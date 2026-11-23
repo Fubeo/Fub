@@ -1,5 +1,5 @@
 {
-  "$nota": "I casi della famiglia testo (piano K6, T16, giro 1): il testo di punto. Carattere (`text.setRangeStyle`: famiglia, stile, dimensione e spaziatura) e Paragrafo (`text.setStyle`: allineamento a sinistra, al centro e a destra) sui testi scelti, e lo strumento Testo, che crea un testo nuovo o cambia le righe di uno che c'è. Interlinea, crenatura e giustificato il file di Fub non li scrive ancora: il motore li cambierebbe, ma Fub rifiuta (`unsupported`) invece di perderli; un comando di Carattere senza testi scelti non cambia niente (`empty`), e con altri oggetti scelti cambia solo i testi. Scrivere dentro un testo che c'è lo provano i gesti del motore (`gesti_motore.rs`), con i caratteri. Carattere e Paragrafo sono sezioni del client: la loro prova è il test che le apre.",
+  "$nota": "I casi della famiglia testo (piano K6, T16): il testo di punto e il testo in area. Carattere (`text.setRangeStyle`: famiglia, stile, dimensione, spaziatura e interlinea) e Paragrafo (`text.setStyle`: allineamento a sinistra, al centro e a destra) sui testi scelti, e lo strumento Testo, che crea un testo nuovo o cambia le righe di uno che c'è. L'interlinea è il `dy` di ogni riga: il testo si riscrive intero, con lo stesso id. Maiuscole e minuscole (`type.changeCase`), Trova e sostituisci (`edit.findReplace`) e Trova il successivo (`edit.findNext`) cambiano o scelgono le parole. Converti in testo di punto e in testo in area (`type.convertToPointType`, `type.convertToAreaType`) riscrivono il `<text>` con o senza `fub:wrap`; in questi casi non ci sono caratteri, quindi il testo in area non si dispone e Fub rifiuta (`unsupported`) invece di scrivere righe sbagliate, e Crea profili non ha lettere da disegnare e rifiuta allo stesso modo. Con Inter li provano `famiglie.rs` (`crea_profili_scrive_le_lettere`, `testo_in_area_*`). Crenatura e giustificato il file di Fub non li scrive: Fub rifiuta (`unsupported`) invece di perderli; un comando sui testi senza testi scelti non cambia niente (`empty`), e con altri oggetti scelti cambia solo i testi. Scrivere dentro un testo che c'è lo provano i gesti del motore (`gesti_motore.rs`), con i caratteri. Carattere e Paragrafo sono sezioni del client: la loro prova è il test che le apre.",
   "casi": [
     {
       "id": "text.setRangeStyle",
@@ -135,8 +135,55 @@
         "leading": 50
       },
       "atteso": {
-        "rifiuto": "unsupported"
-      }
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "ot1t1t1t1"
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "first": true
+                },
+                "elem": {
+                  "tag": "text",
+                  "attrs": {
+                    "id": "ot1t1t1t1",
+                    "x": "40",
+                    "y": "80",
+                    "fill": "#000000",
+                    "font-family": "Inter, sans-serif",
+                    "font-size": "32"
+                  },
+                  "children": [
+                    {
+                      "tag": "tspan",
+                      "attrs": {
+                        "x": "40",
+                        "dy": "0"
+                      },
+                      "text": "Pioggia"
+                    },
+                    {
+                      "tag": "tspan",
+                      "attrs": {
+                        "x": "40",
+                        "dy": "50"
+                      },
+                      "text": "sul mare"
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "text-setRangeStyle-leading.svg"
     },
     {
       "id": "text.setRangeStyle",
@@ -334,6 +381,317 @@
       "id": "paragraph",
       "fonte": "pannello",
       "prova": "apps/client/src/editors/spatial/completo/famiglie/testo/testo.test.ts"
+    },
+    {
+      "id": "type.changeCase",
+      "selezione": [
+        "ot1t1t1t1"
+      ],
+      "argomenti": {
+        "case": "upper"
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "text",
+            "id": "ot1t1t1t1",
+            "lines": [
+              "PIOGGIA",
+              "SUL MARE"
+            ]
+          }
+        ]
+      },
+      "dopo": "type-changeCase-upper.svg",
+      "disegno": "base.svg"
+    },
+    {
+      "id": "type.changeCase",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {
+        "case": "upper"
+      },
+      "atteso": {
+        "rifiuto": "empty"
+      },
+      "disegno": "base.svg"
+    },
+    {
+      "id": "edit.findReplace",
+      "argomenti": {
+        "find": "mare",
+        "replace": "lago"
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "text",
+            "id": "ot1t1t1t1",
+            "lines": [
+              "Pioggia",
+              "sul lago"
+            ]
+          }
+        ]
+      },
+      "dopo": "edit-findReplace.svg",
+      "disegno": "base.svg",
+      "selezione": []
+    },
+    {
+      "id": "edit.findReplace",
+      "argomenti": {
+        "replace": "lago"
+      },
+      "atteso": {
+        "errore": "bad_args"
+      },
+      "disegno": "base.svg",
+      "selezione": []
+    },
+    {
+      "id": "edit.findNext",
+      "argomenti": {
+        "find": "riga"
+      },
+      "atteso": {
+        "selezione": [
+          "ot2t2t2t2"
+        ]
+      },
+      "disegno": "base.svg",
+      "selezione": []
+    },
+    {
+      "id": "type.createOutlines",
+      "selezione": [
+        "ot2t2t2t2"
+      ],
+      "atteso": {
+        "rifiuto": "unsupported"
+      },
+      "disegno": "base.svg",
+      "argomenti": {}
+    },
+    {
+      "id": "type.convertToAreaType",
+      "selezione": [
+        "ot2t2t2t2"
+      ],
+      "atteso": {
+        "rifiuto": "unsupported"
+      },
+      "disegno": "base.svg",
+      "argomenti": {}
+    },
+    {
+      "id": "type.convertToAreaType",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "atteso": {
+        "rifiuto": "empty"
+      },
+      "disegno": "base.svg",
+      "argomenti": {}
+    },
+    {
+      "id": "type.convertToPointType",
+      "disegno": "area.svg",
+      "selezione": [
+        "oz1z1z1z1"
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "oz1z1z1z1"
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "last": true
+                },
+                "elem": {
+                  "tag": "text",
+                  "attrs": {
+                    "id": "oz1z1z1z1",
+                    "x": "40",
+                    "y": "60",
+                    "fill": "#000000",
+                    "font-family": "Inter, sans-serif",
+                    "font-size": "20"
+                  },
+                  "children": [
+                    {
+                      "tag": "tspan",
+                      "attrs": {
+                        "x": "40",
+                        "dy": "0"
+                      },
+                      "text": "Le onde del mare tornano a riva"
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "type-convertToPointType.svg",
+      "argomenti": {}
+    },
+    {
+      "id": "type.convertToPointType",
+      "selezione": [
+        "ot1t1t1t1"
+      ],
+      "atteso": {
+        "rifiuto": "empty"
+      },
+      "disegno": "base.svg",
+      "argomenti": {}
+    },
+    {
+      "id": "type",
+      "fonte": "strumento",
+      "gesto": [
+        {
+          "phase": "preview",
+          "events": [
+            {
+              "kind": "down",
+              "x": 200,
+              "y": 220,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 280,
+              "y": 250,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 360,
+              "y": 280,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "up",
+              "x": 360,
+              "y": 280,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ],
+          "inputs": []
+        },
+        {
+          "phase": "preview",
+          "events": [],
+          "inputs": [
+            {
+              "kind": "text",
+              "text": "Onde del mare che tornano"
+            }
+          ]
+        },
+        {
+          "phase": "commit",
+          "events": [],
+          "inputs": [
+            {
+              "kind": "key",
+              "key": "Escape",
+              "code": "Escape",
+              "pressed": true
+            }
+          ]
+        }
+      ],
+      "atteso": {
+        "rifiuto": "unsupported"
+      },
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {}
+    },
+    {
+      "id": "text.editRange",
+      "argomenti": {
+        "element": "ot1t1t1t1",
+        "text": "Pioggia\nsul lago"
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "text",
+            "id": "ot1t1t1t1",
+            "lines": [
+              "Pioggia",
+              "sul lago"
+            ]
+          }
+        ]
+      },
+      "dopo": "edit-findReplace.svg",
+      "disegno": "base.svg",
+      "selezione": []
+    },
+    {
+      "id": "text.editRange",
+      "argomenti": {
+        "text": "Pioggia"
+      },
+      "atteso": {
+        "errore": "bad_args"
+      },
+      "disegno": "base.svg",
+      "selezione": []
+    },
+    {
+      "id": "text.editRange",
+      "argomenti": {
+        "element": "oa1a1a1a1",
+        "text": "Pioggia"
+      },
+      "atteso": {
+        "errore": "bad_args"
+      },
+      "disegno": "base.svg",
+      "selezione": []
+    },
+    {
+      "id": "text.editRange",
+      "argomenti": {
+        "element": "ot1t1t1t1",
+        "start": 0,
+        "end": 2,
+        "insert": "X"
+      },
+      "atteso": {
+        "errore": "bad_args"
+      },
+      "disegno": "base.svg",
+      "selezione": []
     }
   ]
 }

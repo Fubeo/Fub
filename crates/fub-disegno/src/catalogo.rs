@@ -572,6 +572,11 @@ pub const NOMI: &[(&str, Tipo)] = &[
     // Le opzioni di un livello (T15, giro 3): occhio e lucchetto.
     ("visible", Tipo::SiNo),
     ("locked", Tipo::SiNo),
+    // Trova e sostituisci, Trova successivo (T16): le parole da cercare.
+    ("find", Tipo::Testo),
+    ("replace", Tipo::Testo),
+    ("matchCase", Tipo::SiNo),
+    ("wholeWord", Tipo::SiNo),
 ];
 
 /// Una finestra che Fub scrive da sé, perché lo schema del motore descrive i
@@ -761,6 +766,18 @@ pub const FINESTRE_SCRITTE: &[FinestraScritta] = &[
         id: "object.compoundShape.setMode",
         schema: "{mode: add|subtract|intersect|exclude}",
         predefiniti: &[("mode", "add")],
+        limiti: &[],
+    },
+    // Trova e sostituisci (T16): in tutti i testi del disegno. La finestra non
+    // chiede gli oggetti (`ids`), che la persona non vede per nome.
+    FinestraScritta {
+        id: "edit.findReplace",
+        schema: "{find, replace, matchCase, wholeWord}",
+        predefiniti: &[
+            ("replace", ""),
+            ("matchCase", "false"),
+            ("wholeWord", "false"),
+        ],
         limiti: &[],
     },
 ];

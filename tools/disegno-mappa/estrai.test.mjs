@@ -90,7 +90,10 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // «da fare»: il gesto non porta i flag di vista, e il widget arriva con T12.
   // T12 punti le dieci sui punti di un tracciato: `path.moveAnchor`, `.moveAnchors`, `.setHandle`,
   // `.insertAnchor`, `.removeAnchor`, `.convertAnchor`, `.deleteAnchors`, `.close`, `.appendAnchor`, `.split`.
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1158, fub: 114, escluso: 12, fatto: 267 });
+  // T16 testo base le sette del testo: `type.changeCase`, `type.createOutlines`,
+  // `type.convertToAreaType`, `type.convertToPointType`, `edit.findReplace`, `edit.findNext`
+  // e `text.editRange`.
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1151, fub: 114, escluso: 12, fatto: 274 });
 });
 
 // --- un motore finto ---------------------------------------------------------------
