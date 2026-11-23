@@ -2597,7 +2597,8 @@ formato non la scrive. Librerie dei campioni unite in cab430dc0:
 la decisione del 23/11 (campioni globali, gruppi appiattiti, nessun
 formato nuovo): unito in 27dc617fe (stesso nome e stesso colore saltato,
 colore diverso col numero; il gancio `traduci_dopo` porta il documento nel
-formato solo per la differenza). La finestra delle librerie è in giro; le
+formato solo per la differenza). La finestra delle librerie è unita in dab0ba7da
+(«Altra libreria…» resta «da fare»); le
 librerie dell'utente (`window.userSwatchLibrary1…10`) restano «da fare»
 (cartella del desktop). Pannello Colore unito in 97709e755: `color` è la
 sezione Colore del Design; `ui.colorPicker` (il selettore del kit) e
@@ -2607,7 +2608,11 @@ Campione più vicino e Seleziona per tipo uniti in 2399db133: senza campioni
 Applica e Trova sono spenti con la frase in italiano. Rischi: una sfumatura
 privata fa scrivere una rimozione verso «@1» (caso tolto dal banco), un
 oggetto nascosto con id esplicito cambia: tutti e due al giro Opus sulle
-ricette. In giro: le letture `color.harmony`, `convert`, `gamutCheck`.
+ricette. Ricolora unito in 03317a5cc: un oggetto legato a un campione
+globale se ne stacca (drawing-colors.md); rischi: un oggetto nascosto scelto
+a mano si ricolora, la sfumatura vecchia resta nei defs. Letture del colore
+(`paint.toggleActive`, `recent`, `proxies`, `recolor.colors`, `reduce`,
+`randomize`) unite. In giro: la guida colori, i temi colore.
 Aspetta: niente
 
 ## T15 · L'aspetto e i livelli
@@ -2769,8 +2774,13 @@ Riduci è spento su testi, maschere e oggetti nascosti, con la frase.
 Difetti trovati, al giro Opus sulle ricette (feat/k6-ricette-riapertura):
 nascondi e blocca scrivono sul corpo senza aggiornare la ricetta, e una
 ricetta riscritta su un oggetto con maschera non si riapre (test ignorato
-in `tests/riapertura_aspetto.rs`). In giro: Aggiungi riempimento e
-contorno; Nascondi altri, Mostra tutti, Blocca altri, Sblocca tutti.
+in `tests/riapertura_aspetto.rs`). Aggiungi riempimento e contorno
+unito in 81b6cbc4a; Mostra tutti e Sblocca tutti uniti in 189acf0f1.
+Nascondi altri e Blocca altri restano «da fare»: con la carta (`fub-paper`
+figlio della radice) il motore importa un solo livello (`import.rs`
+`layer_mode`) e «gli altri» si contano sul livello corrente, non sulla
+scelta; vanno col modello dei livelli. In giro: Seleziona per tipo di
+testo e maniglie.
 Aspetta: niente
 
 ## T16 · Il testo
