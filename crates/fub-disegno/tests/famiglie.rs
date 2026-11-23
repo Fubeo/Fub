@@ -516,7 +516,7 @@ fn testo_in_area_va_e_torna() {
     let testo = il_testo(&area, "ot1t1t1t1");
     assert!(testo.contains("fub:wrap=\""), "{testo}");
     assert!(
-        testo.contains(">Pioggia </tspan><tspan x=\"40\" dy=\"40\">sul mare<"),
+        testo.contains(">Pioggia</tspan><tspan x=\"40\" dy=\"40\">sul mare<"),
         "{testo}"
     );
     // Riaperto, è un testo in area: le maiuscole lo fanno andare a capo nel

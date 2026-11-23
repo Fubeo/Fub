@@ -200,6 +200,12 @@ export function installWorkspace(ctx: EditorContext): void {
   // I comandi di livello dell'albero (K6 T15, giro 4) passano dal motore col Completo
   // aperto e acceso; nel Semplice, o senza motore, li fa l'editor come sempre.
   ctx.livelliMotore = () => (aperto === null || !vuoleCompleto() ? null : aperto.livelli);
+  // Il campo «Testo» di un testo in area (K6 T16) passa dal motore col Completo aperto e
+  // acceso: rifà gli a capo nel riquadro. Senza motore il campo non c'è per un testo in area.
+  ctx.areaWordsWriter = () => {
+    const ora = aperto === null || !vuoleCompleto() || (options.motore ?? null) === null ? null : aperto;
+    return ora === null ? null : (elemento, testo) => ora.parole(elemento, testo);
+  };
   const portaCompleto = (): void => {
     if ((completo !== "no" && completo !== "fallito") || !vuoleCompleto()) return;
     completo = "verifica";
@@ -257,6 +263,8 @@ export function installWorkspace(ctx: EditorContext): void {
             clientStato: (id) => statoClienteCompleto(ctx, id),
           });
           sezioniAperte = aperto.sezioni;
+          // Il campo «Testo» di un testo in area scelto c'è adesso (`areaWordsWriter`).
+          ctx.syncProperties();
           // Lo strumento del motore aspetta la sua famiglia dal Completo aperto
           // (`sceltaMotore`): una famiglia che non arriva non fa partire il gesto.
           ctx.preparaStrumento = (id) => aperto!.preparaStrumento(id);

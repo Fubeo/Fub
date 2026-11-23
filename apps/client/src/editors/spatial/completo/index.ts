@@ -110,6 +110,11 @@ export interface Completo {
   /// punti (`path.deleteAnchors`), non l'oggetto. `true` se c'erano punti scelti e il
   /// comando è partito; `false` senza punti, e Canc resta quello dell'editor.
   cancellaPunti(): boolean;
+  /// Le parole `testo` per il testo in area `elemento`, dal campo «Testo»
+  /// dell'ispettore: passano da `text.editRange`, che rifà gli a capo nel
+  /// riquadro, con un passo d'annulla solo e i rifiuti detti come per ogni
+  /// comando (`eseguiVoce`).
+  parole(elemento: string, testo: string): void;
   /// La fila delle opzioni dello strumento `strumento` con le sue etichette, quando
   /// la sua famiglia è pronta (`carica.testi`); `null` prima, o se lo stato non ha
   /// controlli da mostrare. Le etichette non si inventano: senza famiglia pronta non
@@ -619,6 +624,9 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila" | "e
         ? null
         : creaPortaLivelli({ motore: ctx.motore, carica, vita: ctx.life, leggi: dipendenze.leggi }),
     cancellaPunti,
+    parole(elemento, testo) {
+      void eseguiPerId("text.editRange", { element: elemento, text: testo }, { senzaFinestra: true });
+    },
     clicStrumento(strumento, punto) {
       if (chiuso) return;
       const clic = COMANDO_DEL_CLIC[strumento];

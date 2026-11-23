@@ -8,7 +8,7 @@ import type { Op } from "../../scene/ops";
 import { plural, t, type DrawKey } from "../../strings";
 import { gesture as asGesture, moveOps, roundDelta } from "../edit";
 import { elemOf, orderOps, type Order } from "../arrange";
-import { textLines, wordsOf } from "../text";
+import { areaWords, areaWordsOf, textLines, wordsOf } from "../text";
 import { orderChanges } from "../order-changes";
 import { detailsOf as outlineDetails, lookOf as outlineLook, outlineOps, outlinesOf, widthLinesOf } from "../outline";
 import { boundsAfter, numericOps } from "../transform";
@@ -95,6 +95,12 @@ export interface PanelContext {
   /// scelto, con le parole scelte: chi scrive le sostituisce. Falso se il
   /// campo non c'è.
   focusWords: () => boolean;
+  /// Chi riscrive le parole di un testo in area (`fub:wrap`) dal campo
+  /// «Testo»: il motore del Completo aperto e acceso (`text.editRange`), che
+  /// rifà gli a capo nel riquadro. `null`, o assente, senza motore: il campo
+  /// non c'è per un testo in area, perché l'operazione `text` scriverebbe
+  /// righe senza a capo.
+  areaWordsWriter?: () => ((element: string, words: string) => void) | null;
 }
 
 /// Monta il pannello delle proprietà, gli attributi e la descrizione delle immagini.
@@ -391,7 +397,9 @@ export function installPanel(ctx: EditorContext): void {
   const wordsOfUnit = (unit: Unit): string | null => {
     if (unit.role !== "text" || unit.id === null || unit.node.details?.textPath !== undefined) return null;
     const elem = elemOf(unit.node);
-    return elem === null ? null : wordsOf(elem);
+    if (elem === null) return null;
+    if (elem.attrs["fub:wrap"] !== undefined) return (ctx.areaWordsWriter?.() ?? null) === null ? null : areaWordsOf(elem);
+    return wordsOf(elem);
   };
 
   /// Le parole del testo scelto, dal campo «Testo»: le righe come le scrive
@@ -402,6 +410,18 @@ export function installPanel(ctx: EditorContext): void {
     const unit = units.length === 1 ? units[0]! : null;
     const before = unit === null ? null : wordsOfUnit(unit);
     if (unit === null || unit.id === null || before === null) return null;
+    const writer = ctx.areaWordsWriter?.() ?? null;
+    if (writer !== null && elemOf(unit.node)?.attrs["fub:wrap"] !== undefined) {
+      // Un testo in area: le parole come sono scritte, spazi e a capo
+      // compresi; gli a capo nel riquadro li rifà il motore, con un passo
+      // d'annulla solo. Svuotato, il testo se ne va come un testo di punto.
+      const words = areaWords(value);
+      if (words.trim() === "") return changeFromPanel("draw.action.delete", [{ op: "remove", target: unit.target }], []);
+      if (words === before) return null;
+      if (!editable()) return t("draw.rejected", { reason: t("draw.reason.read_only") });
+      writer(unit.id, words);
+      return null;
+    }
     const lines = textLines(value);
     if (lines.length === 0) return changeFromPanel("draw.action.delete", [{ op: "remove", target: unit.target }], []);
     if (lines.join("\n") === textLines(before).join("\n")) return null;

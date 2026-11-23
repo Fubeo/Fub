@@ -172,6 +172,7 @@ pub(crate) fn importa(testo: &str, revisione: u64) -> Result<Copia, ErroreApertu
         modificabile = false;
     }
     let mut mappa = Mappa::nuova(elementi, &mut documento);
+    spazi_fra_le_righe(&mappa, &mut documento);
     testi_in_area(&mappa, &mut documento);
     mappa.ricette = ricette;
     campioni::nel_motore(&campioni_del_file, &usi, &mappa, &mut documento);
@@ -436,6 +437,76 @@ fn elementi(testo: &str, items: &[Item], base: Affine) -> Vec<Elemento> {
     fuori
 }
 
+/// Come il file scrive un paragrafo vuoto di un testo in area: uno spazio
+/// indivisibile, come la riga vuota dell'editor (`tools/text.ts`,
+/// `BLANK_LINE`).
+pub(crate) const RIGA_VUOTA: &str = "\u{a0}";
+
+/// Gli a capo e i rientri fra i `<tspan>` di un testo di punto non sono
+/// testo (formato della scena, testo §1), ma il motore li importa come uno
+/// spazio in fondo alla riga prima: qui si tolgono, e il testo del motore
+/// è quello che il file fa leggere. Senza, Converti in testo in area
+/// scriverebbe «Pioggia » dove il file dice «Pioggia». Gli spazi che la
+/// riga del file scrive davvero restano. Un testo con pezzi resta com'è:
+/// le sue parole non si cambiano dal motore.
+fn spazi_fra_le_righe(mappa: &Mappa, documento: &mut Document) {
+    use vectorcraft_doc::text::TextKind;
+    use vectorcraft_doc::NodeKind;
+    for e in mappa.elementi() {
+        let (Some(info), Some(nodo)) = (&e.testo, e.nodo) else {
+            continue;
+        };
+        if !info.di_punto || info.pezzi || info.righe.len() < 2 {
+            continue;
+        }
+        let Some(NodeKind::Text(t)) = documento.node_mut(nodo).map(|n| &mut n.kind) else {
+            continue;
+        };
+        if t.kind != TextKind::Point
+            || !t.ruby.is_empty()
+            || t.runs.iter().any(|r| r.inline.is_some())
+        {
+            continue;
+        }
+        let testo = t.plain_text();
+        let righe: Vec<&str> = testo.split('\n').collect();
+        if righe.len() != info.righe.len() {
+            continue;
+        }
+        // I byte da togliere, in ordine: gli spazi in fondo a ogni riga
+        // oltre quelli che la riga del file ha.
+        let mut via: Vec<std::ops::Range<usize>> = Vec::new();
+        let mut da = 0;
+        for (riga, del_file) in righe.iter().zip(&info.righe).take(righe.len() - 1) {
+            let fine = da + riga.len();
+            let in_fondo = |r: &str| r.len() - r.trim_end_matches(' ').len();
+            let di_troppo = in_fondo(riga).saturating_sub(in_fondo(del_file));
+            if di_troppo > 0 {
+                via.push(fine - di_troppo..fine);
+            }
+            da = fine + 1;
+        }
+        if via.is_empty() {
+            continue;
+        }
+        // Ogni pezzo perde i byte che cadono nel suo tratto.
+        let mut inizio = 0;
+        for run in &mut t.runs {
+            let tratto = inizio..inizio + run.text.len();
+            let mut nuovo = String::with_capacity(run.text.len());
+            for (i, c) in run.text.char_indices() {
+                let b = tratto.start + i;
+                if !via.iter().any(|r| r.contains(&b)) {
+                    nuovo.push(c);
+                }
+            }
+            inizio = tratto.end;
+            run.text = nuovo;
+        }
+        t.runs.retain(|r| !r.text.is_empty());
+    }
+}
+
 /// I testi in area del file (`fub:wrap`, formato della scena, testo §4)
 /// diventano testi in area del motore (K6 T16): il motore li importa come
 /// testi di punto, una riga per `<tspan>`. Il paragrafo torna intero (le
@@ -484,16 +555,21 @@ fn testi_in_area(mappa: &Mappa, documento: &mut Document) {
         {
             continue;
         }
+        let continua =
+            |i: usize| i > 0 && matches!(info.unioni[i].as_deref(), Some("space" | "word"));
         let mut testo = String::new();
         for (i, riga) in info.righe.iter().enumerate() {
             if i > 0 {
                 testo.push_str(match info.unioni[i].as_deref() {
+                    _ if !continua(i) => "\n",
                     Some("space") => " ",
-                    Some("word") => "",
-                    _ => "\n",
+                    _ => "",
                 });
             }
-            testo.push_str(riga);
+            // Un paragrafo vuoto il file lo scrive come uno spazio
+            // indivisibile: un `<tspan>` vuoto non sposterebbe la riga dopo.
+            let solo = !continua(i) && (i + 1 == info.righe.len() || !continua(i + 1));
+            testo.push_str(if solo && riga == RIGA_VUOTA { "" } else { riga });
         }
         let ancora = match t.para_at(0).justify {
             Justify::Center => 0.5,

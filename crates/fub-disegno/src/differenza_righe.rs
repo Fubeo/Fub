@@ -112,11 +112,21 @@ pub(crate) fn righe_scritte(
                     "i paragrafi di un testo in area hanno tutti lo stesso allineamento nel file",
                 );
             }
+            // La larghezza come il file la scrive, coi suoi decimali: le righe
+            // sono quelle di quel riquadro, e chi riapre il file ritrova gli
+            // stessi a capo.
+            let scritta = numero(fb.width() * s, DECIMALI_GEOMETRIA);
+            let larghezza = scritta
+                .parse::<f64>()
+                .ok()
+                .map(|w| w / s)
+                .filter(|w| w.is_finite() && *w > 1e-6)
+                .ok_or(RIQUADRO_FUORI)?;
             // Il riquadro alto quanto serve: le righe che il formato scrive.
             let mut alto = t.clone();
             alto.area.fit = Default::default();
             alto.kind = TextKind::Area {
-                frame: shapes::rectangle(Rect::new(fb.x0, fb.y0, fb.x1, fb.y0 + 1e7)),
+                frame: shapes::rectangle(Rect::new(fb.x0, fb.y0, fb.x0 + larghezza, fb.y0 + 1e7)),
             };
             let lay = vectorcraft_text::layout(vectorcraft_text::FontDb::global(), &alto);
             let testo = alto.plain_text();
@@ -156,8 +166,17 @@ pub(crate) fn righe_scritte(
             if di_nuovo != testo.replace("\r\n", "\n") {
                 return Err("il testo non si scrive riga per riga nel riquadro: le righe del file non lo ridanno uguale");
             }
+            // Un paragrafo vuoto si scrive come uno spazio indivisibile: un
+            // `<tspan>` vuoto non sposterebbe la riga dopo. L'apertura lo
+            // rilegge vuoto (`apertura.rs`, `RIGA_VUOTA`).
+            for i in 0..righe.len() {
+                let solo = righe[i].1.is_none() && righe.get(i + 1).is_none_or(|r| r.1.is_none());
+                if solo && righe[i].0.is_empty() {
+                    righe[i].0 = crate::apertura::RIGA_VUOTA.to_string();
+                }
+            }
             let base = lay.lines.first().map_or(fb.y0, |l| l.baseline);
-            let o = m * Point::new(fb.x0 + ancora * fb.width(), base);
+            let o = m * Point::new(fb.x0 + ancora * larghezza, base);
             let x = numero(o.x, DECIMALI_GEOMETRIA);
             let basi: Vec<f64> = lay.lines.iter().map(|l| l.baseline).collect();
             let figli = righe
@@ -181,7 +200,7 @@ pub(crate) fn righe_scritte(
             Ok(RigheScritte {
                 x: x.clone(),
                 y: numero(o.y, DECIMALI_GEOMETRIA),
-                wrap: Some(numero(fb.width() * s, DECIMALI_GEOMETRIA)),
+                wrap: Some(scritta),
                 righe: figli,
             })
         }
