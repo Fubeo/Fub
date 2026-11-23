@@ -147,7 +147,9 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // i loro casi in livelli.json); `layer.hideOthers` e `layer.lockOthers` restano «da fare», con la causa.
   // T12 angoli porta a «fatto» `addon.pathtools.cornerSet` («Imposta angoli», con la finestra del raggio) e
   // `addon.pathtools.cornerRemove` («Rimuovi angoli»): la ricetta riscritta si applica nella scena del client.
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1083, fub: 114, escluso: 12, fatto: 342 });
+  // T15 seleziona tipo: Seleziona testo di punto e in area («fatto», nel sottomenu Oggetto); le maniglie
+  // di direzione e i pennelli restano «da fare», con la causa provata nella nota.
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1081, fub: 114, escluso: 12, fatto: 344 });
 });
 
 // --- un motore finto ---------------------------------------------------------------

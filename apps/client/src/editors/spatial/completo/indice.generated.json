@@ -3043,6 +3043,22 @@
     },
     {
       "fonte": "motore",
+      "id": "select.object.areaText",
+      "chiamata": {
+        "comando": "disegno.select.object.areaText"
+      },
+      "etichetta": {
+        "it": "Oggetti testo in area",
+        "en": "Area Text Objects"
+      },
+      "posto": "menu/selezione/oggetto",
+      "famiglia": "livelli",
+      "tasto": null,
+      "effetto": "mostra",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "select.object.clippingMasks",
       "chiamata": {
         "comando": "disegno.select.object.clippingMasks"
@@ -3066,6 +3082,22 @@
       "etichetta": {
         "it": "Tracciati aperti",
         "en": "Open Paths"
+      },
+      "posto": "menu/selezione/oggetto",
+      "famiglia": "livelli",
+      "tasto": null,
+      "effetto": "mostra",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "select.object.pointText",
+      "chiamata": {
+        "comando": "disegno.select.object.pointText"
+      },
+      "etichetta": {
+        "it": "Oggetti testo per punti",
+        "en": "Point Text Objects"
       },
       "posto": "menu/selezione/oggetto",
       "famiglia": "livelli",
