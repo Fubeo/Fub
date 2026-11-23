@@ -275,22 +275,6 @@
     },
     {
       "fonte": "motore",
-      "id": "addon.pathtools.erase",
-      "chiamata": {
-        "comando": "disegno.addon.pathtools.erase"
-      },
-      "etichetta": {
-        "it": "Pennello gomma punti di ancoraggio",
-        "en": "Anchor Eraser Brush"
-      },
-      "posto": "ispettore/design",
-      "famiglia": "tracciati",
-      "tasto": null,
-      "effetto": "cambia",
-      "finestra": false
-    },
-    {
-      "fonte": "motore",
       "id": "addon.pathtools.expandDashes",
       "chiamata": {
         "comando": "disegno.addon.pathtools.expandDashes"
