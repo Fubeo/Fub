@@ -118,3 +118,92 @@ fn togliere_l_ultimo_tema_riporta_la_lista_di_serie_che_l_host_non_tiene() {
         vuota
     ));
 }
+
+/// Il messaggio di un errore `bad_args` del comando, o un panico se il comando non l'ha dato.
+fn errore_di(d: &mut Disegno, id: &str, valore: Value) -> String {
+    match d.comando(DrawingCommandRequest {
+        revision: d.revisione(),
+        id: format!("disegno.{id}"),
+        selection: vec![],
+        value: valore,
+        preview: false,
+    }) {
+        Err(fub_abi::PluginError::BadArgs(msg)) => msg.to_string(),
+        altro => panic!("doveva dare bad_args: {altro:?}"),
+    }
+}
+
+#[test]
+fn i_rifiuti_dei_temi_dicono_il_perche_in_italiano() {
+    let ds = motore();
+    let mut d = apri(&ds, BASE);
+    // Nome vuoto: la frase italiana, non il messaggio del motore.
+    let vuoto = errore_di(
+        &mut d,
+        "colorTheme.save",
+        json!({ "colors": ["#ff0000"], "name": "  " }),
+    );
+    assert_eq!(vuoto, "Il tema ha bisogno di un nome.");
+    // Nome già usato: il nome del tema esistente nella frase.
+    comando(
+        &mut d,
+        "colorTheme.save",
+        json!({ "colors": ["#ff0000"], "name": "Tramonto" }),
+    );
+    let usato = errore_di(
+        &mut d,
+        "colorTheme.save",
+        json!({ "colors": ["#00ff00"], "name": "Tramonto" }),
+    );
+    assert_eq!(
+        usato,
+        "C'è già un tema «Tramonto»: scegli un altro nome, o sostituisci quello."
+    );
+    // Il tema che non c'è.
+    let manca = errore_di(&mut d, "colorTheme.delete", json!({ "name": "Altro" }));
+    assert_eq!(manca, "Non c'è nessun tema «Altro».");
+    // Un colore non valido, e un numero di colori fuori dal limite.
+    let colore = errore_di(
+        &mut d,
+        "colorTheme.save",
+        json!({ "colors": ["#12"], "name": "X" }),
+    );
+    assert_eq!(colore, "Un colore non è valido: usa la forma #rrggbb.");
+    let troppi = errore_di(
+        &mut d,
+        "colorTheme.save",
+        json!({ "colors": [], "name": "X" }),
+    );
+    assert_eq!(troppi, "Un tema ha da 1 a 5 colori.");
+}
+
+#[test]
+fn in_sola_lettura_il_tema_si_salva_e_il_colore_no() {
+    // Un SVG che Fub non apre come suo: in sola lettura. Salvare un tema non scrive il disegno,
+    // quindi resta possibile; cambiare un colore no (`unsupported`).
+    let ds = motore();
+    let testo = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 300\" width=\"400\" height=\"300\"><rect id=\"oa1a1a1a1\" x=\"100\" y=\"100\" width=\"100\" height=\"50\" fill=\"#000000\"/></svg>";
+    let mut d = apri(&ds, testo);
+    let prima = d.testo().to_string();
+    let salvato = comando(
+        &mut d,
+        "colorTheme.save",
+        json!({ "colors": ["#ff0000"], "name": "Sola lettura" }),
+    );
+    assert!(salvato.refused.is_none(), "{salvato:?}");
+    assert_eq!(d.testo(), prima, "il disegno in sola lettura non cambia");
+    let cambio = d.prendi_le_preferenze_cambiate();
+    assert!(cambio.dopo.contains_key("colorThemes"));
+    // Un colore del disegno, invece, si rifiuta.
+    let colore = d
+        .comando(DrawingCommandRequest {
+            revision: d.revisione(),
+            id: "disegno.paint.setFill".into(),
+            selection: vec!["oa1a1a1a1".into()],
+            value: json!({ "color": "#00aa00" }),
+            preview: false,
+        })
+        .expect("il comando gira");
+    assert!(colore.ops.is_none());
+    assert!(colore.refused.is_some());
+}

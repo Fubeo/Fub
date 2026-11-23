@@ -180,6 +180,15 @@ finestra.
   le lascia com'erano, e gli altri effetti vanno verificati uno per uno (T18).
   Le tinte piatte non ci sono: il formato del campione non le ha.
 
+- **Temi di colore (K6 T14, temi).** Nella scheda Risorse, il pannello «Temi di
+  colore» elenca i temi della libreria con i loro colori. «Salva tema dai colori
+  scelti» prende il riempimento e il contorno della selezione (senza selezione il
+  pulsante è spento, con la frase); un nome vuoto o già di un tema si dice sotto il
+  campo prima del motore. «Togli tema» toglie quello scelto. La libreria sta nelle
+  preferenze del motore (`draw.motore`): salvare e togliere non cambiano il disegno,
+  restano accesi anche su un disegno di sola lettura. «Aggiungi ai campioni» non c'è
+  ancora: crea un gruppo di colori, e il formato non ne ha.
+
 La sezione è in `apps/client/src/editors/spatial/completo/colore-sezione.ts`,
 Campioni in `completo/campioni-sezione.ts`;
 le parole delle finestre nella famiglia `colore`

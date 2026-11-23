@@ -33,6 +33,8 @@ import { registraContorno } from "./contorno-sezione";
 import { registraSfumatura } from "./sfumatura-sezione";
 import { creaPortaPreimpostate } from "./sfumature-preimpostate";
 import { registraTrasparenza } from "./trasparenza-sezione";
+import { creaPortaTemi } from "./temi-porta";
+import { registraTemi } from "./temi-sezione";
 import { registraTesto } from "./testo-sezioni";
 import type { Teardown } from "../../../ui/lifetime";
 import { languageCurrent } from "../../../i18n/strings";
@@ -439,6 +441,9 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila" | "e
         });
   registraSfumatura(sezioni, (id, valori) => void eseguiPerId(id, valori, { senzaFinestra: true }), ctx.life, latoAttivo, preimpostate);
   registraTrasparenza(sezioni, eseguiPerId);
+  // Il pannello «Temi di colore» della scheda Risorse (K6 T14, temi): la lista e i comandi passano dal
+  // motore, con la famiglia `colore`, che il caricatore porta quando il pannello si apre.
+  registraTemi(sezioni, creaPortaTemi({ motore: ctx.motore, carica: { famiglia: (id) => carica.famiglia(id) }, vita: ctx.life }), ctx.life);
   // Le sezioni «Carattere» e «Paragrafo» (K6 T16, giro 1): il testo scelto, un comando per cambio.
   registraTesto(sezioni, (id, valori) => void eseguiPerId(id, valori, { senzaFinestra: true }), ctx.life);
   const carica = caricatore({ ctx: { ...ctx, sezioni, registraFila, esegui: eseguiPerId }, moduli: opzioni.moduli, prepara: opzioni.prepara });

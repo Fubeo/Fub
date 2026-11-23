@@ -161,7 +161,9 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // lo lascia correre sugli oggetti scelti (casi in `tests/famiglie/trasforma.json`, disegno `pixel.svg`).
   // T14 guida colori: tre righe fatte (il pannello Guida colori, Opzioni guida colori e Limita guida
   // colori alla libreria), con i loro casi in colore.json e i test della sezione.
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1071, fub: 114, escluso: 12, fatto: 354 });
+  // T14 temi, pannello: il pannello `color_themes` (Risorse, Temi di colore) è «fatto»: uno in più.
+  // Il pannello parla con i comandi già fatti (`colorTheme.list`, `save`, `delete`).
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1070, fub: 114, escluso: 12, fatto: 355 });
 });
 
 // --- un motore finto ---------------------------------------------------------------

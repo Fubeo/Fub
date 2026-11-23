@@ -1040,6 +1040,44 @@ export const RISORSE_EN: Record<keyof typeof RISORSE_IT, string> = {
 
 /// La colonna e il cassetto del Disegno completo (K6 T8): la casella «Tutti
 /// gli strumenti», il cassetto con la ricerca e i nomi dei suoi gruppi.
+/// Il pannello «Temi di colore» della scheda Risorse (K6 T14, temi).
+export const TEMI_IT = {
+  "draw.temi.titolo": "Temi di colore",
+  "draw.temi.aria": "Temi di colore",
+  "draw.temi.caricamento": "Carico i temi…",
+  "draw.temi.vuoto": "Non ci sono temi salvati. Scegli dei colori nel disegno e salvane uno.",
+  "draw.temi.assente": "Il motore non risponde: riprova fra un momento.",
+  "draw.temi.colori": "{count} colori",
+  "draw.temi.nome": "Nome del tema",
+  "draw.temi.nome.vuoto": "Scrivi un nome per il tema.",
+  "draw.temi.nome.preso": "C'è già un tema con questo nome: scegline un altro.",
+  "draw.temi.nessuna.scelta": "Scegli prima dei colori nel disegno: il tema li prende da lì.",
+  "draw.temi.salva": "Salva tema dai colori scelti",
+  "draw.temi.salvato": "Tema «{nome}» salvato.",
+  "draw.temi.togli": "Togli tema",
+  "draw.temi.tolto": "Tema «{nome}» tolto.",
+  "draw.temi.non.salvato": "Il tema non si è salvato: il motore non ha fatto niente.",
+} as const;
+
+/// L'inglese del pannello «Temi di colore».
+export const TEMI_EN: Record<keyof typeof TEMI_IT, string> = {
+  "draw.temi.titolo": "Colour themes",
+  "draw.temi.aria": "Colour themes",
+  "draw.temi.caricamento": "Loading themes…",
+  "draw.temi.vuoto": "No saved themes. Choose colours in the drawing and save one.",
+  "draw.temi.assente": "The engine is not responding: try again in a moment.",
+  "draw.temi.colori": "{count} colours",
+  "draw.temi.nome": "Theme name",
+  "draw.temi.nome.vuoto": "Write a name for the theme.",
+  "draw.temi.nome.preso": "A theme with this name already exists: choose another.",
+  "draw.temi.nessuna.scelta": "Choose colours in the drawing first: the theme takes them from there.",
+  "draw.temi.salva": "Save theme from chosen colours",
+  "draw.temi.salvato": "Theme “{nome}” saved.",
+  "draw.temi.togli": "Remove theme",
+  "draw.temi.tolto": "Theme “{nome}” removed.",
+  "draw.temi.non.salvato": "The theme was not saved: the engine did nothing.",
+};
+
 export const COLONNA_IT = {
   "draw.chrome.column.all": "Tutti gli strumenti",
   "draw.engine.tool": "Strumento del motore",
