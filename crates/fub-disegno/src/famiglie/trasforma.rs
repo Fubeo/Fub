@@ -9,6 +9,7 @@ use std::sync::Arc;
 use fub_abi::{DrawingDisabledReason, DrawingRefusal, PluginError};
 use fub_motori::{ErroreMotore, Servizi};
 use serde_json::Value;
+use vectorcraft_doc::{Node, NodeId, NodeKind};
 
 use super::tracciati::sceglie_inchiostro;
 use super::{nodi_scelti, selezione_spenta, StatoFamiglia};
@@ -26,9 +27,21 @@ const DISPONI: [&str; 7] = [
     "addon.arrange.sort",
 ];
 
-/// Le voci di ≡ › Oggetto › Sposta e Distorci (K6 T13, giro «sposta»): spostano o deformano
-/// gli oggetti scelti, e un tratto dell'inchiostro di Fub non si cambia (`unmapped`, come Disponi).
-const SPOSTA_E_DISTORCI: [&str; 2] = ["object.nudge", "object.distort"];
+/// Le voci di ≡ › Oggetto › Sposta, Distorci, Ruota, Scala, Inclina e Rifletti (K6 T13): cambiano la
+/// forma o la posizione degli oggetti scelti con un `transform`, e un tratto dell'inchiostro di Fub
+/// non si cambia (`unmapped`, come Disponi).
+const SPOSTA_E_TRASFORMA: [&str; 6] = [
+    "object.nudge",
+    "object.distort",
+    "object.rotate",
+    "object.scale",
+    "object.shear",
+    "object.reflect",
+];
+
+/// Il perché di Distorci sul testo spento: il formato non tiene un testo con una `transform`
+/// (scene-format-text.md: la rende estraneo), quindi si crea prima il contorno.
+const DISTORCI_SUL_TESTO: &str = "Distorci non vale sul testo: crea prima i contorni.";
 
 /// Quanti oggetti scelti vuole una voce di Disponi, come dice il motore: lo
 /// scambio esattamente due, le sostituzioni, il raggruppamento e l'ordine almeno
@@ -66,8 +79,13 @@ impl StatoFamiglia for Stato {
         if DISPONI.contains(&id) {
             return disponi_spenta(id, copia, selezione);
         }
-        if SPOSTA_E_DISTORCI.contains(&id) && sceglie_inchiostro(copia, selezione) {
+        if SPOSTA_E_TRASFORMA.contains(&id) && sceglie_inchiostro(copia, selezione) {
             return Some(DrawingDisabledReason::FubInk);
+        }
+        if id == "object.distort" && contiene_testo(copia, selezione) {
+            return Some(DrawingDisabledReason::Other {
+                text: DISTORCI_SUL_TESTO.into(),
+            });
         }
         let allinea = matches!(id, "object.align" | "object.distribute" | "object.distributeSpacing");
         if allinea && selezione.is_empty() {
@@ -79,8 +97,11 @@ impl StatoFamiglia for Stato {
     /// Una voce di Disponi su un inchiostro di Fub non gira: l'inchiostro non è un
     /// oggetto del motore, e il comando lo rifiuta come `unmapped`, come il colore.
     fn rifiuto(id: &str, copia: &Copia, selezione: &[String]) -> Option<DrawingRefusal> {
-        let inchiostro = DISPONI.contains(&id) || SPOSTA_E_DISTORCI.contains(&id);
-        (inchiostro && sceglie_inchiostro(copia, selezione)).then_some(DrawingRefusal::Unmapped)
+        let inchiostro = DISPONI.contains(&id) || SPOSTA_E_TRASFORMA.contains(&id);
+        if inchiostro && sceglie_inchiostro(copia, selezione) {
+            return Some(DrawingRefusal::Unmapped);
+        }
+        (id == "object.distort" && contiene_testo(copia, selezione)).then_some(DrawingRefusal::Unsupported)
     }
 
     /// Gli angoli di Distorci (TL, TR, BR, BL) devono formare un quadrilatero: due angoli
@@ -154,4 +175,20 @@ fn quadrilatero_valido(angoli: &Value) -> Result<(), &'static str> {
         return Err("gli angoli sono allineati: non formano un quadrilatero");
     }
     Ok(())
+}
+
+/// Vero se fra gli oggetti scelti c'è un testo, anche dentro un gruppo: Distorci scrive un
+/// `transform` su quel testo, e il formato lo renderebbe estraneo.
+fn contiene_testo(copia: &Copia, selezione: &[String]) -> bool {
+    fn cerca(nodo: &Node) -> bool {
+        match &nodo.kind {
+            NodeKind::Text(_) => true,
+            NodeKind::Group { children, .. } => children.iter().any(|c| cerca(c)),
+            _ => false,
+        }
+    }
+    let nodi: Vec<NodeId> = nodi_scelti(copia, selezione).unwrap_or_default();
+    nodi
+        .iter()
+        .any(|n| copia.documento.node(*n).is_some_and(cerca))
 }

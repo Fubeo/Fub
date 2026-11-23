@@ -2457,6 +2457,237 @@
         ]
       },
       "dopo": "t13-due-livelli-dopo.svg"
+    },
+    {
+      "id": "object.rotate",
+      "disegno": "t13-solo-inchiostro.svg",
+      "selezione": [
+        "oi8b8b8b8"
+      ],
+      "argomenti": {
+        "angle": 90
+      },
+      "atteso": {
+        "rifiuto": "unmapped"
+      }
+    },
+    {
+      "id": "object.rotate",
+      "disegno": "t13-inchiostro.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "oi8b8b8b8"
+      ],
+      "argomenti": {
+        "angle": 90
+      },
+      "atteso": {
+        "rifiuto": "unmapped"
+      }
+    },
+    {
+      "id": "object.scale",
+      "disegno": "t13-solo-inchiostro.svg",
+      "selezione": [
+        "oi8b8b8b8"
+      ],
+      "argomenti": {
+        "sx": 50
+      },
+      "atteso": {
+        "rifiuto": "unmapped"
+      }
+    },
+    {
+      "id": "object.scale",
+      "disegno": "t13-inchiostro.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "oi8b8b8b8"
+      ],
+      "argomenti": {
+        "sx": 50
+      },
+      "atteso": {
+        "rifiuto": "unmapped"
+      }
+    },
+    {
+      "id": "object.shear",
+      "disegno": "t13-solo-inchiostro.svg",
+      "selezione": [
+        "oi8b8b8b8"
+      ],
+      "argomenti": {
+        "angle": 15,
+        "axis": "horizontal"
+      },
+      "atteso": {
+        "rifiuto": "unmapped"
+      }
+    },
+    {
+      "id": "object.shear",
+      "disegno": "t13-inchiostro.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "oi8b8b8b8"
+      ],
+      "argomenti": {
+        "angle": 15,
+        "axis": "horizontal"
+      },
+      "atteso": {
+        "rifiuto": "unmapped"
+      }
+    },
+    {
+      "id": "object.reflect",
+      "disegno": "t13-solo-inchiostro.svg",
+      "selezione": [
+        "oi8b8b8b8"
+      ],
+      "argomenti": {
+        "axis": "vertical"
+      },
+      "atteso": {
+        "rifiuto": "unmapped"
+      }
+    },
+    {
+      "id": "object.reflect",
+      "disegno": "t13-inchiostro.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "oi8b8b8b8"
+      ],
+      "argomenti": {
+        "axis": "vertical"
+      },
+      "atteso": {
+        "rifiuto": "unmapped"
+      }
+    },
+    {
+      "id": "object.distort",
+      "disegno": "testo.svg",
+      "selezione": [
+        "ot1t1t1t1"
+      ],
+      "argomenti": {
+        "corners": [
+          [
+            40,
+            40
+          ],
+          [
+            200,
+            40
+          ],
+          [
+            200,
+            120
+          ],
+          [
+            40,
+            120
+          ]
+        ]
+      },
+      "atteso": {
+        "rifiuto": "unsupported"
+      }
+    },
+    {
+      "id": "object.distort",
+      "disegno": "t13-testo-in-area.svg",
+      "selezione": [
+        "oz1z1z1z1"
+      ],
+      "argomenti": {
+        "corners": [
+          [
+            40,
+            40
+          ],
+          [
+            200,
+            40
+          ],
+          [
+            200,
+            120
+          ],
+          [
+            40,
+            120
+          ]
+        ]
+      },
+      "atteso": {
+        "rifiuto": "unsupported"
+      }
+    },
+    {
+      "id": "object.distort",
+      "disegno": "t13-testo-gruppo.svg",
+      "selezione": [
+        "gt5t5t5t5"
+      ],
+      "argomenti": {
+        "corners": [
+          [
+            40,
+            40
+          ],
+          [
+            200,
+            40
+          ],
+          [
+            200,
+            120
+          ],
+          [
+            40,
+            120
+          ]
+        ]
+      },
+      "atteso": {
+        "rifiuto": "unsupported"
+      }
+    },
+    {
+      "id": "object.distort",
+      "disegno": "testo.svg",
+      "selezione": [
+        "ot1t1t1t1",
+        "oa1a1a1a1"
+      ],
+      "argomenti": {
+        "corners": [
+          [
+            40,
+            40
+          ],
+          [
+            200,
+            40
+          ],
+          [
+            200,
+            120
+          ],
+          [
+            40,
+            120
+          ]
+        ]
+      },
+      "atteso": {
+        "rifiuto": "unsupported"
+      }
     }
   ]
 }
