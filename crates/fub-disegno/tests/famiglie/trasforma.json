@@ -3100,6 +3100,357 @@
       "atteso": {
         "rifiuto": "unsupported"
       }
+    },
+    {
+      "id": "object.puppetWarp",
+      "disegno": "base.svg",
+      "selezione": [
+        "op7a7a7a7"
+      ],
+      "argomenti": {
+        "pins": [
+          [
+            300,
+            200
+          ],
+          [
+            360,
+            200
+          ],
+          [
+            330,
+            260
+          ]
+        ],
+        "moved": [
+          [
+            300,
+            220
+          ],
+          [
+            360,
+            200
+          ],
+          [
+            330,
+            260
+          ]
+        ]
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "op7a7a7a7",
+            "attrs": {
+              "d": "M300 220 L360 200 L330 260 Z"
+            }
+          }
+        ]
+      },
+      "dopo": "marionetta-tre-spilli.svg"
+    },
+    {
+      "id": "object.puppetWarp",
+      "disegno": "base.svg",
+      "selezione": [
+        "op7a7a7a7"
+      ],
+      "argomenti": {
+        "pins": [
+          [
+            330,
+            260
+          ]
+        ],
+        "moved": [
+          [
+            330,
+            280
+          ]
+        ]
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "op7a7a7a7",
+            "attrs": {
+              "d": "M299.86 220.07 L359.86 219.93 L330 280 Z"
+            }
+          }
+        ]
+      },
+      "dopo": "marionetta-uno-spillo.svg"
+    },
+    {
+      "id": "object.puppetWarp",
+      "disegno": "base.svg",
+      "selezione": [
+        "op7a7a7a7"
+      ],
+      "argomenti": {
+        "pins": [],
+        "moved": []
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "object.puppetWarp",
+      "disegno": "base.svg",
+      "selezione": [
+        "op7a7a7a7"
+      ],
+      "argomenti": {
+        "pins": [
+          [
+            10,
+            10
+          ]
+        ],
+        "moved": [
+          [
+            20,
+            20
+          ]
+        ]
+      },
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "object.puppetWarp",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {
+        "pins": [
+          [
+            100,
+            100
+          ],
+          [
+            200,
+            100
+          ],
+          [
+            200,
+            150
+          ],
+          [
+            100,
+            150
+          ]
+        ],
+        "moved": [
+          [
+            100,
+            100
+          ],
+          [
+            200,
+            100
+          ],
+          [
+            200,
+            170
+          ],
+          [
+            100,
+            150
+          ]
+        ]
+      },
+      "atteso": {
+        "rifiuto": "unsupported"
+      }
+    },
+    {
+      "id": "object.puppetWarp",
+      "disegno": "base.svg",
+      "selezione": [
+        "gd4d4d4d4"
+      ],
+      "argomenti": {
+        "pins": [
+          [
+            20,
+            20
+          ]
+        ],
+        "moved": [
+          [
+            25,
+            25
+          ]
+        ]
+      },
+      "atteso": {
+        "rifiuto": "unsupported"
+      }
+    },
+    {
+      "id": "object.puppetWarp",
+      "disegno": "testo.svg",
+      "selezione": [
+        "ot1t1t1t1"
+      ],
+      "argomenti": {
+        "pins": [
+          [
+            40,
+            250
+          ]
+        ],
+        "moved": [
+          [
+            40,
+            270
+          ]
+        ]
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "ot1t1t1t1",
+            "attrs": {
+              "transform": "matrix(0.9997 -0.0227 0.0227 0.9997 -5.6571 20.9702)"
+            }
+          }
+        ]
+      },
+      "dopo": "marionetta-testo.svg"
+    },
+    {
+      "id": "object.puppetWarp",
+      "disegno": "t13-solo-inchiostro.svg",
+      "selezione": [
+        "oi8b8b8b8"
+      ],
+      "argomenti": {
+        "pins": [
+          [
+            120,
+            220
+          ]
+        ],
+        "moved": [
+          [
+            120,
+            230
+          ]
+        ]
+      },
+      "atteso": {
+        "rifiuto": "unmapped"
+      }
+    },
+    {
+      "id": "object.puppetWarp",
+      "disegno": "bloccato.svg",
+      "selezione": [
+        "ob2b2b2b2"
+      ],
+      "argomenti": {
+        "pins": [
+          [
+            220,
+            100
+          ]
+        ],
+        "moved": [
+          [
+            220,
+            110
+          ]
+        ]
+      },
+      "atteso": {
+        "rifiuto": "locked"
+      }
+    },
+    {
+      "id": "object.puppetWarp",
+      "disegno": "t13-livello-bloccato-davvero.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {
+        "pins": [
+          [
+            100,
+            100
+          ]
+        ],
+        "moved": [
+          [
+            100,
+            110
+          ]
+        ]
+      },
+      "atteso": {
+        "rifiuto": "locked"
+      }
+    },
+    {
+      "id": "object.puppetWarp",
+      "disegno": "t13-nascosto.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {
+        "pins": [
+          [
+            100,
+            100
+          ]
+        ],
+        "moved": [
+          [
+            100,
+            110
+          ]
+        ]
+      },
+      "atteso": {
+        "rifiuto": "unsupported"
+      }
+    },
+    {
+      "id": "object.puppetWarp.pins",
+      "disegno": "base.svg",
+      "selezione": [
+        "op7a7a7a7"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "lettura_parziale": {
+          "pins": [
+            [
+              329.96699999999987,
+              221.1669999999999
+            ],
+            [
+              346.15762499999994,
+              208.20762500000004
+            ],
+            [
+              331.4991428571429,
+              245.40628571428573
+            ],
+            [
+              316.932,
+              208.43449999999999
+            ]
+          ]
+        }
+      }
     }
   ]
 }

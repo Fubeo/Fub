@@ -19,6 +19,10 @@ fn arrotonda(v: f64) -> f64 {
 }
 
 use super::tracciati::sceglie_inchiostro;
+
+#[path = "trasforma_marionetta.rs"]
+mod marionetta;
+use marionetta::{MARIONETTA, MARIONETTA_PINS};
 use super::{nodi_scelti, selezione_spenta, StatoFamiglia};
 use crate::apertura::Copia;
 
@@ -91,6 +95,9 @@ impl StatoFamiglia for Stato {
     /// decide la sezione del client: qui non si dice `needs_two`. Le voci di
     /// Disponi dicono quanti ne vogliono, col perché.
     fn spento(id: &str, copia: &Copia, selezione: &[String]) -> Option<DrawingDisabledReason> {
+        if id == MARIONETTA {
+            return marionetta::spento(copia, selezione);
+        }
         if DISPONI.contains(&id) {
             return disponi_spenta(id, copia, selezione);
         }
@@ -138,6 +145,9 @@ impl StatoFamiglia for Stato {
     /// Una voce di Disponi, Sposta leggermente o Distorci su un inchiostro di Fub non gira:
     /// l'inchiostro non è un oggetto del motore, e il comando lo rifiuta come `unmapped`, come il colore.
     fn rifiuto(id: &str, copia: &Copia, selezione: &[String]) -> Option<DrawingRefusal> {
+        if id == MARIONETTA {
+            return marionetta::rifiuto(copia, selezione);
+        }
         if id == RENDI_PERFETTO {
             // L'inchiostro di Fub non è un oggetto del motore (`unmapped`); un oggetto nascosto il
             // motore lo sposterebbe lo stesso, e Fub non lo tocca: niente da fare (`empty`).
@@ -160,7 +170,23 @@ impl StatoFamiglia for Stato {
     /// uguali, cioè un lato di lunghezza zero, o quattro angoli allineati danno una trasformazione
     /// che schiaccia il tracciato (il motore ne scrive un punto solo, in 0 0). Angoli che si
     /// incrociano (un quadrilatero che si rovescia) sono uno specchio, e valgono.
-    fn argomenti_della_copia(id: &str, _copia: &Copia, valore: Value) -> Result<Value, PluginError> {
+    fn legge(&self, id: &str) -> bool {
+        id == MARIONETTA_PINS
+    }
+
+    /// Gli spilli della marionetta: il motore li vuole in documento; senza spilli, o con due liste di
+    /// lunghezza diversa, è `BadArgs` in italiano (`trasforma_marionetta.rs`).
+    fn rifiuto_valore(id: &str, copia: &Copia, selezione: &[String], valore: &Value) -> Option<DrawingRefusal> {
+        if id != MARIONETTA {
+            return None;
+        }
+        marionetta::rifiuto_valore(copia, selezione, valore)
+    }
+
+    fn argomenti_della_copia(id: &str, copia: &Copia, valore: Value) -> Result<Value, PluginError> {
+        if id == MARIONETTA || id == MARIONETTA_PINS {
+            return marionetta::argomenti(id, copia, valore);
+        }
         if id == "object.distort" {
             let angoli = valore.get("corners").unwrap_or(&Value::Null);
             quadrilatero_valido(angoli).map_err(|perche| PluginError::BadArgs(format!("{id}: {perche}").into()))?;
