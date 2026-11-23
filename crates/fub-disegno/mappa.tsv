@@ -988,7 +988,7 @@ interfaccia	ui.shortcutImportDialog	Import Shortcut Set…		fub	—	T9	fub	fub	�
 interfaccia	view.outline	Outline		vista	F1	T11	fatto	menu/visualizza	famiglia		Contorno
 interfaccia	view.pixelPreview	Pixel Preview		vista	F1	T11	da fare	menu/visualizza	famiglia	l'anteprima dei pixel non la disegna ancora il client	Anteprima pixel
 interfaccia	view.trimView	Trim View		stampa	F4	T25	da fare	menu/visualizza	famiglia		Vista rifilata
-interfaccia	view.cornerWidget	Hide Corner Widget		vista	F1	T11	da fare	menu/visualizza	famiglia	i widget d'angolo arrivano con i punti di T12 (le azioni sul punto): nel Completo non ce ne sono ancora	Nascondi widget angolo
+interfaccia	view.cornerWidget	Hide Corner Widget		vista	F1	T11	da fare	menu/visualizza	famiglia	widget d'angolo (raggio trascinabile sul vertice) non ancora nel Completo: il motore ha solo la preferenza hideCornerWidgetAbove e il comando cornerSet (T12 fatto). Serve una lettura del raggio per vertice e un widget da trascinare (T12, azioni sul punto)	Nascondi widget angolo
 interfaccia	view.snapToPixel	Snap to Pixel		vista	F1	T11	da fare	menu/visualizza	famiglia	l'aggancio al pixel non c'è ancora: quello alla griglia è un passo diverso	Aggancia ai pixel
 interfaccia	view.snapToGlyph	Snap to Glyph		testo	F2	T16	da fare	menu/visualizza	famiglia		Aggancia a glifo
 interfaccia	view.preciseCursors	Use Precise Cursors		vista	F1	T11	da fare	menu/visualizza	famiglia	il cursore a croce di precisione non c'è ancora nel client	Usa cursori di precisione
