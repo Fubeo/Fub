@@ -131,7 +131,9 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // delle librerie e le librerie dell'utente (la cartella del desktop non c'è nel Completo).
   // T14 pannello colore: il pannello `color` diventa «fatto» (la sezione Colore del Design, con la sua
   // prova in colore.json); `ui.colorPicker` e `ui.colorPanel` restano «da fare», con la causa nella nota.
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1102, fub: 114, escluso: 12, fatto: 323 });
+  // T15 aspetto: Riduci ad aspetto di base («fatto», con la riapertura dei due riempimenti); Svuota
+  // resta «da fare», perché il file riaperto perde l'oggetto (la causa è nella nota).
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1101, fub: 114, escluso: 12, fatto: 324 });
 });
 
 // --- un motore finto ---------------------------------------------------------------

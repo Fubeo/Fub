@@ -478,3 +478,13 @@ describe("eseguiVoce, coi comandi del testo (K6 T16, testo base)", () => {
     }
   });
 });
+
+describe("eseguiVoce, Riduci ad aspetto di base (K6 T15, aspetto)", () => {
+  it("manda al motore disegno.appearance.reduceToBasic con la selezione, e il passo va alla cronologia", async () => {
+    const { d, sessione, azioni } = dipendenze();
+    eseguiVoce(voce({ id: "appearance.reduceToBasic", famiglia: "aspetto", chiamata: { comando: "disegno.appearance.reduceToBasic", valore: {} } }), d);
+    await tick();
+    expect(sessione.comando).toHaveBeenCalledWith({ id: "disegno.appearance.reduceToBasic", selection: ["n1", "n2"], value: {}, preview: false });
+    expect(azioni.commit).toHaveBeenCalledOnce();
+  });
+});

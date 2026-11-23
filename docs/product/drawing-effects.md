@@ -67,6 +67,17 @@ I sedici modi, coi nomi e nei gruppi di Illustrator e di Photoshop:
 - **Un filtro scritto da un altro programma** si vede e si conserva come gli
   effetti di Fub.
 
+## Riduci ad aspetto di base
+
+Il comando Riduci ad aspetto di base (il pannello Aspetto con i suoi comandi
+arriva dopo) lascia un solo riempimento e un
+solo contorno visibili: con più riempimenti il file è una ricetta, e la
+riapertura conserva quei riempimenti finché Riduci non ne toglie uno. Con
+niente scelto, con un oggetto bloccato o con una maschera di opacità il
+comando non parte e dice perché. Svuota l'aspetto non c'è ancora: un oggetto
+svuotato si riapre come grafica semplice, e questo il file non lo tiene (K6
+T15 aspetto).
+
 ## L'opacità nella barra
 
 Nello spazio Completo la barra «Disponi», accanto alla selezione, ha il campo

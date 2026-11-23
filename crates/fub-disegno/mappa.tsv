@@ -2,8 +2,8 @@
 fonte	id	etichetta	menu	famiglia	fase	task	stato	posto	pigro	nota	etichetta_it
 motore	appearance.addFill	Add New Fill	Window › Appearance	aspetto	F1	T15	da fare	ispettore/design	famiglia		Aggiungi nuovo riempimento
 motore	appearance.addStroke	Add New Stroke	Window › Appearance	aspetto	F1	T15	da fare	ispettore/design	famiglia		Aggiungi nuova traccia
-motore	appearance.clear	Clear Appearance	Window › Appearance	aspetto	F1	T15	da fare	ispettore/design	famiglia		Cancella aspetto
-motore	appearance.reduceToBasic	Reduce to Basic Appearance	Window › Appearance	aspetto	F1	T15	da fare	ispettore/design	famiglia		Riduci ad aspetto di base
+motore	appearance.clear	Clear Appearance	Window › Appearance	aspetto	F1	T15	da fare	ispettore/design	famiglia	Svuota porta l'oggetto senza riempimento né contorno: la riapertura di quel file lo segna «il motore non ne fa un oggetto suo» (perdita scritta), quindi il file non riapre uguale; con un contorno colorato il file non sa scrivere lo spessore senza colore (K6 T15 aspetto)	Cancella aspetto
+motore	appearance.reduceToBasic	Reduce to Basic Appearance	Window › Appearance	aspetto	F1	T15	fatto	ispettore/design	famiglia	tiene un riempimento e un contorno visibili: con due riempimenti il file è una ricetta, che si riapre con due e Riduci ne toglie uno (test riapertura_aspetto); con una maschera di opacità non si fa (K6 T15 aspetto)	Riduci ad aspetto di base
 motore	appearance.setItem	Appearance Item		aspetto	F1	T15	da fare	ispettore/design	famiglia		Elemento aspetto
 motore	appearance.removeItem	Remove Item		aspetto	F1	T15	da fare	ispettore/design	famiglia		Rimuovi elemento
 motore	appearance.addEffect	Add Effect		aspetto	F1	T15	da fare	ispettore/design	famiglia		Aggiungi effetto
