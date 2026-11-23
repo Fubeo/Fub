@@ -100,6 +100,14 @@ sceglie, ma la gomma che la attraversa la toglie intera, in tutti e due i
 modi. Mentre la gomma passa non sbiadisce, perché si disegna insieme alle
 parti estranee vicine: se ne va quando la gomma si alza.
 
+La **Gomma dei punti** (la casella con la gomma, «Pennello gomma punti di
+ancoraggio») toglie i punti di ancoraggio dei tracciati scelti che il tratto
+tocca. Si trascina: il segno tratteggiato dice dove passa, e al rilascio il
+motore riceve un solo comando con tutto il tratto. Esc a metà, o uno strumento
+diverso, non cambia niente. Un clic senza movimento non fa niente. Senza un
+tracciato scelto l'editor dice «Scegli un tracciato.». Se il tratto non tocca
+nessun punto, lo dice e non scrive.
+
 ## Ripennare e levigare
 
 Con dei tratti scelti, cambiare penna, misura, colore o opacità nella riga

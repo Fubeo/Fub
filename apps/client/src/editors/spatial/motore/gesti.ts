@@ -65,7 +65,8 @@ import type { EditorContext } from "../tools/editor/context";
 import { layerRefusal, layerTitle, matrixText } from "../tools/editor/helpers";
 import type { GestureBase, MotoreGesture } from "../tools/editor/types";
 import type { ToolId } from "../tools/registry";
-import { motivoDelRifiutoDelloStrumento } from "./rifiuto";
+import { motivoDelRifiuto, motivoDelRifiutoDelloStrumento } from "./rifiuto";
+import { CodaGommaPunti, STRUMENTO_GOMMA_PUNTI } from "./gomma-punti";
 import type { GestoMotore, MotoreAssente, SessioneMotore } from "./sessione";
 import { cursoreCss, motoreDelloStrumento, StatiStrumenti } from "./strumento";
 import { Scrittura, STRUMENTI_CHE_SCRIVONO } from "./scrittura";
@@ -489,6 +490,9 @@ export interface GestiMotoreContext {
   /// tracciato aperto, Esc con uno strumento dei tracciati torna alla
   /// Selezione. `true` se il tasto è servito.
   motoreTasto: (tasto: "Enter" | "Escape") => boolean;
+  /// La Gomma dei punti (K6 T12, giro 2): a rilascio, il tratto del trascinamento
+  /// va al motore in un solo comando (`gomma-punti.ts`).
+  gommaPuntiEnd: (punti: readonly Point[]) => void;
 }
 
 /// Ciò che il gesto tiene e gli altri pezzi non leggono.
@@ -1105,6 +1109,43 @@ export function installGestiMotore(ctx: EditorContext): void {
     }
     return false;
   };
+
+  // La Gomma dei punti (K6 T12, giro 2): a rilascio il tratto va al motore in
+  // un solo comando, uno alla volta (`gomma-punti.ts`). Dopo la chiusura
+  // dell'editor non parte più niente e non si dice più niente.
+  const applicaEsitoGomma = (esito: DrawingOutcome): void => {
+    if (esito.refused !== null) {
+      ctx.select(esito.selection);
+      if (esito.refused === "empty") ctx.announce(t("draw.gomma_punti.vuota"));
+      else ctx.announce(t("draw.rejected", { reason: t(motivoDelRifiuto(esito.refused) ?? "draw.reason.invalid") }));
+      return;
+    }
+    const read = opsDellEsito(esito.ops);
+    if ("reason" in read) {
+      console.error(`motore del disegno: un'operazione dell'esito non vale (${read.reason}): ${read.detail}`);
+      ctx.announce(t("draw.rejected", { reason: t("draw.reason.invalid") }));
+      return;
+    }
+    if (read.ops.length > 0 && ctx.commit("draw.engine.tool", asGesture(read.ops)) === null) return;
+    ctx.select(esito.selection);
+    if (read.ops.length > 0) ctx.announce(`${t("draw.engine.done")} ${ctx.objects()}`);
+  };
+  const gomma = new CodaGommaPunti({
+    sessione: async () => {
+      if (porta === undefined || ctx.disposed) return null;
+      // Come il gesto del motore: la famiglia dello strumento dev'essere pronta.
+      const pronta = await (preparazioni.get(STRUMENTO_GOMMA_PUNTI) ?? Promise.resolve(true));
+      return pronta ? porta.pronta(ATTESA_APERTURA_MS) : null;
+    },
+    selezione: () => ctx.selection,
+    esito: (esito) => {
+      if (!ctx.disposed) applicaEsitoGomma(esito);
+    },
+    dici: (frase) => {
+      if (!ctx.disposed) ctx.announce(t(frase));
+    },
+  });
+  ctx.gommaPuntiEnd = (punti) => gomma.lancia(punti);
 
   /// Un tocco della Selezione su un oggetto, senza trascinare: per il doppio
   /// tocco, che isola un gruppo come oggi.

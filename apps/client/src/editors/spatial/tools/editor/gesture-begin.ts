@@ -2,6 +2,7 @@
 // createDrawEditor (`../editor.ts`): lavora sul contesto che i pezzi
 // condividono.
 
+import { STRUMENTO_GOMMA_PUNTI } from "../../motore/gomma-punti";
 import type { InkPointerType } from "../../../../ink/input/pointer";
 import type { StrokeStart } from "../../../../ink/input/session";
 import { penLook } from "../../../../ink/pens";
@@ -89,6 +90,9 @@ export function installGestureBegin(ctx: EditorContext): void {
     // Uno strumento della vista del motore (Mano, Zoom, Ruota vista) muove la
     // vista di Fub (`hand-zoom.ts`): come la Mano, non disegna niente.
     if (vistaDelMotore(ctx.motoreTool) !== null) return { ...base, kind: "refused" };
+    // La Gomma dei punti (K6 T12, giro 2) non passa dal motore a ogni movimento: il
+    // tratto si raccoglie qui, e al rilascio parte un solo comando.
+    if (ctx.motoreTool === STRUMENTO_GOMMA_PUNTI) return { ...base, kind: "pathErase", path: [] };
     if (ctx.motoreTool !== null) {
       const motore = ctx.motoreBegin(base);
       if (motore !== null) return motore;

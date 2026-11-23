@@ -13,6 +13,8 @@ import type { Point } from "../../scene/matrix";
 import { plural, t } from "../../strings";
 import { gesture as asGesture, removeOps } from "../edit";
 import { gripAt } from "../frame";
+import { IDENTITY } from "../../scene/matrix";
+import { segnoDelTratto } from "../../motore/gomma-punti";
 import { toScene } from "../../view";
 import { Unit, type Erasable, type ForeignBlock } from "../hit";
 import { preciseEraseOps, type StrokeCut } from "../erase-precise";
@@ -395,6 +397,10 @@ export function installCurvatureTool(ctx: EditorContext): void {
         case "motore":
           ctx.motoreSamples(g, samples);
           break;
+        case "pathErase":
+          for (const sample of samples) g.path.push(toPoint(sample));
+          ctx.showShape(segnoDelTratto(g.path), IDENTITY);
+          break;
         case "refused":
           break;
       }
@@ -462,6 +468,11 @@ export function installCurvatureTool(ctx: EditorContext): void {
         case "motore":
           ctx.current = null;
           ctx.motoreEnd(g);
+          return;
+        case "pathErase":
+          ctx.current = null;
+          ctx.showShape(null, IDENTITY);
+          ctx.gommaPuntiEnd(g.path);
           return;
         case "refused":
           ctx.current = null;
