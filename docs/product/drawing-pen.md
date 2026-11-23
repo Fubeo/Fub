@@ -269,7 +269,7 @@ strumenti, i comandi non toccano i tratti dell'Inchiostro: con un tratto a
 mano scelto sono spenti e dicono «Un tratto dell'Inchiostro di Fub non si
 cambia da qui.».
 
-Cinque voci aprono una finestra, con l'anteprima sul foglio:
+Sei voci aprono una finestra, con l'anteprima sul foglio:
 
 - **Sposta tracciato…**: un tracciato nuovo, parallelo, alla distanza
   scritta (un numero negativo lo porta dentro), con le giunzioni ad angolo
@@ -280,7 +280,11 @@ Cinque voci aprono una finestra, con l'anteprima sul foglio:
 - **Dividi in trattini**: trattini della lunghezza scritta, con lo spazio
   fra l'uno e l'altro;
 - **≡ › Oggetto › Espandi…**: il riempimento e il tratto diventano forme
-  piene, su ogni oggetto scelto e non solo sui tracciati.
+  piene, su ogni oggetto scelto e non solo sui tracciati;
+- **≡ › Oggetto › Tracciato › Pulisci…**: toglie i punti isolati, i tracciati
+  senza riempimento né contorno e i testi vuoti. Vale su tutto il disegno, non
+  sulla selezione; le tre caselle sono accese di serie, e un oggetto su un
+  livello nascosto o bloccato resta com'è.
 
 L'anteprima mostra i contorni nuovi mentre si cambiano i valori: parte
 quando un campo prende il valore (Invio, Tab o un clic fuori), non a ogni
