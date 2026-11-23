@@ -117,19 +117,35 @@ describe("Base, la vista Mappa", () => {
     } };
     return { kind: "custom", value: { rows: [{ doc: "pin.md", values: { lat: { kind: "number", value: 0 }, lon: { kind: "number", value: 0 } } }], summaries: {} } };
   };
-  const mount = (hosts: readonly string[], tile: (url: string, kind: "raster" | "vector") => Promise<ArrayBuffer>, openSettings?: (key: string) => void) => {
+  const mount = (hosts: readonly string[], tile: (url: string, kind: "raster" | "vector") => Promise<ArrayBuffer>, openSettings?: (key: string) => void, onOpenDocument: (doc: string) => void = () => {}) => {
     const host = document.createElement("div");
     document.body.append(host);
     const fetchSpy = vi.fn(async () => { throw new Error("la webview non scarica tessere"); });
     vi.stubGlobal("fetch", fetchSpy);
     const surface = mountBaseSurface("base", { paneId: "base-map", documentId: "views/map.base", parent: host }, {
       queryIndex: mapQuery, invokeCommand: vi.fn(async () => ({})), viewState: async () => null,
-      setViewState: async () => {}, onOpenDocument: () => {},
+      setViewState: async () => {}, onOpenDocument,
       mapTiles: { hosts: async () => hosts, tile, ...(openSettings ? { openSettings } : {}) },
     });
     surface.buffer.setDoc("views:\n  - {name: Map, type: map}\n");
     return { host, fetchSpy, done: () => { surface.destroy(); host.remove(); vi.unstubAllGlobals(); } };
   };
+
+  it("è un'applicazione coi suoi tasti, e Invio o Spazio su un segnaposto sono un clic solo che apre la nota", async () => {
+    const opened = vi.fn();
+    const { host, done } = mount([], vi.fn(async () => PNG), undefined, opened);
+    try {
+      await vi.waitFor(() => expect(host.querySelector(".base-map-marker")).not.toBeNull());
+      // Un'immagine con dentro dei pulsanti non sarebbe raggiungibile: la mappa li contiene.
+      expect(host.querySelector(".base-map-atlas")!.getAttribute("role")).toBe("application");
+      const marker = host.querySelector<SVGElement>(".base-map-marker")!;
+      const clicks = vi.fn();
+      marker.addEventListener("click", clicks);
+      for (const key of ["Enter", " "]) marker.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));
+      expect(clicks).toHaveBeenCalledTimes(2);
+      expect(opened.mock.calls.map(([doc]) => doc)).toEqual(["pin.md", "pin.md"]);
+    } finally { done(); }
+  });
 
   it("con l'elenco vuoto dice «tessere non ammesse», rimanda alle Impostazioni e non chiede niente", async () => {
     const tile = vi.fn(async () => PNG);

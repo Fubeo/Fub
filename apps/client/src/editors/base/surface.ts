@@ -1920,7 +1920,9 @@ export function mountBaseSurface(
     const wrapper = document.createElement("div");
     wrapper.className = "base-map";
     wrapper.dataset.provider = "offline";
-    const atlas = svg("svg", { viewBox: "0 0 720 360", role: "img", "aria-label": t("base.map.label"), tabindex: "0" });
+    // Un'applicazione, non un'immagine: tiene i suoi tasti (frecce, + e -) e
+    // contiene i segnaposto, che sono pulsanti raggiungibili col Tab.
+    const atlas = svg("svg", { viewBox: "0 0 720 360", role: "application", "aria-label": t("base.map.label"), tabindex: "0" });
     atlas.classList.add("base-map-atlas");
     const world = svg("g", {});
     const tiles = svg("g", { class: "base-map-tiles" });
@@ -1943,7 +1945,8 @@ export function mountBaseSurface(
       marker.append(svg("title", {}));
       marker.querySelector("title")!.textContent = name;
       marker.addEventListener("click", () => open(row.doc));
-      marker.addEventListener("keydown", (event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); open(row.doc); } });
+      // Invio e Spazio sono il clic del pulsante, come per un `button`: uno solo.
+      marker.addEventListener("keydown", (event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); marker.dispatchEvent(new MouseEvent("click", { bubbles: true })); } });
       world.append(marker);
     }
     atlas.append(world);

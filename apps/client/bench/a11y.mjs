@@ -588,7 +588,8 @@ async function inspectKeyboard(page) {
     };
     const readFocused = () => page.evaluate(() => {
         const el = document.activeElement;
-        if (!(el instanceof HTMLElement)) return null;
+        // Anche un SVG prende il fuoco: la mappa della base e i suoi segnaposto.
+        if (!(el instanceof HTMLElement || el instanceof SVGElement)) return null;
         const hasIndicator = (style, pseudo, after) =>
           style.outlineStyle !== "none" ||
           style.boxShadow !== "none" ||
@@ -859,7 +860,7 @@ async function inspectKeyboard(page) {
       for (const key of keys) {
         await page.evaluate((probe) => {
           const target = document.querySelector(`[data-a11y-probe="${probe}"]`);
-          if (!(target instanceof HTMLElement)) return;
+          if (!(target instanceof HTMLElement || target instanceof SVGElement)) return;
           target.focus({ preventScroll: true });
           window.__a11yKeyboardProbe = { active: true, target, clicks: 0 };
         }, candidate.probe);
