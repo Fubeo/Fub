@@ -73,6 +73,10 @@ impl Stampo {
     ) -> Result<Option<String>, String> {
         let mut copia = n.clone();
         copia.name = None;
+        // Nascosto o no, il corpo è la grafica dell'oggetto: lo stato lo
+        // scrive la differenza con un `set` (l'esportazione salterebbe un
+        // oggetto nascosto).
+        copia.visible = true;
         senza_nomi(&mut copia);
         copia.transform(locale, Scaling::from(true));
         let mut livello = Node::layer(NodeId(u64::MAX), "", LayerColor::Preset(0));

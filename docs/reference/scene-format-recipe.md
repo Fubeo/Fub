@@ -8,7 +8,8 @@
 > (patch `0009-ricetta-per-elemento`) per l'elemento, l'impronta e i byte;
 > `crates/fub-disegno/src/ricetta.rs` per la tabella, la lettura e la
 > scrittura; `crates/fub-disegno/src/espansa.rs` per il corpo espanso; le
-> prove in `crates/fub-disegno/tests/ricetta.rs`.
+> prove in `crates/fub-disegno/tests/ricetta.rs` e, per la riapertura dopo
+> un comando, in `crates/fub-disegno/tests/ricette_riapertura.rs`.
 
 Un oggetto del disegno con un effetto dal vivo, un aspetto con tre
 riempimenti o una forma dal vivo non si scrive in SVG semplice senza perdere
@@ -63,12 +64,16 @@ file si leggono ma non si riscrivono.
 ## 2. L'impronta
 
 `hash` è `body_hash` del motore applicato al testo dell'elemento, dal tag di
-apertura a quello di chiusura, figli compresi, **senza il suo attributo
-`transform`**: FNV-1a a 64 bit in esadecimale, con gli spazi fra i tag
-tolti e le altre serie di spazi lette come uno solo. Così:
+apertura a quello di chiusura, figli compresi, **senza i suoi attributi
+`transform`, `display` e `fub:locked`**: FNV-1a a 64 bit in esadecimale,
+con gli spazi fra i tag tolti e le altre serie di spazi lette come uno solo
+(`ricetta::impronta`). Gli stessi attributi dei figli contano: sono la
+grafica espansa. Così:
 
 - spostare, ruotare o scalare l'oggetto, che cambia solo la sua
   `transform`, tiene la ricetta;
+- nasconderlo, mostrarlo, bloccarlo e sbloccarlo, che cambiano solo il suo
+  `display` e il suo `fub:locked`, tengono la ricetta;
 - rientrare il file o cambiarne i fine riga non conta;
 - ogni altro cambio dell'elemento, in Fub senza il motore o fuori da Fub,
   fa cadere la ricetta (§4).
@@ -87,8 +92,13 @@ semplice.
 
 Il motore legge le ricette dopo aver letto il corpo. Una ricetta vale se il
 suo elemento c'è, è nella mappa e la sua impronta torna: allora l'oggetto
-del motore diventa quello della ricetta, messo dove l'elemento sta. Una
-ricetta che non vale non blocca mai l'apertura: l'elemento resta grafica
+del motore diventa quello della ricetta, messo dove l'elemento sta, nascosto
+e bloccato come l'elemento (lo stato è del file, non della ricetta). Un
+corpo che non disegna niente (senza riempimento né contorno, anche sotto una
+maschera di opacità) l'import del motore non lo porta: la ricetta, se vale,
+rimette l'oggetto al posto dell'elemento fra i fratelli; sotto la radice,
+fuori da un livello, resta la riga «non trova il suo oggetto nel motore».
+Una ricetta che non vale non blocca mai l'apertura: l'elemento resta grafica
 semplice e si modifica come tale, e una riga fra le parti lo dice (tipo
 approssimato, il dettaglio comincia con «la ricetta »).
 
@@ -118,10 +128,21 @@ come operazioni sulla scena ([operazioni sulla scena](scene-operations.md)):
 
 - un oggetto con una ricetta che si sposta soltanto: un `set` della sua
   `transform`, la ricetta resta;
+- un oggetto con una ricetta nascosto, mostrato, bloccato o sbloccato: un
+  `set` del suo `display` o del suo `fub:locked`, la ricetta resta;
 - un oggetto che diventa ricco, o un oggetto con la ricetta che cambia
   altrimenti: l'elemento si toglie e si riaggiunge con lo stesso id (se è
   già della forma nuova, se no con uno nuovo) come corpo espanso (`raw`),
-  e la ricetta nuova nasce con l'impronta di quel testo;
+  e la ricetta nuova nasce con l'impronta di quel testo. Il corpo è la
+  grafica dell'oggetto anche se è nascosto; se è nascosto o bloccato, un
+  `set` di `display="none"` o `fub:locked="true"` sull'id del corpo viene
+  dopo l'`add`;
+- un gruppo è ricco solo per ciò che è suo (la sua opacità, il suo modo di
+  fusione, il suo riempimento o contorno, che è un aspetto impilato perché si
+  disegna sopra gli oggetti), mai per gli oggetti che contiene: il confronto
+  scende fino a loro, e ognuno si scrive per sé (riscritto con la sua
+  ricetta se diventa ricco); il gruppo si riscrive intero solo quando cambia
+  ciò che è suo;
 - quando le ricette cambiano, il loro `<metadata>` si toglie (`remove` col
   percorso) e se ne aggiunge uno nuovo (`add` `raw`, primo figlio di
   `<svg>`) con le ricette che restano, le nuove e il resto del blocco

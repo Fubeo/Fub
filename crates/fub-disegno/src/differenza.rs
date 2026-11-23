@@ -822,9 +822,10 @@ impl Lavoro<'_> {
                 let byte = ricetta::codifica(nodo, locale).map_err(no)?;
                 self.ricette.nuove.push(vectorcraft_svg::recipe_element(
                     &id,
-                    &vectorcraft_svg::element_hash(&raw),
+                    &ricetta::impronta(&raw),
                     &byte,
                 ));
+                self.stato_del_corpo(nodo, riscritto, &id);
                 json!({ "raw": raw })
             } else {
                 let (tag, mut attrs) = match scritto {
@@ -843,6 +844,92 @@ impl Lavoro<'_> {
             self.add.push(op);
         }
         Ok(())
+    }
+
+    /// La parte di cui `n` risponde da sé quando si chiede se è ricco. Un
+    /// gruppo risponde solo di sé: i suoi oggetti sono elementi del file, e il
+    /// confronto scende fino a loro, che si scrivono ognuno per sé (un oggetto
+    /// diventato ricco si riscrive con la sua ricetta, il gruppo resta). Ogni
+    /// altro contenitore risponde di ciò che contiene, tranne gli oggetti con
+    /// una ricetta applicata nel file.
+    fn propria(&self, n: &Arc<Node>) -> Arc<Node> {
+        if !matches!(n.kind, NodeKind::Group { .. }) {
+            return self.senza_ricette(n);
+        }
+        let mut solo = (**n).clone();
+        if let Some(f) = solo.children_mut() {
+            f.clear();
+        }
+        Arc::new(solo)
+    }
+
+    /// `n` senza gli oggetti che contiene con una ricetta applicata nel file.
+    /// Lo stesso `Arc` se dentro non ce ne sono.
+    fn senza_ricette(&self, n: &Arc<Node>) -> Arc<Node> {
+        let Some(figli) = n.children() else {
+            return n.clone();
+        };
+        let ricette = self.copia.mappa.ricette();
+        let mut cambiato = false;
+        let tenuti: Vec<Arc<Node>> = figli
+            .iter()
+            .filter_map(|c| {
+                let con_ricetta = self
+                    .elemento(c.id)
+                    .and_then(|e| e.id.as_deref())
+                    .is_some_and(|id| ricette.applicata(id));
+                if con_ricetta {
+                    cambiato = true;
+                    return None;
+                }
+                let dentro = self.senza_ricette(c);
+                cambiato |= !Arc::ptr_eq(&dentro, c);
+                Some(dentro)
+            })
+            .collect();
+        if !cambiato {
+            return n.clone();
+        }
+        let mut copia = (**n).clone();
+        if let Some(f) = copia.children_mut() {
+            *f = tenuti;
+        }
+        Arc::new(copia)
+    }
+
+    /// Lo stato, nascosto e bloccato, di un oggetto scritto come corpo
+    /// espanso con la ricetta: il corpo non lo porta (lo stampo esporta
+    /// l'oggetto visibile) e l'impronta non lo conta, quindi va in un `set`
+    /// sull'id del corpo, dopo l'`add`. Per un oggetto riscritto prende il
+    /// posto del `set` che [`Lavoro::stato`] ha messo sul suo id di prima:
+    /// l'elemento di prima se ne va con i suoi attributi, e l'id può essere
+    /// nuovo.
+    fn stato_del_corpo(&mut self, nodo: &Node, riscritto: bool, id: &str) {
+        if riscritto {
+            if let Some(prima) = self
+                .elemento(nodo.id)
+                .and_then(Elemento::id_del_file)
+                .map(str::to_string)
+            {
+                self.set.retain(|op| {
+                    let solo_stato = op["attrs"]
+                        .as_object()
+                        .is_some_and(|a| a.keys().all(|k| k == "display" || k == "fub:locked"));
+                    !(op["id"] == prima && solo_stato)
+                });
+            }
+        }
+        let mut attrs = Map::new();
+        if !nodo.visible {
+            attrs.insert("display".into(), json!("none"));
+        }
+        if nodo.locked {
+            attrs.insert("fub:locked".into(), json!("true"));
+        }
+        if !attrs.is_empty() {
+            self.set
+                .push(json!({ "op": "set", "id": id, "attrs": attrs }));
+        }
     }
 
     /// Il posto di un oggetto nuovo fra i fratelli di dopo.
@@ -1070,12 +1157,16 @@ impl Lavoro<'_> {
                 self.riscritti.insert(a.id);
                 return Ok(());
             }
-            if ricetta::esito_albero(a) > Esito::Corpo {
+            // Gli oggetti di un gruppo, e quelli con una ricetta loro, non
+            // fanno ricco questo: il confronto scende fino a loro, e ognuno si
+            // scrive per sé (spostato, o riscritto con la sua ricetta).
+            let (propria_a, propria_b) = (self.propria(a), self.propria(b));
+            if ricetta::esito_albero(&propria_a) > Esito::Corpo {
                 // Ricco. Se i suoi costrutti cambiano, gli attributi non li
                 // direbbero: si riscrive intero con la sua ricetta. Il
                 // tratteggio semplice fa eccezione: `stroke-dasharray` lo
                 // dice, e `foglia` lo scrive (o rifiuta, e si riscrive).
-                if costrutti_non_detti(a) != costrutti_non_detti(b) {
+                if costrutti_non_detti(&propria_a) != costrutti_non_detti(&propria_b) {
                     self.riscritti.insert(a.id);
                     return Ok(());
                 }
