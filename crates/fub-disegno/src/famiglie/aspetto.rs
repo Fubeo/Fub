@@ -38,6 +38,9 @@ pub(crate) const CONTORNO: &str = "stroke.set";
 /// maschera degli altri, che vanno in un gruppo con `mask`.
 const CREA_MASCHERA: &str = "transparency.makeOpacityMask";
 
+/// Riduci ad aspetto di base (K6 T15, aspetto): lascia un solo riempimento e un solo contorno visibili.
+const RIDUCI: &str = "appearance.reduceToBasic";
+
 /// I valori del pannello Trasparenza per la scelta, e la maschera di opacità della scelta: letture.
 const LETTURA_TRASPARENZA: &str = "transparency.info";
 const LETTURA_MASCHERA: &str = "transparency.opacityMaskInfo";
@@ -139,6 +142,9 @@ impl StatoFamiglia for Stato {
         if id == CREA_MASCHERA {
             return spento_maschera(copia, selezione);
         }
+        if id == RIDUCI {
+            return spento_riduci(copia, selezione);
+        }
         if id != TRASPARENZA && id != CONTORNO {
             return None;
         }
@@ -169,6 +175,14 @@ impl StatoFamiglia for Stato {
     fn rifiuto(id: &str, copia: &Copia, selezione: &[String]) -> Option<DrawingRefusal> {
         if let Some(sfumatura) = come_sfumatura(id) {
             return Colore::rifiuto(sfumatura, copia, selezione);
+        }
+        if id == RIDUCI {
+            return match spento_riduci(copia, selezione)? {
+                DrawingDisabledReason::NoSelection => Some(DrawingRefusal::Empty),
+                DrawingDisabledReason::ReadOnly => Some(DrawingRefusal::Locked),
+                DrawingDisabledReason::Unmapped => Some(DrawingRefusal::Unmapped),
+                _ => Some(DrawingRefusal::Unsupported),
+            };
         }
         if id == CREA_MASCHERA {
             return match spento_maschera(copia, selezione)? {
@@ -304,4 +318,38 @@ fn piu_alto(copia: &Copia, nodi: &[NodeId]) -> Option<NodeId> {
         }
     });
     cima
+}
+
+/// Perché Riduci ad aspetto di base non vale sulle scelte (K6 T15, aspetto): niente scelto, un oggetto
+/// bloccato, e un oggetto con una maschera di opacità: il motore lo riscrive con una ricetta che la
+/// riapertura non riconosce più (la perdita c'è, ma l'oggetto non è più una maschera).
+fn spento_riduci(copia: &Copia, selezione: &[String]) -> Option<DrawingDisabledReason> {
+    if selezione.is_empty() {
+        return Some(DrawingDisabledReason::NoSelection);
+    }
+    if !copia.modificabile {
+        return Some(DrawingDisabledReason::ReadOnly);
+    }
+    let scelti = match nodi_scelti(copia, selezione) {
+        Ok(scelti) => scelti,
+        Err(DrawingRefusal::Locked) => return Some(DrawingDisabledReason::ReadOnly),
+        Err(_) => return Some(DrawingDisabledReason::Unmapped),
+    };
+    let con_maschera = |n: &NodeId| {
+        copia
+            .documento
+            .node(*n)
+            .is_some_and(|nodo| nodo.extras().mask.is_some())
+    };
+    if scelti.iter().any(con_maschera) {
+        return Some(DrawingDisabledReason::Other {
+            text: "Con una maschera di opacità non si fa ancora: il file non riapre l'oggetto com'era.".into(),
+        });
+    }
+    // Il colore di un testo sta nei suoi caratteri: il riempimento dell'oggetto, scritto sul `<text>`,
+    // lo spegnerebbe per intero. Il testo non si riduce ancora.
+    let testo = |n: &NodeId| copia.documento.node(*n).is_some_and(|nodo| matches!(nodo.kind, NodeKind::Text(_)));
+    scelti.iter().any(testo).then(|| DrawingDisabledReason::Other {
+        text: "Il testo non si riduce ancora: il suo colore sta nei caratteri.".into(),
+    })
 }
