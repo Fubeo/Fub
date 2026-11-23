@@ -141,6 +141,8 @@ export const MOTORE_PRONTO: ReadonlySet<string> = new Set([
   "eyedropper",
   // La Misura: la linea e le misure restano sul foglio fino alla misura dopo.
   "measure",
+  // La Tavola: crea, sposta (coi disegni dentro) e ridimensiona le tavole.
+  "artboard",
 ]);
 
 /// L'icona di uno strumento del motore nella colonna e nel cassetto: quella
@@ -160,6 +162,7 @@ export const ICONE_MOTORE: Readonly<Record<string, string>> = {
   // Le trasformazioni (T13 giro 5): Inclina ha il parallelogramma del catalogo.
   eyedropper: "draw-eyedropper",
   measure: "draw-measure",
+  artboard: "draw-artboard",
   rotate: "draw-rotate",
   reflect: "draw-flip-h",
   scale: "draw-scale",

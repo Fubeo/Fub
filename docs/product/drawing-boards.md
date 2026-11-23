@@ -13,11 +13,24 @@ le sta sopra però è suo: è ciò che mostra una nota che incorpora soltanto le
 Un disegno senza tavole è una pagina sola. Come il file le scrive sta in
 [formato della scena, tavole](../reference/scene-format-boards.md).
 
-L'editor non crea più tavole e non le cambia: lo strumento Tavola, l'elenco
-delle tavole, la sezione «Tavola» delle proprietà, i loro tasti e la
-presentazione se ne sono andati col livello Standard (decisione 0231). Le
-tavole che un file ha già restano dove sono, si vedono e si visitano, e un
-disegno aperto e salvato senza modifiche resta uguale byte per byte.
+Il Disegno completo ha di nuovo lo **strumento Tavola**, quello di
+VectorCraft, nella colonna degli strumenti:
+
+- trascinato fuori dalle tavole ne **crea una nuova**, col nome «Tavola N» e
+  una carta del colore di quella della pagina, messa dopo le altre;
+- trascinato dentro una tavola la **sposta coi disegni** che le stanno sopra;
+- sulle maniglie della tavola attiva la **ridimensiona**.
+
+In un disegno senza tavole la pagina conta come la prima tavola: quando lo
+strumento la cambia o ne crea un'altra, la pagina diventa «Tavola 1» e la sua
+carta diventa la carta di quella tavola. La pagina si allarga da sola, a passi
+di 256 unità, quando una tavola ne esce. Il disegno nel motore e il file
+restano legati dal ponte (`crates/fub-disegno/src/tavole.rs`); un file le cui
+carte non vanno con le loro tavole (la regola S015) non cambia le tavole.
+
+L'elenco delle tavole, la sezione «Tavola» delle proprietà e la presentazione
+non ci sono ancora. Un disegno aperto e salvato senza modifiche resta uguale
+byte per byte.
 
 ## Sul foglio
 

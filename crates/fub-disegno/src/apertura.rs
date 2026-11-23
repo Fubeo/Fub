@@ -58,6 +58,8 @@ pub(crate) struct Copia {
     pub radice: Affine,
     /// I campioni del file, che il motore ha come campioni globali.
     pub campioni: CampioniDelFile,
+    /// Le tavole del file, che il motore ha come sue tavole.
+    pub tavole: crate::tavole::Tavole,
 }
 
 impl Copia {
@@ -155,6 +157,7 @@ pub(crate) fn importa(testo: &str, revisione: u64) -> Result<Copia, ErroreApertu
         }
     };
     let mut documento = documento;
+    let tavole = crate::tavole::leggi(testo, &scena.items, base, &mut documento);
     gruppi_di_fub(&elementi, &mut documento);
     livelli_vuoti(&elementi, &mut documento);
     if senza_carta {
@@ -193,6 +196,7 @@ pub(crate) fn importa(testo: &str, revisione: u64) -> Result<Copia, ErroreApertu
         perdite: perdite.in_elenco(),
         radice: base,
         campioni: campioni_del_file,
+        tavole,
     })
 }
 
@@ -697,7 +701,7 @@ fn copia_per_l_import(
     // Fub: il motore fa allora dei livelli di Fub i suoi livelli in cima,
     // senza un livello che stia per la radice. Si toglie l'elemento intero;
     // resta nella mappa senza oggetto e senza perdita.
-    if let Some(carta) = carta_da_togliere(elementi) {
+    for carta in carte_da_togliere(elementi) {
         let e = &mut elementi[carta];
         if let (Some(&da), Some(&a)) = (span.get(&e.percorso), fine.get(&e.percorso)) {
             modifiche.push((da, a, String::new()));
@@ -754,13 +758,14 @@ fn copia_per_l_import(
     (out, sintetici)
 }
 
-/// La carta da lasciare fuori dalla copia per l'import: se fra i figli
-/// della radice che il motore disegna ci sono solo la carta e livelli di
-/// Fub, almeno uno. Le `defs` e le tavole non si disegnano e non contano.
-/// Con un oggetto o un gruppo fuori dai livelli la carta resta: il motore
-/// li mette tutti in un livello che sta per la radice, carta compresa.
-fn carta_da_togliere(elementi: &[Elemento]) -> Option<usize> {
-    let mut carta = None;
+/// Le carte da lasciare fuori dalla copia per l'import: se fra i figli
+/// della radice che il motore disegna ci sono solo le carte (della pagina o
+/// delle tavole, che nel motore sono le sue tavole) e livelli di Fub,
+/// almeno uno. Le `defs` e le tavole non si disegnano e non contano. Con un
+/// oggetto o un gruppo fuori dai livelli le carte restano: il motore li
+/// mette tutti in un livello che sta per la radice, carte comprese.
+fn carte_da_togliere(elementi: &[Elemento]) -> Vec<usize> {
+    let mut carte = Vec::new();
     let mut livelli = 0;
     for (i, e) in elementi.iter().enumerate() {
         if e.genitore.is_some() {
@@ -768,12 +773,15 @@ fn carta_da_togliere(elementi: &[Elemento]) -> Option<usize> {
         }
         match e.ruolo {
             Role::Defs | Role::Board => {}
-            Role::Paper if carta.is_none() && e.motivo.is_none() => carta = Some(i),
+            Role::Paper if e.motivo.is_none() => carte.push(i),
             Role::Layer if e.motivo.is_none() => livelli += 1,
-            _ => return None,
+            _ => return Vec::new(),
         }
     }
-    carta.filter(|_| livelli > 0)
+    if livelli == 0 {
+        carte.clear();
+    }
+    carte
 }
 
 /// Le etichette che il motore userebbe come nome al posto dell'id.
@@ -1030,7 +1038,7 @@ fn numeri(s: &str) -> Vec<f64> {
     out
 }
 
-fn leggi_view_box(s: &str) -> Option<[f64; 4]> {
+pub(crate) fn leggi_view_box(s: &str) -> Option<[f64; 4]> {
     match numeri(s)[..] {
         [x, y, w, h] if w > 0.0 && h > 0.0 => Some([x, y, w, h]),
         _ => None,

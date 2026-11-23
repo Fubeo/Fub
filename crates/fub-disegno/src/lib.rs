@@ -47,3 +47,4 @@ pub mod ricetta;
 mod sfumature;
 /// La sincronia fra il documento del motore e il file sul disco.
 pub mod sincronia;
+mod tavole;

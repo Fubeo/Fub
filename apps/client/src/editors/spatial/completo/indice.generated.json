@@ -5687,6 +5687,22 @@
     },
     {
       "fonte": "strumento",
+      "id": "artboard",
+      "chiamata": {
+        "strumento": "artboard"
+      },
+      "etichetta": {
+        "it": "Strumento Tavola",
+        "en": "Artboard Tool"
+      },
+      "posto": "colonna/misura",
+      "famiglia": "tavole",
+      "tasto": "Shift+O",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "strumento",
       "id": "bloat",
       "chiamata": {
         "strumento": "bloat"

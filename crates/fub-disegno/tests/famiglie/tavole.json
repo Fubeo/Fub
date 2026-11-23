@@ -51,6 +51,215 @@
           "ob2b2b2b2"
         ]
       }
+    },
+    {
+      "id": "artboard",
+      "fonte": "strumento",
+      "disegno": "base.svg",
+      "selezione": [],
+      "gesto": [
+        {
+          "phase": "preview",
+          "events": [
+            {
+              "kind": "down",
+              "x": 500,
+              "y": 50,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 600,
+              "y": 150,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ]
+        },
+        {
+          "phase": "commit",
+          "events": [
+            {
+              "kind": "up",
+              "x": 600,
+              "y": 150,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ]
+        }
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "first": true
+                },
+                "elem": {
+                  "tag": "view",
+                  "attrs": {
+                    "id": "b00000001",
+                    "fub:role": "board",
+                    "viewBox": "0 0 400 300"
+                  },
+                  "children": [
+                    {
+                      "tag": "title",
+                      "attrs": {},
+                      "text": "Tavola 1"
+                    }
+                  ]
+                }
+              },
+              {
+                "op": "set",
+                "id": "fub-paper",
+                "attrs": {
+                  "fub:board": "b00000001"
+                }
+              },
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "after": "b00000001"
+                },
+                "elem": {
+                  "tag": "view",
+                  "attrs": {
+                    "id": "b00000002",
+                    "fub:role": "board",
+                    "viewBox": "500 50 100 100"
+                  },
+                  "children": [
+                    {
+                      "tag": "title",
+                      "attrs": {},
+                      "text": "Tavola 2"
+                    }
+                  ]
+                }
+              },
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "after": "fub-paper"
+                },
+                "elem": {
+                  "tag": "rect",
+                  "attrs": {
+                    "id": "c00000003",
+                    "fub:role": "paper",
+                    "fub:board": "b00000002",
+                    "x": "500",
+                    "y": "50",
+                    "width": "100",
+                    "height": "100",
+                    "fill": "#ffffff"
+                  }
+                }
+              },
+              {
+                "op": "page",
+                "viewBox": "0 0 656 300"
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "artboard.svg"
+    },
+    {
+      "id": "artboard",
+      "fonte": "strumento",
+      "disegno": "due.svg",
+      "selezione": [],
+      "gesto": [
+        {
+          "phase": "preview",
+          "events": [
+            {
+              "kind": "down",
+              "x": 580,
+              "y": 180,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 620,
+              "y": 200,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ]
+        },
+        {
+          "phase": "commit",
+          "events": [
+            {
+              "kind": "up",
+              "x": 620,
+              "y": 200,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ]
+        }
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "set",
+                "id": "ob2b2b2b2",
+                "attrs": {
+                  "transform": "matrix(1 0 0 1 40 20)"
+                }
+              },
+              {
+                "op": "set",
+                "id": "b3c3c3c3c",
+                "attrs": {
+                  "viewBox": "440 20 200 200"
+                }
+              },
+              {
+                "op": "set",
+                "id": "c2b2b2b2b",
+                "attrs": {
+                  "x": "440",
+                  "y": "20",
+                  "width": "200",
+                  "height": "200"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "artboard-sposta.svg"
     }
   ]
 }

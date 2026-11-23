@@ -258,6 +258,30 @@ pub(crate) fn differenza(
     lavoro.nuovi(&prima, dopo)?;
     lavoro.ordine(&prima, dopo)?;
     lavoro.ident.extend(ident_del_confronto);
+    // Le tavole: le operazioni sui `view` e sulle loro carte, che il motore
+    // non ha come oggetti (`crate::tavole`).
+    let delle_tavole = {
+        let mappa = &copia.mappa;
+        let dati = &mut lavoro.dati;
+        crate::tavole::operazioni(
+            &copia.tavole,
+            &copia.documento.artboards,
+            &dopo.artboards,
+            copia.radice,
+            &mut |specie| {
+                let id = id::nuovo(specie, &|id| mappa.id_preso(id) || dati.contains(id))?;
+                dati.insert(id.clone());
+                Some(id)
+            },
+        )
+        .map_err(|e| match e {
+            crate::tavole::NonSiScrive::FuoriRegola => {
+                no("le carte del file non vanno con le loro tavole: le tavole non cambiano")
+            }
+            crate::tavole::NonSiScrive::Id => no("nessun id nuovo libero"),
+            crate::tavole::NonSiScrive::Matrice => no("la radice del file non si inverte"),
+        })?
+    };
     let Lavoro {
         ident,
         mut remove,
@@ -299,6 +323,9 @@ pub(crate) fn differenza(
         return Err(Rifiuto::TroppoGrande);
     }
     crate::perdite::controlla(&copia.perdite, &ops).map_err(Rifiuto::NonMappato)?;
+    // Le tavole non sono oggetti del motore: il controllo delle parti non
+    // mappate non le guarda.
+    ops.extend(delle_tavole);
     // I campioni nuovi o cambiati prima di chi li usa, quelli tolti per
     // ultimi, quando nessuno li usa più. Sono risorse, non oggetti del
     // disegno: il controllo delle parti non mappate non li guarda.
