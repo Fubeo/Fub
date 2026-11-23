@@ -184,6 +184,11 @@
           "predefinito": "corner"
         }
       ]
+    },
+    {
+      "fonte": "interfaccia",
+      "id": "ui.expandDialog",
+      "campi": []
     }
   ]
 }
