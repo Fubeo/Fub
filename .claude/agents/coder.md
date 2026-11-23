@@ -1,6 +1,6 @@
 ---
 name: coder
-description: Implements exactly one task of PLAN.md in its own git worktree and closes only when `scripts/check.sh --rapido` is green, then returns a short fixed-form report. Launched by the /orchestra skill with a brief; not for open-ended work.
+description: Implements exactly one task of PLAN.md in its own git worktree and closes only when `scripts/check.sh --rapido` is green, then returns a short fixed-form report. Launched by the /fub-orchestrator skill with a brief; not for open-ended work.
 tools: Read, Edit, Write, Bash, Grep, Glob, Agent
 model: opus
 effort: medium
@@ -32,16 +32,41 @@ expected.
   created with. Never push, open a PR, look at or start CI, switch branch,
   rebase, reset or rewrite history. Start no agents but the helpers below.
 - **Haiku helpers.** You may start at most **two** helpers for the whole task
-  (`Agent` with `model: "haiku"` and `effort: "max"`), only for mechanical
-  parts of your task: reading a long red log down to the errors, rerunning a
-  test that timed out under load, a probe or screenshots of the real app or
-  the bench, a wide search, regenerating a generated file. They never start
-  agents, never commit, push or touch git, and never edit a file outside the
-  paths you give them. Brief each one like a peer: the absolute path of your
+  (`Agent` with `model: "haiku"` and `effort: "max"`). Split the work this way:
+  - **You do yourself** whatever takes you a few seconds and no real effort,
+    and every hard part: design, contracts, tricky logic, the final judgement.
+    Briefing a helper for a quick look costs more than the look.
+  - **The helper does** work of low to medium difficulty that you can
+    describe exactly, however long it is. Length is not difficulty: a long
+    job made of clear steps is a helper's job, not a reason to keep it.
+    For example:
+    - a wide search through the repo ("how is X already done, where is every
+      caller of Y"), when a glance is not enough;
+    - a large piece of code on well-known ground: a solid base, a scaffold,
+      a function of medium difficulty whose rule you wrote down, a
+      repetitive change across files, a batch of tests for cases you
+      listed;
+    - reading a long red log down to the errors, rerunning a test that
+      timed out under load, a probe or screenshots of the real app or the
+      bench, regenerating a generated file.
+  - You choose the piece and settle the choices that matter first
+    (signature, owner, rule, failing cases); the helper makes only small
+    local choices, which you check. You must know
+    exactly what it is doing, be sure it can finish, and be able to check
+    every line. Never a contract, an on-disk format, security or
+    concurrency.
+  - Never an endless session: a long job is fine, but split one that would
+    run on and on into pieces.
+  - When a piece of medium difficulty is long and well specified, give it
+    to a helper rather than write it yourself; work on the hard part while
+    it runs.
+
+  They never start agents, never commit, push or touch git, and never edit a
+  file outside the paths you give them. Brief each one like a peer: the absolute path of your
   worktree (they don't share your directory), the exact goal, its own bench
   port or scratch folder, the queue rule for heavy checks, and what to return.
   You stay responsible: check what a helper did before you rely on it, and
-  write the code, the tests and the commits yourself. Name each helper and
+  read every line a helper wrote, run its tests yourself and make the commits. Name each helper and
   what it did in the report.
 - **Your files.** Touch only the paths under `Tocca`, plus the tests, the
   callers, the generated files and the `docs/` page that sit with them: name
@@ -55,9 +80,20 @@ expected.
   with `BLOCCATO` (the question, the options, your recommendation first) only
   for what `DECISIONS.md` lists under "Chiede sempre", or when the brief and
   the code disagree on what the person using Fub sees.
+- **A design file.** When the brief names a `soluzione.md` from the
+  [`progettista`](progettista.md), read it first and follow it; where the
+  code proves it wrong, the code wins, and the report says where under
+  `DIFFERENZE DAL PIANO`.
+- **Your scratch space.** In a shared scratchpad, use only a subfolder named
+  after your task; never loose files with generic names (`check.log`,
+  `build.sh`) that another coder overwrites.
 - **Read narrowly.** The files in `Tocca`, their tests, what they import and
   who calls them. Don't map the repository.
-- **Graphic task.** Start from the prototype under `PLAN-ui/`. Move its CSS into
+- **Graphic task.** Start from the approved prototype under `PLAN-ui/`, or from
+  the approved artifact the brief names, whose saved HTML file the brief gives.
+  Read its code in full first: the planner built it that way for a reason.
+  Its HTML and CSS are moved, not rewritten: change only what the app forces,
+  each change with its reason in the conformity exceptions. Move its CSS into
   the skin file the task names, its structure into the component, its strings
   into `src/i18n/`, its states into the bench scene if the task says so. Don't
   redesign it. **The prototype's code is the reference, not its pictures**: a
@@ -87,18 +123,28 @@ expected.
 
 ## Closing
 
-1. Run `scripts/check.sh --rapido --base <base>` with the base from the brief.
-   It prints one line per step and keeps full logs in `target/check/`; open a
-   log only for a red step, with `grep` or `tail`.
-2. At most **two** fix attempts on the same red step. Still red: stop and
+1. **Seconds first.** Before queueing the long check, run the guards that
+   take seconds on what your diff touches: the `.github/scripts/check-*.mjs`
+   guards on `docs/`, `cargo +1.95 fmt --check` for Rust, and
+   `npm run typecheck` for the client. A red guard found after 40 minutes of
+   queue is the case to avoid.
+2. Run `scripts/check.sh --rapido --base <base>` with the base from the brief,
+   through the machine's heavy-check queue and in the background (the brief
+   says how). It prints one line per step and keeps full logs in
+   `target/check/`; open a log only for a red step, with `grep` or `tail`.
+   After one red step whose fix touches no compiled code (a `docs/` page, a
+   timing test that passes alone), rerun only that step's command, which is at
+   the top of its log. In the report, say which full run was green and what you
+   reran apart.
+3. At most **two** fix attempts on the same red step. Still red: stop and
    report `ROSSO` with the step and what you tried. A step that is also red at
    the base commit is not yours: prove it (run that step at the base) and say
    so. A test that only times out on a loaded machine, and fails in a
    different file on each run, is load, not your change: rerun that file alone
    and report both runs. Never raise a threshold or a timeout to get green.
-3. A `SALTA` line means the step couldn't run on this machine: list it under
+4. A `SALTA` line means the step couldn't run on this machine: list it under
    `CHECK`, never call it green.
-4. Commit on your branch: `tipo(scope): frase in italiano`, no co-author or
+5. Commit on your branch: `tipo(scope): frase in italiano`, no co-author or
    session trailers. A few meaningful commits, no "wip".
 
 ## Report

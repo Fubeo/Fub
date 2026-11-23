@@ -1,6 +1,6 @@
 # Decisioni del lavoro a piani
 
-Questo file serve al workflow a piani (`/pianifica`, `/orchestra`, vedi
+Questo file serve al workflow a piani (`/pianifica`, `/fub-orchestrator`, vedi
 `CLAUDE.md`). Dice che cosa l'orchestratore decide da solo e che cosa chiede,
 e tiene il registro delle scelte fatte durante il lavoro, perché il piano dopo
 ne tenga conto. Le scelte di architettura vere vanno in un ADR
@@ -21,7 +21,14 @@ dubbio su una scelta tecnica si decide, non si chiede.
   revisioni comprese (regola dell'utente, che la cambia solo lui; prima erano
   due coder dal 2026-11-07 e uno dal 2026-11-04). Un task particolarmente
   semplice, e solo quello, può andare a un coder Haiku con ragionamento
-  xhigh. I controlli pesanti passano dalla coda della macchina (vedi
+  xhigh, mai in una sessione lunga. Dal 2026-11-20 gli aiutanti Haiku di un
+  coder Opus fanno il lavoro di difficoltà bassa o media, anche lungo (la
+  lunghezza non è difficoltà) (ricerche
+  larghe nel repo, pezzi di codice grandi ma su terreno noto e con poco
+  margine d'errore), scelto e disegnato dal coder Opus, che lo tiene d'occhio
+  riga per riga e fa da sé le cose rapide e quelle difficili (regola
+  dell'utente). Mai una sessione senza fine
+  per un Haiku. I controlli pesanti passano dalla coda della macchina (vedi
   `CLAUDE_DEVICE.md`);
 - il come che il piano approvato lascia aperto: nomi, tipi, dove sta una
   funzione, la forma di un messaggio d'errore, la forma dei test;
