@@ -101,10 +101,10 @@ motore	view.proofSetup	Proof Setup	View › Proof Setup	stampa	F4	T25	da fare	me
 motore	view.proofColors	Proof Colors	View	stampa	F4	T25	da fare	menu/visualizza	famiglia		Colori di prova
 motore	view.overprintPreview	Overprint Preview	View	stampa	F4	T25	da fare	menu/visualizza	famiglia		Anteprima sovrastampa
 motore	view.separationsPreview	Separations Preview		stampa	F4	T25	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Anteprima separazioni
-motore	color.plates	Plates		colore	F1	T14	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Lastre
+motore	color.plates	Plates		colore	F1	T14	fatto	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Lastre
 motore	edit.colors.overprintBlack	Overprint Black…	Edit › Edit Colors	colore	F1	T14	fatto	menu/modifica/colori	famiglia	finestra	Sovrastampa nero…
 motore	swatch.setSpot	Spot Color		colore	F1	T14	da fare	ispettore/design	famiglia	il formato del campione non ha la tinta piatta: swatch.new con spot è rifiutato (caso in colore.json)	Colore spot
-motore	colorTheme.list	Color Themes		colore	F1	T14	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Temi colore
+motore	colorTheme.list	Color Themes		colore	F1	T14	fatto	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Temi colore
 motore	colorTheme.save	Save Theme	Window › Color Themes	colore	F1	T14	da fare	ispettore/risorse	famiglia		Salva tema
 motore	colorTheme.delete	Delete Theme	Window › Color Themes	colore	F1	T14	da fare	ispettore/risorse	famiglia		Elimina tema
 motore	colorTheme.addToSwatches	Add to Swatches	Window › Color Themes	colore	F1	T14	da fare	ispettore/risorse	famiglia		Aggiungi ai campioni

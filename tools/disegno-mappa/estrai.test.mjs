@@ -145,7 +145,9 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // il pannello Aspetto e il resto dell'aspetto restano «da fare».
   // T15 livelli altri: `layer.showAll` e `layer.unlockAll` diventano «fatto» (la visita dell'albero, con
   // i loro casi in livelli.json); `layer.hideOthers` e `layer.lockOthers` restano «da fare», con la causa.
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1085, fub: 114, escluso: 12, fatto: 340 });
+  // T14 letture colore (temi): `color.plates` e `colorTheme.list` sono «fatto» (letture senza
+  // finestra, casi in colore.json): due in più. Il salvataggio dei temi resta «da fare» (disco).
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1083, fub: 114, escluso: 12, fatto: 342 });
 });
 
 // --- un motore finto ---------------------------------------------------------------

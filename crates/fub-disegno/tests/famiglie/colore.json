@@ -5818,6 +5818,229 @@
       "atteso": {
         "rifiuto": "locked"
       }
+    },
+    {
+      "id": "color.plates",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": {
+        "lettura": {
+          "on": false,
+          "plates": [
+            {
+              "name": "Cyan",
+              "spot": false,
+              "visible": true,
+              "rgb": [
+                0.0,
+                0.6407959461212158,
+                0.9456701874732971
+              ]
+            },
+            {
+              "name": "Magenta",
+              "spot": false,
+              "visible": true,
+              "rgb": [
+                0.9209107160568237,
+                0.0,
+                0.5272963643074036
+              ]
+            },
+            {
+              "name": "Yellow",
+              "spot": false,
+              "visible": true,
+              "rgb": [
+                1.0,
+                0.9529474377632141,
+                0.0
+              ]
+            },
+            {
+              "name": "Black",
+              "spot": false,
+              "visible": true,
+              "rgb": [
+                0.16537758708000183,
+                0.1669466197490692,
+                0.1706230342388153
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "color.plates",
+      "disegno": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 400 300\" width=\"400\" height=\"300\">\n  <rect id=\"fub-paper\" fub:role=\"paper\" x=\"0\" y=\"0\" width=\"400\" height=\"300\" fill=\"#ffffff\"/>\n  <g id=\"l1a2b3c4d\" fub:layer=\"Livello 1\"/>\n</svg>\n",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": {
+        "lettura": {
+          "on": false,
+          "plates": [
+            {
+              "name": "Cyan",
+              "spot": false,
+              "visible": true,
+              "rgb": [
+                0.0,
+                0.6407959461212158,
+                0.9456701874732971
+              ]
+            },
+            {
+              "name": "Magenta",
+              "spot": false,
+              "visible": true,
+              "rgb": [
+                0.9209107160568237,
+                0.0,
+                0.5272963643074036
+              ]
+            },
+            {
+              "name": "Yellow",
+              "spot": false,
+              "visible": true,
+              "rgb": [
+                1.0,
+                0.9529474377632141,
+                0.0
+              ]
+            },
+            {
+              "name": "Black",
+              "spot": false,
+              "visible": true,
+              "rgb": [
+                0.16537758708000183,
+                0.1669466197490692,
+                0.1706230342388153
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "color.plates",
+      "disegno": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 400 300\" width=\"400\" height=\"300\">\n  <rect id=\"fub-paper\" fub:role=\"paper\" x=\"0\" y=\"0\" width=\"400\" height=\"300\" fill=\"#ffffff\"/>\n  <g id=\"l1a2b3c4d\" fub:layer=\"Livello 1\">\n    <rect id=\"og1g1g1g1\" x=\"20\" y=\"20\" width=\"40\" height=\"40\" fill=\"#808080\"/>\n  </g>\n</svg>\n",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": {
+        "lettura": {
+          "on": false,
+          "plates": [
+            {
+              "name": "Cyan",
+              "spot": false,
+              "visible": true,
+              "rgb": [
+                0.0,
+                0.6407959461212158,
+                0.9456701874732971
+              ]
+            },
+            {
+              "name": "Magenta",
+              "spot": false,
+              "visible": true,
+              "rgb": [
+                0.9209107160568237,
+                0.0,
+                0.5272963643074036
+              ]
+            },
+            {
+              "name": "Yellow",
+              "spot": false,
+              "visible": true,
+              "rgb": [
+                1.0,
+                0.9529474377632141,
+                0.0
+              ]
+            },
+            {
+              "name": "Black",
+              "spot": false,
+              "visible": true,
+              "rgb": [
+                0.16537758708000183,
+                0.1669466197490692,
+                0.1706230342388153
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "color.plates",
+      "disegno": "campioni.svg",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": {
+        "lettura": {
+          "on": false,
+          "plates": [
+            {
+              "name": "Cyan",
+              "spot": false,
+              "visible": true,
+              "rgb": [
+                0.0,
+                0.6407959461212158,
+                0.9456701874732971
+              ]
+            },
+            {
+              "name": "Magenta",
+              "spot": false,
+              "visible": true,
+              "rgb": [
+                0.9209107160568237,
+                0.0,
+                0.5272963643074036
+              ]
+            },
+            {
+              "name": "Yellow",
+              "spot": false,
+              "visible": true,
+              "rgb": [
+                1.0,
+                0.9529474377632141,
+                0.0
+              ]
+            },
+            {
+              "name": "Black",
+              "spot": false,
+              "visible": true,
+              "rgb": [
+                0.16537758708000183,
+                0.1669466197490692,
+                0.1706230342388153
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "colorTheme.list",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": {
+        "lettura": {
+          "themes": []
+        }
+      }
     }
   ]
 }

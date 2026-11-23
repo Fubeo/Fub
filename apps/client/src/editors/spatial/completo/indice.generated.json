@@ -627,6 +627,38 @@
     },
     {
       "fonte": "motore",
+      "id": "color.plates",
+      "chiamata": {
+        "comando": "disegno.color.plates"
+      },
+      "etichetta": {
+        "it": "Lastre",
+        "en": "Plates"
+      },
+      "posto": "interno",
+      "famiglia": "colore",
+      "tasto": null,
+      "effetto": "legge",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "colorTheme.list",
+      "chiamata": {
+        "comando": "disegno.colorTheme.list"
+      },
+      "etichetta": {
+        "it": "Temi colore",
+        "en": "Color Themes"
+      },
+      "posto": "interno",
+      "famiglia": "colore",
+      "tasto": null,
+      "effetto": "legge",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "document.find",
       "chiamata": {
         "comando": "disegno.document.find"
