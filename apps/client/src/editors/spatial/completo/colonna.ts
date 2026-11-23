@@ -120,6 +120,8 @@ export const MOTORE_PRONTO: ReadonlySet<string> = new Set([
   // Rimodella e la Trasformazione libera (E), nella stessa casella.
   "reshape",
   "freeTransform",
+  // La Marionetta: gli spilli restano nel documento fra un gesto e l'altro.
+  "puppetWarp",
   // I pennelli che deformano (la casella «Larghezza»): un comando, `object.liquify`.
   "warp",
   "twirl",
@@ -165,6 +167,7 @@ export const ICONE_MOTORE: Readonly<Record<string, string>> = {
   crystallize: "draw-crystallize",
   wrinkle: "draw-wrinkle",
   freeTransform: "draw-free-transform",
+  puppetWarp: "draw-puppet-warp",
   lineSegment: "draw-line",
   arc: "draw-arc",
   spiral: "draw-spiral",

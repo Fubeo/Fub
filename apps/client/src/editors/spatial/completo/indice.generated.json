@@ -6007,6 +6007,22 @@
     },
     {
       "fonte": "strumento",
+      "id": "puppetWarp",
+      "chiamata": {
+        "strumento": "puppetWarp"
+      },
+      "etichetta": {
+        "it": "Strumento Alterazione marionetta",
+        "en": "Puppet Warp Tool"
+      },
+      "posto": "colonna/trasforma",
+      "famiglia": "trasforma",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "strumento",
       "id": "rectCut",
       "chiamata": {
         "strumento": "rectCut"

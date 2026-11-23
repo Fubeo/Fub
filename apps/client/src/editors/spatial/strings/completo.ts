@@ -1218,6 +1218,7 @@ export const COLONNA_IT = {
   "draw.engine.name.crystallize": "Cristallizza",
   "draw.engine.name.wrinkle": "Grinza",
   "draw.engine.name.freeTransform": "Trasformazione libera",
+  "draw.engine.name.puppetWarp": "Altera marionetta",
   // Il Testo del motore (K6 T16) sta nella casella del Testo di Fub.
   "draw.engine.name.type": "Testo (Completo)",
   "draw.engine.type.box": "Testo che stai scrivendo: Esc per uscire",
@@ -1327,6 +1328,7 @@ export const COLONNA_EN: Record<keyof typeof COLONNA_IT, string> = {
   "draw.engine.name.crystallize": "Crystallize",
   "draw.engine.name.wrinkle": "Wrinkle",
   "draw.engine.name.freeTransform": "Free Transform",
+  "draw.engine.name.puppetWarp": "Puppet Warp",
   "draw.engine.name.type": "Type (Full)",
   "draw.engine.type.box": "Text you are typing: Esc to leave",
   "draw.chrome.drawer.title": "All tools",

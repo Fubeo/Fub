@@ -48,6 +48,8 @@ const completoFinto = () => ({
   strumentoMotore: () => null,
   ascoltaColonna: () => () => undefined,
   cassetto: () => undefined,
+  preparaStrumento: () => Promise.resolve(true),
+  fila: () => null,
 });
 
 const SOURCE = doc(`<title>Prova</title>${LAYER}<rect id="o1a2b3c4d" x="60" y="60" width="20" height="20" fill="none" stroke="#000000" stroke-width="2"/></g>`);

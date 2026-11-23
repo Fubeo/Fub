@@ -184,6 +184,7 @@ const COLUMN: Readonly<Record<string, readonly string[]>> = {
   "draw-effects": ["M5 20l3-12h5", "M4.5 13h6", "M14 11l6 8", "M20 11l-6 8"],
   "draw-eyedropper": ["M14 4.5a2.5 2.5 0 0 1 3.5 0l2 2a2.5 2.5 0 0 1 0 3.5L17 12.5 11.5 7z", "M12.5 8l-7 7V19h4l7-7"],
   "draw-flare": ["M9 12a3 3 0 1 0 6 0a3 3 0 1 0-6 0", "M12 3v4", "M12 17v4", "M3 12h4", "M17 12h4", "M5.6 5.6l2.8 2.8", "M15.6 15.6l2.8 2.8"],
+  "draw-puppet-warp": ["M4 17c3-6 6-9 8-9s5 3 8 9", "M12 8m-1.5 0a1.5 1.5 0 1 0 3 0a1.5 1.5 0 1 0-3 0", "M5.5 15.5h3v3h-3z", "M15.5 15.5h3v3h-3z"],
   "draw-free-transform": ["M5 5h14v14H5z", "M3.5 3.5h3v3h-3z", "M17.5 3.5h3v3h-3z", "M3.5 17.5h3v3h-3z", "M17.5 17.5h3v3h-3z"],
   "draw-gradient": ["M4 5h16v14H4z", "M9 5v14", "M13 5v14", "M16 5v14", "M18.5 5v14"],
   "draw-graph": ["M4 20h16", "M6 20v-6", "M10 20V8", "M14 20v-9", "M18 20V5"],

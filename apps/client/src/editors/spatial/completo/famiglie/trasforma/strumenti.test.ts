@@ -19,7 +19,7 @@ interface VoceGenerata {
 }
 
 const VOCI = (indiceGenerato as { readonly voci: readonly VoceGenerata[] }).voci;
-const STRUMENTI_TRASFORMA = ["rotate", "reflect", "scale", "shear", "reshape", "freeTransform"];
+const STRUMENTI_TRASFORMA = ["rotate", "reflect", "scale", "shear", "reshape", "freeTransform", "puppetWarp"];
 const CLIC_TRASFORMA: readonly [string, string][] = [
   ["rotate", "object.rotate"],
   ["reflect", "object.reflect"],
@@ -28,7 +28,7 @@ const CLIC_TRASFORMA: readonly [string, string][] = [
 ];
 
 describe("gli strumenti di trasformazione nella colonna", () => {
-  it("sono fatti nell'indice generato: Ruota, Rifletti, Scala, Inclina, Rimodella e Trasformazione libera, della famiglia trasforma", () => {
+  it("sono fatti nell'indice generato: Ruota, Rifletti, Scala, Inclina, Rimodella, Trasformazione libera e Marionetta, della famiglia trasforma", () => {
     const fatti = VOCI.filter((voce) => voce.famiglia === "trasforma" && voce.chiamata.strumento !== undefined).map((voce) => voce.chiamata.strumento);
     expect(fatti.sort()).toEqual([...STRUMENTI_TRASFORMA].sort());
     for (const id of STRUMENTI_TRASFORMA) expect(MOTORE_PRONTO.has(id), id).toBe(true);
@@ -60,15 +60,16 @@ describe("gli strumenti di trasformazione nella colonna", () => {
     expect(DRAW_ICONS[iconaMotore("shear")]).not.toEqual(DRAW_ICONS["draw-all-tools"]);
   });
 
-  it("stanno nel gruppo «modificare», nella casella della Ruota, senza la Deformazione, che aspetta", () => {
+  it("stanno nel gruppo «modificare», nella casella della Ruota, con la Marionetta in fondo", () => {
     const gruppo = layoutCompleto(toolsFor("full", "vector"), MOTORE_PRONTO).find((g) => g.id === "modify");
     const casella = gruppo?.caselle.find((c) => c.includes("motore:rotate")) ?? [];
-    expect(casella).toEqual(["motore:rotate", "motore:reflect", "motore:scale", "motore:shear", "motore:reshape", "motore:freeTransform"]);
+    expect(casella).toEqual(["motore:rotate", "motore:reflect", "motore:scale", "motore:shear", "motore:reshape", "motore:freeTransform", "motore:puppetWarp"]);
   });
 
-  it("senza ancora la Deformazione, che non è fatta", () => {
-    const tutti = layoutCompleto([], MOTORE_PRONTO).flatMap((g) => g.caselle.flat());
-    expect(tutti).not.toContain("motore:puppetWarp");
+  it("Altera marionetta ha la sua icona, non quella di «Tutti gli strumenti»", () => {
+    expect(iconaMotore("puppetWarp")).toBe("draw-puppet-warp");
+    expect(COLONNA_IT["draw.engine.name.puppetWarp"]).toBe("Altera marionetta");
+    expect(DRAW_ICONS["draw-puppet-warp"]).not.toEqual(DRAW_ICONS["draw-all-tools"]);
   });
 });
 

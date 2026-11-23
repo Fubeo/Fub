@@ -105,6 +105,15 @@ VectorCraft; `Maiusc` tiene la direzione a multipli di 45°, `Esc` lascia tutto
 com'era. Un tiro lontano dal contorno non cambia niente, e un tratto della
 penna di Fub non si rimodella: lo si dice.
 
+Sempre lì c'è **Altera marionetta**, come in VectorCraft: con un oggetto scelto
+mostra subito gli spilli automatici, al centro e alle estremità. Un clic
+sull'oggetto aggiunge uno spillo, `Maiusc` ne sceglie più d'uno; trascinare uno
+spillo sposta quelli scelti e piega l'oggetto, mentre gli altri lo tengono
+fermo. `Alt` trascinando vicino a uno spillo gira l'oggetto attorno a lui, e
+`Canc` toglie gli spilli scelti. Ogni deformazione riparte dalla forma di
+partenza: riportare lo spillo dov'era ridà l'oggetto com'era. Gli spilli restano
+finché resta scelto lo stesso oggetto, ma il file non li salva.
+
 Nella casella «Larghezza» ci sono i sette **pennelli che deformano**, come in
 VectorCraft: Altera spinge il contorno nel verso in cui si trascina, Vortice lo
 avvolge, Contrai lo stringe verso il centro del pennello, Gonfia lo allarga,
