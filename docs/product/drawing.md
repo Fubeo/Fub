@@ -192,49 +192,9 @@ aspetto si scrive lo stile di prima ([Disegni, appunti](drawing-clipboard.md)).
 
 ## Livelli
 
-Un livello del disegno è un gruppo figlio della radice con `fub:layer`, che
-ne porta il nome. Nello spazio Completo la barra ha il pulsante «Livelli»: mostra
-il livello in cui si disegna, quello corrente, col suo nome e, a parole, il suo
-stato, «bloccato» o «nascosto». Il suo menu elenca i livelli dalla cima, e
-sceglierne uno lo rende corrente; poi ha i comandi su quello corrente:
-
-- **Nuovo livello** ne crea uno vuoto sopra quello corrente, che diventa lui,
-  col primo nome libero fra «Livello 2», «Livello 3» e così via;
-- **Rinomina…** chiede il nome, che non resta vuoto né fatto di soli spazi e
-  ha al più 80 caratteri;
-- **Nascondi** e **Mostra** scrivono e tolgono `display="none"`, che lo
-  nasconde anche negli altri programmi; **Blocca** e **Sblocca** scrivono e
-  tolgono `fub:locked="true"`. Gli oggetti di un livello nascosto o bloccato
-  non si scelgono e non si cancellano, ed escono dalla selezione;
-- **Sposta su** e **Sposta giù** lo portano sopra il livello che ha sopra, o
-  sotto quello che ha sotto; ciò che sta alla radice fra i due resta dov'era;
-- **Elimina** lo toglie con ciò che contiene, e diventa corrente il livello
-  sotto, o quello sopra. L'unico livello e uno bloccato non si eliminano, e la
-  voce spenta dice perché.
-
-Penna, evidenziatore, forme, testi e immagini, incollate o dal vault, vanno nel
-livello corrente. Se è nascosto o bloccato il gesto non scrive, e un annuncio
-dice perché e che cosa fare. Scegliere oggetti tutti in un livello lo rende
-corrente: la riga dell'albero degli oggetti mostra il nome («Note»), e
-per chi legge a voce il nome dice «Livello «Note», corrente».
-
-Il livello corrente è del disegno, non del riquadro: due riquadri sullo stesso
-disegno disegnano nello stesso livello, e la scelta resta quando l'editor si
-rimonta o il file si rilegge, finché il documento resta aperto. Se il livello
-corrente se ne va (cancellato da un altro riquadro, dal testo, annullato) si
-disegna nel livello più alto che si vede e non è bloccato; se torna, con
-Annulla o Ripeti, torna corrente. Nel Completo, Oggetto › Disponi › **Sposta sul
-livello corrente** porta gli oggetti scelti in cima a quel livello; un livello
-corrente nascosto o bloccato non li riceve, e l'annuncio dice perché.
-
-Nella barra «Disponi», **Sposta in un livello** porta gli oggetti scelti in cima
-a un altro livello, nell'ordine in cui stavano, dove si vedevano e con lo stile
-che ereditavano. Il menu spegne il livello che li ha già tutti e quelli nascosti
-o bloccati; senza un altro livello dove portarli il pulsante non c'è.
-
-Ogni comando è un passo di annulla, e annullarlo rende corrente il livello
-che ha toccato, se c'è ancora. Nel Semplice il pulsante non c'è, e il
-disegno va nel livello più alto che si vede e non è bloccato.
+Un livello del disegno è un gruppo figlio della radice con `fub:layer`. Il
+livello corrente, i comandi del pulsante «Livelli» e lo spostamento fra i
+livelli stanno in [Disegni, pannello dei livelli](drawing-layers.md).
 
 ## Griglia e pagina
 

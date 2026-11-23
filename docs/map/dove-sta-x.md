@@ -79,6 +79,7 @@
 | il disegno sul motore (chi possiede che cosa) | [Il disegno sul motore](../architecture/disegno.md) |
 | il disegno completo (la parità, la mappa, le famiglie pigre, l'indice) | [Il disegno completo](../architecture/disegno-completo.md) |
 | gli strumenti del motore nel Completo (il ponte, le opzioni, i tracciati, il Contagocce) | [Gli strumenti del motore](../architecture/disegno-strumenti.md) |
+| i livelli del motore nel Completo (la differenza, i comandi sui livelli, il livello corrente) | [I livelli del motore](../architecture/disegno-livelli.md) |
 | la tavolozza dell'inchiostro | `apps/client/src/ink/palette.ts` (Okabe–Ito) |
 | i colori della lavagna (i sei di JSON Canvas, i nove delle note, «Altro…») | `apps/client/src/editors/canvas/colors.ts` |
 | le schede vive della lavagna (`liveCardIds`, `LIVE_ZOOM_MIN`, `MAX_LIVE_CARDS`, che vale anche per le schede della nota) e il contratto dei renderer | `apps/client/src/editors/core/cards/contract.ts`; i renderer in `apps/client/src/editors/core/cards/kinds/` e `apps/client/src/editors/grid/card.ts` |
