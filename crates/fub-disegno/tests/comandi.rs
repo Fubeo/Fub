@@ -237,6 +237,8 @@ fn una_selezione_con_un_elemento_non_mappato_non_cambia_niente() {
     // tracciato con `element` nel valore, non con ciò che è scelto: un
     // `element` non mappato lo rifiutano all'esecuzione.
     let sempre = [
+        // Il modo di disegno (K6 T11) è della sessione: normale e dietro non leggono la scelta.
+        "disegno.view.drawMode",
         "disegno.eyedropper.setOptions",
         "disegno.path.moveAnchor",
         "disegno.path.setHandle",

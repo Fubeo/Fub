@@ -75,6 +75,54 @@
       "id": "navigator",
       "fonte": "pannello",
       "prova": "apps/client/src/editors/spatial/tools/editor/chrome/navigator.test.ts"
+    },
+    {
+      "id": "view.drawMode",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "mode": "behind"
+      },
+      "atteso": {
+        "lettura": {
+          "mode": "behind"
+        }
+      }
+    },
+    {
+      "id": "view.drawMode",
+      "disegno": "base.svg",
+      "selezione": [
+        "op7a7a7a7"
+      ],
+      "argomenti": {
+        "mode": "inside"
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "view.drawMode",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "mode": "inside"
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "view.drawMode",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "mode": "zzz"
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
     }
   ]
 }

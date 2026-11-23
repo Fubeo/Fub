@@ -181,7 +181,8 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // colori pieni globali, e il comando dà `empty` (casi in colore.json, campioni_ordine.rs). Una riga in più.
   // T14 librerie: le letture salva e carica sono nel motore e nei casi, ma restano «da fare»: l'indice del
   // client non legge il loro schema (path e data senza tipo).
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1049, fub: 114, escluso: 12, fatto: 376 });
+  // T11 modo di disegno porta a «fatto» view.drawMode (normale e dietro; dentro al passo successivo).
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1048, fub: 114, escluso: 12, fatto: 377 });
 });
 
 // --- un motore finto ---------------------------------------------------------------
