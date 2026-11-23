@@ -56,6 +56,10 @@ export interface DipendenzeComando extends AzioniEsito {
   /// Media e Media e unisci li mandano nel `value` (`anchors`). Senza, o vuoti,
   /// quei comandi valgono sui tracciati scelti interi.
   readonly punti?: () => readonly DrawingAnchor[];
+  /// L'id di Fub del livello corrente del disegno (`livello-corrente.ts`), o
+  /// `null` se non ce n'è uno con un id: Sposta sul livello corrente lo manda
+  /// nel `value` (`layer`). Senza, il ponte usa il livello più alto libero.
+  readonly livello?: () => string | null;
   /// Mette l'anteprima sul foglio, o la toglie con `null`.
   readonly anteprima: (anteprima: DrawingPreview | null) => void;
   /// La finestra del comando, se la voce ne ha una.
@@ -109,10 +113,19 @@ const SUI_PUNTI_SCELTI: ReadonlySet<string> = new Set([
   "disegno.path.deleteAnchors",
 ]);
 
+/// Il comando che vale sul livello corrente, che sta nel client: lo manda col
+/// suo id di Fub (`layer`), e il ponte lo toglie prima del motore.
+const SUL_LIVELLO_CORRENTE = "disegno.object.arrange.sendToCurrentLayer";
+
 /// Il valore di partenza del comando `id`: quello fisso della voce, più i punti
-/// scelti adesso per un comando che li usa e non li ha già.
+/// scelti adesso per un comando che li usa e non li ha già, o il livello
+/// corrente per Sposta sul livello corrente.
 function valoreDi(id: string, valore: unknown, dipendenze: DipendenzeComando): Readonly<Record<string, unknown>> {
   const base = comeOggetto(valore);
+  if (id === SUL_LIVELLO_CORRENTE && !("layer" in base)) {
+    const livello = dipendenze.livello?.() ?? null;
+    return livello === null ? base : { ...base, layer: livello };
+  }
   if (!SUI_PUNTI_SCELTI.has(id) || "anchors" in base) return base;
   const punti = dipendenze.punti?.() ?? [];
   return punti.length === 0 ? base : { ...base, anchors: [...punti] };

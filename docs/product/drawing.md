@@ -218,6 +218,15 @@ dice perché e che cosa fare. Scegliere oggetti tutti in un livello lo rende
 corrente: la riga dell'albero degli oggetti mostra il nome («Note»), e
 per chi legge a voce il nome dice «Livello «Note», corrente».
 
+Il livello corrente è del disegno, non del riquadro: due riquadri sullo stesso
+disegno disegnano nello stesso livello, e la scelta resta quando l'editor si
+rimonta o il file si rilegge, finché il documento resta aperto. Se il livello
+corrente se ne va (cancellato da un altro riquadro, dal testo, annullato) si
+disegna nel livello più alto che si vede e non è bloccato; se torna, con
+Annulla o Ripeti, torna corrente. Nel Completo, Oggetto › Disponi › **Sposta sul
+livello corrente** porta gli oggetti scelti in cima a quel livello; un livello
+corrente nascosto o bloccato non li riceve, e l'annuncio dice perché.
+
 Nella barra «Disponi», **Sposta in un livello** porta gli oggetti scelti in cima
 a un altro livello, nell'ordine in cui stavano, dove si vedevano e con lo stile
 che ereditavano. Il menu spegne il livello che li ha già tutti e quelli nascosti
