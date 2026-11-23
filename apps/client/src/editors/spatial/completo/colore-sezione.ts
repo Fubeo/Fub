@@ -18,7 +18,7 @@ import { colorWell, type ColorWell } from "../../../kit/color/well";
 import type { Lifetime } from "../../../ui/lifetime";
 import { t } from "../strings";
 import { drawPickerText } from "../tools/color-text";
-import { registraSezione, type ColoreSelezione, type ContestoSezione, type Sezione, type Sezioni } from "./sezioni";
+import { registraSezione, type ColoreSelezione, type ColoriSelezione, type ContestoSezione, type Sezione, type Sezioni } from "./sezioni";
 
 /// Il comando del motore: l'id della voce e i suoi valori.
 export type EseguiColore = (id: string, valori: Readonly<Record<string, unknown>>) => void;
@@ -30,6 +30,13 @@ export type Lato = "fill" | "stroke";
 /// Risorse › Campioni dà il campione scelto a quel lato. Uno per Completo aperto.
 export interface LatoAttivo {
   lato: Lato;
+}
+
+/// I colori che il pannello ha dato alla sezione Colore all'ultimo giro: la vista del pozzo. Il
+/// selettore di «Selettore colore…» parte da qui (K6 T14, selettore). `null` finché la sezione non è
+/// stata disegnata.
+export interface ColoriVisti {
+  valore: ColoriSelezione | null;
 }
 
 interface Parti {
@@ -45,7 +52,7 @@ interface Parti {
 }
 
 /// Il nome di un lato nella lingua di adesso.
-const nomeDi = (lato: Lato): string => t(lato === "fill" ? "draw.properties.fill" : "draw.properties.stroke");
+export const nomeDi = (lato: Lato): string => t(lato === "fill" ? "draw.properties.fill" : "draw.properties.stroke");
 
 /// Il valore da dare al pozzo: un colore, `none`, `null` se misto; ciò che non è un colore semplice
 /// (una sfumatura, un motivo) resta com'è, e il pozzo lo nomina con `nomeDelValore`.
@@ -68,7 +75,7 @@ function pulsante(testo: string, nota: string): HTMLButtonElement {
 
 /// La sezione «Colore» per la scheda Design, da registrare nel Completo aperto: `vita` è quella del
 /// Completo, con cui vivono i pozzi.
-export function sezioneColore(esegui: EseguiColore, vita: Lifetime, stato: LatoAttivo = { lato: "fill" }): Sezione {
+export function sezioneColore(esegui: EseguiColore, vita: Lifetime, stato: LatoAttivo = { lato: "fill" }, visti?: ColoriVisti): Sezione {
   let parti: Parti | null = null;
   /// I colori dell'ultimo giro, per i nomi di ciò che non è un colore semplice.
   let colori: Readonly<Partial<Record<Lato, ColoreSelezione>>> = {};
@@ -166,6 +173,7 @@ export function sezioneColore(esegui: EseguiColore, vita: Lifetime, stato: LatoA
   const disegna = (contesto: ContestoSezione): (() => void) => {
     const p = (parti ??= crea());
     colori = { fill: contesto.colori?.riempimento, stroke: contesto.colori?.contorno };
+    if (visti !== undefined) visti.valore = contesto.colori ?? {};
     const spenta = contesto.sel.numero === 0;
     const mancanti: Lato[] = [];
     for (const lato of ["fill", "stroke"] as const) {
@@ -220,6 +228,6 @@ export function sezioneColore(esegui: EseguiColore, vita: Lifetime, stato: LatoA
 }
 
 /// Registra la sezione nel registro del Completo aperto. `false` se c'è già.
-export function registraColore(sezioni: Sezioni, esegui: EseguiColore, vita: Lifetime, stato?: LatoAttivo): boolean {
-  return registraSezione({ sezioni }, sezioneColore(esegui, vita, stato));
+export function registraColore(sezioni: Sezioni, esegui: EseguiColore, vita: Lifetime, stato?: LatoAttivo, visti?: ColoriVisti): boolean {
+  return registraSezione({ sezioni }, sezioneColore(esegui, vita, stato, visti));
 }

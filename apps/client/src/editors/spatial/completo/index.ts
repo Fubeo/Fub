@@ -25,7 +25,9 @@ import { COMANDO_DEL_CLIC, iconaMotore, layoutCompleto, MOTORE_PRONTO, type Grup
 import { registraAllinea } from "./allinea";
 import { registraElaborazione } from "./elaborazione";
 import { registraTrasforma } from "./trasforma-sezione";
-import { registraColore, type LatoAttivo } from "./colore-sezione";
+import { registraColore, type ColoriVisti, type LatoAttivo } from "./colore-sezione";
+// «Selettore colore…» (K6 T14, selettore): il selettore del pozzo da una voce del menu e della ricerca.
+import { VOCE_SELETTORE_COLORE, voceSelettoreColore } from "./selettore-colore";
 import { registraCampioni } from "./campioni-sezione";
 import { apriRicolora, motivoRicolora, VOCE_RICOLORA } from "./ricolora";
 import { registraGuidaColori } from "./guida-colori-sezione";
@@ -39,7 +41,7 @@ import { registraTesto } from "./testo-sezioni";
 import type { Teardown } from "../../../ui/lifetime";
 import { languageCurrent } from "../../../i18n/strings";
 import type { ToolSpec } from "../tools/registry";
-import type { Lifetime } from "../../../ui/lifetime";
+import { openLifetime, type Lifetime } from "../../../ui/lifetime";
 import type { CassettoOptions } from "../tools/editor/chrome/drawer";
 import { openPopover } from "../../../kit/popover";
 import { keyboardPlatform } from "../../../ui/commands";
@@ -414,6 +416,11 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila" | "e
   // La sezione «Colore» (K6 T14, giro 1): riempimento e contorno, scambia, nessuno e di serie.
   // Il lato attivo che Colore cambia e Risorse › Campioni usa (K6 T14, giro 2).
   const latoAttivo: LatoAttivo = { lato: "fill" };
+  // I colori che la sezione Colore ha visto (la vista del pozzo), per il selettore. Le sue finestre
+  // si chiudono col Completo (`chiudi`) e col disegno (`ctx.life`).
+  const coloriVisti: ColoriVisti = { valore: null };
+  const vitaSelettore = openLifetime();
+  ctx.life.add(() => vitaSelettore.close());
   // Le voci del client che il Completo fa da sé, con una sua sezione: le altre vanno all'editor.
   const vociDelCompleto = new Map<string, VoceDelCompleto>();
   vociDelCompleto.set("pathfinder.repeat", {
@@ -425,7 +432,7 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila" | "e
   // Ricolora grafica (K6 T14): la voce di Modifica › Modifica colori apre la sua finestra. Il suo
   // stato è quello del comando che la finestra scrive (`conVociClient`).
   vociDelCompleto.set(VOCE_RICOLORA, { stato: () => null, esegui: () => void apriRicolora(dipendenze) });
-  registraColore(sezioni, (id, valori) => void eseguiPerId(id, valori, { senzaFinestra: true }), ctx.life, latoAttivo);
+  registraColore(sezioni, (id, valori) => void eseguiPerId(id, valori, { senzaFinestra: true }), ctx.life, latoAttivo, coloriVisti);
   // La «Guida colori» del Design (K6 T14, giro 3): le armonie del lato attivo, lette dal motore.
   registraGuidaColori(sezioni, (id, valori) => void eseguiPerId(id, valori, { senzaFinestra: true }), () => dipendenze, ctx.life, latoAttivo);
   // La sezione «Campioni» di Risorse (K6 T14, giro 2): la griglia, la scelta, le finestre del kit.
@@ -524,6 +531,9 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila" | "e
     annuncia: opzioni.tasti?.annuncia ?? (() => undefined),
     ...(opzioni.tasti?.diFub === undefined ? {} : { diFub: opzioni.tasti.diFub }),
   };
+  // Modifica › Modifica colori › «Selettore colore…» (K6 T14, selettore): il selettore del pozzo, con il
+  // lato attivo e i colori che la sezione Colore ha visto. Le sue finestre passano da `dipendenze`.
+  vociDelCompleto.set(VOCE_SELETTORE_COLORE, voceSelettoreColore({ dipendenze, lato: latoAttivo, colori: coloriVisti, vita: vitaSelettore }));
   // Gli appunti del motore (K6 T11): mentre il Completo è aperto, copiare e incollare
   // passano dal motore, e il Semplice li cede qui (`tools/clipboard.ts`). Senza
   // motore o senza tasti non ci sono.
@@ -711,6 +721,7 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila" | "e
     chiudi() {
       if (chiuso) return;
       chiuso = true;
+      vitaSelettore.close();
       carica.chiudi();
       sezioni.chiudi();
     },

@@ -184,7 +184,9 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // T11 ruota vista: `view.rotate` (Ruota vista…, una finestra con l'angolo) diventa «fatto», con la sua
   // prova in vista.json; `view.rotateToSelection` resta «da fare»: il motore non ha la rotazione condivisa.
   // T11 cursori: «Usa cursori di precisione» è fatta; T12: «Unisci» (gesto) è fatta.
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1046, fub: 114, escluso: 12, fatto: 379 });
+  // T14 selettore colore: `ui.colorPicker` («Selettore colore…», in Modifica › Modifica colori) è «fatto», con la sua
+  // prova in selettore-colore.test.ts e il caso in colore.json: una in meno da fare, una in più fatta.
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1045, fub: 114, escluso: 12, fatto: 380 });
 });
 
 // --- un motore finto ---------------------------------------------------------------

@@ -4833,6 +4833,22 @@
     },
     {
       "fonte": "interfaccia",
+      "id": "ui.colorPicker",
+      "chiamata": {
+        "client": "ui.colorPicker"
+      },
+      "etichetta": {
+        "it": "Selettore colore…",
+        "en": "Color Picker…"
+      },
+      "posto": "menu/modifica/colori",
+      "famiglia": "colore",
+      "tasto": null,
+      "effetto": "mostra",
+      "finestra": true
+    },
+    {
+      "fonte": "interfaccia",
       "id": "ui.expandDialog",
       "chiamata": {
         "client": "ui.expandDialog"
