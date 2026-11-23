@@ -139,7 +139,9 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // T14 librerie finestra porta a «fatto» `window.swatchLibrary`: la finestra elenca le librerie, mostra
   // i campioni e aggiunge (prova: `librerie-finestra.test.ts`). Resta «da fare» Altra libreria… (un file).
   // T14 ricolora: cinque righe fatte in più (tre letture, Ricolora grafica e la sua finestra).
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1092, fub: 114, escluso: 12, fatto: 333 });
+  // T14 letture colore: `color.harmony`, `color.convert` e `color.gamutCheck` sono «fatto»
+  // (letture senza finestra, casi in colore.json): tre in più.
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1089, fub: 114, escluso: 12, fatto: 336 });
 });
 
 // --- un motore finto ---------------------------------------------------------------
