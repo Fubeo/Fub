@@ -188,7 +188,8 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // T11: «Aggancia ai pixel» è fatta.
   // T11: «Zoom sulla selezione» è fatta (con la strada del Completo in chrome/status.ts).
   // T14: «Selettore colore…» (`ui.colorPicker`) è fatto, in Modifica › Colori.
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1041, fub: 114, escluso: 12, fatto: 384 });
+  // T12: «Aggiungi punti…» (addon.pathtools.addPoints) è fatta, con il solo numero dei punti.
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1040, fub: 114, escluso: 12, fatto: 385 });
 });
 
 // --- un motore finto ---------------------------------------------------------------

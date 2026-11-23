@@ -277,6 +277,11 @@ Cinque voci aprono una finestra, con l'anteprima sul foglio:
 - **Semplifica…**: meno punti di ancoraggio, con la soglia degli angoli e
   la scelta dei soli segmenti dritti;
 - **Smussa…**: curve morbide al posto delle linee spezzate;
+- **Aggiungi punti ai segmenti…**: quanti punti nuovi per segmento, da 1 a
+  100, spaziati in modo uguale: la forma non cambia. Sul tracciato chiuso
+  conta anche il segmento di chiusura. Sul testo e sulle forme primitive
+  (rettangolo, ellisse) la voce è spenta col perché: prima bisogna farne un
+  tracciato;
 - **Dividi in trattini**: trattini della lunghezza scritta, con lo spazio
   fra l'uno e l'altro;
 - **≡ › Oggetto › Espandi…**: il riempimento e il tratto diventano forme

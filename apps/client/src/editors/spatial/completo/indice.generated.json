@@ -163,6 +163,22 @@
     },
     {
       "fonte": "motore",
+      "id": "addon.pathtools.addPoints",
+      "chiamata": {
+        "comando": "disegno.addon.pathtools.addPoints"
+      },
+      "etichetta": {
+        "it": "Aggiungi punti ai segmenti…",
+        "en": "Add Points to Segments…"
+      },
+      "posto": "menu/oggetto/tracciato",
+      "famiglia": "tracciati",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "motore",
       "id": "addon.pathtools.close",
       "chiamata": {
         "comando": "disegno.addon.pathtools.close"

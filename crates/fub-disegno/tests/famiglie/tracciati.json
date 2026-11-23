@@ -8130,6 +8130,139 @@
       "atteso": {
         "errore": "bad_args"
       }
+    },
+    {
+      "id": "addon.pathtools.addPoints",
+      "disegno": "addpoints-aperto.svg",
+      "selezione": [
+        "oaper0001"
+      ],
+      "argomenti": {
+        "count": 2
+      },
+      "dopo": "addpoints-aperto-due.svg",
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oaper0001",
+            "attrs": {
+              "d": "M40 60 L73.33 60 L106.67 60 L140 60"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "addon.pathtools.addPoints",
+      "disegno": "addpoints-chiuso.svg",
+      "selezione": [
+        "ochiu0001"
+      ],
+      "argomenti": {
+        "count": 1
+      },
+      "dopo": "addpoints-chiuso-uno.svg",
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "ochiu0001",
+            "attrs": {
+              "d": "M40 60 L90 60 L140 60 L115 100 L90 140 L65 100 Z"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "addon.pathtools.addPoints",
+      "disegno": "addpoints-rettangolo.svg",
+      "selezione": [
+        "orett0001"
+      ],
+      "argomenti": {
+        "count": 1
+      },
+      "atteso": {
+        "rifiuto": "unsupported"
+      }
+    },
+    {
+      "id": "addon.pathtools.addPoints",
+      "disegno": "addpoints-ellisse.svg",
+      "selezione": [
+        "oell00001"
+      ],
+      "argomenti": {
+        "count": 1
+      },
+      "atteso": {
+        "rifiuto": "unsupported"
+      }
+    },
+    {
+      "id": "addon.pathtools.addPoints",
+      "disegno": "addpoints-testo.svg",
+      "selezione": [
+        "otxt00001"
+      ],
+      "argomenti": {
+        "count": 1
+      },
+      "atteso": {
+        "rifiuto": "unsupported"
+      }
+    },
+    {
+      "id": "addon.pathtools.addPoints",
+      "disegno": "addpoints-aperto.svg",
+      "selezione": [
+        "oaper0001"
+      ],
+      "argomenti": {
+        "count": 0
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "addon.pathtools.addPoints",
+      "disegno": "addpoints-aperto.svg",
+      "selezione": [
+        "oaper0001"
+      ],
+      "argomenti": {
+        "count": -2
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "addon.pathtools.addPoints",
+      "disegno": "addpoints-bloccato.svg",
+      "selezione": [
+        "obloc0001"
+      ],
+      "argomenti": {
+        "count": 1
+      },
+      "atteso": {
+        "rifiuto": "locked"
+      }
+    },
+    {
+      "id": "addon.pathtools.addPoints",
+      "disegno": "addpoints-aperto.svg",
+      "selezione": [],
+      "argomenti": {
+        "count": 1
+      },
+      "atteso": {
+        "rifiuto": "empty"
+      }
     }
   ]
 }
