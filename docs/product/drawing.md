@@ -350,6 +350,26 @@ apre, per esempio perché non c'è più, lo dice con un avviso.
 Chi monta l'editor sceglie e apre i documenti con `links`; senza, il disegno
 non ha segni né «Collega a una nota…», e un collegamento si toglie lo stesso.
 
+## Campioni e gruppi di colori
+
+Nel Completo i campioni del disegno si raccolgono in gruppi di colori: Nuovo
+gruppo colori ne fa uno coi campioni scelti o con colori nuovi (senza nome si
+chiama «Gruppo colori»), Modifica gruppo colori ne cambia i colori e il nome, e
+chi usa un campione segue il nuovo colore, Separa gruppo colori lascia i
+campioni dove sono, senza gruppo. Un tema salvato si aggiunge ai campioni come
+un gruppo col suo nome. Un gruppo vuoto non si salva: Fub chiede di scegliere
+almeno un campione.
+
+Campioni predefiniti rimette i campioni di serie, coi nomi in italiano, i grigi
+e i colori brillanti in due gruppi; un campione che il disegno ha già non torna
+due volte. Le sfumature di serie non entrano, perché nel file un campione è un
+colore pieno, e Fub lo dice insieme a «fatto». Togliendo i campioni del
+disegno, un oggetto che ne usava uno tiene il suo colore.
+
+Nel file un gruppo è un attributo dei suoi campioni: un Fub più vecchio, o un
+altro programma, vede gli stessi colori senza gruppo
+([il formato](../reference/scene-format-resources.md#2-le-risorse)).
+
 ## Ciò che il disegno porta
 
 Un disegno può portare ciò che Fub disegna ma non crea più da quando il
