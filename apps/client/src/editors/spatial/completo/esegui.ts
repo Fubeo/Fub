@@ -13,6 +13,7 @@ import { languageCurrent } from "../../../i18n/strings";
 import type { Lifetime } from "../../../ui/lifetime";
 import { apriFinestra, type Esegui, type EsitoComando, type FinestraOpzioni, type ModuloFinestra } from "../motore/finestre";
 import type { MotoreDelDisegno } from "../motore/gesti";
+import type { ArgomentiRifiutati } from "../motore/sessione";
 import { motivoDelRifiuto } from "../motore/rifiuto";
 import type { Op } from "../scene/ops";
 import { t } from "../strings";
@@ -142,19 +143,35 @@ function attesaFamiglia(stato: StatoFamiglia): Promise<void> {
   return Promise.reject(stato.kind === "errore" && stato.perche === "no-memory" ? "no_memory" : "motore");
 }
 
-/// Manda il comando al motore. `null` se il motore non c'è o non risponde.
+/// Manda il comando al motore. Gli argomenti rifiutati (`bad_args`) tornano
+/// con la frase del motore, e il motore resta pronto; `null` se il motore non
+/// c'è o non risponde.
+export async function chiamaConArgomenti(
+  dipendenze: DipendenzeComando,
+  id: string,
+  valore: unknown,
+  anteprima: boolean,
+): Promise<DrawingOutcome | ArgomentiRifiutati | null> {
+  if (dipendenze.motore === null) return null;
+  const sessione = await dipendenze.motore.pronta(ATTESA_MOTORE_MS);
+  if (sessione === null) return null;
+  const esito = await sessione.comando({ id, selection: [...dipendenze.selezione()], value: valore, preview: anteprima });
+  if (esito === null || ("kind" in esito && esito.kind === "assente")) return null;
+  return esito;
+}
+
+/// Manda il comando al motore, per una lettura: `null` se il motore non c'è,
+/// non risponde o non ne prende gli argomenti. Un comando che cambia il
+/// disegno, o che una persona ha chiesto, passa da `chiamaConArgomenti` e dice
+/// la frase del motore.
 export async function chiama(
   dipendenze: DipendenzeComando,
   id: string,
   valore: unknown,
   anteprima: boolean,
 ): Promise<DrawingOutcome | null> {
-  if (dipendenze.motore === null) return null;
-  const sessione = await dipendenze.motore.pronta(ATTESA_MOTORE_MS);
-  if (sessione === null) return null;
-  const esito = await sessione.comando({ id, selection: [...dipendenze.selezione()], value: valore, preview: anteprima });
-  if (esito === null || "kind" in esito) return null;
-  return esito;
+  const esito = await chiamaConArgomenti(dipendenze, id, valore, anteprima);
+  return esito === null || "kind" in esito ? null : esito;
 }
 
 /// Un esito che non è un'anteprima: la selezione, le operazioni in un passo, e
@@ -192,6 +209,17 @@ export function applicaEsito(esito: DrawingOutcome, etichetta: string, azioni: A
       : t("draw.completo.key.doneWithLosses", { command: etichetta, losses: perdite }),
   );
   return true;
+}
+
+/// L'esito di un comando (`applicaEsito`), o gli argomenti che il motore ha
+/// rifiutato, detti con la sua frase: niente cambia, e il disegno resta
+/// modificabile. `true` solo se il comando è andato.
+export function applicaRisposta(esito: DrawingOutcome | ArgomentiRifiutati, etichetta: string, azioni: AzioniEsito): boolean {
+  if ("kind" in esito) {
+    azioni.annuncia(esito.message);
+    return false;
+  }
+  return applicaEsito(esito, etichetta, azioni);
 }
 
 /// Fa partire il comando della voce `voce`: subito se non ha parametri (dopo
@@ -238,8 +266,10 @@ export function eseguiVoce(voce: VoceIndice, dipendenze: DipendenzeComando): Pro
       // I punti scelti quando la finestra si apre: valgono fino a OK.
       const partenza = valoreDi(comando.id, comando.valore, dipendenze);
       const esegui: Esegui = async (valori, anteprima): Promise<EsitoComando> => {
-        const esito = await chiama(dipendenze, comando.id, { ...partenza, ...valori }, anteprima);
+        const esito = await chiamaConArgomenti(dipendenze, comando.id, { ...partenza, ...valori }, anteprima);
         if (esito === null) return { anteprima: null, rifiuto: "not_ready" };
+        // I valori che il motore non prende: la finestra dice la sua frase e resta aperta.
+        if ("kind" in esito) return { anteprima: null, rifiuto: null, argomenti: esito.message };
         // OK manda il comando una volta sola: un passo della cronologia.
         if (!anteprima) applicaEsito(esito, etichetta, dipendenze);
         return { anteprima: esito.preview, rifiuto: esito.refused };
@@ -272,12 +302,12 @@ export function eseguiVoce(voce: VoceIndice, dipendenze: DipendenzeComando): Pro
       dipendenze.annuncia(t("draw.window.failed"));
       return false;
     }
-    const esito = await chiama(dipendenze, comando.id, valoreDi(comando.id, comando.valore, dipendenze), false);
+    const esito = await chiamaConArgomenti(dipendenze, comando.id, valoreDi(comando.id, comando.valore, dipendenze), false);
     if (dipendenze.vita.closed) return false;
     if (esito === null) {
       dipendenze.annuncia(t("draw.window.unanswered"));
       return false;
     }
-    return applicaEsito(esito, etichetta, dipendenze);
+    return applicaRisposta(esito, etichetta, dipendenze);
   });
 }

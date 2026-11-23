@@ -285,6 +285,25 @@ describe("OK, Annulla, Esc e Invio", () => {
   });
 });
 
+describe("gli argomenti rifiutati dal motore (`bad_args`)", () => {
+  it("OK con valori che il motore non prende: la sua frase nella finestra, senza Riprova, e la finestra resta aperta", async () => {
+    const { result } = await open();
+    action("ok").click();
+    await settle();
+    commits()[0]!.risolvi({ anteprima: null, rifiuto: null, argomenti: "Il raggio deve essere più piccolo del lato." });
+    await settle();
+    expect(dialog()).not.toBeNull();
+    expect(dialog()!.querySelector(".kit-form-error")?.textContent).toBe("Il raggio deve essere più piccolo del lato.");
+    expect(action("retry").hidden).toBe(true);
+    // Si cambia e si riprova con OK: la finestra manda di nuovo, e chiude.
+    action("ok").click();
+    await settle();
+    expect(commits()).toHaveLength(2);
+    commits()[1]!.risolvi(VUOTO);
+    expect(await result).toBe(true);
+  });
+});
+
 describe("il valore di partenza", () => {
   it("con 0 sotto il minimo, OK è spento fin dall'apertura, e il campo dice il limite accanto a sé", async () => {
     apriFinestra(

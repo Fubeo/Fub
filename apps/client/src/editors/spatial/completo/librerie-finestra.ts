@@ -18,8 +18,8 @@
 import { openDialog } from "../../../kit/dialog";
 import { formBody, formCheck, formError, formNote } from "../../../kit/form";
 import { openLifetime, type Lifetime } from "../../../ui/lifetime";
-import { t, type DrawKey } from "../strings";
-import { applicaEsito, chiama, type DipendenzeComando } from "./esegui";
+import { t } from "../strings";
+import { applicaEsito, chiama, chiamaConArgomenti, type DipendenzeComando } from "./esegui";
 import { motivoDelRifiuto } from "../motore/rifiuto";
 
 /// Una libreria dell'elenco (`swatch.library.list`).
@@ -41,8 +41,9 @@ export interface CampioneVoce {
 export interface PortaLibrerie {
   elenco(): Promise<readonly LibreriaVoce[] | null>;
   campioni(id: string): Promise<readonly CampioneVoce[] | null>;
-  /// Aggiunge i campioni di `id` (tutti se `nomi` è `null`). `rifiuto` col perché in italiano, o `null`.
-  aggiungi(id: string, nomi: readonly string[] | null): Promise<{ readonly rifiuto: DrawKey | null } | null>;
+  /// Aggiunge i campioni di `id` (tutti se `nomi` è `null`). `rifiuto` col perché già a parole (la frase
+  /// del motore se non ne prende gli argomenti), o `null`.
+  aggiungi(id: string, nomi: readonly string[] | null): Promise<{ readonly rifiuto: string | null } | null>;
 }
 
 /// Le librerie dalla lettura di `swatch.library.list`; `null` se non si legge.
@@ -82,10 +83,11 @@ export function creaPortaLibrerie(dipendenze: DipendenzeComando, etichetta: stri
     },
     async aggiungi(id, nomi) {
       const valore = nomi === null ? { library: id } : { library: id, names: [...nomi] };
-      const esito = await chiama(dipendenze, "disegno.swatch.library.add", valore, false);
+      const esito = await chiamaConArgomenti(dipendenze, "disegno.swatch.library.add", valore, false);
       if (esito === null) return null;
-      if (esito.refused !== null) return { rifiuto: motivoDelRifiuto(esito.refused) ?? "draw.libraries.add_failed" };
-      return applicaEsito(esito, etichetta, dipendenze) ? { rifiuto: null } : { rifiuto: "draw.libraries.add_failed" };
+      if ("kind" in esito) return { rifiuto: esito.message };
+      if (esito.refused !== null) return { rifiuto: t(motivoDelRifiuto(esito.refused) ?? "draw.libraries.add_failed") };
+      return applicaEsito(esito, etichetta, dipendenze) ? { rifiuto: null } : { rifiuto: t("draw.libraries.add_failed") };
     },
   };
 }
@@ -209,7 +211,7 @@ export function apriFinestraLibrerie(porta: PortaLibrerie, vita: Lifetime): void
     occupato = false;
     if (own.closed) return false;
     if (esito === null) dimmi(t("draw.libraries.add_failed"));
-    else if (esito.rifiuto !== null) dimmi(t(esito.rifiuto));
+    else if (esito.rifiuto !== null) dimmi(esito.rifiuto);
     aggiornaAzioni();
     return esito !== null && esito.rifiuto === null;
   };

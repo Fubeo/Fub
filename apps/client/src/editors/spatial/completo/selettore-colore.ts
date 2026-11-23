@@ -23,10 +23,10 @@ import { formBody, formError, formNote } from "../../../kit/form";
 import { identifier } from "../../../ui/a11y";
 import { openLifetime, type Lifetime } from "../../../ui/lifetime";
 import { motivoDelRifiuto } from "../motore/rifiuto";
-import { t, type DrawKey } from "../strings";
+import { t } from "../strings";
 import { drawPickerText } from "../tools/color-text";
 import { nomeDi, type ColoriVisti, type Lato, type LatoAttivo } from "./colore-sezione";
-import { applicaEsito, chiama, type DipendenzeComando } from "./esegui";
+import { applicaEsito, chiamaConArgomenti, type DipendenzeComando } from "./esegui";
 import type { ColoreSelezione, ColoriSelezione, VoceDelCompleto } from "./sezioni";
 
 /// L'id della voce del client (`chiamata.client` dell'indice) del selettore.
@@ -59,16 +59,21 @@ export async function famigliaColorePronta(carica: DipendenzeComando["carica"]):
 /// Manda il colore del lato dal percorso del pozzo: `paint.setFill` o `paint.setStroke`, con `{none: true}`
 /// per nessun colore. Risolve con il perché in italiano se il motore lo rifiuta; `null` se è andata, o se
 /// non c'è niente da dire. Le risposte che arrivano a finestra chiusa non cambiano niente.
-async function applicaColore(dipendenze: DipendenzeComando, lato: Lato, colore: string, finestra: Lifetime): Promise<DrawKey | null> {
+async function applicaColore(dipendenze: DipendenzeComando, lato: Lato, colore: string, finestra: Lifetime): Promise<string | null> {
   const pronta = await famigliaColorePronta(dipendenze.carica);
   if (finestra.closed) return null;
-  if (!pronta) return "draw.window.failed";
+  if (!pronta) return t("draw.window.failed");
   const id = lato === "fill" ? "disegno.paint.setFill" : "disegno.paint.setStroke";
-  const esito = await chiama(dipendenze, id, colore === "none" ? { none: true } : { color: colore }, false);
+  const esito = await chiamaConArgomenti(dipendenze, id, colore === "none" ? { none: true } : { color: colore }, false);
   if (finestra.closed) return null;
-  if (esito === null) return "draw.window.unanswered";
-  if (esito.refused !== null) return motivoDelRifiuto(esito.refused);
-  return applicaEsito(esito, nomeDi(lato), dipendenze) ? null : "draw.completo.key.failed";
+  if (esito === null) return t("draw.window.unanswered");
+  // I valori che il motore non prende: la sua frase.
+  if ("kind" in esito) return esito.message;
+  if (esito.refused !== null) {
+    const motivo = motivoDelRifiuto(esito.refused);
+    return motivo === null ? null : t(motivo);
+  }
+  return applicaEsito(esito, nomeDi(lato), dipendenze) ? null : t("draw.completo.key.failed");
 }
 
 /// La finestra: il selettore del kit con Annulla e OK. Il colore parte da `partenza` (`null`: nessun colore,
@@ -111,9 +116,9 @@ function apriFinestraSelettore(dipendenze: DipendenzeComando, lato: Lato, parten
       const colore = scelto;
       if (azione === "annulla" || colore === null) return true;
       // Un errore del motore non lascia il dialogo occupato per sempre: dice che non ha risposto.
-      return applicaColore(dipendenze, lato, colore, finestra).catch((): DrawKey => "draw.window.unanswered").then((rifiuto) => {
+      return applicaColore(dipendenze, lato, colore, finestra).catch((): string => t("draw.window.unanswered")).then((rifiuto) => {
         if (rifiuto === null) return true;
-        errore.textContent = t(rifiuto);
+        errore.textContent = rifiuto;
         errore.hidden = false;
         return false;
       });

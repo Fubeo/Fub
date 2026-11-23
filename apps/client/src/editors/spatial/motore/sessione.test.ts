@@ -6,10 +6,10 @@
 // la chiusura.
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { DrawingGesture, DrawingOutcome, DrawingSync } from "../../../host/contract";
+import type { DrawingGesture, DrawingOutcome, DrawingSync, PluginError } from "../../../host/contract";
 import { createFakeHost, type DrawingFake, type FakeHost } from "../../../host/fake";
 import { DocumentSessionCollection, type DocumentSessionApi } from "../../../state/document-session";
-import { apriSessione, TEMPO_LIMITE_MS, type GestoMotore, type MotoreAssente, type SessioneMotore } from "./sessione";
+import { apriSessione, TEMPO_LIMITE_MS, type ArgomentiRifiutati, type GestoMotore, type MotoreAssente, type SessioneMotore } from "./sessione";
 
 const DOC = "disegni/mappa.svg";
 const SVG = '<svg xmlns="http://www.w3.org/2000/svg">\n  <rect id="r-1" width="10" height="10"/>\n</svg>\n';
@@ -348,6 +348,105 @@ describe("il motore che non risponde", () => {
     await vi.waitFor(() => expect(session.stato()).toEqual({ kind: "assente", perche: "errore" }));
     expect(await session.gesto(GESTO)).toEqual({ kind: "assente", perche: "errore" });
     expect(gesti(host)).toHaveLength(0);
+  });
+});
+
+describe("gli argomenti rifiutati (`bad_args`)", () => {
+  const FRASE = "Scegli due o più campioni da unire.";
+  const rifiuta = (request: { id: string; revision: string }): DrawingOutcome => {
+    if (request.id === "disegno.swatch.merge") throw { kind: "bad_args", message: FRASE } satisfies PluginError;
+    return esito(request.revision);
+  };
+
+  it("a un comando: la sessione resta aperta, nessuno sente un'assenza, la frase arriva a chi ha chiesto", async () => {
+    const host = createFakeHost({ drawing: { comando: rifiuta } });
+    const session = await apri(host);
+    const avvisi: MotoreAssente[] = [];
+    session.quandoAssente((assente) => avvisi.push(assente));
+    const risposta = await session.comando({ id: "disegno.swatch.merge", selection: [], value: { names: ["Blu"] } });
+    expect(risposta).toEqual({ kind: "argomenti", message: FRASE } satisfies ArgomentiRifiutati);
+    expect(session.stato()).toBe("aperta");
+    expect(avvisi).toEqual([]);
+    expect(host.atGate("closeDrawing")).toHaveLength(0);
+    expect(host.drawingCopy(session.instance)).toBeDefined();
+  });
+
+  it("dopo il rifiuto la fila va avanti: il comando valido, il gesto e il sync partono", async () => {
+    const host = createFakeHost({ drawing: { comando: rifiuta, gesto: (gesture) => esito(gesture.revision) } });
+    const session = await apri(host);
+    // In fila insieme: il rifiuto non blocca chi viene dopo.
+    const sbagliato = session.comando({ id: "disegno.swatch.merge", selection: [], value: { names: ["Blu"] } });
+    const valido = session.comando({ id: "disegno.spessore", selection: ["r-1"], value: 3 });
+    expect(await sbagliato).toEqual({ kind: "argomenti", message: FRASE });
+    expect(await valido).toEqual(esito("0"));
+    modifica('width="10"', 'width="12"');
+    expect(await session.gesto(GESTO)).toEqual(esito("1"));
+    expect(host.drawingCopy(session.instance)!.revision).toBe("1");
+    expect(session.stato()).toBe("aperta");
+  });
+
+  it("a un gesto: stessa cosa, e il gesto dopo va", async () => {
+    let volte = 0;
+    const host = createFakeHost({
+      drawing: {
+        gesto: (gesture) => {
+          if (volte++ === 0) throw { kind: "bad_args", message: "Un clic vuole un punto." } satisfies PluginError;
+          return esito(gesture.revision);
+        },
+      },
+    });
+    const session = await apri(host);
+    const avvisi: MotoreAssente[] = [];
+    session.quandoAssente((assente) => avvisi.push(assente));
+    expect(await session.gesto(GESTO)).toEqual({ kind: "argomenti", message: "Un clic vuole un punto." });
+    expect(session.stato()).toBe("aperta");
+    expect(avvisi).toEqual([]);
+    expect(await session.gesto(GESTO)).toEqual(esito("0"));
+  });
+
+  it("dopo uno `stale`: la riprova che rifiuta gli argomenti dà la frase, senza fermare la sessione", async () => {
+    let volte = 0;
+    const host = createFakeHost({
+      drawing: {
+        comando: (request) => {
+          if (volte++ === 0) return esito(request.revision, "stale");
+          throw { kind: "bad_args", message: FRASE } satisfies PluginError;
+        },
+      },
+    });
+    const session = await apri(host);
+    expect(await session.comando({ id: "disegno.swatch.merge", selection: [], value: {} })).toEqual({ kind: "argomenti", message: FRASE });
+    expect(syncs(host)).toHaveLength(1);
+    expect(session.stato()).toBe("aperta");
+  });
+
+  it("un `bad_args` a un sync resta un guasto: la copia non è più certa", async () => {
+    const host = createFakeHost({ drawing: { gesto: (gesture) => esito(gesture.revision) } });
+    const session = await apri(host);
+    host.fault("drawingSync", { kind: "bad_args", message: "edits fuori dal testo" });
+    modifica('width="10"', 'width="11"');
+    await vi.waitFor(() => expect(session.stato()).toEqual({ kind: "assente", perche: "errore" }));
+  });
+
+  it("`permission_denied` a un comando resta un guasto", async () => {
+    const host = createFakeHost({ drawing: { comando: rifiuta } });
+    const session = await apri(host);
+    host.fault("drawingCommand", { kind: "permission_denied", message: "vault diverso" });
+    expect(await session.comando({ id: "disegno.spessore", selection: [], value: 1 })).toEqual({ kind: "assente", perche: "errore" });
+    expect(session.stato()).toEqual({ kind: "assente", perche: "errore" });
+  });
+
+  it("il rifiuto che arriva dopo la chiusura si scarta", async () => {
+    const host = createFakeHost({ drawing: { comando: rifiuta } });
+    const session = await apri(host);
+    const release = host.throttle("drawingCommand");
+    const inVolo = session.comando({ id: "disegno.swatch.merge", selection: [], value: { names: ["Blu"] } });
+    await giro();
+    const chiusa = session.chiudi();
+    release();
+    expect(await inVolo).toBeNull();
+    await chiusa;
+    expect(session.stato()).toBe("chiusa");
   });
 });
 

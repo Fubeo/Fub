@@ -155,6 +155,9 @@ export function installLayersGrid(ctx: EditorContext): void {
         case "fallito":
           announce(t("draw.completo.key.failed"));
           return;
+        case "argomenti":
+          announce(esito.frase);
+          return;
         case "fatto":
           if (writeLayers(write.label, { ops: esito.ops, keys: [] }, write.engineKey(esito.ops))) announce(write.said());
       }

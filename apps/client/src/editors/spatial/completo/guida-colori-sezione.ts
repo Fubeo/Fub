@@ -189,7 +189,7 @@ export function sezioneGuidaColori(
     if (senzaScelta) {
       const esito = await chiama(deps, "disegno.paint.proxies", {}, false).catch(() => null);
       if (questa !== versione) return;
-      const lettura = esito === null || esito.refused !== null ? null : esito.reading;
+      const lettura = esito === null || "kind" in esito || esito.refused !== null ? null : esito.reading;
       colore = isRecord(lettura) ? hexDellaVernice(lettura[lato.lato]) : null;
     }
     if (colore === null) {
@@ -213,7 +213,7 @@ export function sezioneGuidaColori(
     }
     const esito = await chiama(deps, "disegno.color.harmony", parametri(colore, guida), false).catch(() => null);
     if (questa !== versione) return;
-    const letta = esito === null || esito.refused !== null ? null : guidaDaLettura(esito.reading);
+    const letta = esito === null || "kind" in esito || esito.refused !== null ? null : guidaDaLettura(esito.reading);
     stato = letta === null ? { tipo: "errore" } : { tipo: "pronta", letta };
     disegnaCorpo();
   };

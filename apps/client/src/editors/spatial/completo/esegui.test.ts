@@ -4,6 +4,7 @@
 // sono finti: nessun DOM.
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { DrawingOutcome } from "../../../host/contract";
+import type { ArgomentiRifiutati } from "../motore/sessione";
 import { openLifetime, type Lifetime } from "../../../ui/lifetime";
 import type { Op } from "../scene/ops";
 import { apriFinestra } from "../motore/finestre";
@@ -79,7 +80,7 @@ function caricatoreFinto(stato: StatoFamiglia, dopo: StatoFamiglia = stato) {
 }
 
 /// Le dipendenze finte, con un motore che risponde `risposta`.
-function dipendenze(over: Partial<DipendenzeComando> & { risposta?: DrawingOutcome | null } = {}) {
+function dipendenze(over: Partial<DipendenzeComando> & { risposta?: DrawingOutcome | ArgomentiRifiutati | null } = {}) {
   const sessione = {
     comando: vi.fn(() => Promise.resolve(over.risposta === undefined ? esito() : over.risposta)),
   };
@@ -177,6 +178,20 @@ describe("eseguiVoce, senza finestra", () => {
     expect(azioni.seleziona).toHaveBeenCalledWith(["n9"]);
     expect(azioni.annuncia).toHaveBeenLastCalledWith(t("draw.reason.lockedSelection"));
     expect(azioni.annuncia).not.toHaveBeenCalledWith(t("draw.window.refused"));
+  });
+
+  it("argomenti rifiutati (`bad_args`): si dice la frase del motore, il disegno non cambia e il comando dopo va", async () => {
+    const frase = "Scegli due o più campioni da unire.";
+    const { d, sessione, azioni } = dipendenze({ risposta: { kind: "argomenti", message: frase } });
+    eseguiVoce(voce(), d);
+    await tick();
+    expect(azioni.annuncia).toHaveBeenLastCalledWith(frase);
+    expect(azioni.commit).not.toHaveBeenCalled();
+    expect(azioni.seleziona).not.toHaveBeenCalled();
+    sessione.comando.mockResolvedValueOnce(esito());
+    eseguiVoce(voce(), d);
+    await tick();
+    expect(azioni.commit).toHaveBeenCalledWith(OPS, etichettaDi(voce()));
   });
 
   it("ogni rifiuto dice il suo motivo, come per i colori; «niente da cambiare» non è un errore", async () => {
@@ -327,6 +342,18 @@ describe("eseguiVoce, con finestra", () => {
     expect(riprova).toBeDefined();
     await riprova!();
     expect(carica.riprova).toHaveBeenCalledWith(voce().famiglia);
+  });
+
+  it("argomenti rifiutati alla mandata della finestra: la frase torna alla finestra, niente alla cronologia", async () => {
+    const { d, azioni } = dipendenze({
+      finestra: () => Promise.resolve(schema()),
+      risposta: { kind: "argomenti", message: "Il raggio è troppo grande." },
+    });
+    eseguiVoce(voce({ finestra: true }), d);
+    await tick();
+    const esegui = vi.mocked(apriFinestra).mock.calls[0]![2];
+    expect(await esegui({ radius: 400 }, false)).toEqual({ anteprima: null, rifiuto: null, argomenti: "Il raggio è troppo grande." });
+    expect(azioni.commit).not.toHaveBeenCalled();
   });
 
   it("l'anteprima della finestra non va alla cronologia, e ridà l'anteprima", async () => {

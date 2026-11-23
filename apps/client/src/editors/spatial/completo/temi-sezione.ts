@@ -71,6 +71,7 @@ export function sezioneTemi(porta: PortaTemi, vita: Lifetime): Sezione {
   const frase = (esito: EsitoTema, fatto: string): string => {
     if (esito.kind === "fatto") return fatto;
     if (esito.kind === "assente") return t("draw.temi.assente");
+    if (esito.kind === "argomenti") return esito.frase;
     return t("draw.temi.non.salvato");
   };
 

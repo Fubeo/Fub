@@ -50,7 +50,15 @@ export type EsitoPreimpostata =
   /// Le preferenze del motore (`draw.motore`) vengono da un Fub più nuovo o non si leggono: l'host
   /// rifiuta di salvare o togliere, senza toccare il motore né il disco.
   | { readonly kind: "bloccato"; readonly perche: "nuove" | "rotte" }
+  /// Il motore non prende il nome (`bad_args`): la sua frase.
+  | { readonly kind: "argomenti"; readonly frase: string }
   | { readonly kind: "assente" };
+
+/// Gli argomenti che il motore non prende (`bad_args`), con la sua frase: una lettura che non è un
+/// valore del motore, e non si confonde con uno.
+class ArgomentiDelMotore {
+  constructor(readonly frase: string) {}
+}
 
 /// Il perché del rifiuto dell'host, da `reading` (`{"prefs": "newer" | "broken"}`), o `null`.
 function bloccoDi(reading: unknown): "nuove" | "rotte" | null {
@@ -140,8 +148,8 @@ export function creaPortaPreimpostate(dipendenze: DipendenzePreimpostate): Porta
     const pronta = await motore.pronta(ATTESA_MOTORE_MS);
     return pronta === null || dipendenze.vita.closed ? null : pronta;
   };
-  /// Una lettura del motore: la lettura, `"vuoto"` se il motore non aveva niente da fare, `null` se non
-  /// ha risposto.
+  /// Una lettura del motore: la lettura, `"vuoto"` se il motore non aveva niente da fare,
+  /// `ArgomentiDelMotore` se non ne prende gli argomenti, `null` se non ha risposto.
   const leggi = async (
     s: NonNullable<Awaited<ReturnType<typeof sessione>>>,
     id: string,
@@ -149,7 +157,8 @@ export function creaPortaPreimpostate(dipendenze: DipendenzePreimpostate): Porta
     selection: readonly string[] = [],
   ): Promise<unknown> => {
     const esito = await s.comando({ id: `disegno.${id}`, selection: [...selection], value, preview: false });
-    if (esito === null || "kind" in esito || dipendenze.vita.closed) return null;
+    if (esito === null || dipendenze.vita.closed) return null;
+    if ("kind" in esito) return esito.kind === "argomenti" ? new ArgomentiDelMotore(esito.message) : null;
     if (esito.refused !== null) {
       const perche = bloccoDi(esito.reading);
       return perche === null ? "vuoto" : { bloccato: perche };
@@ -158,6 +167,7 @@ export function creaPortaPreimpostate(dipendenze: DipendenzePreimpostate): Porta
   };
   const nomeDi = (lettura: unknown, campo: "name" | "deleted"): EsitoPreimpostata => {
     if (lettura === null) return { kind: "assente" };
+    if (lettura instanceof ArgomentiDelMotore) return { kind: "argomenti", frase: lettura.frase };
     const perche = (lettura as { bloccato?: "nuove" | "rotte" }).bloccato;
     if (perche !== undefined) return { kind: "bloccato", perche };
     const nome = (lettura as Record<string, unknown> | "vuoto")[campo as never] as unknown;
@@ -168,7 +178,7 @@ export function creaPortaPreimpostate(dipendenze: DipendenzePreimpostate): Porta
       const s = await sessione();
       if (s === null) return { kind: "assente" };
       const lettura = await leggi(s, "gradient.presets.list", {});
-      if (lettura === null || lettura === "vuoto") return { kind: "assente" };
+      if (lettura === null || lettura === "vuoto" || lettura instanceof ArgomentiDelMotore) return { kind: "assente" };
       return { kind: "pronte", preimpostate: preimpostateDi(lettura) };
     },
     async salva(nome, lato, davanti) {

@@ -41,10 +41,13 @@ export type RichiestaLivello =
 /// - `rifiuto`: il motore non l'ha fatto, col perché a parole (`null`: non cambiava niente);
 /// - `nativo`: il motore non può farlo adesso (spento, fermo, la famiglia non arriva, il livello
 ///   non ha un id che il motore conosce): lo fa l'editor da sé, con le stesse operazioni;
-/// - `fallito`: il motore ha risposto con operazioni che non si leggono.
+/// - `fallito`: il motore ha risposto con operazioni che non si leggono;
+/// - `argomenti`: il motore ha rifiutato i valori del comando (`bad_args`), con la sua frase; non
+///   cambia niente, e l'editor non lo rifà da sé.
 export type EsitoLivello =
   | { readonly kind: "fatto"; readonly ops: readonly Op[] }
   | { readonly kind: "rifiuto"; readonly motivo: DrawKey | null }
+  | { readonly kind: "argomenti"; readonly frase: string }
   | { readonly kind: "nativo" }
   | { readonly kind: "fallito" };
 
@@ -115,7 +118,9 @@ export function creaPortaLivelli(dipendenze: DipendenzePorta): PortaLivelli {
       const chiamata = chiamataDi(richiesta, numeri);
       if (chiamata === null) return nativo;
       const esito = await sessione.comando({ id: chiamata.id, selection: [], value: chiamata.value, preview: false });
-      if (esito === null || "kind" in esito || dipendenze.vita.closed) return nativo;
+      if (dipendenze.vita.closed) return nativo;
+      if (esito !== null && "kind" in esito && esito.kind === "argomenti") return { kind: "argomenti", frase: esito.message };
+      if (esito === null || "kind" in esito) return nativo;
       if (esito.refused !== null) return { kind: "rifiuto", motivo: motivoDelLivello(esito) };
       const ops = dipendenze.leggi(esito.ops);
       return ops === null ? { kind: "fallito" } : { kind: "fatto", ops };

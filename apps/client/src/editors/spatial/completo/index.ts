@@ -53,7 +53,7 @@ import { t, type DrawKey } from "../strings";
 import { COLONNA_IT } from "../strings/completo";
 // I tasti del motore (K6 T9b): il montaggio sulla radice dell'editor, e il
 // percorso di un comando che fanno partire.
-import { applicaEsito, eseguiVoce, type AzioniEsito, type DipendenzeComando, type OpzioniFinestraComando } from "./esegui";
+import { applicaEsito, applicaRisposta, eseguiVoce, type AzioniEsito, type DipendenzeComando, type OpzioniFinestraComando } from "./esegui";
 // Gli appunti del motore (K6 T11): copia, taglia e incolla passano dal motore.
 import { creaAppuntiCompleto } from "./appunti";
 import { creaPortaLivelli, type PortaLivelli } from "./livelli-porta";
@@ -598,11 +598,12 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila" | "e
     }
     const esito = await sessione.comando({ id, selection: [...dipendenze.selezione()], value: valore });
     if (ctx.life.closed) return;
-    if (esito === null || "kind" in esito) {
+    if (esito === null || ("kind" in esito && esito.kind === "assente")) {
       dipendenze.annuncia(t("draw.window.unanswered"));
       return;
     }
-    applicaEsito(esito, etichetta, dipendenze);
+    // Gli argomenti rifiutati si dicono con la frase del motore; lo stato si rilegge lo stesso.
+    applicaRisposta(esito, etichetta, dipendenze);
     rileggi?.();
   };
   // Una voce del menu o della ricerca: uno strumento lo sceglie l'editor; un

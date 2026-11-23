@@ -18,7 +18,7 @@
 import type { DrawingOutcome } from "../../../host/contract";
 import type { Point } from "../scene/matrix";
 import type { Elem } from "../scene/serialize";
-import type { MotoreAssente, SessioneMotore } from "./sessione";
+import type { ArgomentiRifiutati, RispostaMotore, SessioneMotore } from "./sessione";
 
 /// Il nome dello strumento nella colonna (`completo/colonna.ts`, `motore:…`).
 export const STRUMENTO_GOMMA_PUNTI = "anchorEraserBrush";
@@ -67,6 +67,9 @@ export interface GommaPuntiDipendenze {
   readonly esito: (esito: DrawingOutcome) => void;
   /// Dice una frase a chi disegna.
   readonly dici: (frase: FraseGomma) => void;
+  /// Dice la frase del motore che ha rifiutato gli argomenti del comando:
+  /// non è cambiato niente, e il motore resta pronto per il colpo dopo.
+  readonly rifiutati: (rifiutati: ArgomentiRifiutati) => void;
 }
 
 /// La coda dei tratti della gomma: un comando alla volta, uno per tratto.
@@ -104,13 +107,17 @@ export class CodaGommaPunti {
       this.dici("draw.gomma_punti.assente");
       return;
     }
-    const risposta: DrawingOutcome | MotoreAssente | null = await sessione.comando({
+    const risposta: RispostaMotore = await sessione.comando({
       id: COMANDO_GOMMA_PUNTI,
       selection: selezione,
       value: valoreGomma(punti),
       preview: false,
     });
     if (!this.aperta) return;
+    if (risposta !== null && "kind" in risposta && risposta.kind === "argomenti") {
+      this.dip.rifiutati(risposta);
+      return;
+    }
     if (risposta === null || "kind" in risposta) {
       this.dici("draw.gomma_punti.assente");
       return;

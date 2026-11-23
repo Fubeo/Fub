@@ -4,7 +4,7 @@
 
 import { describe, expect, it } from "vitest";
 import type { DrawingOutcome } from "../../../host/contract";
-import { COMANDO_PENNELLO, CodaPennello, colpo, segnoDelColpo, valorePennello, type FrasePennello } from "./pennello-tondo";
+import { COMANDO_PENNELLO, CodaPennello, colpo, segnoDelColpo, valorePennello } from "./pennello-tondo";
 import type { SessioneMotore } from "./sessione";
 
 const esito = (refused: DrawingOutcome["refused"] = null): DrawingOutcome => ({
@@ -30,11 +30,12 @@ function sessioneFinta(risposta: () => Promise<DrawingOutcome | null> = async ()
 
 function coda(opzioni: { sessione?: SessioneMotore | null } = {}) {
   const esiti: DrawingOutcome[] = [];
-  const frasi: FrasePennello[] = [];
+  const frasi: string[] = [];
   const c = new CodaPennello({
     sessione: async () => (opzioni.sessione === undefined ? null : opzioni.sessione),
     esito: (e) => esiti.push(e),
     dici: (f) => frasi.push(f),
+    rifiutati: (r) => frasi.push(r.message),
   });
   return { c, esiti, frasi };
 }

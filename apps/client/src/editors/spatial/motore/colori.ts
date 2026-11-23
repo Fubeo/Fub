@@ -183,6 +183,13 @@ export function installColoriMotore(ctx: EditorContext, scriviDaSe: (id: FieldId
       }
       const esito = await sessione.comando({ id: command, selection, value: valore });
       if (ctx.disposed) return;
+      // Un valore che il motore non prende si dice con la sua frase, come un
+      // rifiuto: non si scrive da sé, il motore ha detto perché no.
+      if (esito !== null && "kind" in esito && esito.kind === "argomenti") {
+        ctx.announce(esito.message);
+        rinfresca();
+        return;
+      }
       if (esito === null || "kind" in esito || esito.refused === "closed") {
         daSe();
         return;
