@@ -467,6 +467,38 @@
     },
     {
       "fonte": "motore",
+      "id": "appearance.duplicateItem",
+      "chiamata": {
+        "comando": "disegno.appearance.duplicateItem"
+      },
+      "etichetta": {
+        "it": "Duplica elemento",
+        "en": "Duplicate Item"
+      },
+      "posto": "ispettore/design",
+      "famiglia": "aspetto",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "appearance.moveItem",
+      "chiamata": {
+        "comando": "disegno.appearance.moveItem"
+      },
+      "etichetta": {
+        "it": "Riordina elemento aspetto",
+        "en": "Reorder Appearance Item"
+      },
+      "posto": "ispettore/design",
+      "famiglia": "aspetto",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "appearance.reduceToBasic",
       "chiamata": {
         "comando": "disegno.appearance.reduceToBasic"
@@ -474,6 +506,22 @@
       "etichetta": {
         "it": "Riduci ad aspetto di base",
         "en": "Reduce to Basic Appearance"
+      },
+      "posto": "ispettore/design",
+      "famiglia": "aspetto",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "appearance.removeItem",
+      "chiamata": {
+        "comando": "disegno.appearance.removeItem"
+      },
+      "etichetta": {
+        "it": "Rimuovi elemento",
+        "en": "Remove Item"
       },
       "posto": "ispettore/design",
       "famiglia": "aspetto",

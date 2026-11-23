@@ -395,3 +395,214 @@ fn aggiungere_un_riempimento_al_gruppo_lo_riscrive_con_la_sua_ricetta() {
         "{riempito}"
     );
 }
+
+// --- 5. le voci della pila (K6 T15, voci d'aspetto) -----------------------------------------------
+
+/// Un oggetto con un riempimento rosso sotto uno blu: la pila a due colori, con la sua ricetta.
+const COLORI: &str = include_str!("famiglie/aspetto/due-riempimenti-colori.svg");
+
+/// I riempimenti del corpo di `OGGETTO`, nell'ordine in cui il file li scrive (dal primo, sotto, all'ultimo).
+/// Gli id dei pezzi cambiano a ogni scrittura: il loro ordine e i loro colori sono quello che conta.
+fn riempimenti_del_corpo(testo: &str) -> Vec<String> {
+    let apre = format!("<g id=\"{OGGETTO}\">");
+    if let Some(inizio) = testo.find(&apre) {
+        // Più riempimenti: il corpo è un gruppo con un pezzo per riempimento.
+        let corpo = &testo[inizio..];
+        let corpo = &corpo[..corpo.find("</g>").expect("la fine del corpo")];
+        return corpo
+            .match_indices("fill=\"")
+            .map(|(i, _)| {
+                corpo[i + 6..]
+                    .split('"')
+                    .next()
+                    .unwrap_or_default()
+                    .to_string()
+            })
+            .collect();
+    }
+    // Un riempimento solo: il corpo è l'elemento stesso, col suo `fill`.
+    let inizio = testo
+        .find(&format!("id=\"{OGGETTO}\""))
+        .expect("il corpo dell'oggetto");
+    let etichetta = &testo[inizio..];
+    let etichetta = &etichetta[..etichetta.find('>').expect("la fine dell'elemento")];
+    etichetta
+        .split("fill=\"")
+        .nth(1)
+        .and_then(|r| r.split('"').next())
+        .map(|colore| vec![colore.to_string()])
+        .unwrap_or_default()
+}
+
+/// Togliere una voce della pila: il file che resta si riapre senza perdite, con la voce che è rimasta.
+/// Togliere l'ultima voce di una forma non si fa, anche due volte di fila.
+#[test]
+fn togliere_una_voce_si_riapre_senza_perdite() {
+    // Togliere il rosso (voce 0) lascia il blu. La ricetta resta, come dopo Riduci: il file si riapre
+    // senza perdite con il solo blu.
+    let blu = dopo(
+        COLORI,
+        "appearance.removeItem",
+        &[OGGETTO],
+        json!({"index": 0}),
+    )
+    .expect("togliere il rosso");
+    senza_perdite(&blu);
+    assert_eq!(ricette(&blu).len(), 1, "{blu}");
+    assert_eq!(riempimenti_del_corpo(&blu), ["#0000ff"], "{blu}");
+    // Togliere l'ultimo riempimento lascerebbe la forma senza colore: si rifiuta, anche la seconda volta.
+    for _ in 0..2 {
+        assert_eq!(
+            dopo(
+                &blu,
+                "appearance.removeItem",
+                &[OGGETTO],
+                json!({"index": 0})
+            )
+            .err()
+            .as_deref(),
+            Some("Unsupported")
+        );
+    }
+}
+
+/// Un oggetto con un riempimento e un contorno: togliere il riempimento lascia il contorno, che si riapre
+/// senza perdite; togliere anche il contorno lascerebbe la forma senza nulla, e si rifiuta.
+const RIEMPIMENTO_E_CONTORNO: &str = include_str!("famiglie/aspetto/contorno.svg");
+
+/// Gli attributi dell'elemento `OGGETTO` nel file (la sua marca, dal suo id alla chiusura).
+fn marca_di_oggetto(testo: &str) -> &str {
+    let inizio = testo.find(&format!("id=\"{OGGETTO}\"")).expect("l'oggetto");
+    let resto = &testo[inizio..];
+    &resto[..resto.find('>').expect("la fine della marca")]
+}
+
+#[test]
+fn togliere_il_riempimento_lascia_il_contorno_che_si_riapre() {
+    let contorno = dopo(
+        RIEMPIMENTO_E_CONTORNO,
+        "appearance.removeItem",
+        &[OGGETTO],
+        json!({"index": 0}),
+    )
+    .expect("togliere il riempimento");
+    senza_perdite(&contorno);
+    let marca = marca_di_oggetto(&contorno);
+    assert!(marca.contains("fill=\"none\""), "{marca}");
+    assert!(marca.contains("stroke=\"#000000\""), "{marca}");
+    assert_eq!(
+        dopo(
+            &contorno,
+            "appearance.removeItem",
+            &[OGGETTO],
+            json!({"index": 0})
+        )
+        .err()
+        .as_deref(),
+        Some("Unsupported")
+    );
+    // Togliere il contorno invece lascia il riempimento, e si riapre anche quello.
+    let riempito = dopo(
+        RIEMPIMENTO_E_CONTORNO,
+        "appearance.removeItem",
+        &[OGGETTO],
+        json!({"index": 1}),
+    )
+    .expect("togliere il contorno");
+    senza_perdite(&riempito);
+    let marca = marca_di_oggetto(&riempito);
+    assert!(marca.contains("fill=\"#ff0000\""), "{marca}");
+    assert!(marca.contains("stroke=\"none\""), "{marca}");
+}
+
+/// Duplicare una voce: la copia nasce sopra la sua voce, il file con le tre voci si riapre senza perdite
+/// con la ricetta della pila, e togliere la copia riporta il file di prima, byte per byte.
+#[test]
+fn duplicare_una_voce_si_riapre_senza_perdite() {
+    let tre = dopo(
+        COLORI,
+        "appearance.duplicateItem",
+        &[OGGETTO],
+        json!({"index": 0}),
+    )
+    .expect("duplicare il rosso");
+    senza_perdite(&tre);
+    assert_eq!(ricette(&tre).len(), 1, "{tre}");
+    assert_eq!(
+        riempimenti_del_corpo(&tre),
+        ["#ff0000", "#ff0000", "#0000ff"],
+        "{tre}"
+    );
+    // La copia è la voce 1, sopra il rosso originale: togliendola torna la pila di prima.
+    let torna = dopo(
+        &tre,
+        "appearance.removeItem",
+        &[OGGETTO],
+        json!({"index": 1}),
+    )
+    .expect("togliere la copia");
+    senza_perdite(&torna);
+    assert_eq!(
+        riempimenti_del_corpo(&torna),
+        ["#ff0000", "#0000ff"],
+        "{torna}"
+    );
+    // Il secondo duplicato di fila rifà la cosa giusta: quattro voci, niente errore.
+    let quattro = dopo(
+        &tre,
+        "appearance.duplicateItem",
+        &[OGGETTO],
+        json!({"index": 0}),
+    )
+    .expect("duplicare di nuovo");
+    senza_perdite(&quattro);
+    assert_eq!(
+        riempimenti_del_corpo(&quattro),
+        ["#ff0000", "#ff0000", "#ff0000", "#0000ff"],
+        "{quattro}"
+    );
+}
+
+/// Spostare una voce: il file con le voci scambiate si riapre senza perdite, e spostarla di nuovo riporta
+/// il file di prima, byte per byte. Spostarla dove sta già non cambia niente e non fa un passo.
+#[test]
+fn spostare_una_voce_si_riapre_senza_perdite() {
+    let scambiato = dopo(
+        COLORI,
+        "appearance.moveItem",
+        &[OGGETTO],
+        json!({"from": 0, "to": 1}),
+    )
+    .expect("spostare il rosso sopra il blu");
+    senza_perdite(&scambiato);
+    assert_eq!(
+        riempimenti_del_corpo(&scambiato),
+        ["#0000ff", "#ff0000"],
+        "{scambiato}"
+    );
+    let torna = dopo(
+        &scambiato,
+        "appearance.moveItem",
+        &[OGGETTO],
+        json!({"from": 1, "to": 0}),
+    )
+    .expect("spostare di nuovo");
+    senza_perdite(&torna);
+    assert_eq!(
+        riempimenti_del_corpo(&torna),
+        ["#ff0000", "#0000ff"],
+        "{torna}"
+    );
+    // Il blu è già in cima: spostarlo più in alto non cambia niente.
+    assert_eq!(
+        dopo(
+            COLORI,
+            "appearance.moveItem",
+            &[OGGETTO],
+            json!({"from": 1, "to": 9})
+        )
+        .err()
+        .as_deref(),
+        Some("Empty")
+    );
+}

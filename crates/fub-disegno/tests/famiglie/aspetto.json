@@ -1,5 +1,5 @@
 {
-  "$nota": "I casi della famiglia aspetto (piano K6, T15): l'opacità e il metodo di fusione dell'oggetto scelto (transparency.set, giro 2, disegno aspetto/base.svg) e il contorno (stroke.set, giro 5, disegno aspetto/contorno.svg: un rettangolo, un'ellisse tratteggiata, un testo e un rettangolo bloccato). Il contorno scrive stroke-width, stroke-linecap, stroke-linejoin e stroke-dasharray sull'elemento, in un passo di Annulla; ciò che la scena non dice (limite dell'angolo, allineamento, frecce del motore) è unsupported, il testo non ha contorno, l'oggetto bloccato è locked.",
+  "$nota": "I casi della famiglia aspetto (piano K6, T15): l'opacità e il metodo di fusione dell'oggetto scelto (transparency.set, giro 2, disegno aspetto/base.svg) e il contorno (stroke.set, giro 5, disegno aspetto/contorno.svg: un rettangolo, un'ellisse tratteggiata, un testo e un rettangolo bloccato). Il contorno scrive stroke-width, stroke-linecap, stroke-linejoin e stroke-dasharray sull'elemento, in un passo di Annulla; ciò che la scena non dice (limite dell'angolo, allineamento, frecce del motore) è unsupported, il testo non ha contorno, l'oggetto bloccato è locked. Voci d'aspetto (K6 T15, voci d'aspetto): togliere, duplicare e spostare una voce della pila (appearance.removeItem, duplicateItem, moveItem) con i casi di scelta e di argomenti; togliere l'ultima voce di una forma è unsupported (il file non la riapre), e spostare un riempimento sopra o sotto un contorno è unsupported (il file non dice l'ordine tra i due). Il disegno con due colori è colori (due-riempimenti-colori.svg): lì lo spostamento cambia la pila, e la riapertura è provata in tests/ricette_riapertura.rs. I `dopo` dei casi con operazioni sono controllati byte per byte e annullati da casi.test.ts.",
   "casi": [
     {
       "id": "transparency.set",
@@ -1633,6 +1633,1159 @@
           }
         ]
       }
+    },
+    {
+      "id": "appearance.removeItem",
+      "disegno": "due-riempimenti.svg",
+      "selezione": ["oa1a1a1a1"],
+      "argomenti": {"index": 0},
+      "dopo": "voci-togli-0-dopo.svg",
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "oa1a1a1a1"
+              },
+              {
+                "op": "remove",
+                "target": {
+                  "path": [
+                    0
+                  ],
+                  "tag": "metadata"
+                }
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<rect id=\"oa1a1a1a1\" x=\"100\" y=\"100\" width=\"100\" height=\"50\" fill=\"#ff0000\"/>"
+              },
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<metadata><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"oa1a1a1a1\" hash=\"8f931157caae0288\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjo1LCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MS4wLCJnIjowLjAsImIiOjAuMH19fV19LCJraW5kIjp7InR5cGUiOiJwYXRoIiwicGF0aCI6eyJzdWJwYXRocyI6W3siYW5jaG9ycyI6W3sicCI6WzEwMC4wLDEwMC4wXX0seyJwIjpbMjAwLjAsMTAwLjBdfSx7InAiOlsyMDAuMCwxNTAuMF19LHsicCI6WzEwMC4wLDE1MC4wXX1dLCJjbG9zZWQiOnRydWV9XX19fX0=</vectorcraft:recipe></metadata>"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "appearance.removeItem",
+      "disegno": "due-riempimenti.svg",
+      "selezione": ["oa1a1a1a1"],
+      "argomenti": {"index": 1},
+      "dopo": "voci-togli-1-dopo.svg",
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "oa1a1a1a1"
+              },
+              {
+                "op": "remove",
+                "target": {
+                  "path": [
+                    0
+                  ],
+                  "tag": "metadata"
+                }
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<rect id=\"oa1a1a1a1\" x=\"100\" y=\"100\" width=\"100\" height=\"50\" fill=\"#ff0000\"/>"
+              },
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<metadata><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"oa1a1a1a1\" hash=\"8f931157caae0288\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjo1LCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MS4wLCJnIjowLjAsImIiOjAuMH19fV19LCJraW5kIjp7InR5cGUiOiJwYXRoIiwicGF0aCI6eyJzdWJwYXRocyI6W3siYW5jaG9ycyI6W3sicCI6WzEwMC4wLDEwMC4wXX0seyJwIjpbMjAwLjAsMTAwLjBdfSx7InAiOlsyMDAuMCwxNTAuMF19LHsicCI6WzEwMC4wLDE1MC4wXX1dLCJjbG9zZWQiOnRydWV9XX19fX0=</vectorcraft:recipe></metadata>"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "appearance.removeItem",
+      "disegno": "due-riempimenti.svg",
+      "selezione": ["oa1a1a1a1"],
+      "argomenti": {"index": 5},
+      "atteso": {"errore": "bad_args"}
+    },
+    {
+      "id": "appearance.removeItem",
+      "disegno": "due-riempimenti.svg",
+      "selezione": ["oa1a1a1a1"],
+      "argomenti": {},
+      "atteso": {"errore": "bad_args"}
+    },
+    {
+      "id": "appearance.removeItem",
+      "disegno": "due-riempimenti.svg",
+      "selezione": ["oa1a1a1a1"],
+      "argomenti": {"index": "uno"},
+      "atteso": {"errore": "bad_args"}
+    },
+    {
+      "id": "appearance.removeItem",
+      "disegno": "due-riempimenti.svg",
+      "selezione": ["oa1a1a1a1"],
+      "argomenti": {"indices": [0, 1]},
+      "atteso": {"rifiuto": "unsupported"}
+    },
+    {
+      "id": "appearance.removeItem",
+      "disegno": "contorno.svg",
+      "selezione": ["oa1a1a1a1"],
+      "argomenti": {"index": 0},
+      "dopo": "voci-togli-contorno-0-dopo.svg",
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oa1a1a1a1",
+            "attrs": {
+              "fill": "none"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "appearance.removeItem",
+      "disegno": "contorno.svg",
+      "selezione": ["oa1a1a1a1"],
+      "argomenti": {"index": 1},
+      "dopo": "voci-togli-contorno-1-dopo.svg",
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oa1a1a1a1",
+            "attrs": {
+              "stroke": "none",
+              "stroke-width": "0"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "appearance.removeItem",
+      "disegno": "base.svg",
+      "selezione": ["oa1a1a1a1"],
+      "argomenti": {"index": 0},
+      "atteso": {"rifiuto": "unsupported"}
+    },
+    {
+      "id": "appearance.removeItem",
+      "disegno": "base.svg",
+      "selezione": ["oa1a1a1a1", "oe1e1e1e1"],
+      "argomenti": {"index": 0},
+      "atteso": {"rifiuto": "unsupported"}
+    },
+    {
+      "id": "appearance.removeItem",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {"index": 0},
+      "atteso": {"rifiuto": "empty"}
+    },
+    {
+      "id": "appearance.removeItem",
+      "disegno": "due-riempimenti-gruppo.svg",
+      "selezione": ["oa1a1a1a1"],
+      "argomenti": {"index": 0},
+      "dopo": "voci-togli-gruppo-oggetto-dopo.svg",
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "oa1a1a1a1"
+              },
+              {
+                "op": "remove",
+                "target": {
+                  "path": [
+                    0
+                  ],
+                  "tag": "metadata"
+                }
+              },
+              {
+                "op": "add",
+                "parent": "o8hhrn30a",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<rect id=\"oa1a1a1a1\" x=\"100\" y=\"100\" width=\"100\" height=\"50\" fill=\"#ff0000\"/>"
+              },
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<metadata><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"oa1a1a1a1\" hash=\"8f931157caae0288\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjo1LCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MS4wLCJnIjowLjAsImIiOjAuMH19fV19LCJraW5kIjp7InR5cGUiOiJwYXRoIiwicGF0aCI6eyJzdWJwYXRocyI6W3siYW5jaG9ycyI6W3sicCI6WzEwMC4wLDEwMC4wXX0seyJwIjpbMjAwLjAsMTAwLjBdfSx7InAiOlsyMDAuMCwxNTAuMF19LHsicCI6WzEwMC4wLDE1MC4wXX1dLCJjbG9zZWQiOnRydWV9XX19fX0=</vectorcraft:recipe></metadata>"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "appearance.removeItem",
+      "disegno": "due-riempimenti-gruppo.svg",
+      "selezione": ["o8hhrn30a"],
+      "argomenti": {"index": 0},
+      "atteso": {"errore": "bad_args"}
+    },
+    {
+      "id": "appearance.removeItem",
+      "disegno": "aggiungi-gruppo-intero-dopo.svg",
+      "selezione": ["o8hhrn30a"],
+      "argomenti": {"index": 0},
+      "dopo": "voci-togli-gruppo-intero-dopo.svg",
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "o8hhrn30a"
+              },
+              {
+                "op": "remove",
+                "target": {
+                  "path": [
+                    1
+                  ],
+                  "tag": "metadata"
+                }
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "last": true
+                },
+                "raw": "<g id=\"o8hhrn30a\"><g id=\"o7a9nvyll\"><rect id=\"oybdyef8u\" x=\"100\" y=\"100\" width=\"100\" height=\"50\" fill=\"#ff0000\"/><rect id=\"ofoukolzf\" x=\"100\" y=\"100\" width=\"100\" height=\"50\" fill=\"#ff0000\"/></g><ellipse id=\"oadg08y4b\" cx=\"250\" cy=\"150\" rx=\"40\" ry=\"30\" fill=\"#0000ff\"/></g>"
+              },
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<metadata><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"o8hhrn30a\" hash=\"3f338e22bf5413df\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjoxMCwia2luZCI6eyJ0eXBlIjoiZ3JvdXAiLCJjaGlsZHJlbiI6W3siaWQiOjEzLCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MS4wLCJnIjowLjAsImIiOjAuMH19fSx7ImtpbmQiOiJmaWxsIiwicGFpbnQiOnsidHlwZSI6InNvbGlkIiwiY29sb3IiOnsibW9kZWwiOiJyZ2IiLCJyIjoxLjAsImciOjAuMCwiYiI6MC4wfX19XX0sImtpbmQiOnsidHlwZSI6InBhdGgiLCJwYXRoIjp7InN1YnBhdGhzIjpbeyJhbmNob3JzIjpbeyJwIjpbMTAwLjAsMTAwLjBdfSx7InAiOlsyMDAuMCwxMDAuMF19LHsicCI6WzIwMC4wLDE1MC4wXX0seyJwIjpbMTAwLjAsMTUwLjBdfV0sImNsb3NlZCI6dHJ1ZX1dfX19LHsiaWQiOjE0LCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MC4wLCJnIjowLjAsImIiOjEuMH19fV19LCJraW5kIjp7InR5cGUiOiJwYXRoIiwicGF0aCI6eyJzdWJwYXRocyI6W3siYW5jaG9ycyI6W3sicCI6WzI5MC4wLDE1MC4wXSwiaW4iOlsyOTAuMCwxMzMuNDMxNDU3NTA1MDc2Ml0sIm91dCI6WzI5MC4wLDE2Ni41Njg1NDI0OTQ5MjM4XSwia2luZCI6IlNtb290aCJ9LHsicCI6WzI1MC4wLDE4MC4wXSwiaW4iOlsyNzIuMDkxMzg5OTkzMjMxNzYsMTgwLjBdLCJvdXQiOlsyMjcuOTA4NjEwMDA2NzY4MjQsMTgwLjBdLCJraW5kIjoiU21vb3RoIn0seyJwIjpbMjEwLjAsMTUwLjBdLCJpbiI6WzIxMC4wLDE2Ni41Njg1NDI0OTQ5MjM4XSwib3V0IjpbMjEwLjAsMTMzLjQzMTQ1NzUwNTA3NjJdLCJraW5kIjoiU21vb3RoIn0seyJwIjpbMjUwLjAsMTIwLjBdLCJpbiI6WzIyNy45MDg2MTAwMDY3NjgyNCwxMjAuMF0sIm91dCI6WzI3Mi4wOTEzODk5OTMyMzE3NiwxMjAuMF0sImtpbmQiOiJTbW9vdGgifV0sImNsb3NlZCI6dHJ1ZX1dfX19XSwiY2xpcCI6ZmFsc2V9fX0=</vectorcraft:recipe></metadata>"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "appearance.removeItem",
+      "disegno": "maschera-dopo.svg",
+      "selezione": ["oa1a1a1a1"],
+      "argomenti": {"index": 0},
+      "atteso": {"rifiuto": "unsupported"}
+    },
+    {
+      "id": "appearance.removeItem",
+      "disegno": "contorno.svg",
+      "selezione": ["ot1t1t1t1"],
+      "argomenti": {"index": 0},
+      "atteso": {"rifiuto": "unsupported"}
+    },
+    {
+      "id": "appearance.removeItem",
+      "disegno": "inchiostro.svg",
+      "selezione": ["oi8b8b8b8"],
+      "argomenti": {"index": 0},
+      "atteso": {"rifiuto": "unmapped"}
+    },
+    {
+      "id": "appearance.removeItem",
+      "disegno": "maschera-bloccata.svg",
+      "selezione": ["oa1a1a1a1"],
+      "argomenti": {"index": 0},
+      "atteso": {"rifiuto": "locked"}
+    },
+    {
+      "id": "appearance.removeItem",
+      "disegno": "due-riempimenti-nascosto.svg",
+      "selezione": ["oa1a1a1a1"],
+      "argomenti": {"index": 0},
+      "atteso": {"rifiuto": "unsupported"}
+    },
+    {
+      "id": "appearance.removeItem",
+      "disegno": "due-riempimenti-livello-bloccato.svg",
+      "selezione": ["oa1a1a1a1"],
+      "argomenti": {"index": 0},
+      "atteso": {"rifiuto": "locked"}
+    },
+    {
+      "id": "appearance.removeItem",
+      "disegno": "due-riempimenti.svg",
+      "selezione": ["oa1a1a1a1"],
+      "argomenti": {"index": 0, "ids": [999]},
+      "atteso": {"rifiuto": "unsupported"}
+    },
+    {
+      "id": "appearance.removeItem",
+      "disegno": "due-riempimenti.svg",
+      "selezione": ["oa1a1a1a1"],
+      "argomenti": {"index": 0, "target": "passo"},
+      "atteso": {"errore": "bad_args"}
+    },
+    {
+      "id": "appearance.removeItem",
+      "disegno": "due-riempimenti-colori.svg",
+      "selezione": ["oa1a1a1a1"],
+      "argomenti": {"index": 1},
+      "dopo": "voci-colori-togli-1-dopo.svg",
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "oa1a1a1a1"
+              },
+              {
+                "op": "remove",
+                "target": {
+                  "path": [
+                    1
+                  ],
+                  "tag": "metadata"
+                }
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<rect id=\"oa1a1a1a1\" x=\"100\" y=\"100\" width=\"100\" height=\"50\" fill=\"#ff0000\"/>"
+              },
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<metadata><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"oa1a1a1a1\" hash=\"8f931157caae0288\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjo1LCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MS4wLCJnIjowLjAsImIiOjAuMH19fV19LCJraW5kIjp7InR5cGUiOiJwYXRoIiwicGF0aCI6eyJzdWJwYXRocyI6W3siYW5jaG9ycyI6W3sicCI6WzEwMC4wLDEwMC4wXX0seyJwIjpbMjAwLjAsMTAwLjBdfSx7InAiOlsyMDAuMCwxNTAuMF19LHsicCI6WzEwMC4wLDE1MC4wXX1dLCJjbG9zZWQiOnRydWV9XX19fX0=</vectorcraft:recipe></metadata>"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "appearance.removeItem",
+      "disegno": "due-riempimenti-colori.svg",
+      "selezione": ["oa1a1a1a1"],
+      "argomenti": {"index": 0},
+      "dopo": "voci-colori-togli-0-dopo.svg",
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "oa1a1a1a1"
+              },
+              {
+                "op": "remove",
+                "target": {
+                  "path": [
+                    1
+                  ],
+                  "tag": "metadata"
+                }
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<rect id=\"oa1a1a1a1\" x=\"100\" y=\"100\" width=\"100\" height=\"50\" fill=\"#0000ff\"/>"
+              },
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<metadata><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"oa1a1a1a1\" hash=\"199dc12a12371d08\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjo1LCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MC4wLCJnIjowLjAsImIiOjEuMH19fV19LCJraW5kIjp7InR5cGUiOiJwYXRoIiwicGF0aCI6eyJzdWJwYXRocyI6W3siYW5jaG9ycyI6W3sicCI6WzEwMC4wLDEwMC4wXX0seyJwIjpbMjAwLjAsMTAwLjBdfSx7InAiOlsyMDAuMCwxNTAuMF19LHsicCI6WzEwMC4wLDE1MC4wXX1dLCJjbG9zZWQiOnRydWV9XX19fX0=</vectorcraft:recipe></metadata>"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "appearance.duplicateItem",
+      "disegno": "due-riempimenti.svg",
+      "selezione": ["oa1a1a1a1"],
+      "argomenti": {"index": 0},
+      "dopo": "voci-duplica-0-dopo.svg",
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "oa1a1a1a1"
+              },
+              {
+                "op": "remove",
+                "target": {
+                  "path": [
+                    0
+                  ],
+                  "tag": "metadata"
+                }
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<g id=\"oa1a1a1a1\"><rect id=\"ohcvgy5i5\" x=\"100\" y=\"100\" width=\"100\" height=\"50\" fill=\"#ff0000\"/><rect id=\"og9aao740\" x=\"100\" y=\"100\" width=\"100\" height=\"50\" fill=\"#ff0000\"/><rect id=\"ovjbv48a3\" x=\"100\" y=\"100\" width=\"100\" height=\"50\" fill=\"#ff0000\"/></g>"
+              },
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<metadata><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"oa1a1a1a1\" hash=\"d4c924a18508bffa\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjo1LCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MS4wLCJnIjowLjAsImIiOjAuMH19fSx7ImtpbmQiOiJmaWxsIiwicGFpbnQiOnsidHlwZSI6InNvbGlkIiwiY29sb3IiOnsibW9kZWwiOiJyZ2IiLCJyIjoxLjAsImciOjAuMCwiYiI6MC4wfX19LHsia2luZCI6ImZpbGwiLCJwYWludCI6eyJ0eXBlIjoic29saWQiLCJjb2xvciI6eyJtb2RlbCI6InJnYiIsInIiOjEuMCwiZyI6MC4wLCJiIjowLjB9fX1dfSwia2luZCI6eyJ0eXBlIjoicGF0aCIsInBhdGgiOnsic3VicGF0aHMiOlt7ImFuY2hvcnMiOlt7InAiOlsxMDAuMCwxMDAuMF19LHsicCI6WzIwMC4wLDEwMC4wXX0seyJwIjpbMjAwLjAsMTUwLjBdfSx7InAiOlsxMDAuMCwxNTAuMF19XSwiY2xvc2VkIjp0cnVlfV19fX19</vectorcraft:recipe></metadata>"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "appearance.duplicateItem",
+      "disegno": "due-riempimenti.svg",
+      "selezione": ["oa1a1a1a1"],
+      "argomenti": {"index": 1, "to": 0},
+      "dopo": "voci-duplica-1-in-0-dopo.svg",
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "oa1a1a1a1"
+              },
+              {
+                "op": "remove",
+                "target": {
+                  "path": [
+                    0
+                  ],
+                  "tag": "metadata"
+                }
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<g id=\"oa1a1a1a1\"><rect id=\"oyplfvp3m\" x=\"100\" y=\"100\" width=\"100\" height=\"50\" fill=\"#ff0000\"/><rect id=\"of3bhl6j6\" x=\"100\" y=\"100\" width=\"100\" height=\"50\" fill=\"#ff0000\"/><rect id=\"ofq3mxzq1\" x=\"100\" y=\"100\" width=\"100\" height=\"50\" fill=\"#ff0000\"/></g>"
+              },
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<metadata><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"oa1a1a1a1\" hash=\"6002993b2a296b55\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjo1LCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MS4wLCJnIjowLjAsImIiOjAuMH19fSx7ImtpbmQiOiJmaWxsIiwicGFpbnQiOnsidHlwZSI6InNvbGlkIiwiY29sb3IiOnsibW9kZWwiOiJyZ2IiLCJyIjoxLjAsImciOjAuMCwiYiI6MC4wfX19LHsia2luZCI6ImZpbGwiLCJwYWludCI6eyJ0eXBlIjoic29saWQiLCJjb2xvciI6eyJtb2RlbCI6InJnYiIsInIiOjEuMCwiZyI6MC4wLCJiIjowLjB9fX1dfSwia2luZCI6eyJ0eXBlIjoicGF0aCIsInBhdGgiOnsic3VicGF0aHMiOlt7ImFuY2hvcnMiOlt7InAiOlsxMDAuMCwxMDAuMF19LHsicCI6WzIwMC4wLDEwMC4wXX0seyJwIjpbMjAwLjAsMTUwLjBdfSx7InAiOlsxMDAuMCwxNTAuMF19XSwiY2xvc2VkIjp0cnVlfV19fX19</vectorcraft:recipe></metadata>"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "appearance.duplicateItem",
+      "disegno": "due-riempimenti.svg",
+      "selezione": ["oa1a1a1a1"],
+      "argomenti": {"indices": [0, 1]},
+      "dopo": "voci-duplica-indici-dopo.svg",
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "oa1a1a1a1"
+              },
+              {
+                "op": "remove",
+                "target": {
+                  "path": [
+                    0
+                  ],
+                  "tag": "metadata"
+                }
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<g id=\"oa1a1a1a1\"><rect id=\"oba20jr8w\" x=\"100\" y=\"100\" width=\"100\" height=\"50\" fill=\"#ff0000\"/><rect id=\"ovklzzfko\" x=\"100\" y=\"100\" width=\"100\" height=\"50\" fill=\"#ff0000\"/><rect id=\"onak3zvnf\" x=\"100\" y=\"100\" width=\"100\" height=\"50\" fill=\"#ff0000\"/><rect id=\"olt4kkt9o\" x=\"100\" y=\"100\" width=\"100\" height=\"50\" fill=\"#ff0000\"/></g>"
+              },
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<metadata><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"oa1a1a1a1\" hash=\"b9ed2238cde83355\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjo1LCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MS4wLCJnIjowLjAsImIiOjAuMH19fSx7ImtpbmQiOiJmaWxsIiwicGFpbnQiOnsidHlwZSI6InNvbGlkIiwiY29sb3IiOnsibW9kZWwiOiJyZ2IiLCJyIjoxLjAsImciOjAuMCwiYiI6MC4wfX19LHsia2luZCI6ImZpbGwiLCJwYWludCI6eyJ0eXBlIjoic29saWQiLCJjb2xvciI6eyJtb2RlbCI6InJnYiIsInIiOjEuMCwiZyI6MC4wLCJiIjowLjB9fX0seyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MS4wLCJnIjowLjAsImIiOjAuMH19fV19LCJraW5kIjp7InR5cGUiOiJwYXRoIiwicGF0aCI6eyJzdWJwYXRocyI6W3siYW5jaG9ycyI6W3sicCI6WzEwMC4wLDEwMC4wXX0seyJwIjpbMjAwLjAsMTAwLjBdfSx7InAiOlsyMDAuMCwxNTAuMF19LHsicCI6WzEwMC4wLDE1MC4wXX1dLCJjbG9zZWQiOnRydWV9XX19fX0=</vectorcraft:recipe></metadata>"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "appearance.duplicateItem",
+      "disegno": "due-riempimenti.svg",
+      "selezione": ["oa1a1a1a1"],
+      "argomenti": {"index": 7},
+      "atteso": {"errore": "bad_args"}
+    },
+    {
+      "id": "appearance.duplicateItem",
+      "disegno": "due-riempimenti.svg",
+      "selezione": ["oa1a1a1a1"],
+      "argomenti": {"indices": [0, 1], "to": 3},
+      "atteso": {"errore": "bad_args"}
+    },
+    {
+      "id": "appearance.duplicateItem",
+      "disegno": "due-riempimenti.svg",
+      "selezione": ["oa1a1a1a1"],
+      "argomenti": {},
+      "atteso": {"errore": "bad_args"}
+    },
+    {
+      "id": "appearance.duplicateItem",
+      "disegno": "base.svg",
+      "selezione": ["oa1a1a1a1", "oe1e1e1e1"],
+      "argomenti": {"index": 0},
+      "dopo": "voci-duplica-due-oggetti-dopo.svg",
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "oe1e1e1e1"
+              },
+              {
+                "op": "remove",
+                "target": "oa1a1a1a1"
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<g id=\"oa1a1a1a1\"><rect id=\"opz9sszbb\" x=\"100\" y=\"100\" width=\"100\" height=\"50\" fill=\"#ff0000\"/><rect id=\"oilfeox0n\" x=\"100\" y=\"100\" width=\"100\" height=\"50\" fill=\"#ff0000\"/></g>"
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "last": true
+                },
+                "raw": "<g id=\"oe1e1e1e1\"><ellipse id=\"op1w89p35\" cx=\"250\" cy=\"150\" rx=\"40\" ry=\"30\" fill=\"#0000ff\"/><ellipse id=\"omsuameru\" cx=\"250\" cy=\"150\" rx=\"40\" ry=\"30\" fill=\"#0000ff\"/></g>"
+              },
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<metadata><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"oa1a1a1a1\" hash=\"2408bf7b91fd8e99\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjozLCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MS4wLCJnIjowLjAsImIiOjAuMH19fSx7ImtpbmQiOiJmaWxsIiwicGFpbnQiOnsidHlwZSI6InNvbGlkIiwiY29sb3IiOnsibW9kZWwiOiJyZ2IiLCJyIjoxLjAsImciOjAuMCwiYiI6MC4wfX19XX0sImtpbmQiOnsidHlwZSI6InBhdGgiLCJwYXRoIjp7InN1YnBhdGhzIjpbeyJhbmNob3JzIjpbeyJwIjpbMTAwLjAsMTAwLjBdfSx7InAiOlsyMDAuMCwxMDAuMF19LHsicCI6WzIwMC4wLDE1MC4wXX0seyJwIjpbMTAwLjAsMTUwLjBdfV0sImNsb3NlZCI6dHJ1ZX1dfX19fQ==</vectorcraft:recipe><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"oe1e1e1e1\" hash=\"7a52c9894a3d6273\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjo0LCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MC4wLCJnIjowLjAsImIiOjEuMH19fSx7ImtpbmQiOiJmaWxsIiwicGFpbnQiOnsidHlwZSI6InNvbGlkIiwiY29sb3IiOnsibW9kZWwiOiJyZ2IiLCJyIjowLjAsImciOjAuMCwiYiI6MS4wfX19XX0sImtpbmQiOnsidHlwZSI6InBhdGgiLCJwYXRoIjp7InN1YnBhdGhzIjpbeyJhbmNob3JzIjpbeyJwIjpbMjkwLjAsMTUwLjBdLCJpbiI6WzI5MC4wLDEzMy40MzE0NTc1MDUwNzYyXSwib3V0IjpbMjkwLjAsMTY2LjU2ODU0MjQ5NDkyMzhdLCJraW5kIjoiU21vb3RoIn0seyJwIjpbMjUwLjAsMTgwLjBdLCJpbiI6WzI3Mi4wOTEzODk5OTMyMzE3NiwxODAuMF0sIm91dCI6WzIyNy45MDg2MTAwMDY3NjgyNCwxODAuMF0sImtpbmQiOiJTbW9vdGgifSx7InAiOlsyMTAuMCwxNTAuMF0sImluIjpbMjEwLjAsMTY2LjU2ODU0MjQ5NDkyMzhdLCJvdXQiOlsyMTAuMCwxMzMuNDMxNDU3NTA1MDc2Ml0sImtpbmQiOiJTbW9vdGgifSx7InAiOlsyNTAuMCwxMjAuMF0sImluIjpbMjI3LjkwODYxMDAwNjc2ODI0LDEyMC4wXSwib3V0IjpbMjcyLjA5MTM4OTk5MzIzMTc2LDEyMC4wXSwia2luZCI6IlNtb290aCJ9XSwiY2xvc2VkIjp0cnVlfV19fX19</vectorcraft:recipe></metadata>"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "appearance.duplicateItem",
+      "disegno": "contorno.svg",
+      "selezione": ["oa1a1a1a1"],
+      "argomenti": {"index": 1},
+      "dopo": "voci-duplica-contorno-1-dopo.svg",
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "oa1a1a1a1"
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<g id=\"oa1a1a1a1\"><rect id=\"ol7p34eab\" x=\"100\" y=\"100\" width=\"100\" height=\"50\" fill=\"#ff0000\"/><rect id=\"ombndth7u\" x=\"100\" y=\"100\" width=\"100\" height=\"50\" fill=\"none\" stroke=\"#000000\" stroke-width=\"2\"/><rect id=\"o252acewv\" x=\"100\" y=\"100\" width=\"100\" height=\"50\" fill=\"none\" stroke=\"#000000\" stroke-width=\"2\"/></g>"
+              },
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<metadata><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"oa1a1a1a1\" hash=\"617de81e6251782e\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjozLCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MS4wLCJnIjowLjAsImIiOjAuMH19fSx7ImtpbmQiOiJzdHJva2UiLCJwYWludCI6eyJ0eXBlIjoic29saWQiLCJjb2xvciI6eyJtb2RlbCI6InJnYiIsInIiOjAuMCwiZyI6MC4wLCJiIjowLjB9fSwid2lkdGgiOjIuMCwibWl0ZXJfbGltaXQiOjQuMH0seyJraW5kIjoic3Ryb2tlIiwicGFpbnQiOnsidHlwZSI6InNvbGlkIiwiY29sb3IiOnsibW9kZWwiOiJyZ2IiLCJyIjowLjAsImciOjAuMCwiYiI6MC4wfX0sIndpZHRoIjoyLjAsIm1pdGVyX2xpbWl0Ijo0LjB9XX0sImtpbmQiOnsidHlwZSI6InBhdGgiLCJwYXRoIjp7InN1YnBhdGhzIjpbeyJhbmNob3JzIjpbeyJwIjpbMTAwLjAsMTAwLjBdfSx7InAiOlsyMDAuMCwxMDAuMF19LHsicCI6WzIwMC4wLDE1MC4wXX0seyJwIjpbMTAwLjAsMTUwLjBdfV0sImNsb3NlZCI6dHJ1ZX1dfX19fQ==</vectorcraft:recipe></metadata>"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "appearance.duplicateItem",
+      "disegno": "maschera-dopo.svg",
+      "selezione": ["oa1a1a1a1"],
+      "argomenti": {"index": 0},
+      "dopo": "voci-duplica-maschera-dopo.svg",
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "oa1a1a1a1"
+              },
+              {
+                "op": "remove",
+                "target": {
+                  "path": [
+                    1
+                  ],
+                  "tag": "metadata"
+                }
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "last": true
+                },
+                "raw": "<g id=\"oa1a1a1a1\"><defs><mask id=\"rlx6dek3z\" maskUnits=\"userSpaceOnUse\" color-interpolation=\"sRGB\" x=\"-100000\" y=\"-100000\" width=\"200000\" height=\"200000\"><ellipse cx=\"250\" cy=\"150\" rx=\"40\" ry=\"30\" fill=\"#0000ff\"/></mask></defs><g id=\"ordxxsrl5\" mask=\"url(#rlx6dek3z)\"><g id=\"oxruxl5jx\"><rect id=\"o7bil1glz\" x=\"100\" y=\"100\" width=\"100\" height=\"50\" fill=\"#ff0000\"/><rect id=\"od2mucrxq\" x=\"100\" y=\"100\" width=\"100\" height=\"50\" fill=\"#ff0000\"/></g></g></g>"
+              },
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<metadata><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"oa1a1a1a1\" hash=\"d500b242806788db\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjo2LCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MS4wLCJnIjowLjAsImIiOjAuMH19fSx7ImtpbmQiOiJmaWxsIiwicGFpbnQiOnsidHlwZSI6InNvbGlkIiwiY29sb3IiOnsibW9kZWwiOiJyZ2IiLCJyIjoxLjAsImciOjAuMCwiYiI6MC4wfX19XX0sIm1hc2siOnsiYXJ0Ijp7ImlkIjo0LCJuYW1lIjoib2UxZTFlMWUxIiwiYXBwZWFyYW5jZSI6eyJpdGVtcyI6W3sia2luZCI6ImZpbGwiLCJwYWludCI6eyJ0eXBlIjoic29saWQiLCJjb2xvciI6eyJtb2RlbCI6InJnYiIsInIiOjAuMCwiZyI6MC4wLCJiIjoxLjB9fX1dfSwia2luZCI6eyJ0eXBlIjoicGF0aCIsInBhdGgiOnsic3VicGF0aHMiOlt7ImFuY2hvcnMiOlt7InAiOlsyOTAuMCwxNTAuMF0sImluIjpbMjkwLjAsMTMzLjQzMTQ1NzUwNTA3NjJdLCJvdXQiOlsyOTAuMCwxNjYuNTY4NTQyNDk0OTIzOF0sImtpbmQiOiJTbW9vdGgifSx7InAiOlsyNTAuMCwxODAuMF0sImluIjpbMjcyLjA5MTM4OTk5MzIzMTc2LDE4MC4wXSwib3V0IjpbMjI3LjkwODYxMDAwNjc2ODI0LDE4MC4wXSwia2luZCI6IlNtb290aCJ9LHsicCI6WzIxMC4wLDE1MC4wXSwiaW4iOlsyMTAuMCwxNjYuNTY4NTQyNDk0OTIzOF0sIm91dCI6WzIxMC4wLDEzMy40MzE0NTc1MDUwNzYyXSwia2luZCI6IlNtb290aCJ9LHsicCI6WzI1MC4wLDEyMC4wXSwiaW4iOlsyMjcuOTA4NjEwMDA2NzY4MjQsMTIwLjBdLCJvdXQiOlsyNzIuMDkxMzg5OTkzMjMxNzYsMTIwLjBdLCJraW5kIjoiU21vb3RoIn1dLCJjbG9zZWQiOnRydWV9XX19fSwiY2xpcCI6dHJ1ZSwiaW52ZXJ0IjpmYWxzZSwiZGlzYWJsZWQiOmZhbHNlLCJsaW5rZWQiOnRydWV9LCJraW5kIjp7InR5cGUiOiJwYXRoIiwicGF0aCI6eyJzdWJwYXRocyI6W3siYW5jaG9ycyI6W3sicCI6WzEwMC4wLDEwMC4wXX0seyJwIjpbMjAwLjAsMTAwLjBdfSx7InAiOlsyMDAuMCwxNTAuMF19LHsicCI6WzEwMC4wLDE1MC4wXX1dLCJjbG9zZWQiOnRydWV9XX19fX0=</vectorcraft:recipe></metadata>"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "appearance.duplicateItem",
+      "disegno": "due-riempimenti-gruppo.svg",
+      "selezione": ["oa1a1a1a1"],
+      "argomenti": {"index": 0},
+      "dopo": "voci-duplica-gruppo-oggetto-dopo.svg",
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "oa1a1a1a1"
+              },
+              {
+                "op": "remove",
+                "target": {
+                  "path": [
+                    0
+                  ],
+                  "tag": "metadata"
+                }
+              },
+              {
+                "op": "add",
+                "parent": "o8hhrn30a",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<g id=\"oa1a1a1a1\"><rect id=\"oclwkg3ti\" x=\"100\" y=\"100\" width=\"100\" height=\"50\" fill=\"#ff0000\"/><rect id=\"o6ihhkanj\" x=\"100\" y=\"100\" width=\"100\" height=\"50\" fill=\"#ff0000\"/><rect id=\"odfkbzu2a\" x=\"100\" y=\"100\" width=\"100\" height=\"50\" fill=\"#ff0000\"/></g>"
+              },
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<metadata><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"oa1a1a1a1\" hash=\"11587a06513072a0\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjo1LCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MS4wLCJnIjowLjAsImIiOjAuMH19fSx7ImtpbmQiOiJmaWxsIiwicGFpbnQiOnsidHlwZSI6InNvbGlkIiwiY29sb3IiOnsibW9kZWwiOiJyZ2IiLCJyIjoxLjAsImciOjAuMCwiYiI6MC4wfX19LHsia2luZCI6ImZpbGwiLCJwYWludCI6eyJ0eXBlIjoic29saWQiLCJjb2xvciI6eyJtb2RlbCI6InJnYiIsInIiOjEuMCwiZyI6MC4wLCJiIjowLjB9fX1dfSwia2luZCI6eyJ0eXBlIjoicGF0aCIsInBhdGgiOnsic3VicGF0aHMiOlt7ImFuY2hvcnMiOlt7InAiOlsxMDAuMCwxMDAuMF19LHsicCI6WzIwMC4wLDEwMC4wXX0seyJwIjpbMjAwLjAsMTUwLjBdfSx7InAiOlsxMDAuMCwxNTAuMF19XSwiY2xvc2VkIjp0cnVlfV19fX19</vectorcraft:recipe></metadata>"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "appearance.duplicateItem",
+      "disegno": "due-riempimenti-gruppo.svg",
+      "selezione": ["o8hhrn30a"],
+      "argomenti": {"index": 0},
+      "atteso": {"errore": "bad_args"}
+    },
+    {
+      "id": "appearance.duplicateItem",
+      "disegno": "contorno.svg",
+      "selezione": ["ot1t1t1t1"],
+      "argomenti": {"index": 0},
+      "atteso": {"rifiuto": "unsupported"}
+    },
+    {
+      "id": "appearance.duplicateItem",
+      "disegno": "inchiostro.svg",
+      "selezione": ["oi8b8b8b8"],
+      "argomenti": {"index": 0},
+      "atteso": {"rifiuto": "unmapped"}
+    },
+    {
+      "id": "appearance.duplicateItem",
+      "disegno": "maschera-bloccata.svg",
+      "selezione": ["oa1a1a1a1"],
+      "argomenti": {"index": 0},
+      "atteso": {"rifiuto": "locked"}
+    },
+    {
+      "id": "appearance.duplicateItem",
+      "disegno": "due-riempimenti-nascosto.svg",
+      "selezione": ["oa1a1a1a1"],
+      "argomenti": {"index": 0},
+      "atteso": {"rifiuto": "unsupported"}
+    },
+    {
+      "id": "appearance.duplicateItem",
+      "disegno": "due-riempimenti-livello-bloccato.svg",
+      "selezione": ["oa1a1a1a1"],
+      "argomenti": {"index": 0},
+      "atteso": {"rifiuto": "locked"}
+    },
+    {
+      "id": "appearance.duplicateItem",
+      "disegno": "due-riempimenti.svg",
+      "selezione": ["oa1a1a1a1"],
+      "argomenti": {"index": 0, "ids": [999]},
+      "atteso": {"rifiuto": "unsupported"}
+    },
+    {
+      "id": "appearance.duplicateItem",
+      "disegno": "due-riempimenti.svg",
+      "selezione": [],
+      "argomenti": {"index": 0},
+      "atteso": {"rifiuto": "empty"}
+    },
+    {
+      "id": "appearance.duplicateItem",
+      "disegno": "due-riempimenti-colori.svg",
+      "selezione": ["oa1a1a1a1"],
+      "argomenti": {"index": 0},
+      "dopo": "voci-colori-duplica-0-dopo.svg",
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "oa1a1a1a1"
+              },
+              {
+                "op": "remove",
+                "target": {
+                  "path": [
+                    1
+                  ],
+                  "tag": "metadata"
+                }
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<g id=\"oa1a1a1a1\"><rect id=\"o1wviwtv4\" x=\"100\" y=\"100\" width=\"100\" height=\"50\" fill=\"#ff0000\"/><rect id=\"ozf5znlqz\" x=\"100\" y=\"100\" width=\"100\" height=\"50\" fill=\"#ff0000\"/><rect id=\"op85ama1u\" x=\"100\" y=\"100\" width=\"100\" height=\"50\" fill=\"#0000ff\"/></g>"
+              },
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<metadata><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"oa1a1a1a1\" hash=\"06a6e729200d423c\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjo1LCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MS4wLCJnIjowLjAsImIiOjAuMH19fSx7ImtpbmQiOiJmaWxsIiwicGFpbnQiOnsidHlwZSI6InNvbGlkIiwiY29sb3IiOnsibW9kZWwiOiJyZ2IiLCJyIjoxLjAsImciOjAuMCwiYiI6MC4wfX19LHsia2luZCI6ImZpbGwiLCJwYWludCI6eyJ0eXBlIjoic29saWQiLCJjb2xvciI6eyJtb2RlbCI6InJnYiIsInIiOjAuMCwiZyI6MC4wLCJiIjoxLjB9fX1dfSwia2luZCI6eyJ0eXBlIjoicGF0aCIsInBhdGgiOnsic3VicGF0aHMiOlt7ImFuY2hvcnMiOlt7InAiOlsxMDAuMCwxMDAuMF19LHsicCI6WzIwMC4wLDEwMC4wXX0seyJwIjpbMjAwLjAsMTUwLjBdfSx7InAiOlsxMDAuMCwxNTAuMF19XSwiY2xvc2VkIjp0cnVlfV19fX19</vectorcraft:recipe></metadata>"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "appearance.duplicateItem",
+      "disegno": "due-riempimenti-colori.svg",
+      "selezione": ["oa1a1a1a1"],
+      "argomenti": {"index": 1, "to": 0},
+      "dopo": "voci-colori-duplica-1-in-0-dopo.svg",
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "oa1a1a1a1"
+              },
+              {
+                "op": "remove",
+                "target": {
+                  "path": [
+                    1
+                  ],
+                  "tag": "metadata"
+                }
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<g id=\"oa1a1a1a1\"><rect id=\"oluv99g04\" x=\"100\" y=\"100\" width=\"100\" height=\"50\" fill=\"#0000ff\"/><rect id=\"o7mp3jngt\" x=\"100\" y=\"100\" width=\"100\" height=\"50\" fill=\"#ff0000\"/><rect id=\"osevtz22c\" x=\"100\" y=\"100\" width=\"100\" height=\"50\" fill=\"#0000ff\"/></g>"
+              },
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<metadata><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"oa1a1a1a1\" hash=\"8bdfb56bc0818bd1\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjo1LCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MC4wLCJnIjowLjAsImIiOjEuMH19fSx7ImtpbmQiOiJmaWxsIiwicGFpbnQiOnsidHlwZSI6InNvbGlkIiwiY29sb3IiOnsibW9kZWwiOiJyZ2IiLCJyIjoxLjAsImciOjAuMCwiYiI6MC4wfX19LHsia2luZCI6ImZpbGwiLCJwYWludCI6eyJ0eXBlIjoic29saWQiLCJjb2xvciI6eyJtb2RlbCI6InJnYiIsInIiOjAuMCwiZyI6MC4wLCJiIjoxLjB9fX1dfSwia2luZCI6eyJ0eXBlIjoicGF0aCIsInBhdGgiOnsic3VicGF0aHMiOlt7ImFuY2hvcnMiOlt7InAiOlsxMDAuMCwxMDAuMF19LHsicCI6WzIwMC4wLDEwMC4wXX0seyJwIjpbMjAwLjAsMTUwLjBdfSx7InAiOlsxMDAuMCwxNTAuMF19XSwiY2xvc2VkIjp0cnVlfV19fX19</vectorcraft:recipe></metadata>"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "appearance.moveItem",
+      "disegno": "contorno.svg",
+      "selezione": ["oa1a1a1a1"],
+      "argomenti": {"from": 0, "to": 1},
+      "atteso": {"rifiuto": "unsupported"}
+    },
+    {
+      "id": "appearance.moveItem",
+      "disegno": "contorno.svg",
+      "selezione": ["oa1a1a1a1"],
+      "argomenti": {"from": 1, "to": 0},
+      "atteso": {"rifiuto": "unsupported"}
+    },
+    {
+      "id": "appearance.moveItem",
+      "disegno": "contorno.svg",
+      "selezione": ["oa1a1a1a1"],
+      "argomenti": {"from": 0, "to": 0},
+      "atteso": {"rifiuto": "empty"}
+    },
+    {
+      "id": "appearance.moveItem",
+      "disegno": "contorno.svg",
+      "selezione": ["oa1a1a1a1"],
+      "argomenti": {"from": 1, "to": 9},
+      "atteso": {"rifiuto": "empty"}
+    },
+    {
+      "id": "appearance.moveItem",
+      "disegno": "contorno.svg",
+      "selezione": ["oa1a1a1a1"],
+      "argomenti": {"from": 0, "to": 9},
+      "atteso": {"rifiuto": "unsupported"}
+    },
+    {
+      "id": "appearance.moveItem",
+      "disegno": "contorno.svg",
+      "selezione": ["oa1a1a1a1"],
+      "argomenti": {"from": 5, "to": 0},
+      "atteso": {"errore": "bad_args"}
+    },
+    {
+      "id": "appearance.moveItem",
+      "disegno": "contorno.svg",
+      "selezione": ["oa1a1a1a1"],
+      "argomenti": {"from": "contents", "to": 0},
+      "atteso": {"rifiuto": "unsupported"}
+    },
+    {
+      "id": "appearance.moveItem",
+      "disegno": "contorno.svg",
+      "selezione": ["oa1a1a1a1"],
+      "argomenti": {"to": 0},
+      "atteso": {"errore": "bad_args"}
+    },
+    {
+      "id": "appearance.moveItem",
+      "disegno": "contorno.svg",
+      "selezione": ["oa1a1a1a1"],
+      "argomenti": {"from": 0},
+      "atteso": {"errore": "bad_args"}
+    },
+    {
+      "id": "appearance.moveItem",
+      "disegno": "contorno.svg",
+      "selezione": ["oa1a1a1a1"],
+      "argomenti": {"from": 0, "to": 1, "aligned": true},
+      "atteso": {"rifiuto": "unsupported"}
+    },
+    {
+      "id": "appearance.moveItem",
+      "disegno": "base.svg",
+      "selezione": ["oa1a1a1a1", "oe1e1e1e1"],
+      "argomenti": {"from": 0, "to": 0},
+      "atteso": {"rifiuto": "empty"}
+    },
+    {
+      "id": "appearance.moveItem",
+      "disegno": "base.svg",
+      "selezione": ["oa1a1a1a1", "oe1e1e1e1"],
+      "argomenti": {"from": 1, "to": 0},
+      "atteso": {"errore": "bad_args"}
+    },
+    {
+      "id": "appearance.moveItem",
+      "disegno": "due-riempimenti.svg",
+      "selezione": ["oa1a1a1a1"],
+      "argomenti": {"from": 0, "to": 1},
+      "atteso": {"rifiuto": "empty"}
+    },
+    {
+      "id": "appearance.moveItem",
+      "disegno": "due-riempimenti-gruppo.svg",
+      "selezione": ["o8hhrn30a"],
+      "argomenti": {"from": 0, "to": 1},
+      "atteso": {"errore": "bad_args"}
+    },
+    {
+      "id": "appearance.moveItem",
+      "disegno": "due-riempimenti-gruppo.svg",
+      "selezione": ["o8hhrn30a"],
+      "argomenti": {"from": 0, "to": 1, "target": "contents"},
+      "atteso": {"rifiuto": "empty"}
+    },
+    {
+      "id": "appearance.moveItem",
+      "disegno": "maschera-bloccata.svg",
+      "selezione": ["oa1a1a1a1"],
+      "argomenti": {"from": 0, "to": 1},
+      "atteso": {"rifiuto": "locked"}
+    },
+    {
+      "id": "appearance.moveItem",
+      "disegno": "inchiostro.svg",
+      "selezione": ["oi8b8b8b8"],
+      "argomenti": {"from": 0, "to": 1},
+      "atteso": {"rifiuto": "unmapped"}
+    },
+    {
+      "id": "appearance.moveItem",
+      "disegno": "contorno.svg",
+      "selezione": ["ot1t1t1t1"],
+      "argomenti": {"from": 0, "to": 1},
+      "atteso": {"rifiuto": "unsupported"}
+    },
+    {
+      "id": "appearance.moveItem",
+      "disegno": "due-riempimenti-nascosto.svg",
+      "selezione": ["oa1a1a1a1"],
+      "argomenti": {"from": 0, "to": 1},
+      "atteso": {"rifiuto": "unsupported"}
+    },
+    {
+      "id": "appearance.moveItem",
+      "disegno": "due-riempimenti-livello-bloccato.svg",
+      "selezione": ["oa1a1a1a1"],
+      "argomenti": {"from": 0, "to": 1},
+      "atteso": {"rifiuto": "locked"}
+    },
+    {
+      "id": "appearance.moveItem",
+      "disegno": "contorno.svg",
+      "selezione": [],
+      "argomenti": {"from": 0, "to": 1},
+      "atteso": {"rifiuto": "empty"}
+    },
+    {
+      "id": "appearance.moveItem",
+      "disegno": "due-riempimenti-colori.svg",
+      "selezione": ["oa1a1a1a1"],
+      "argomenti": {"from": 0, "to": 1},
+      "dopo": "voci-colori-su-dopo.svg",
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "oa1a1a1a1"
+              },
+              {
+                "op": "remove",
+                "target": {
+                  "path": [
+                    1
+                  ],
+                  "tag": "metadata"
+                }
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<g id=\"oa1a1a1a1\"><rect id=\"o44i23l6b\" x=\"100\" y=\"100\" width=\"100\" height=\"50\" fill=\"#0000ff\"/><rect id=\"o8fst217e\" x=\"100\" y=\"100\" width=\"100\" height=\"50\" fill=\"#ff0000\"/></g>"
+              },
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<metadata><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"oa1a1a1a1\" hash=\"6cfb9e8115d26675\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjo1LCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MC4wLCJnIjowLjAsImIiOjEuMH19fSx7ImtpbmQiOiJmaWxsIiwicGFpbnQiOnsidHlwZSI6InNvbGlkIiwiY29sb3IiOnsibW9kZWwiOiJyZ2IiLCJyIjoxLjAsImciOjAuMCwiYiI6MC4wfX19XX0sImtpbmQiOnsidHlwZSI6InBhdGgiLCJwYXRoIjp7InN1YnBhdGhzIjpbeyJhbmNob3JzIjpbeyJwIjpbMTAwLjAsMTAwLjBdfSx7InAiOlsyMDAuMCwxMDAuMF19LHsicCI6WzIwMC4wLDE1MC4wXX0seyJwIjpbMTAwLjAsMTUwLjBdfV0sImNsb3NlZCI6dHJ1ZX1dfX19fQ==</vectorcraft:recipe></metadata>"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "appearance.moveItem",
+      "disegno": "due-riempimenti-colori.svg",
+      "selezione": ["oa1a1a1a1"],
+      "argomenti": {"from": 1, "to": 0},
+      "dopo": "voci-colori-giu-dopo.svg",
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "oa1a1a1a1"
+              },
+              {
+                "op": "remove",
+                "target": {
+                  "path": [
+                    1
+                  ],
+                  "tag": "metadata"
+                }
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<g id=\"oa1a1a1a1\"><rect id=\"ofxcpzdld\" x=\"100\" y=\"100\" width=\"100\" height=\"50\" fill=\"#0000ff\"/><rect id=\"olo4m2v0t\" x=\"100\" y=\"100\" width=\"100\" height=\"50\" fill=\"#ff0000\"/></g>"
+              },
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<metadata><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"oa1a1a1a1\" hash=\"2b3297e2e9b1e142\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjo1LCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MC4wLCJnIjowLjAsImIiOjEuMH19fSx7ImtpbmQiOiJmaWxsIiwicGFpbnQiOnsidHlwZSI6InNvbGlkIiwiY29sb3IiOnsibW9kZWwiOiJyZ2IiLCJyIjoxLjAsImciOjAuMCwiYiI6MC4wfX19XX0sImtpbmQiOnsidHlwZSI6InBhdGgiLCJwYXRoIjp7InN1YnBhdGhzIjpbeyJhbmNob3JzIjpbeyJwIjpbMTAwLjAsMTAwLjBdfSx7InAiOlsyMDAuMCwxMDAuMF19LHsicCI6WzIwMC4wLDE1MC4wXX0seyJwIjpbMTAwLjAsMTUwLjBdfV0sImNsb3NlZCI6dHJ1ZX1dfX19fQ==</vectorcraft:recipe></metadata>"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "appearance.removeItem",
+      "disegno": "immagine.svg",
+      "selezione": ["oj2j2j2j2"],
+      "argomenti": {"index": 0},
+      "atteso": {"rifiuto": "unmapped"}
+    },
+    {
+      "id": "appearance.duplicateItem",
+      "disegno": "immagine.svg",
+      "selezione": ["oj2j2j2j2"],
+      "argomenti": {"index": 0},
+      "atteso": {"rifiuto": "unmapped"}
+    },
+    {
+      "id": "appearance.moveItem",
+      "disegno": "immagine.svg",
+      "selezione": ["oj2j2j2j2"],
+      "argomenti": {"from": 0, "to": 1},
+      "atteso": {"rifiuto": "unmapped"}
     }
   ]
 }

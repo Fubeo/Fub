@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:fub="https://fubeo.github.io/ns/scene/1" fub:version="1" viewBox="0 0 400 300" width="400" height="300">
+  <rect id="fub-paper" fub:role="paper" x="0" y="0" width="400" height="300" fill="#ffffff"/>
+  <metadata><vectorcraft:recipe xmlns:vectorcraft="urn:vectorcraft:editing" for="oa1a1a1a1" hash="11587a06513072a0" v="1">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjo1LCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MS4wLCJnIjowLjAsImIiOjAuMH19fSx7ImtpbmQiOiJmaWxsIiwicGFpbnQiOnsidHlwZSI6InNvbGlkIiwiY29sb3IiOnsibW9kZWwiOiJyZ2IiLCJyIjoxLjAsImciOjAuMCwiYiI6MC4wfX19LHsia2luZCI6ImZpbGwiLCJwYWludCI6eyJ0eXBlIjoic29saWQiLCJjb2xvciI6eyJtb2RlbCI6InJnYiIsInIiOjEuMCwiZyI6MC4wLCJiIjowLjB9fX1dfSwia2luZCI6eyJ0eXBlIjoicGF0aCIsInBhdGgiOnsic3VicGF0aHMiOlt7ImFuY2hvcnMiOlt7InAiOlsxMDAuMCwxMDAuMF19LHsicCI6WzIwMC4wLDEwMC4wXX0seyJwIjpbMjAwLjAsMTUwLjBdfSx7InAiOlsxMDAuMCwxNTAuMF19XSwiY2xvc2VkIjp0cnVlfV19fX19</vectorcraft:recipe></metadata>
+  <g id="l1a2b3c4d" fub:layer="Livello 1">
+    
+    
+  <g id="o8hhrn30a">
+    <g id="oa1a1a1a1"><rect id="oclwkg3ti" x="100" y="100" width="100" height="50" fill="#ff0000"/><rect id="o6ihhkanj" x="100" y="100" width="100" height="50" fill="#ff0000"/><rect id="odfkbzu2a" x="100" y="100" width="100" height="50" fill="#ff0000"/></g><ellipse id="oe1e1e1e1" cx="250" cy="150" rx="40" ry="30" fill="#0000ff"/></g></g>
+</svg>
