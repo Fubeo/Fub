@@ -271,6 +271,10 @@ fn una_selezione_con_un_elemento_non_mappato_non_cambia_niente() {
         "disegno.gradient.presets.save",
         "disegno.gradient.presets.delete",
         "disegno.view.transparencyGrid",
+        // Le letture della Trasparenza (K6 T15, giro maschere) non cambiano il disegno: con un
+        // elemento non mappato danno il vuoto, come le altre letture.
+        "disegno.transparency.info",
+        "disegno.transparency.opacityMaskInfo",
     ];
     let comandi = d.comandi(&["oa1a1a1a1".into(), "onessuno1".into()]);
     let accesi: Vec<&str> = comandi

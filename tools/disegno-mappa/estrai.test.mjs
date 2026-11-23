@@ -93,7 +93,9 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // T14 campioni porta a «fatto» quattro righe dei campioni (duplica, unisci, ordina per nome, sposta).
   // Restano «da fare», con il perché: i tre comandi dei gruppi e i predefiniti non ci sono nel formato,
   // e ordina per specie non cambia niente su campioni che sono tutti colori.
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1154, fub: 114, escluso: 12, fatto: 271 });
+  // T15 maschere: Crea maschera di opacità e le due letture della Trasparenza («fatto»); le altre
+  // maschere, il pannello e l'isolamento della pagina restano «da fare» con la causa nella nota.
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1151, fub: 114, escluso: 12, fatto: 274 });
 });
 
 // --- un motore finto ---------------------------------------------------------------

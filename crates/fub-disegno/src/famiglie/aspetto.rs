@@ -34,6 +34,14 @@ const TRASPARENZA: &str = "transparency.set";
 /// Il contorno: spessore, estremi, angoli, tratteggio.
 pub(crate) const CONTORNO: &str = "stroke.set";
 
+/// Crea la maschera di opacità (K6 T15, giro maschere): con due oggetti o più, il più alto fa da
+/// maschera degli altri, che vanno in un gruppo con `mask`.
+const CREA_MASCHERA: &str = "transparency.makeOpacityMask";
+
+/// I valori del pannello Trasparenza per la scelta, e la maschera di opacità della scelta: letture.
+const LETTURA_TRASPARENZA: &str = "transparency.info";
+const LETTURA_MASCHERA: &str = "transparency.opacityMaskInfo";
+
 /// Il punto scelto della sfumatura del riempimento o del contorno davanti.
 const PUNTO_DELLA_SFUMATURA: &str = "gradient.selectStop";
 
@@ -71,13 +79,21 @@ impl StatoFamiglia for Stato {
 
     /// Scegliere un punto della sfumatura cambia solo la sessione del motore (il punto su cui agiscono
     /// i tasti e il pannello): una lettura, `{index}`.
+    /// Le letture della Trasparenza (K6 T15, giro maschere): i valori del pannello e la maschera
+    /// dell'oggetto scelto. Non cambiano il documento.
     fn legge(&self, id: &str) -> bool {
-        id == PUNTO_DELLA_SFUMATURA
+        id == PUNTO_DELLA_SFUMATURA || matches!(id, LETTURA_TRASPARENZA | LETTURA_MASCHERA)
     }
 
     /// Lo spessore e le lunghezze del tratteggio sono numeri finiti non negativi; un tratteggio vuoto,
     /// o che non disegna trattini (tutto a zero), è un contorno pieno: `dash: null` per il motore.
     fn adatta(&self, id: &str, argomenti: Value) -> Result<Value, PluginError> {
+        if id == CREA_MASCHERA {
+            let booleano = |chiave: &str| argomenti.get(chiave).is_none_or(Value::is_boolean);
+            if !booleano("clip") || !booleano("invert") {
+                return Err(PluginError::BadArgs("clip e invert sono vero o falso".into()));
+            }
+        }
         if id != CONTORNO {
             return Ok(argomenti);
         }
@@ -120,6 +136,9 @@ impl StatoFamiglia for Stato {
         if let Some(sfumatura) = come_sfumatura(id) {
             return Colore::spento(sfumatura, copia, selezione);
         }
+        if id == CREA_MASCHERA {
+            return spento_maschera(copia, selezione);
+        }
         if id != TRASPARENZA && id != CONTORNO {
             return None;
         }
@@ -151,6 +170,13 @@ impl StatoFamiglia for Stato {
         if let Some(sfumatura) = come_sfumatura(id) {
             return Colore::rifiuto(sfumatura, copia, selezione);
         }
+        if id == CREA_MASCHERA {
+            return match spento_maschera(copia, selezione)? {
+                DrawingDisabledReason::NeedsPath => Some(DrawingRefusal::Unsupported),
+                DrawingDisabledReason::ReadOnly => Some(DrawingRefusal::Locked),
+                _ => Some(DrawingRefusal::Empty),
+            };
+        }
         if id != CONTORNO {
             return None;
         }
@@ -171,6 +197,12 @@ impl StatoFamiglia for Stato {
     ) -> Option<DrawingRefusal> {
         if let Some(sfumatura) = come_sfumatura(id) {
             return Colore::rifiuto_valore(sfumatura, copia, selezione, valore);
+        }
+        // La maschera che non ritaglia, o invertita: non c'è un attributo per dirlo, e il motore la
+        // farebbe diversa dal file.
+        if id == CREA_MASCHERA {
+            let c = |chiave: &str| valore.get(chiave).and_then(Value::as_bool);
+            return (c("clip") == Some(false) || c("invert") == Some(true)).then_some(DrawingRefusal::Unsupported);
         }
         (id == CONTORNO && fuori_dalla_scena(valore)).then_some(DrawingRefusal::Unsupported)
     }
@@ -229,4 +261,47 @@ fn fuori_dalla_scena(valore: &Value) -> bool {
         || c("profile").is_some_and(|v| v.as_str() != Some("uniform"))
         || c("item").is_some()
         || c("target").is_some_and(|v| v.as_str() != Some("object"))
+}
+
+/// Perché Crea maschera di opacità non vale sulle scelte: niente scelto, un oggetto solo (la
+/// maschera di un oggetto solo si disegna in modifica, che il disegno non tiene fra due comandi),
+/// un oggetto bloccato, o una maschera che non è un tracciato (il file la scrive solo così).
+fn spento_maschera(copia: &Copia, selezione: &[String]) -> Option<DrawingDisabledReason> {
+    if selezione.is_empty() {
+        return Some(DrawingDisabledReason::NoSelection);
+    }
+    if !copia.modificabile {
+        return Some(DrawingDisabledReason::ReadOnly);
+    }
+    let scelti = match nodi_scelti(copia, selezione) {
+        Ok(scelti) => scelti,
+        Err(DrawingRefusal::Locked) => return Some(DrawingDisabledReason::ReadOnly),
+        Err(_) => return Some(DrawingDisabledReason::Unmapped),
+    };
+    if scelti.len() < 2 {
+        return Some(DrawingDisabledReason::NeedsTwo);
+    }
+    if scelti.iter().any(|n| copia.documento.node(*n).is_some_and(|nodo| nodo.locked)) {
+        return Some(DrawingDisabledReason::ReadOnly);
+    }
+    let cima = piu_alto(copia, &scelti).and_then(|n| copia.documento.node(n));
+    (!cima.is_some_and(tracciato_di_maschera)).then_some(DrawingDisabledReason::NeedsPath)
+}
+
+/// Un tracciato che fa da maschera: un tracciato che non è una guida né un ritaglio, o un composto.
+fn tracciato_di_maschera(nodo: &vectorcraft_doc::Node) -> bool {
+    use vectorcraft_doc::NodeKind;
+    matches!(nodo.kind, NodeKind::Path { guide: false, clipping: false, .. } | NodeKind::Compound { .. })
+}
+
+/// Il più alto fra `nodi` nell'ordine di pittura del motore (l'ultimo che il giro del documento
+/// incontra).
+fn piu_alto(copia: &Copia, nodi: &[NodeId]) -> Option<NodeId> {
+    let mut cima = None;
+    copia.documento.walk(|n| {
+        if nodi.contains(&n.id) {
+            cima = Some(n.id);
+        }
+    });
+    cima
 }
