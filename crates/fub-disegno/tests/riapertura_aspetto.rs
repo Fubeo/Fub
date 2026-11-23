@@ -67,6 +67,32 @@ fn la_maschera_di_opacita_si_riapre_senza_perdite_e_resta_una_maschera() {
     assert_eq!(m["linked"], json!(true), "{m}");
 }
 
+/// Rischio noto, da correggere in un giro dedicato (non qui): quando un comando riscrive la ricetta di un
+/// oggetto con una maschera di opacità, la riapertura non trova più l'oggetto nel motore. Qui il comando
+/// è Svuota (`appearance.clear`), che la famiglia Aspetto non serve più sulle maschere: la prova va
+/// direttamente al motore. Il file esce con la perdita «la ricetta non trova il suo oggetto nel motore»,
+/// e l'oggetto non è più una maschera. Si toglie `#[ignore]` quando la riapertura lo tiene.
+#[test]
+#[ignore = "rischio noto: la ricetta riscritta su un oggetto con maschera non riapre l'oggetto (K6 T15, aspetto)"]
+fn la_ricetta_riscritta_su_una_maschera_si_riapre_con_la_maschera() {
+    let (mut disegno, aperto) = apri_tutte(MASCHERA);
+    let svuotato = disegno
+        .comando(comando(
+            "disegno.appearance.clear",
+            &["oa1a1a1a1"],
+            json!({}),
+            aperto.revision,
+        ))
+        .expect("Svuota");
+    let testo = scritto(MASCHERA, &svuotato.ops);
+    let (_, riapre) = apri_tutte(&testo);
+    assert!(
+        riapre.losses.is_empty(),
+        "perdite alla riapertura: {:?}",
+        riapre.losses
+    );
+}
+
 #[test]
 fn un_oggetto_con_due_riempimenti_si_riapre_e_riduci_ne_toglie_uno_solo_una_volta() {
     // Il file con due riempimenti lo scrive la ricetta di Aggiungi riempimento, qui solo per avere il

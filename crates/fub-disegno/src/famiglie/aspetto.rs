@@ -180,7 +180,7 @@ impl StatoFamiglia for Stato {
             return match spento_riduci(copia, selezione)? {
                 DrawingDisabledReason::NoSelection => Some(DrawingRefusal::Empty),
                 DrawingDisabledReason::ReadOnly => Some(DrawingRefusal::Locked),
-                DrawingDisabledReason::Unmapped => Some(DrawingRefusal::Unmapped),
+                DrawingDisabledReason::Unmapped | DrawingDisabledReason::FubInk => Some(DrawingRefusal::Unmapped),
                 _ => Some(DrawingRefusal::Unsupported),
             };
         }
@@ -341,9 +341,20 @@ fn spento_riduci(copia: &Copia, selezione: &[String]) -> Option<DrawingDisabledR
             .node(*n)
             .is_some_and(|nodo| nodo.extras().mask.is_some())
     };
+    // Un tratto dell'Inchiostro di Fub è un riempimento del file, non un oggetto che il motore riduce.
+    if sceglie_inchiostro(copia, selezione) {
+        return Some(DrawingDisabledReason::FubInk);
+    }
     if scelti.iter().any(con_maschera) {
         return Some(DrawingDisabledReason::Other {
             text: "Con una maschera di opacità non si fa ancora: il file non riapre l'oggetto com'era.".into(),
+        });
+    }
+    // Un oggetto nascosto: il motore lo lascia com'è, e Riduci non dice nulla. Si dice perché.
+    let nascosto = |n: &NodeId| copia.documento.node(*n).is_some_and(|nodo| !nodo.visible);
+    if scelti.iter().any(nascosto) {
+        return Some(DrawingDisabledReason::Other {
+            text: "L'oggetto è nascosto: Riduci ad aspetto di base non lo tocca. Mostralo per ridurlo.".into(),
         });
     }
     // Il colore di un testo sta nei suoi caratteri: il riempimento dell'oggetto, scritto sul `<text>`,
