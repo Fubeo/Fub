@@ -61,6 +61,48 @@ fn dentro(testo: &str, genitore: &str) -> Result<(usize, usize), String> {
     Ok((inizio, chiude))
 }
 
+/// Dove finisce la testa della radice, come la conta la scena del client (`scene/engine/base.ts`,
+/// `destination`, ramo `first`): dopo il titolo, i metadati, le descrizioni, le `defs` e le carte o le
+/// tavole (`fub:role="paper"` o `"board"`) che stanno in testa. Un `first` sulla radice si mette dopo
+/// l'ultimo di questi, come nel client: il `metadata` della ricetta viene dopo la carta, non prima.
+fn dopo_la_testa(testo: &str, inizio: usize) -> Result<usize, String> {
+    let mut fine = inizio;
+    let mut i = inizio;
+    loop {
+        let da = i + (testo[i..].len() - testo[i..].trim_start().len());
+        let resto = &testo[da..];
+        if !resto.starts_with('<') || resto.starts_with("</") || resto.starts_with("<!--") {
+            break;
+        }
+        let nome: String = resto[1..]
+            .chars()
+            .take_while(|c| !c.is_whitespace() && *c != '/' && *c != '>')
+            .collect();
+        let fine_tag = fine_del_tag(testo, da)?;
+        let tag = &testo[da..fine_tag];
+        let in_testa = match nome.as_str() {
+            "title" | "desc" | "metadata" | "defs" => true,
+            "rect" => tag.contains("fub:role=\"paper\"") || tag.contains("fub:role=\"board\""),
+            _ => false,
+        };
+        if !in_testa {
+            break;
+        }
+        let fine_elemento = if tag.ends_with("/>") {
+            fine_tag
+        } else {
+            let chiusura = format!("</{nome}>");
+            testo[fine_tag..]
+                .find(&chiusura)
+                .map(|k| fine_tag + k + chiusura.len())
+                .ok_or_else(|| format!("«{nome}» non si chiude"))?
+        };
+        fine = fine_elemento;
+        i = fine_elemento;
+    }
+    Ok(fine)
+}
+
 fn testo_di<'a>(v: &'a Value, cosa: &str) -> Result<&'a str, String> {
     v.as_str()
         .ok_or_else(|| format!("{cosa} non è un testo: {v}"))
@@ -185,7 +227,11 @@ fn inserisci(testo: &mut String, op: &Value, corpo: &str) -> Result<(), String> 
     let (inizio, fine) = dentro(testo, genitore)?;
     let pos = &op["pos"];
     let dove = if pos.get("first").is_some() {
-        inizio
+        if genitore == "#root" {
+            dopo_la_testa(testo, inizio)?
+        } else {
+            inizio
+        }
     } else if pos.get("last").is_some() {
         fine
     } else {
