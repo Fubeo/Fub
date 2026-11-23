@@ -106,7 +106,8 @@ function disegnaContorno(contesto: ContestoSezione, esegui: EseguiContorno): () 
     mixedText: contorno?.spessore === undefined ? "" : t("draw.properties.mixed"),
     problem: problemaDi,
     onCommit: (valore) => {
-      manda({ weight: allaScena(valore) });
+      // Lo stesso spessore che c'è già non è un cambio: niente comando, niente passo.
+      if (valore !== contorno?.spessore?.valore) manda({ weight: allaScena(valore) });
       return undefined;
     },
     lifetime: contesto.vita,
