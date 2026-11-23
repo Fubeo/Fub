@@ -1,3 +1,126 @@
 {
-  "casi": []
+  "casi": [
+    {
+      "id": "blobBrush",
+      "fonte": "strumento",
+      "disegno": "../pennello/vuota.svg",
+      "gesto": [
+        {
+          "phase": "preview",
+          "events": [
+            {
+              "kind": "down",
+              "x": 60,
+              "y": 60,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 90,
+              "y": 62,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 120,
+              "y": 60,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ]
+        },
+        {
+          "phase": "commit",
+          "events": [
+            {
+              "kind": "up",
+              "x": 120,
+              "y": 60,
+              "pressure": 0.0,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ],
+          "inputs": []
+        }
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "add",
+            "parent": "l1a2b3c4d",
+            "pos": {
+              "last": true
+            },
+            "elem": {
+              "tag": "path",
+              "attrs": {
+                "d": "M55.02 59.5 C55.3 56.75 57.75 54.75 60.5 55.02 C81.77 57.15 98.23 57.15 119.5 55.02 C122.25 54.75 124.7 56.75 124.98 59.5 C125.25 62.25 123.25 64.7 120.5 64.98 C98.56 67.17 81.44 67.17 59.5 64.98 C56.75 64.7 54.75 62.25 55.02 59.5 Z",
+                "fill": "#000000",
+                "id": "oblob0001"
+              }
+            }
+          }
+        ]
+      },
+      "dopo": "pennello-gesto.svg"
+    },
+    {
+      "id": "blobBrush",
+      "fonte": "strumento",
+      "disegno": "../pennello/livello-bloccato.svg",
+      "gesto": [
+        {
+          "phase": "preview",
+          "events": [
+            {
+              "kind": "down",
+              "x": 60,
+              "y": 60,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 120,
+              "y": 60,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ]
+        },
+        {
+          "phase": "commit",
+          "events": [
+            {
+              "kind": "up",
+              "x": 120,
+              "y": 60,
+              "pressure": 0.0,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ],
+          "inputs": []
+        }
+      ],
+      "atteso": {
+        "rifiuto": "locked"
+      }
+    }
+  ]
 }

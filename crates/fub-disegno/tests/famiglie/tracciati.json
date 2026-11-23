@@ -8605,6 +8605,221 @@
       "atteso": {
         "rifiuto": "empty"
       }
+    },
+    {
+      "id": "path.blob",
+      "disegno": "../pennello/vuota.svg",
+      "selezione": [],
+      "argomenti": {
+        "points": [
+          [
+            50,
+            50
+          ],
+          [
+            120,
+            60
+          ],
+          [
+            160,
+            90
+          ]
+        ],
+        "color": "#ff0000"
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "add",
+            "parent": "l1a2b3c4d",
+            "pos": {
+              "last": true
+            },
+            "elem": {
+              "tag": "path",
+              "attrs": {
+                "d": "M50.71 45.05 L120.71 55.05 C121.54 55.17 122.33 55.5 123 56 L163 86 C165.21 87.66 165.66 90.79 164 93 C162.34 95.21 159.21 95.66 157 94 L118.02 64.77 L49.29 54.95 C46.56 54.56 44.66 52.03 45.05 49.29 C45.44 46.56 47.97 44.66 50.71 45.05 Z",
+                "fill": "#ff0000",
+                "id": "oavoh6rjc"
+              }
+            }
+          }
+        ]
+      },
+      "dopo": "pennello-tela.svg"
+    },
+    {
+      "id": "path.blob",
+      "disegno": "../pennello/vuota.svg",
+      "selezione": [],
+      "argomenti": {
+        "points": [
+          [
+            50,
+            50
+          ]
+        ],
+        "color": "#ff0000"
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "add",
+            "parent": "l1a2b3c4d",
+            "pos": {
+              "last": true
+            },
+            "elem": {
+              "tag": "path",
+              "attrs": {
+                "d": "M50 45 L50.01 45 C52.77 45 55.01 47.24 55.01 50 C55.01 52.76 52.77 55 50.01 55 L50 55 C47.24 55 45 52.76 45 50 C45 47.24 47.24 45 50 45 Z",
+                "fill": "#ff0000",
+                "id": "oz7f7uhei"
+              }
+            }
+          }
+        ]
+      },
+      "dopo": "pennello-clic.svg"
+    },
+    {
+      "id": "path.blob",
+      "disegno": "../pennello/un-tondo.svg",
+      "selezione": [],
+      "argomenti": {
+        "points": [
+          [
+            60,
+            60
+          ],
+          [
+            120,
+            60
+          ]
+        ],
+        "color": "#ff0000"
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "op1a1a1a1",
+            "attrs": {
+              "d": "M40 80 L40 40 L80 40 L80 55 L120 55 C122.76 55 125 57.24 125 60 C125 62.76 122.76 65 120 65 L80 65 L80 80 Z"
+            }
+          }
+        ]
+      },
+      "dopo": "pennello-fonde.svg"
+    },
+    {
+      "id": "path.blob",
+      "disegno": "../pennello/un-tondo.svg",
+      "selezione": [],
+      "argomenti": {
+        "points": [
+          [
+            60,
+            60
+          ],
+          [
+            120,
+            60
+          ]
+        ],
+        "color": "#0000ff"
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "add",
+            "parent": "l1a2b3c4d",
+            "pos": {
+              "last": true
+            },
+            "elem": {
+              "tag": "path",
+              "attrs": {
+                "d": "M60 55 L120 55 C122.76 55 125 57.24 125 60 C125 62.76 122.76 65 120 65 L60 65 C57.24 65 55 62.76 55 60 C55 57.24 57.24 55 60 55 Z",
+                "fill": "#0000ff",
+                "id": "olyo3uexr"
+              }
+            }
+          }
+        ]
+      },
+      "dopo": "pennello-altro-colore.svg"
+    },
+    {
+      "id": "path.blob",
+      "disegno": "../pennello/livello-bloccato.svg",
+      "selezione": [],
+      "argomenti": {
+        "points": [
+          [
+            50,
+            50
+          ],
+          [
+            120,
+            60
+          ]
+        ],
+        "color": "#ff0000"
+      },
+      "atteso": {
+        "rifiuto": "locked"
+      }
+    },
+    {
+      "id": "path.blob",
+      "disegno": "../pennello/vuota.svg",
+      "selezione": [],
+      "argomenti": {
+        "points": [
+          [
+            50,
+            50
+          ],
+          [
+            120,
+            60
+          ]
+        ]
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "path.blob",
+      "disegno": "../pennello/testo-e-gruppo.svg",
+      "selezione": [],
+      "argomenti": {
+        "points": [
+          [
+            60,
+            60
+          ],
+          [
+            120,
+            60
+          ]
+        ],
+        "color": "#ff0000"
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "op1a1a1a1",
+            "attrs": {
+              "d": "M100 55 L100 40 L140 40 L140 80 L100 80 L100 65 L60 65 C57.24 65 55 62.76 55 60 C55 57.24 57.24 55 60 55 Z"
+            }
+          }
+        ]
+      },
+      "dopo": "pennello-testo-gruppo.svg"
     }
   ]
 }

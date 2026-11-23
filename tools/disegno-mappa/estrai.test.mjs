@@ -191,7 +191,8 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // T12: «Aggiungi punti…» (addon.pathtools.addPoints) è fatta, con il solo numero dei punti.
   // T12: «Dividi in griglia…» (object.path.splitIntoGrid) è fatta: una griglia sul riquadro di tutti i tracciati scelti, come il motore.
   // T14 gruppi di colori: newGroup, ungroup, editGroup, addToSwatches e resetDefaults sono fatti (`fub:group` sui campioni).
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1034, fub: 114, escluso: 12, fatto: 391 });
+  // T12: il Pennello tondo (path.blob e lo strumento blobBrush) è fatto, con Maiusc+B.
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1032, fub: 114, escluso: 12, fatto: 393 });
 });
 
 // --- un motore finto ---------------------------------------------------------------

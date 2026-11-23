@@ -6,8 +6,8 @@ import type { DrawingOverlay } from "../../../host/contract";
 import { A_PIU_CLIC, segniComeForma, STRUMENTI_DEI_TRACCIATI } from "./tracciati";
 
 describe("gli strumenti dei tracciati", () => {
-  it("sono ventuno, e quelli a più clic stanno fra loro", () => {
-    expect(STRUMENTI_DEI_TRACCIATI.size).toBe(21);
+  it("sono ventidue, e quelli a più clic stanno fra loro", () => {
+    expect(STRUMENTI_DEI_TRACCIATI.size).toBe(22);
     for (const id of A_PIU_CLIC) expect(STRUMENTI_DEI_TRACCIATI.has(id), id).toBe(true);
   });
 });

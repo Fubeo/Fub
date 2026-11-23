@@ -35,6 +35,7 @@ export const STRUMENTI_DEI_TRACCIATI: ReadonlySet<string> = new Set([
   "sharedEdge",
   "eraser",
   "pathEraser",
+  "blobBrush",
   "anchorEraserBrush",
   "scissors",
   "knife",

@@ -68,6 +68,29 @@ pub(crate) struct Ponte {
     ritoccati: Vec<NodeId>,
 }
 
+/// Il rifiuto del Pennello tondo per il livello del gesto, come `forme::destinazione`: un livello scelto
+/// che non c'è, nascosto o bloccato si rifiuta; senza livello scelto va il più alto né nascosto né bloccato,
+/// e se non c'è né uno né l'altro si rifiuta come bloccato. `None` se il colpo può andare.
+fn livello_del_pennello(copia: &Copia, layer: Option<&str>) -> Option<DrawingRefusal> {
+    let livelli: Vec<_> = copia
+        .mappa
+        .elementi()
+        .iter()
+        .filter(|e| e.ruolo == fub_scene::Role::Layer)
+        .collect();
+    match layer {
+        Some(id) => match livelli.iter().find(|e| e.id.as_deref() == Some(id)) {
+            None => Some(DrawingRefusal::Locked),
+            Some(e) if e.nascosto => Some(DrawingRefusal::Hidden),
+            Some(e) if e.bloccato => Some(DrawingRefusal::Locked),
+            Some(_) => None,
+        },
+        None if livelli.is_empty() => None,
+        None if livelli.iter().rev().any(|e| !e.nascosto && !e.bloccato) => None,
+        None => Some(DrawingRefusal::Locked),
+    }
+}
+
 /// Esegue un pezzo del gesto `gesto` con lo strumento del motore `id`.
 pub(crate) fn gesto(
     banco: &mut Banco,
@@ -88,6 +111,13 @@ pub(crate) fn gesto(
     }
     if !conosciuto(id) {
         return rifiuta(banco, esito, DrawingRefusal::UnknownTool);
+    }
+    // Il Pennello tondo dipinge sul livello del gesto: un livello che non c'è, bloccato o nascosto si
+    // rifiuta prima del motore, con la stessa parola della forma (`forme::destinazione`).
+    if id == "blobBrush" {
+        if let Some(motivo) = livello_del_pennello(copia, gesto.layer.as_deref()) {
+            return rifiuta(banco, esito, motivo);
+        }
     }
     let qui = InCorso {
         tool: gesto.tool.clone(),
