@@ -93,7 +93,8 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // T14 campioni porta a «fatto» quattro righe dei campioni (duplica, unisci, ordina per nome, sposta).
   // Restano «da fare», con il perché: i tre comandi dei gruppi e i predefiniti non ci sono nel formato,
   // e ordina per specie non cambia niente su campioni che sono tutti colori.
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1154, fub: 114, escluso: 12, fatto: 271 });
+  // T14 ricolora: cinque righe fatte in più (tre letture, Ricolora grafica e la sua finestra).
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1149, fub: 114, escluso: 12, fatto: 276 });
 });
 
 // --- un motore finto ---------------------------------------------------------------

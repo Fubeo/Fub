@@ -87,6 +87,21 @@ pub(crate) const SFUMATURE: [&str; 3] = ["paint.editGradient", "paint.setGradien
 /// Il comando che porta davanti il riempimento o il tratto: una lettura.
 pub(crate) const ALTERNA: &str = "paint.toggleActive";
 
+/// Le letture di Ricolora grafica che non cambiano il file: i colori della scelta, le riduzioni
+/// e le casuali (le proposte della finestra, che le mostra e ne sceglie una). `recolor.apply`
+/// cambia il file.
+pub(crate) const LETTURE: [&str; 3] = ["recolor.colors", "recolor.reduce", "recolor.randomize"];
+
+/// Ricolora la grafica (T14): la scrittura che la finestra `ui.recolorDialog` manda dopo le
+/// anteprime. Vale sugli oggetti scelti; senza scelta il motore chiede la scelta o un gruppo di
+/// colori (che Fub non ha ancora, T30), e la voce è spenta.
+pub(crate) const RICOLORA: &str = "recolor.apply";
+
+/// Le letture di Ricolora che guardano la scelta (i suoi colori, e le proposte di riduzione e
+/// casuali): sono spente come la scrittura quando la scelta non va (niente, bloccata, Inchiostro,
+/// non mappata), perché la finestra non si apre su una scelta che non si può ricolorare.
+pub(crate) const LETTURE_DELLA_SCELTA: [&str; 3] = ["recolor.colors", "recolor.reduce", "recolor.randomize"];
+
 /// Le voci di Modifica › Modifica colori.
 pub(crate) const MODIFICA_COLORI: [&str; 10] = [
     "edit.colors.invert",
@@ -156,7 +171,11 @@ const RIEMPIMENTI_DELLE_FUSIONI: usize = 3;
 
 /// Il comando cambia i colori degli oggetti scelti.
 fn sugli_scelti(id: &str) -> bool {
-    SUL_COLORE_ATTIVO.contains(&id) || MODIFICA_COLORI.contains(&id) || SFUMATURE.contains(&id)
+    SUL_COLORE_ATTIVO.contains(&id)
+        || MODIFICA_COLORI.contains(&id)
+        || SFUMATURE.contains(&id)
+        || id == RICOLORA
+        || LETTURE_DELLA_SCELTA.contains(&id)
 }
 
 /// Gli argomenti di una sfumatura chiedono ciò che la scena non scrive: una
@@ -213,7 +232,7 @@ impl StatoFamiglia for Stato {
     }
 
     fn legge(&self, id: &str) -> bool {
-        id == ALTERNA
+        id == ALTERNA || LETTURE.contains(&id)
     }
 
     /// Un campione nuovo, cambiato o fatto dai colori usati è globale;

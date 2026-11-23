@@ -485,10 +485,10 @@ motore	view.printTiling	Show Print Tiling	View	stampa	F4	T25	da fare	menu/visual
 motore	print.tiling.set	Print Tiling		stampa	F4	T25	da fare	menu/file	sotto:disegno-formati		Affiancamento di stampa
 motore	print.tiling	Print Tiling Pages		stampa	F4	T25	da fare	interno	sotto:disegno-formati	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Pagine affiancamento di stampa
 motore	document.rasterEffectsSettings	Document Raster Effects Settings…	Effect	raster	F3	T24	da fare	menu/effetto	famiglia	finestra	Impostazioni effetti raster documento…
-motore	recolor.colors	Artwork Colors		colore	F1	T14	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Colori della grafica
-motore	recolor.apply	Recolor Artwork	Edit › Edit Colors	colore	F1	T14	da fare	menu/modifica	famiglia		Ricolora grafica
-motore	recolor.reduce	Reduce Colors		colore	F1	T14	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Riduci colori
-motore	recolor.randomize	Randomize Colors		colore	F1	T14	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Colori casuali
+motore	recolor.colors	Artwork Colors		colore	F1	T14	fatto	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Colori della grafica
+motore	recolor.apply	Recolor Artwork	Edit › Edit Colors	colore	F1	T14	fatto	interno	famiglia		Ricolora grafica
+motore	recolor.reduce	Reduce Colors		colore	F1	T14	fatto	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Riduci colori
+motore	recolor.randomize	Randomize Colors		colore	F1	T14	fatto	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Colori casuali
 motore	file.recovery.save	Save Recovery Data		fub	—	T2	fub	fub	—	bozze e versioni del kernel	Salva dati di recupero
 motore	file.recovery.list	Recovery Data		fub	—	T2	fub	fub	—	bozze e versioni del kernel	Dati di recupero
 motore	file.recovery.restore	Restore Recovered Documents		fub	—	T2	fub	fub	—	bozze e versioni del kernel	Ripristina documenti recuperati
@@ -1091,7 +1091,7 @@ interfaccia	tool.select	Select Tool		nucleo	F1	T11	fatto	colonna	nucleo		Selezio
 interfaccia	tool.setOption	Tool Option		nucleo	F1	T11	fatto	colonna	nucleo		Opzione strumento
 interfaccia	effect.dialog	Effect…		effetti	F2	T18	da fare	menu/effetto	famiglia		Effetto…
 interfaccia	ui.paramDialog	Command Dialog		fub	—	T11	fub	fub	—	le finestre dei comandi di Fub (completo/finestre)	Finestra dei comandi
-interfaccia	ui.recolorDialog	Recolor Artwork…		colore	F1	T14	da fare	finestra	famiglia		Ricolora grafica…
+interfaccia	ui.recolorDialog	Recolor Artwork…		colore	F1	T14	fatto	menu/modifica/colori	famiglia		Ricolora grafica…
 interfaccia	ui.cropImage	Crop Image		immagini	F3	T20	da fare	finestra	famiglia		Ritaglia immagine
 interfaccia	effect.applyLast	Apply Last Effect		effetti	F2	T18	da fare	menu/effetto	famiglia		Applica ultimo effetto
 interfaccia	pathfinder.repeat	Repeat Pathfinder		forme	F1	T13	fatto	menu/oggetto/elaborazione	famiglia		Ripeti Elaborazione tracciati

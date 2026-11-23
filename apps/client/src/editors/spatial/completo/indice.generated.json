@@ -2147,6 +2147,70 @@
     },
     {
       "fonte": "motore",
+      "id": "recolor.apply",
+      "chiamata": {
+        "comando": "disegno.recolor.apply"
+      },
+      "etichetta": {
+        "it": "Ricolora grafica",
+        "en": "Recolor Artwork"
+      },
+      "posto": "interno",
+      "famiglia": "colore",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "recolor.colors",
+      "chiamata": {
+        "comando": "disegno.recolor.colors"
+      },
+      "etichetta": {
+        "it": "Colori della grafica",
+        "en": "Artwork Colors"
+      },
+      "posto": "interno",
+      "famiglia": "colore",
+      "tasto": null,
+      "effetto": "legge",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "recolor.randomize",
+      "chiamata": {
+        "comando": "disegno.recolor.randomize"
+      },
+      "etichetta": {
+        "it": "Colori casuali",
+        "en": "Randomize Colors"
+      },
+      "posto": "interno",
+      "famiglia": "colore",
+      "tasto": null,
+      "effetto": "legge",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "recolor.reduce",
+      "chiamata": {
+        "comando": "disegno.recolor.reduce"
+      },
+      "etichetta": {
+        "it": "Riduci colori",
+        "en": "Reduce Colors"
+      },
+      "posto": "interno",
+      "famiglia": "colore",
+      "tasto": null,
+      "effetto": "legge",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "select.add",
       "chiamata": {
         "comando": "disegno.select.add"
@@ -3338,6 +3402,22 @@
         "en": "New Swatch…"
       },
       "posto": "finestra",
+      "famiglia": "colore",
+      "tasto": null,
+      "effetto": "mostra",
+      "finestra": true
+    },
+    {
+      "fonte": "interfaccia",
+      "id": "ui.recolorDialog",
+      "chiamata": {
+        "client": "ui.recolorDialog"
+      },
+      "etichetta": {
+        "it": "Ricolora grafica…",
+        "en": "Recolor Artwork…"
+      },
+      "posto": "menu/modifica/colori",
       "famiglia": "colore",
       "tasto": null,
       "effetto": "mostra",

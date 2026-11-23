@@ -127,7 +127,9 @@ function attesaFamiglia(stato: StatoFamiglia): Promise<void> {
 }
 
 /// Manda il comando al motore. `null` se il motore non c'è o non risponde.
-async function chiama(
+/// Manda un comando al motore con la selezione di adesso, e ne rende l'esito (`null` se il motore non
+/// risponde). Le finestre che leggono o anteprimano (Ricolora grafica, K6 T14) la usano come i comandi.
+export async function chiama(
   dipendenze: DipendenzeComando,
   id: string,
   valore: unknown,
