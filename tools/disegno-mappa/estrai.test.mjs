@@ -157,7 +157,9 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // T14 temi del colore: `colorTheme.save` e `colorTheme.delete` sono «fatto» (letture: la libreria
   // sta nelle preferenze, casi in colore.json e temi_colore.rs): due in più. `addToSwatches` resta
   // «da fare» (il formato non ha gruppi di colori).
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1075, fub: 114, escluso: 12, fatto: 350 });
+  // T13 porta a «fatto» `object.makePixelPerfect` («Rendi perfetto al pixel»): la famiglia `trasforma`
+  // lo lascia correre sugli oggetti scelti (casi in `tests/famiglie/trasforma.json`, disegno `pixel.svg`).
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1074, fub: 114, escluso: 12, fatto: 351 });
 });
 
 // --- un motore finto ---------------------------------------------------------------

@@ -1779,6 +1779,22 @@
     },
     {
       "fonte": "motore",
+      "id": "object.makePixelPerfect",
+      "chiamata": {
+        "comando": "disegno.object.makePixelPerfect"
+      },
+      "etichetta": {
+        "it": "Allinea ai pixel",
+        "en": "Make Pixel Perfect"
+      },
+      "posto": "menu/oggetto",
+      "famiglia": "trasforma",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "object.move",
       "chiamata": {
         "comando": "disegno.object.move"
