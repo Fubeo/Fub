@@ -3347,6 +3347,38 @@
     },
     {
       "fonte": "motore",
+      "id": "swatch.library.get",
+      "chiamata": {
+        "comando": "disegno.swatch.library.get"
+      },
+      "etichetta": {
+        "it": "Libreria campioni",
+        "en": "Swatch Library"
+      },
+      "posto": "interno",
+      "famiglia": "colore",
+      "tasto": null,
+      "effetto": "legge",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "swatch.library.list",
+      "chiamata": {
+        "comando": "disegno.swatch.library.list"
+      },
+      "etichetta": {
+        "it": "Librerie campioni",
+        "en": "Swatch Libraries"
+      },
+      "posto": "interno",
+      "famiglia": "colore",
+      "tasto": null,
+      "effetto": "legge",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "swatch.list",
       "chiamata": {
         "comando": "disegno.swatch.list"

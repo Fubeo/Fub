@@ -1,5 +1,5 @@
 {
-  "$nota": "I casi della famiglia colore (piano K6, T14, giro 1): il colore attivo di Design › Colore (`paint.*`) e Modifica › Modifica colori (`edit.colors.*`) sugli oggetti scelti. Un tratto dell'Inchiostro di Fub scelto non cambia (`unmapped`), un oggetto bloccato nemmeno (`locked`); una fusione vuole tre riempimenti pieni; i colori di un SVG sono già RGB, e Converti in RGB non cambia niente (`empty`), e nemmeno Sovrastampa nero, che tocca solo l'inchiostro nero CMYK o grigio (`empty`). Le finestre di Satura e Regola bilanciamento colore sono voci del client: la loro prova è il test che le apre.",
+  "$nota": "I casi della famiglia colore (piano K6, T14, giro 1): il colore attivo di Design › Colore (`paint.*`) e Modifica › Modifica colori (`edit.colors.*`) sugli oggetti scelti. Un tratto dell'Inchiostro di Fub scelto non cambia (`unmapped`), un oggetto bloccato nemmeno (`locked`); una fusione vuole tre riempimenti pieni; i colori di un SVG sono già RGB, e Converti in RGB non cambia niente (`empty`), e nemmeno Sovrastampa nero, che tocca solo l'inchiostro nero CMYK o grigio (`empty`). Le finestre di Satura e Regola bilanciamento colore sono voci del client: la loro prova è il test che le apre. Giro librerie (K6 T14): swatch.library.list e swatch.library.get leggono le librerie di base del motore (la mappa le dà «fatto»); la lettura non cambia il disegno, e una libreria che non c'è è un errore degli argomenti.",
   "casi": [
     {
       "id": "paint.setFill",
@@ -2835,6 +2835,66 @@
       "argomenti": {},
       "atteso": {
         "rifiuto": "unmapped"
+      }
+    },
+    {
+      "id": "swatch.library.list",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": {
+        "lettura_parziale": {
+          "userFolder": null
+        }
+      }
+    },
+    {
+      "id": "swatch.library.get",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "library": "earth-tones"
+      },
+      "atteso": {
+        "lettura_parziale": {
+          "id": "earth-tones",
+          "name": "Earth Tones",
+          "category": "builtIn"
+        }
+      }
+    },
+    {
+      "id": "swatch.library.get",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "library": "Grays and Neutrals"
+      },
+      "atteso": {
+        "lettura_parziale": {
+          "id": "grays-neutrals",
+          "category": "builtIn"
+        }
+      }
+    },
+    {
+      "id": "swatch.library.get",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "library": "libreria-che-non-c-e"
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "swatch.library.get",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": {
+        "errore": "bad_args"
       }
     }
   ]
