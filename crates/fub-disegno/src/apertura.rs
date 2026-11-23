@@ -172,6 +172,7 @@ pub(crate) fn importa(testo: &str, revisione: u64) -> Result<Copia, ErroreApertu
         modificabile = false;
     }
     let mut mappa = Mappa::nuova(elementi, &mut documento);
+    testi_in_area(&mappa, &mut documento);
     mappa.ricette = ricette;
     campioni::nel_motore(&campioni_del_file, &usi, &mappa, &mut documento);
     perdite::classifica(&mut perdite, testo, &scena.items, &mappa);
@@ -435,12 +436,104 @@ fn elementi(testo: &str, items: &[Item], base: Affine) -> Vec<Elemento> {
     fuori
 }
 
+/// I testi in area del file (`fub:wrap`, formato della scena, testo §4)
+/// diventano testi in area del motore (K6 T16): il motore li importa come
+/// testi di punto, una riga per `<tspan>`. Il paragrafo torna intero (le
+/// righe unite secondo il loro `fub:join`) in un riquadro largo `fub:wrap`,
+/// che comincia, sta al centro o finisce in `x` secondo l'allineamento, con
+/// la prima riga dove il file la scrive e l'altezza che segue il testo
+/// (Dimensione automatica del motore). Un testo con pezzi di aspetto
+/// diverso, ruotato o inclinato resta di punto: si guarda e si sposta, ma
+/// le sue parole non si cambiano dal motore.
+fn testi_in_area(mappa: &Mappa, documento: &mut Document) {
+    use vectorcraft_doc::text::{Justify, TextKind};
+    use vectorcraft_doc::{AreaFit, NodeKind};
+    use vectorcraft_geom::{shapes, Rect};
+    for e in mappa.elementi() {
+        let (Some(info), Some(nodo), Some(ctm)) = (&e.testo, e.nodo, e.ctm()) else {
+            continue;
+        };
+        let Some(larghezza) = info.wrap.filter(|w| w.is_finite() && *w > 0.0) else {
+            continue;
+        };
+        if info.pezzi || info.unioni.len() != info.righe.len() {
+            continue;
+        }
+        let Some(NodeKind::Text(t)) = documento.node_mut(nodo).map(|n| &mut n.kind) else {
+            continue;
+        };
+        // Un aspetto solo, a parte l'interlinea che il `dy` delle righe
+        // dopo la prima dà ai loro pezzi: le righe tornano un pezzo solo.
+        let senza = |r: &vectorcraft_doc::text::TextRun| {
+            let mut s = r.style.clone();
+            s.leading = None;
+            s
+        };
+        let uguali = t.runs.windows(2).all(|w| senza(&w[0]) == senza(&w[1]));
+        let mut interlinee = t.runs.iter().filter_map(|r| r.style.leading);
+        let interlinea = interlinee.next();
+        let una = interlinee.all(|l| Some(l) == interlinea);
+        if t.kind != TextKind::Point || t.vertical || t.runs.is_empty() || !uguali || !una {
+            continue;
+        }
+        let [a, b, c, d, _, _] = (ctm.inverse() * t.xf).as_coeffs();
+        if !(a.is_finite() && a > 1e-9)
+            || b.abs() > 1e-6 * a
+            || c.abs() > 1e-6 * a
+            || (d - a).abs() > 1e-6 * a
+        {
+            continue;
+        }
+        let mut testo = String::new();
+        for (i, riga) in info.righe.iter().enumerate() {
+            if i > 0 {
+                testo.push_str(match info.unioni[i].as_deref() {
+                    Some("space") => " ",
+                    Some("word") => "",
+                    _ => "\n",
+                });
+            }
+            testo.push_str(riga);
+        }
+        let ancora = match t.para_at(0).justify {
+            Justify::Center => 0.5,
+            Justify::Right => 1.0,
+            _ => 0.0,
+        };
+        let w = larghezza / a;
+        let x0 = -ancora * w;
+        t.runs.truncate(1);
+        t.runs[0].text = testo;
+        t.runs[0].style.leading = interlinea;
+        t.normalize_paras();
+        t.area.fit = AreaFit::None;
+        t.kind = TextKind::Area {
+            frame: shapes::rectangle(Rect::new(x0, 0.0, x0 + w, 1e7)),
+        };
+        let lay = vectorcraft_text::layout(vectorcraft_text::FontDb::global(), t);
+        let base = lay.lines.first().map_or(0.0, |l| l.baseline);
+        let fondo = lay
+            .lines
+            .last()
+            .map_or(1.0, |l| l.baseline + l.descent)
+            .max(base + 1.0);
+        t.kind = TextKind::Area {
+            frame: shapes::rectangle(Rect::new(x0, -base, x0 + w, fondo - base)),
+        };
+        t.area.fit = AreaFit::AutoHeight;
+        let lay = vectorcraft_text::layout(vectorcraft_text::FontDb::global(), t);
+        t.cached_bounds = Some(lay.bounds);
+        t.cached_baselines = lay.baselines();
+    }
+}
+
 /// Le righe di un `<text>` e gli attributi dei suoi `<tspan>`.
 fn info_testo(testo: &str, e: &fub_scene::ElementItem) -> crate::mappa::InfoTesto {
     let righe = e.lines.clone().unwrap_or_default();
     let corpo = testo.get(e.span.bytes[0]..e.span.bytes[1]).unwrap_or("");
     let mut attributi_delle_righe = std::collections::BTreeSet::new();
     let mut tspan = 0usize;
+    let mut unioni = Vec::new();
     let mut da = 0;
     while let Some(i) = corpo[da..].find("<tspan") {
         let inizio = da + i;
@@ -449,17 +542,28 @@ fn info_testo(testo: &str, e: &fub_scene::ElementItem) -> crate::mappa::InfoTest
             continue;
         }
         tspan += 1;
+        let mut unione = None;
         for a in attributi(corpo, inizio).map(|(_, a)| a).unwrap_or_default() {
+            if a.nome == "fub:join" {
+                unione = Some(a.valore.clone());
+            }
             if !matches!(a.nome.as_str(), "x" | "dy" | "fub:join") {
                 attributi_delle_righe.insert(a.nome);
             }
         }
+        unioni.push(unione);
     }
+    let propri = attributi(testo, e.span.bytes[0])
+        .map(|(_, a)| a.into_iter().map(|a| (a.nome, a.valore)).collect())
+        .unwrap_or_default();
     crate::mappa::InfoTesto {
         di_punto: e.wrap.is_none() && e.text_path.is_none() && e.along.is_none(),
         pezzi: tspan > righe.len(),
         righe,
         attributi_delle_righe,
+        attributi: propri,
+        wrap: e.wrap,
+        unioni,
     }
 }
 

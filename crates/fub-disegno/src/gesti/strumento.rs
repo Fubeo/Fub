@@ -293,19 +293,36 @@ fn scrivi_testo(nodo: &Node, locale: Affine) -> Option<(String, Map<String, Valu
     let NodeKind::Text(t) = &nodo.kind else {
         return None;
     };
-    if t.vertical || !matches!(t.kind, TextKind::Point) {
+    if t.vertical || !matches!(t.kind, TextKind::Point | TextKind::Area { .. }) {
         return None;
     }
     let primo = t.runs.first()?;
     let m = locale * t.xf;
     let ancora = m * Point::ZERO;
+    // Un testo in area (lo strumento trascinato): `x` e `y` della sua prima
+    // riga e la larghezza del riquadro, `fub:wrap` (K6 T16).
+    let in_area = match t.kind {
+        TextKind::Area { .. } => Some(differenza::righe_scritte(t, m, None).ok()?),
+        _ => None,
+    };
     let fill = match &primo.style.fill {
         Paint::Solid { color, .. } => color.to_hex(),
         _ => "#000000".into(),
     };
     let mut attrs = Map::new();
-    attrs.insert("x".into(), json!(numero(ancora.x, 2)));
-    attrs.insert("y".into(), json!(numero(ancora.y, 2)));
+    match &in_area {
+        Some(r) => {
+            if let Some(w) = &r.wrap {
+                attrs.insert("fub:wrap".into(), json!(w));
+            }
+            attrs.insert("x".into(), json!(r.x));
+            attrs.insert("y".into(), json!(r.y));
+        }
+        None => {
+            attrs.insert("x".into(), json!(numero(ancora.x, 2)));
+            attrs.insert("y".into(), json!(numero(ancora.y, 2)));
+        }
+    }
     attrs.insert("fill".into(), json!(fill));
     // Il carattere di Fub si scrive come lo scrive il Testo del Semplice,
     // con il ripiego generico (`TEXT_FAMILY`).
@@ -440,7 +457,13 @@ fn con_le_righe(
             return;
         };
         let x = elem["attrs"]["x"].as_str().unwrap_or("0").to_string();
-        elem["children"] = Value::Array(righe_del_testo(t, &x, t.xf));
+        elem["children"] = match t.kind {
+            TextKind::Area { .. } => match differenza::righe_scritte(t, t.xf, None) {
+                Ok(r) => Value::Array(r.righe),
+                Err(_) => return,
+            },
+            _ => Value::Array(righe_del_testo(t, &x, t.xf)),
+        };
         cambiato = true;
     };
     match &mut lista {

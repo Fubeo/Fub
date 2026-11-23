@@ -142,17 +142,29 @@ fn scrivi_elem(e: &Value) -> Result<String, String> {
     for (k, v) in e["attrs"].as_object().ok_or("un elem senza attrs")? {
         s.push_str(&format!(" {k}=\"{}\"", testo_di(v, k)?));
     }
+    // Le parole di una riga (`text`, come lo strumento Testo le scrive).
+    let parole = e.get("text").and_then(Value::as_str).unwrap_or("");
     match e.get("children").and_then(Value::as_array) {
         Some(figli) if !figli.is_empty() => {
             s.push('>');
+            s.push_str(&scappa(parole));
             for f in figli {
                 s.push_str(&scrivi_elem(f)?);
             }
             s.push_str(&format!("</{tag}>"));
         }
+        _ if !parole.is_empty() => s.push_str(&format!(">{}</{tag}>", scappa(parole))),
         _ => s.push_str("/>"),
     }
     Ok(s)
+}
+
+/// Il testo di un nodo XML con `&`, `<` e `>` sciolti in entità.
+fn scappa(testo: &str) -> String {
+    testo
+        .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
 }
 
 /// Mette `corpo` sotto `parent`, al posto `pos` dell'operazione `op`. Un

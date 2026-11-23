@@ -72,7 +72,7 @@ use vectorcraft_geom::{Affine, FillRule, PathData, Point};
 use crate::apertura::Copia;
 use crate::campioni::{self, NonSiScrive, Riferimenti};
 use crate::id::{self, Specie};
-use crate::mappa::{Elemento, Posti};
+use crate::mappa::{Elemento, Mappa, Posti};
 use crate::ricetta::{self, Esito};
 use crate::sfumature;
 
@@ -80,12 +80,15 @@ use crate::sfumature;
 /// (`fill` o `stroke`) che la usa.
 type AttributiDellaFoglia = (Map<String, Value>, Vec<(&'static str, sfumature::Scritta)>);
 
+#[path = "differenza_righe.rs"]
+mod righe;
 #[path = "differenza_ritagli.rs"]
 mod ritagli;
 #[path = "differenza_testo.rs"]
 mod testo;
+pub(crate) use righe::righe_scritte;
 pub(crate) use testo::peso_e_corsivo;
-use testo::testo_cambiato;
+use testo::{da_riscrivere, riscrittura, testo_cambiato, TestoRiscritto};
 
 /// `fill-rule` non è un attributo della scena (`docs/reference/scene-format.md`
 /// §4): un elemento che lo scrive diventerebbe estraneo, e i buchi si fanno
@@ -200,6 +203,7 @@ pub(crate) fn differenza(
         gruppi_nuovi: HashMap::new(),
         dati: HashSet::new(),
         riscritti: HashSet::new(),
+        testi_riscritti: HashMap::new(),
         ricette: ricetta::Scritte::default(),
         liberati: HashSet::new(),
         assorbiti: HashSet::new(),
@@ -395,6 +399,10 @@ struct Lavoro<'a> {
     /// Gli oggetti che si riscrivono interi: l'elemento di prima si toglie e
     /// al suo posto va il corpo espanso con la ricetta nuova.
     riscritti: HashSet<NodeId>,
+    /// I testi che si riscrivono interi (anche in `riscritti`): al posto
+    /// dell'elemento di prima va il `<text>` con lo stesso id e le righe
+    /// nuove (K6 T16).
+    testi_riscritti: HashMap<NodeId, TestoRiscritto>,
     /// Le ricette che il gesto scrive o fa cadere.
     ricette: ricetta::Scritte,
     /// I tracciati di un tracciato composto sciolto: c'erano, ma non erano
@@ -746,7 +754,7 @@ impl Lavoro<'_> {
             // Un gruppo semplice nuovo fatto solo di pezzi nuovi (i pezzi che
             // l'Elaborazione tracciati lascia divisi): il `g`, poi ogni pezzo
             // dentro, subito dopo, ciascuno con il suo `add`.
-            if !riscritto && gruppo_tutto_nuovo(nodo, prima) {
+            if !riscritto && gruppo_tutto_nuovo(nodo, prima, &self.copia.mappa) {
                 let id = self.id_nuovo(Specie::Oggetto)?;
                 self.ids.insert(nodo.id, id.clone());
                 self.gruppi_nuovi.insert(nodo.id, genitore);
@@ -760,6 +768,25 @@ impl Lavoro<'_> {
                     let dentro = (0..figli.len()).map(|j| (Some(nodo.id), figli.clone(), j));
                     nuovi.splice(k..k, dentro);
                 }
+                continue;
+            }
+            // Un testo riscritto intero: lo stesso id, gli attributi e le
+            // righe nuove.
+            if let Some(testo) = self.testi_riscritti.get(&nodo.id).cloned() {
+                let id = self
+                    .elemento(nodo.id)
+                    .and_then(Elemento::id_del_file)
+                    .map(str::to_string)
+                    .ok_or_else(|| no("un testo senza id non si riscrive"))?;
+                let mut attrs = Map::new();
+                attrs.insert("id".into(), json!(id));
+                attrs.extend(testo.attrs);
+                self.ids.insert(nodo.id, id);
+                let pos = self.posto(&fratelli, i)?;
+                self.add.push(json!({
+                    "op": "add", "parent": parent, "pos": pos,
+                    "elem": { "tag": "text", "attrs": attrs, "children": testo.righe },
+                }));
                 continue;
             }
             // Un oggetto riscritto tiene il suo id se è già della forma nuova.
@@ -1188,6 +1215,12 @@ impl Lavoro<'_> {
         // Un testo di punto con altre parole, un altro carattere o un altro
         // allineamento (K6 T16): il resto del confronto va avanti sul testo
         // di prima che li ha già.
+        if da_riscrivere(b, a) {
+            let riscritto = riscrittura(&e, b, a)?;
+            self.testi_riscritti.insert(a.id, riscritto);
+            self.riscritti.insert(a.id);
+            return Ok(());
+        }
         let (b, mut attrs, righe) = match testo_cambiato(&e, b, a)? {
             Some(cambio) => (Arc::new(cambio.prima), cambio.attrs, cambio.righe),
             None => (b.clone(), Map::new(), None),
@@ -1492,7 +1525,21 @@ fn gruppo_di_prima(n: &Node, prima: &Posti<'_>, riscritti: &HashSet<NodeId>) -> 
 /// Vero per un gruppo semplice (senza ritaglio, senza proprietà sue) che
 /// tiene solo oggetti nuovi, nessuno dei quali c'era prima: si scrive come
 /// un `g` vuoto e i suoi pezzi dentro.
-fn gruppo_tutto_nuovo(n: &Node, prima: &Posti<'_>) -> bool {
+///
+/// Il nome che il motore copia da un oggetto della copia (Crea profili dà al
+/// gruppo dei contorni il nome del testo, che è il suo id nel file) non è una
+/// proprietà del gruppo: il gruppo prende un id nuovo.
+fn gruppo_tutto_nuovo(n: &Node, prima: &Posti<'_>, mappa: &Mappa) -> bool {
+    let senza_nome;
+    let n = match &n.name {
+        Some(nome) if mappa.dell_id(nome).is_some() => {
+            let mut c = n.clone();
+            c.name = None;
+            senza_nome = c;
+            &senza_nome
+        }
+        _ => n,
+    };
     let NodeKind::Group {
         children,
         clip: false,
