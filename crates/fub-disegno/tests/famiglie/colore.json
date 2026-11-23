@@ -6458,6 +6458,41 @@
       "atteso": {
         "rifiuto": "empty"
       }
+    },
+    {
+      "id": "paint.setFill",
+      "disegno": "ricolora-scena.svg",
+      "selezione": [
+        "oh1h1h1h1"
+      ],
+      "argomenti": {
+        "color": "#3366cc"
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oh1h1h1h1",
+            "attrs": {
+              "fill": "#3366cc"
+            }
+          }
+        ]
+      },
+      "dopo": "guida-setfill-nascosto.svg"
+    },
+    {
+      "id": "paint.setFill",
+      "disegno": "ricolora-scena.svg",
+      "selezione": [
+        "oz2z2z2z2"
+      ],
+      "argomenti": {
+        "color": "#3366cc"
+      },
+      "atteso": {
+        "rifiuto": "locked"
+      }
     }
   ]
 }
