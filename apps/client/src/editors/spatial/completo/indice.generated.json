@@ -3987,6 +3987,22 @@
     },
     {
       "fonte": "motore",
+      "id": "swatch.sortByKind",
+      "chiamata": {
+        "comando": "disegno.swatch.sortByKind"
+      },
+      "etichetta": {
+        "it": "Ordina per tipo",
+        "en": "Sort by Kind"
+      },
+      "posto": "ispettore/risorse",
+      "famiglia": "colore",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "swatch.sortByName",
       "chiamata": {
         "comando": "disegno.swatch.sortByName"
