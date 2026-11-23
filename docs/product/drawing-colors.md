@@ -140,13 +140,14 @@ griglia scorre dentro la scheda.
   scelti, o di tutto il disegno senza niente di scelto.
 - **Togli i non usati** elimina in un passo i campioni che nessun oggetto,
   gruppo o altra risorsa usa; spento se sono usati tutti.
-- **Librerie di campioni**: il motore sa l'elenco delle librerie di base e
-  i loro campioni, con il loro conto. **Aggiungi** copia i campioni di una
-  libreria nel disegno, come campioni globali senza gruppo, nell'ordine della
-  libreria; un nome già presente con lo stesso colore non si raddoppia, con un
-  colore diverso prende un numero (per esempio «Clay 1 2»). Le librerie di
-  sfumature non si aggiungono (il formato ha solo colori pieni). La finestra
-  che elenca le librerie non c'è ancora.
+- **Librerie di campioni**: la finestra «Librerie di campioni» (Ctrl+/) elenca
+  le librerie di base, mostra i campioni di quella scelta, col nome e il colore,
+  e **Aggiungi tutti** o **Aggiungi quelli scelti** li copia nel disegno, come
+  campioni globali senza gruppo, nell'ordine della libreria. Un nome già presente
+  con lo stesso colore non si raddoppia; con un colore diverso prende un numero
+  (per esempio «Clay 1 2»). Le librerie di sfumature non si aggiungono: il formato
+  ha solo colori pieni, e la finestra lo dice prima. «Altra libreria…» (caricare
+  un file) non c'è ancora.
 
 Le stesse finestre si aprono dal menu ≡ e da Ctrl+/: «Nuovo campione…» e
 «Opzioni campione…», spenta finché non c'è un campione scelto.

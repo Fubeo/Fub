@@ -1,5 +1,5 @@
 {
-  "$nota": "I casi della famiglia colore (piano K6, T14, giro 1): il colore attivo di Design › Colore (`paint.*`) e Modifica › Modifica colori (`edit.colors.*`) sugli oggetti scelti. Un tratto dell'Inchiostro di Fub scelto non cambia (`unmapped`), un oggetto bloccato nemmeno (`locked`); una fusione vuole tre riempimenti pieni; i colori di un SVG sono già RGB, e Converti in RGB non cambia niente (`empty`), e nemmeno Sovrastampa nero, che tocca solo l'inchiostro nero CMYK o grigio (`empty`). Le finestre di Satura e Regola bilanciamento colore sono voci del client: la loro prova è il test che le apre. Giro librerie (K6 T14): swatch.library.list e swatch.library.get leggono le librerie di base del motore (la mappa le dà «fatto»); la lettura non cambia il disegno, e una libreria che non c'è è un errore degli argomenti. Giro librerie 2 (K6 T14): swatch.library.add copia una libreria di base. I campioni diventano globali e senza gruppo, nell'ordine della libreria; un nome già presente con lo stesso colore non si raddoppia (si salta), con un colore diverso prende un numero («Clay 1 2»). Una libreria o un campione che non c'è, o `apply`, sono errori degli argomenti in italiano.",
+  "$nota": "I casi della famiglia colore (piano K6, T14, giro 1): il colore attivo di Design › Colore (`paint.*`) e Modifica › Modifica colori (`edit.colors.*`) sugli oggetti scelti. Un tratto dell'Inchiostro di Fub scelto non cambia (`unmapped`), un oggetto bloccato nemmeno (`locked`); una fusione vuole tre riempimenti pieni; i colori di un SVG sono già RGB, e Converti in RGB non cambia niente (`empty`), e nemmeno Sovrastampa nero, che tocca solo l'inchiostro nero CMYK o grigio (`empty`). Le finestre di Satura e Regola bilanciamento colore sono voci del client: la loro prova è il test che le apre. Giro librerie (K6 T14): swatch.library.list e swatch.library.get leggono le librerie di base del motore (la mappa le dà «fatto»); la lettura non cambia il disegno, e una libreria che non c'è è un errore degli argomenti. Giro librerie 2 (K6 T14): swatch.library.add copia una libreria di base. I campioni diventano globali e senza gruppo, nell'ordine della libreria; un nome già presente con lo stesso colore non si raddoppia (si salta), con un colore diverso prende un numero («Clay 1 2»). Una libreria o un campione che non c'è, o `apply`, sono errori degli argomenti in italiano. Giro finestra (K6 T14): la finestra «Librerie di campioni» (window.swatchLibrary) è una voce del client che legge l'elenco e i campioni, e aggiunge con swatch.library.add; la sua prova è il test del client.",
   "casi": [
     {
       "id": "paint.setFill",
@@ -4277,6 +4277,11 @@
       "atteso": {
         "rifiuto": "empty"
       }
+    },
+    {
+      "id": "window.swatchLibrary",
+      "fonte": "interfaccia",
+      "prova": "apps/client/src/editors/spatial/completo/librerie-finestra.test.ts"
     }
   ]
 }

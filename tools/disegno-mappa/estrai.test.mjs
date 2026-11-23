@@ -136,7 +136,9 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // T14 colori aggiunti (giro 9, punto 1): Seleziona per tipo di colore (con la sua finestra),
   // Trova e Applica il campione più vicino: tre in più. Le letture del colore e le tinte piatte
   // restano «da fare» in questo giro; stampa e filtro restano «da fare» con la causa.
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1098, fub: 114, escluso: 12, fatto: 327 });
+  // T14 librerie finestra porta a «fatto» `window.swatchLibrary`: la finestra elenca le librerie, mostra
+  // i campioni e aggiunge (prova: `librerie-finestra.test.ts`). Resta «da fare» Altra libreria… (un file).
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1097, fub: 114, escluso: 12, fatto: 328 });
 });
 
 // --- un motore finto ---------------------------------------------------------------
