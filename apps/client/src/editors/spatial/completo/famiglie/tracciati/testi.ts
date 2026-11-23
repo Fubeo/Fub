@@ -71,6 +71,16 @@ export const TESTI: Readonly<Record<string, { readonly it: string; readonly en: 
   "campo:fill": { it: "Riempimento", en: "Fill" },
   "campo:stroke": { it: "Tratto", en: "Stroke" },
 
+  // Pulisci (K6 T12): tutto il disegno, non la selezione; i tre interruttori del motore.
+  "descrizione:object.path.cleanUp": {
+    it: "Toglie ciò che non serve: i punti isolati, i tracciati senza riempimento né contorno e i testi vuoti. Vale su tutto il disegno.",
+    en: "Removes what is not needed: stray points, paths with no fill or stroke, and empty texts. It works on the whole drawing.",
+  },
+  "azione:object.path.cleanUp": { it: "Pulisci", en: "Clean up" },
+  "campo:strayPoints": { it: "Punti isolati", en: "Stray points" },
+  "campo:unpaintedObjects": { it: "Tracciati senza riempimento né contorno", en: "Paths without fill or stroke" },
+  "campo:emptyTextPaths": { it: "Testi vuoti", en: "Empty texts" },
+
   // Dividi in trattini.
   "descrizione:addon.pathtools.divideDashes": {
     it: "Taglia il tracciato in trattini della lunghezza che scrivi.",
