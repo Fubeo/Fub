@@ -1,5 +1,5 @@
 //! I punti scelti e la famiglia `tracciati` (piano K6, T12;
-//! `docs/architecture/disegno-completo.md`, «I tracciati e i punti»): lo
+//! `docs/architecture/disegno-strumenti.md`, «I tracciati e i punti»): lo
 //! stato del gesto dice i punti scelti, i comandi sui punti li riprendono dal
 //! `value` (`anchors`) e li controllano sulla copia, e gli strumenti dei
 //! tracciati non toccano l'inchiostro di Fub.
