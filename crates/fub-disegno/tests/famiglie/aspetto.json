@@ -970,6 +970,11 @@
       "prova": "apps/client/src/editors/spatial/completo/sfumatura-sezione.test.ts"
     },
     {
+      "id": "stroke",
+      "fonte": "pannello",
+      "prova": "apps/client/src/editors/spatial/completo/contorno-sezione.test.ts"
+    },
+    {
       "id": "stroke.set",
       "disegno": "contorno.svg",
       "selezione": [
