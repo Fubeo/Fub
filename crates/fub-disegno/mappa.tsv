@@ -774,7 +774,7 @@ motore	path.knife	Knife		tracciati	F1	T12	fatto	ispettore/design	famiglia		Colte
 motore	path.eraseRegion	Eraser		tracciati	F1	T12	fatto	ispettore/design	famiglia		Gomma
 motore	path.eraseSegments	Path Eraser		tracciati	F1	T12	fatto	ispettore/design	famiglia		Gomma tracciato
 motore	path.smoothRegion	Smooth		tracciati	F1	T12	fatto	ispettore/design	famiglia		Smussa
-motore	path.joinScrub	Join		tracciati	F1	T12	da fare	ispettore/design	famiglia		Unisci
+motore	path.joinScrub	Join		tracciati	F1	T12	fatto	ispettore/design	famiglia		Unisci
 motore	path.blob	Blob Brush		tracciati	F1	T12	da fare	ispettore/design	famiglia		Pennello tondo
 motore	document.open	Open Document		fub	—	T2	fub	fub	—	aprire dal vault (il motore non legge il disco)	Apri documento
 motore	file.list	List Folder		fub	—	T2	fub	fub	—	le schede aperte di Fub	Elenca cartella
