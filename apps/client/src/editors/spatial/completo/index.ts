@@ -28,6 +28,7 @@ import { registraTrasforma } from "./trasforma-sezione";
 import { registraColore, type LatoAttivo } from "./colore-sezione";
 import { registraCampioni } from "./campioni-sezione";
 import { apriRicolora, motivoRicolora, VOCE_RICOLORA } from "./ricolora";
+import { registraGuidaColori } from "./guida-colori-sezione";
 import { registraContorno } from "./contorno-sezione";
 import { registraSfumatura } from "./sfumatura-sezione";
 import { creaPortaPreimpostate } from "./sfumature-preimpostate";
@@ -412,6 +413,8 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila" | "e
   // stato è quello del comando che la finestra scrive (`conVociClient`).
   vociDelCompleto.set(VOCE_RICOLORA, { stato: () => null, esegui: () => void apriRicolora(dipendenze) });
   registraColore(sezioni, (id, valori) => void eseguiPerId(id, valori, { senzaFinestra: true }), ctx.life, latoAttivo);
+  // La «Guida colori» del Design (K6 T14, giro 3): le armonie del lato attivo, lette dal motore.
+  registraGuidaColori(sezioni, (id, valori) => void eseguiPerId(id, valori, { senzaFinestra: true }), () => dipendenze, ctx.life, latoAttivo);
   // La sezione «Campioni» di Risorse (K6 T14, giro 2): la griglia, la scelta, le finestre del kit.
   registraCampioni(sezioni, (id, valori) => void eseguiPerId(id, valori, { senzaFinestra: true }), ctx.life, latoAttivo, vociDelCompleto);
   // La finestra «Librerie di campioni» (K6 T14, finestra): la voce `window.swatchLibrary` apre il dialogo,
