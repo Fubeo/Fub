@@ -716,6 +716,53 @@ export const VISTE = {
     },
     app: { scena: "esporta-pdf-blocco" },
   },
+  /// La cornice della nota a riposo (T82, T14): la barra del titolo con la
+  /// pillola, il vault e i pulsanti a destra, e la banda in fondo col
+  /// pallino del salvato e la modalità. Il prototipo al primo passo, l'app
+  /// dalla scena della testata, che ha la stessa cornice a riposo.
+  cornice: {
+    stati: TUTTI,
+    prototipo: { prepara: (page) => passo(page, "A riposo") },
+    app: { scena: "testata-01-scrittura" },
+  },
+  /// La barra di formato col cursore in un elenco (T11): il prototipo al
+  /// primo passo (la barra dice «Elenco puntato»), l'app dalla scena della
+  /// barra col cursore nella prima voce dell'elenco.
+  "barra-formato": {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await passo(page, "A riposo");
+        await page.waitForSelector("#win #fbar .fb.lbl");
+      },
+    },
+    app: { scena: "barra-formato" },
+  },
+  /// L'ispettore a destra (T19): le schede in alto e il titolo della scheda.
+  /// Solo largo: a 700 px il prototipo lo chiude, e l'app pure.
+  ispettore: {
+    stati: LARGHI,
+    prototipo: {
+      prepara: async (page) => {
+        await passo(page, "A riposo");
+        await page.waitForSelector("#win #insp .itabs");
+      },
+    },
+    app: { scena: "inspector" },
+  },
+  /// La Sorgente (T5): il file com'è, in carattere fisso. Il prototipo al
+  /// passo «Sorgente: il file», l'app dalla scena della Sorgente. Solo
+  /// largo: la scena apre la nota dall'albero, che a 700 px sta nel cassetto.
+  sorgente: {
+    stati: LARGHI,
+    prototipo: {
+      prepara: async (page) => {
+        await passo(page, "Sorgente: il file");
+        await page.waitForSelector("#win #src");
+      },
+    },
+    app: { scena: "source" },
+  },
 };
 
 /// Riporta in cima il pannello delle sezioni, toglie il fuoco e porta via il
@@ -888,6 +935,37 @@ export const PEZZI = [
     prototipo: ".k-g",
     app: ".launcher-group",
     proprieta: [...BASE, "position", "top"],
+  },
+  // Aggiunti dal controllo del 2026-11-21: l'elenco, il nome e il posto di
+  // una riga, i dati sotto l'anteprima.
+  {
+    id: "lanciatore.elenco",
+    vista: "lanciatore",
+    prototipo: ".k-list",
+    app: ".launcher-list",
+    proprieta: ["padding"],
+  },
+  {
+    id: "lanciatore.nome",
+    vista: "lanciatore",
+    prototipo: ".k-i:not(.act) .nm",
+    app: ".launcher-row:not([data-active]) .launcher-row-title",
+    proprieta: ["font", "color"],
+  },
+  {
+    id: "lanciatore.posto",
+    vista: "lanciatore",
+    prototipo: ".k-i:not(.act) .rt",
+    app: ".launcher-row:not([data-active]) .launcher-row-meta",
+    proprieta: ["font", "color", "white-space"],
+  },
+  {
+    id: "lanciatore.anteprima-dati",
+    vista: "lanciatore",
+    stati: LARGHI,
+    prototipo: ".kp-meta",
+    app: ".launcher-preview-meta",
+    proprieta: ["display", "gap", "padding", "font", "color"],
   },
 
   // ── i menu dell'editor (T81) e le maniglie dei blocchi (T2a): #431 ───────
@@ -1514,6 +1592,174 @@ export const PEZZI = [
     app: ".note-tag",
     proprieta: BASE,
   },
+  // Aggiunta dal controllo del 2026-11-21: l'icona della nota, a cavallo
+  // della copertina.
+  {
+    id: "testata.icona",
+    vista: "testata",
+    contesto: "documento",
+    prototipo: ".picon",
+    app: ".cm-fub-page-icon",
+    proprieta: ["margin-top", ...DIMENSIONI, "border-radius", "font-size", "line-height", "background", ...ALLINEAMENTO],
+  },
+
+  // ── la cornice: barra del titolo (T82) e banda (T14) ────────────────────
+  // Aggiunti dal controllo del 2026-11-21. Il binario, il cassetto e le
+  // linguette del prototipo vengono dal prototipo dello Scrittoio 2, e qui
+  // non si confrontano.
+  {
+    id: "cornice.barra",
+    vista: "cornice",
+    prototipo: ".tbar",
+    app: "#topbar",
+    proprieta: ["height", "padding", "gap", "font", "color"],
+  },
+  {
+    id: "cornice.pillola",
+    vista: "cornice",
+    prototipo: ".pill",
+    app: "#pill",
+    proprieta: [...BASE, "height", ...ALLINEAMENTO],
+  },
+  {
+    // Solo largo: a 700 px l'app nasconde il testo della pillola e lascia
+    // l'icona, il prototipo lo tiene (referto 2026-11-21-conformita-editor).
+    id: "cornice.pillola-testo",
+    vista: "cornice",
+    stati: LARGHI,
+    prototipo: ".pill-text",
+    app: "#pill-title",
+    proprieta: ["font", "color", "white-space", "text-overflow"],
+  },
+  {
+    id: "cornice.vault",
+    vista: "cornice",
+    prototipo: ".vault",
+    app: "#vault-chip",
+    proprieta: [...BASE, "height", ...ALLINEAMENTO],
+  },
+  {
+    id: "cornice.pulsante",
+    vista: "cornice",
+    prototipo: ".tbar-r .ib:not(#insp-btn)",
+    app: "#activity-button",
+    proprieta: [...BASE, ...DIMENSIONI],
+  },
+  {
+    id: "banda.fascia",
+    vista: "cornice",
+    prototipo: ".band",
+    app: "#status-band",
+    proprieta: ["height", "padding", "gap", "font", "color", "white-space"],
+  },
+  {
+    id: "banda.salvato",
+    vista: "cornice",
+    prototipo: ".band .ok::before",
+    app: "#status-saving::before",
+    proprieta: [...DIMENSIONI, "border-radius", "background-color", "margin-right"],
+  },
+  {
+    id: "banda.modo",
+    vista: "cornice",
+    prototipo: ".modeb",
+    app: "#status-mode",
+    proprieta: [...BASE, "height", ...ALLINEAMENTO],
+  },
+  {
+    id: "banda.modo-freccia",
+    vista: "cornice",
+    prototipo: ".modeb .car",
+    app: "#status-mode .status-mode-arrow",
+    proprieta: ["color", ...DIMENSIONI],
+  },
+
+  // ── la barra di formato (T11) ───────────────────────────────────────────
+  // Aggiunti dal controllo del 2026-11-21.
+  {
+    id: "barra.superficie",
+    vista: "barra-formato",
+    prototipo: ".fbar",
+    app: ".pane.focus .format-bar",
+    proprieta: [...BASE, "height", ...ALLINEAMENTO],
+  },
+  {
+    id: "barra.pulsante",
+    vista: "barra-formato",
+    prototipo: ".fb:not(.lbl):not(.ins)",
+    app: ".pane.focus .format-bar-button",
+    proprieta: [...BASE, "height", "min-width", ...ALLINEAMENTO],
+  },
+  {
+    id: "barra.stile",
+    vista: "barra-formato",
+    prototipo: "#fb-style",
+    app: ".pane.focus .format-bar-style",
+    proprieta: [...BASE, "height", ...ALLINEAMENTO],
+  },
+  {
+    id: "barra.freccia",
+    vista: "barra-formato",
+    prototipo: "#fb-style .car",
+    app: ".pane.focus .format-bar-style .format-bar-caret",
+    proprieta: ["color", ...DIMENSIONI],
+  },
+  {
+    id: "barra.inserisci",
+    vista: "barra-formato",
+    prototipo: ".fb.ins",
+    app: ".pane.focus .format-bar-insert",
+    proprieta: [...BASE, "height", ...ALLINEAMENTO],
+  },
+  {
+    id: "barra.separatore",
+    vista: "barra-formato",
+    prototipo: ".fg + .fg::before",
+    app: ".pane.focus .format-bar-follow.kit-bar > .kit-bar-group + .kit-bar-group::before",
+    proprieta: [...DIMENSIONI, "margin", "background-color"],
+  },
+
+  // ── l'ispettore (T19) ───────────────────────────────────────────────────
+  // Aggiunti dal controllo del 2026-11-21.
+  {
+    id: "ispettore.superficie",
+    vista: "ispettore",
+    prototipo: ".insp",
+    app: "#right-pane",
+    proprieta: ["width", "padding", "background-color"],
+  },
+  {
+    id: "ispettore.schede",
+    vista: "ispettore",
+    prototipo: ".itabs",
+    app: ".inspector-tabs",
+    proprieta: [...BASE, "height"],
+  },
+  {
+    id: "ispettore.scheda-scelta",
+    vista: "ispettore",
+    prototipo: '.itabs button[aria-selected="true"]',
+    app: '.inspector-tab[aria-selected="true"]',
+    proprieta: [...BASE, "height"],
+  },
+  {
+    id: "ispettore.scheda",
+    vista: "ispettore",
+    prototipo: '.itabs button[aria-selected="false"]',
+    app: '.inspector-tab[aria-selected="false"]',
+    proprieta: [...BASE, "height"],
+  },
+
+  // ── la Sorgente (T5) ────────────────────────────────────────────────────
+  // Aggiunta dal controllo del 2026-11-21: il carattere del file.
+  {
+    id: "sorgente.testo",
+    vista: "sorgente",
+    contesto: "documento",
+    prototipo: ".src",
+    app: ".pane.focus .cm-content",
+    proprieta: ["font", "color", "white-space"],
+  },
   {
     id: "proprieta.elenco",
     vista: "proprieta",
@@ -1769,14 +2015,104 @@ export const PEZZI = [
     app: ".slash-syntax",
     proprieta: ["font", "color", "margin", "white-space", "text-overflow"],
   },
+  // Aggiunti dal controllo del 2026-11-21: il nome sotto le tessere, icona
+  // e nome di una riga, il testo del disegno.
+  {
+    id: "slash.nome-tessera-accesa",
+    vista: "slash",
+    prototipo: ".sl-q.act",
+    app: ".slash-tile[data-lit] .kit-tile-label",
+    proprieta: ["font", "color", "white-space"],
+  },
+  {
+    id: "slash.nome-tessera",
+    vista: "slash",
+    prototipo: ".sl-q:not(.act)",
+    app: ".slash-tile:not([data-lit]) .kit-tile-label",
+    proprieta: ["font", "color", "white-space"],
+  },
+  {
+    id: "slash.icona-riga",
+    vista: "slash",
+    prototipo: ".sl-i:not(.act) .ic",
+    app: ".slash-row:not([data-lit]) .kit-row-icon",
+    proprieta: ["color", ...DIMENSIONI],
+  },
+  {
+    id: "slash.nome-riga",
+    vista: "slash",
+    prototipo: ".sl-i:not(.act) .nm",
+    app: ".slash-row:not([data-lit]) .kit-row-label",
+    proprieta: ["font", "color", "white-space", "text-overflow"],
+  },
+  {
+    id: "slash.testo-disegno",
+    vista: "slash",
+    prototipo: ".sl-tx",
+    app: ".slash-detail-text",
+    proprieta: ["font-size", "line-height"],
+  },
   // ── la Base nella nota (T18) ────────────────────────────────────────────
   // Oltre la colonna fino al margine a tutta larghezza, nella colonna a 700.
+  // Il blocco del prototipo è il vassoio della trasclusione: si allarga lui,
+  // e la Base resta dentro il suo filo.
   {
     id: "base.incorporata",
     vista: "base-nota",
     prototipo: '.blk[data-t="base"]',
-    app: '.pane.focus .base-surface[data-embedded="true"]',
+    app: '.pane.focus .embed.transclusion:has(.base-surface[data-embedded="true"])',
     proprieta: ["margin-right"],
+  },
+  // Aggiunti dal controllo del 2026-11-21: la barra della Base nella nota
+  // (T15) e la sua tabella.
+  {
+    id: "base.barra",
+    vista: "base-nota",
+    prototipo: '.blk[data-t="base"] .bbar',
+    app: '.pane.focus .base-surface[data-embedded="true"] .base-bar',
+    proprieta: ["padding", "gap", "border-bottom-width", "border-bottom-style", "border-bottom-color", ...ALLINEAMENTO],
+  },
+  {
+    id: "base.vista-scelta",
+    vista: "base-nota",
+    prototipo: '.blk[data-t="base"] .bview[aria-pressed="true"]',
+    app: '.pane.focus .base-surface[data-embedded="true"] .base-tab[aria-pressed="true"]',
+    proprieta: [...BASE, "height", ...ALLINEAMENTO],
+  },
+  {
+    id: "base.vista",
+    vista: "base-nota",
+    prototipo: '.blk[data-t="base"] .bview:not([aria-pressed="true"])',
+    app: '.pane.focus .base-surface[data-embedded="true"] .base-tab[aria-pressed="false"]',
+    proprieta: [...BASE, "height", ...ALLINEAMENTO],
+  },
+  {
+    id: "base.attrezzo",
+    vista: "base-nota",
+    prototipo: '.blk[data-t="base"] .bb',
+    app: '.pane.focus .base-surface[data-embedded="true"] .base-tool',
+    proprieta: [...BASE, "height", ...ALLINEAMENTO],
+  },
+  {
+    id: "base.tabella",
+    vista: "base-nota",
+    prototipo: '.blk[data-t="base"] .btab',
+    app: '.pane.focus .base-surface[data-embedded="true"] .base-table',
+    proprieta: ["font-size", "border-collapse"],
+  },
+  {
+    id: "base.titolo",
+    vista: "base-nota",
+    prototipo: '.blk[data-t="base"] .btab td.t',
+    app: '.pane.focus .base-surface[data-embedded="true"] .base-title',
+    proprieta: ["font", "color"],
+  },
+  {
+    id: "base.nuova-riga",
+    vista: "base-nota",
+    prototipo: '.blk[data-t="base"] .btab .addrow td',
+    app: '.pane.focus .base-surface[data-embedded="true"] .base-add-row-button',
+    proprieta: ["font", "color"],
   },
   // ── le schede affiancate (T42) ──────────────────────────────────────────
   // Alla pari, 14 px fra l'una e l'altra, 64 px oltre il testo dai due lati
@@ -3045,5 +3381,123 @@ export const DA_COPRIRE = [
     prototipo: ".pop .dp, .pop .m",
     app: null,
     perche: "gli editor dei tipi aperti (#421, scene proprieta-02…09): la mappa non ha ancora le loro viste",
+  },
+  // ── differenze trovate dal controllo del 2026-11-21 ─────────────────────
+  // docs/misure/2026-11-21-conformita-editor.md: nessun lavoro le ha ancora
+  // corrette; quando una torna uguale al prototipo la voce diventa rossa.
+  {
+    id: "base.vista-scelta",
+    proprieta: ["line-height"],
+    perche: "controllo del 2026-11-21: l'interlinea delle schede delle viste segue quella del testo dell'app",
+  },
+  {
+    id: "base.vista",
+    proprieta: ["line-height"],
+    perche: "controllo del 2026-11-21: l'interlinea delle schede delle viste segue quella del testo dell'app",
+  },
+  {
+    id: "base.attrezzo",
+    proprieta: ["padding", "line-height", "opacity"],
+    perche: "controllo del 2026-11-21: attrezzi più stretti; il primo («Nuova vista») nell'app è spento dentro la nota, nel prototipo no",
+  },
+  {
+    id: "base.nuova-riga",
+    proprieta: ["font-weight", "color"],
+    perche: "controllo del 2026-11-21: «Nuova riga» nell'app è in colore testo e semigrassetto, nel prototipo attenuata",
+  },
+  {
+    id: "cornice.barra",
+    proprieta: ["height", "padding", "gap", "color"],
+    perche: "controllo del 2026-11-21: barra del titolo alta 40 invece di 44, senza margini e spazi propri",
+  },
+  {
+    id: "cornice.pillola",
+    proprieta: ["padding", "margin", "border-radius", "box-shadow", "font-size", "line-height", "background-color", "height"],
+    perche: "controllo del 2026-11-21: pillola alta 28, a 14 px, senza filo, su un altro fondo",
+  },
+  {
+    id: "cornice.pillola-testo",
+    proprieta: ["font-size", "line-height"],
+    perche: "controllo del 2026-11-21: il titolo nella pillola a 14 px invece di 13",
+  },
+  {
+    id: "cornice.vault",
+    proprieta: ["padding", "border-radius"],
+    perche: "controllo del 2026-11-21: angoli e margine sinistro del nome del vault",
+  },
+  {
+    id: "cornice.pulsante",
+    proprieta: ["gap", "border-radius", "font-size", "line-height"],
+    perche: "controllo del 2026-11-21: i pulsanti della barra del titolo a 12 px e con angoli da 8",
+  },
+  {
+    id: "banda.fascia",
+    proprieta: ["height", "padding", "gap"],
+    perche: "controllo del 2026-11-21: la banda di stato alta 26 invece di 32",
+  },
+  {
+    id: "banda.salvato",
+    proprieta: ["width", "height", "border-radius", "background-color", "margin-right"],
+    perche: "controllo del 2026-11-21: il pallino «salvato» da 6 px, nel verde di --success invece dell'accento, attaccato al testo",
+  },
+  {
+    id: "banda.modo",
+    proprieta: ["padding", "gap", "border-radius", "font-weight", "color", "height"],
+    perche: "controllo del 2026-11-21: il pulsante del modo più basso, attenuato e non semigrassetto",
+  },
+  {
+    id: "banda.modo-freccia",
+    proprieta: ["width", "height"],
+    perche: "controllo del 2026-11-21: la freccia del modo da 12 px invece di 14",
+  },
+  {
+    id: "barra.superficie",
+    proprieta: ["font-size", "line-height", "color", "height"],
+    perche: "controllo del 2026-11-21: barra di formato alta 36 a 12 px, in colore attenuato",
+  },
+  {
+    id: "barra.pulsante",
+    proprieta: ["font-size", "line-height", "opacity"],
+    perche: "controllo del 2026-11-21: pulsanti della barra a 12 px; nella scena il primo (Annulla) è spento, nel prototipo acceso",
+  },
+  {
+    id: "barra.stile",
+    proprieta: ["font-size", "line-height"],
+    perche: "controllo del 2026-11-21: il menu dello stile a 12 px",
+  },
+  {
+    id: "barra.freccia",
+    proprieta: ["width", "height"],
+    perche: "controllo del 2026-11-21: la freccia dello stile da 12 px invece di 14",
+  },
+  {
+    id: "barra.inserisci",
+    proprieta: ["font-size", "line-height"],
+    perche: "controllo del 2026-11-21: «Inserisci» a 12 px",
+  },
+  {
+    id: "ispettore.superficie",
+    proprieta: ["width", "padding", "background-color"],
+    perche: "controllo del 2026-11-21: l'ispettore largo 264 su fondo pieno, senza margini interni",
+  },
+  {
+    id: "ispettore.schede",
+    proprieta: ["margin", "border-radius", "background-color", "height"],
+    perche: "controllo del 2026-11-21: le schede dell'ispettore alte 30, angoli da 8, su un altro fondo",
+  },
+  {
+    id: "ispettore.scheda-scelta",
+    proprieta: ["border-radius", "box-shadow", "background-color", "height"],
+    perche: "controllo del 2026-11-21: la scheda scelta alta 26, angoli da 6, ombra e fondo diversi",
+  },
+  {
+    id: "ispettore.scheda",
+    proprieta: ["border-radius", "height"],
+    perche: "controllo del 2026-11-21: le schede alte 26 con angoli da 6",
+  },
+  {
+    id: "sorgente.testo",
+    proprieta: ["font-size", "white-space"],
+    perche: "controllo del 2026-11-21: la Sorgente a 14 px invece di 13",
   },
 ];

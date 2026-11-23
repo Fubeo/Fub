@@ -127,7 +127,9 @@ impl IndexProvider for SearchIndex {
                 self.notes_source(&doc.id);
                 continue;
             }
-            // tantivy non aggiorna: si cancella il termine e si riscrive.
+            // tantivy non aggiorna: si cancella il termine e si riscrive. Le
+            // due operazioni vanno in coda e non a tantivy (#522, vedi
+            // [`Pending`]): partiranno con le altre al commit.
             let term = self.term_for(&doc.id);
             let td = self.tantivy_doc(doc);
             {
@@ -136,7 +138,7 @@ impl IndexProvider for SearchIndex {
                 // entrambi i casi l'indice non è più affidabile: mentire è
                 // peggio che perdere il documento. Si dimentica l'impronta, così
                 // il prossimo passaggio riproverà.
-                let Some(writer) = guard.as_ref() else {
+                if guard.is_none() {
                     drop(guard);
                     self.forget(&doc.id);
                     lost.push(IndexLoss::new(
@@ -148,23 +150,50 @@ impl IndexProvider for SearchIndex {
                         ),
                     ));
                     continue;
-                };
-                writer.delete_term(term);
-                if let Err(and) = writer.add_document(td) {
-                    drop(guard);
-                    self.forget(&doc.id);
-                    lost.push(IndexLoss::new(
-                        doc.id.clone(),
-                        PluginError::Internal(
-                            format!("l'indice di ricerca ha rifiutato il documento: {and}").into(),
-                        ),
-                    ));
-                    continue;
                 }
+                let mut pending = self.pending.lock().expect("mutex");
+                pending.ops.push(UserOperation::Delete(term));
+                pending.ops.push(UserOperation::Add(td));
+                pending.added.push(doc.id.clone());
+                pending.bytes += doc.text.len();
             }
             self.fingerprints.insert(doc.id.clone(), print);
             self.notes_source(&doc.id);
             self.dirty.store(true, Ordering::Release);
+        }
+        // Una coda troppo piena parte senza aspettare il commit: è ciò che
+        // tiene la memoria limitata e, a freddo, i worker al lavoro insieme.
+        let refused = {
+            let guard = self.writer.lock().expect("mutex");
+            match guard.as_ref() {
+                Some(writer) => {
+                    let mut pending = self.pending.lock().expect("mutex");
+                    match pending.bytes >= PENDING_BYTES {
+                        true => drain(writer, &mut pending).err(),
+                        false => None,
+                    }
+                }
+                None => None,
+            }
+        };
+        // Rifiutato il lotto, sono perduti tutti i documenti che c'erano
+        // dentro, anche quelli di una chiamata di prima: il kernel accetta le
+        // perdite per id, e un id che non dichiarassimo qui resterebbe con
+        // un'impronta che dice «ce l'ho».
+        if let Some((ids, and)) = refused {
+            let mut seen = std::collections::HashSet::new();
+            for id in ids {
+                if !seen.insert(id.clone()) {
+                    continue;
+                }
+                self.forget(&id);
+                lost.push(IndexLoss::new(
+                    id,
+                    PluginError::Internal(
+                        format!("l'indice di ricerca ha rifiutato il documento: {and}").into(),
+                    ),
+                ));
+            }
         }
         lost
     }
@@ -181,9 +210,13 @@ impl IndexProvider for SearchIndex {
                 continue;
             }
             let term = self.term_for(id);
+            // In coda e non `delete_term`: deve prendere l'opstamp **dopo**
+            // un'aggiunta dello stesso documento ancora in coda (vedi
+            // [`Pending`]).
             match self.writer.lock().expect("mutex").as_ref() {
-                Some(writer) => {
-                    writer.delete_term(term);
+                Some(_) => {
+                    let mut pending = self.pending.lock().expect("mutex");
+                    pending.ops.push(UserOperation::Delete(term));
                     self.dirty.store(true, Ordering::Release);
                 }
                 None => lost.push(IndexLoss::new(
@@ -223,10 +256,12 @@ impl IndexProvider for SearchIndex {
         // sparito ad app chiusa.
         let mut lost = Vec::new();
         match self.writer.lock().expect("mutex").as_ref() {
-            Some(writer) => {
-                for term in terms {
-                    writer.delete_term(term);
-                }
+            // In coda, come in `on_documents_removed`, e per la stessa ragione.
+            Some(_) => {
+                let mut pending = self.pending.lock().expect("mutex");
+                pending
+                    .ops
+                    .extend(terms.into_iter().map(UserOperation::Delete));
                 self.dirty.store(true, Ordering::Release);
             }
             None => {

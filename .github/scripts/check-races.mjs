@@ -14,6 +14,16 @@
 // parentesi col cancello più avanti sulla stessa riga, il cancello passato
 // come valore, un `.catch` attaccato al cancello, un `.then` fuori dal
 // cancello, il giro con un tipo generico, il metodo staccato dalla corsa.
+// GUARDIA-CANCELLO ha aggiunto le funzioni che ricevono il cancello (un
+// parametro `Expected` di `ui/race`): la guardia non ne leggeva il corpo, e
+// da lì passavano il falso «ricerca non riuscita» del blocco query e
+// l'«immagine mancante» dei media di una resa smontata.
+// CANCELLO-DISEGNO ha chiuso i due limiti che restavano scritti come zone
+// cieche: un alias del tipo (`type Gate = Expected`) e un oggetto di opzioni
+// col tipo scritto altrove (`interface Opzioni { gate: Expected }`). Nel
+// codice non c'erano; ora il tipo del cancello si può nominare solo nei
+// parametri (e negli import coi nomi), e ogni altro posto è una violazione:
+// l'alias non nasce in silenzio.
 // Ciò che resta fuori, e perché, sta sopra `violations`.
 
 import fs from "node:fs";
@@ -45,6 +55,19 @@ function closingOf(code, opening, open = "(", close = ")") {
     }
   }
   return code.length;
+}
+
+/// Dove si apre la graffa chiusa in `closing`, o -1.
+function openingOf(code, closing) {
+  let depth = 0;
+  for (let index = closing; index >= 0; index--) {
+    if (code[index] === "}") depth++;
+    else if (code[index] === "{") {
+      depth--;
+      if (depth === 0) return index;
+    }
+  }
+  return -1;
 }
 
 const NAME = /^#?[A-Za-z_$][\w$]*/;
@@ -213,6 +236,249 @@ function readHead(argument) {
   return { start, gate: gate ? gate[1] : null };
 }
 
+/// Le violazioni nel corpo di un giro (`where` è `"a race"`) o di una
+/// funzione che riceve il cancello: `gate` è il nome del cancello, `null` se
+/// il corpo non ne prende uno; `at` dà il file e la riga di una posizione del
+/// corpo. Le regole sono sopra `violations`.
+function bodyViolations(body, gate, at, where) {
+  const found = [];
+  // Le chiamate del cancello: dentro i loro argomenti un callback si può.
+  const calls = gate === null
+    ? []
+    : [...body.matchAll(gateCallPattern(gate))].map((call) => {
+        const open = call.index + call[0].length - 1;
+        return { open, close: closingOf(body, open) };
+      });
+  const insideGate = (offset) => calls.some((call) => offset > call.open && offset < call.close);
+  for (const awaited of body.matchAll(/\bawait\b/g)) {
+    const from = awaited.index + "await".length;
+    const expression = body.slice(from, awaitedEnd(body, from));
+    if (gate !== null && awaitsGate(expression, gate)) continue;
+    found.push(
+      gate === null
+        ? `${at(awaited.index)}: an \`await\` inside ${where} whose body takes no gate.`
+        : `${at(awaited.index)}: an \`await\` inside ${where} does not go through \`${gate}(…)\`.`,
+    );
+  }
+  for (const caught of body.matchAll(/\}\s*catch\b/g)) {
+    // Il segnale di scadenza è il rigetto del cancello, e arriva solo a un
+    // `await`: un `try` che non ne ha (`try { options.transclude(…) }`) non
+    // lo può prendere. Un `await` dentro una funzione annidata nel `try`
+    // conta lo stesso: la guardia non distingue, e sbaglia dal lato sicuro.
+    const opening = openingOf(body, caught.index);
+    if (/\btry\s*$/.test(body.slice(0, opening)) && !/\bawait\b/.test(body.slice(opening, caught.index))) continue;
+    found.push(
+      `${at(caught.index)}: a \`catch\` inside ${where} can swallow expiry; ` +
+        `use \`await ${gate ?? "expected"}(promise.catch(…))\`.`,
+    );
+  }
+  // La catena che segue una chiamata del cancello.
+  const chained = new Set();
+  for (const call of calls) {
+    let index = call.close + 1;
+    for (;;) {
+      const link = /^\s*(?:\?\.|\.)\s*([A-Za-z_$][\w$]*)\s*(\()?/.exec(body.slice(index));
+      if (link === null) break;
+      const linkAt = index + link[0].search(/\S/);
+      chained.add(linkAt);
+      const open = index + link[0].length - 1;
+      const end = link[2] ? closingOf(body, open) : open;
+      const method = link[1];
+      const swallows = method === "catch" || method === "finally" ||
+        (method === "then" && topLevelArguments(body, open + 1, end).length > 1);
+      if (link[2] && swallows && !insideGate(linkAt)) {
+        found.push(
+          `${at(linkAt)}: a \`.${method}\` after \`${gate}(…)\` runs even when the race has expired; ` +
+            `put it inside: \`${gate}(promise.${method}(…))\`.`,
+        );
+      }
+      index = link[2] ? end + 1 : index + link[0].length;
+    }
+  }
+  for (const callback of body.matchAll(CALLBACK)) {
+    if (chained.has(callback.index) || insideGate(callback.index)) continue;
+    found.push(
+      `${at(callback.index)}: a \`.${callback[1]}\` inside ${where} runs its callback even after the race has expired; ` +
+        `await it through \`${gate ?? "expected"}(…)\`.`,
+    );
+  }
+  return found;
+}
+
+/// I nomi locali del tipo `Expected` importato dal modulo del cancello
+/// (`import type { Expected } from "../ui/race"`, anche `Expected as Gate`
+/// o dentro un import di valori: `{ Race, type Expected }`). Si legge dal
+/// testo vero, perché il codice senza letterali non ha più il percorso. Un
+/// `Expected` che viene da un altro modulo è un altro tipo, e le sue
+/// funzioni non ricevono il cancello.
+function gateTypeNames(text, relative) {
+  const names = new Set();
+  const directory = path.posix.dirname(relative);
+  for (const match of text.matchAll(/\bimport\s+(?:type\s+)?\{([^}]*)\}\s*from\s*["']([^"']+)["']/g)) {
+    const spec = match[2];
+    const target = spec.startsWith(".") ? path.posix.join(directory, spec) : spec;
+    if (!/(?:^|\/)ui\/race(?:\.ts)?$/.test(target)) continue;
+    for (const item of match[1].split(",")) {
+      const name = /^\s*(?:type\s+)?Expected(?:\s+as\s+([A-Za-z_$][\w$]*))?\s*$/.exec(item);
+      if (name) names.add(name[1] ?? "Expected");
+    }
+  }
+  return names;
+}
+
+/// Le strade per cui il tipo del cancello prende un nome che
+/// `gateTypeNames` non vede: un re-export (`export type { Expected as Gate }
+/// from "../ui/race"`, `export * from "../ui/race"`), un import del modulo
+/// intero (`import * as race from "../ui/race"`, poi `e: race.Expected`) o
+/// un tipo importato sul posto (`e: import("../ui/race").Expected`). Ogni
+/// funzione che ricevesse il cancello con quel nome uscirebbe dalla guardia
+/// senza dirlo. Si legge dal testo vero, come gli import.
+function gateAliasImports(text, relative) {
+  const directory = path.posix.dirname(relative);
+  const isGate = (spec) => {
+    const target = spec.startsWith(".") ? path.posix.join(directory, spec) : spec;
+    return /(?:^|\/)ui\/race(?:\.ts)?$/.test(target);
+  };
+  const found = [];
+  const patterns = [
+    [/\bexport\s+(?:type\s+)?\{([^}]*)\}\s*from\s*["']([^"']+)["']/g, (match) => /(?:^|[\s,{])(?:type\s+)?Expected\b/.test(match[1]), "re-exports the gate type"],
+    [/\bexport\s+(?:type\s+)?\*(?:\s+as\s+[\w$]+)?\s+from\s*["']([^"']+)["']/g, () => true, "re-exports the whole gate module"],
+    [/\bimport\s+(?:type\s+)?\*\s+as\s+[\w$]+\s+from\s*["']([^"']+)["']/g, () => true, "imports the whole gate module"],
+    [/\bimport\s*\(\s*["']([^"']+)["']\s*\)\s*\.\s*Expected\b/g, () => true, "names the gate type through `import(…)`"],
+  ];
+  for (const [pattern, names, what] of patterns) {
+    for (const match of text.matchAll(pattern)) {
+      if (!isGate(match[match.length - 1]) || !names(match)) continue;
+      found.push([match.index, what]);
+    }
+  }
+  return found;
+}
+
+/// Se la graffa aperta in `open` è quella di un import o di un export coi
+/// nomi (`import { type Expected } from …`, `export type { … }`).
+function importBraces(code, open) {
+  return /\b(?:import|export)\s+(?:type\s+)?(?:[\w$]+\s*,\s*)?$/.test(code.slice(0, open));
+}
+
+/// La graffa aperta più vicina che racchiude `offset`, o -1 se la prima che
+/// lo racchiude è una tonda o una quadra.
+function enclosingBrace(code, offset) {
+  let depth = 0;
+  for (let index = offset - 1; index >= 0; index--) {
+    const char = code[index];
+    if (char === ")" || char === "]" || char === "}") depth++;
+    else if (char === "(" || char === "[" || char === "{") {
+      if (depth > 0) depth--;
+      else return char === "{" ? index : -1;
+    }
+  }
+  return -1;
+}
+
+/// Le parole dopo cui una parentesi tonda non apre i parametri di un metodo.
+const KEYWORDS = new Set([
+  "if", "for", "while", "switch", "catch", "with", "return", "typeof", "await", "new", "void",
+  "delete", "in", "of", "instanceof", "yield", "case", "throw", "do", "else",
+]);
+
+/// La parentesi tonda aperta più vicina che racchiude `offset`, o -1 se la
+/// prima che lo racchiude è una quadra o una graffa che non sia un tipo
+/// scritto dopo `:` (`{ gate }: { gate: Expected }` sta nei parametri).
+function enclosingParen(code, offset) {
+  let depth = 0;
+  for (let index = offset - 1; index >= 0; index--) {
+    const char = code[index];
+    if (char === ")" || char === "]" || char === "}") depth++;
+    else if (char === "(" || char === "[" || char === "{") {
+      if (depth > 0) depth--;
+      else if (char === "(") return index;
+      else if (char !== "{" || !/:\s*$/.test(code.slice(0, index))) return -1;
+    }
+  }
+  return -1;
+}
+
+/// Dove finisce il corpo senza graffe di una freccia che comincia in `from`:
+/// alla prima `,` o `;` fuori da parentesi, o alla parentesi che chiude
+/// quella in cui la freccia sta.
+function expressionEnd(code, from) {
+  let depth = 0;
+  for (let index = from; index < code.length; index++) {
+    const char = code[index];
+    if (char === "(" || char === "[" || char === "{") depth++;
+    else if (char === ")" || char === "]" || char === "}") {
+      if (depth === 0) return index;
+      depth--;
+    } else if ((char === "," || char === ";") && depth === 0) return index;
+  }
+  return code.length;
+}
+
+/// Il corpo della funzione la cui lista di parametri si apre in `open`
+/// (`{ start, end }`), o `null` se la lista non è di una funzione con un
+/// corpo: una chiamata, un tipo funzione (`run: (e: Expected) => void`), la
+/// firma di un metodo in un'interfaccia o di un overload.
+function functionAt(code, open) {
+  const close = closingOf(code, open);
+  if (close >= code.length) return null;
+  const before = code.slice(0, open).replace(/\s+$/, "");
+  // Un tipo: la lista sta dopo `:`, `=>`, `|`, `&`, `<`, `,` di un
+  // generico o `type X =`.
+  if (/(?::|=>|[|&<]|\btype\s+[\w$]+\s*(?:<[^>]*>)?\s*=)$/.test(before)) return null;
+  const generics = String.raw`(?:<[\w$\s,.<>[\]|&?=]*>)?`;
+  const isFunction = new RegExp(String.raw`\bfunction\s*\*?\s*(?:[A-Za-z_$][\w$]*)?\s*${generics}$`).test(before);
+  const name = isFunction ? null : new RegExp(String.raw`(#?[A-Za-z_$][\w$]*)\s*${generics}$`).exec(before)?.[1];
+  if (name !== null && name !== undefined && KEYWORDS.has(name)) return null;
+  // Una freccia: niente prima della lista, o solo `async`. Un nome davanti
+  // fa un metodo (`load(…) {`) o una chiamata, che non ha un corpo.
+  const arrow = !isFunction && (name === undefined || name === "async");
+  let index = skipSpace(code, close + 1);
+  if (code[index] === ":") {
+    // Il tipo di ritorno: fino alla `=>` di una freccia o alla `{` del
+    // corpo. Una graffa dopo `:`, `|`, `&`, `<`, `,` o `(` è un tipo.
+    let depth = 0;
+    const typeStart = index + 1;
+    for (index = typeStart; index < code.length; index++) {
+      const char = code[index];
+      if (depth === 0 && arrow && code.startsWith("=>", index)) break;
+      if (depth === 0 && !arrow && char === "{" &&
+        !/(?:^|[:|&<,(]|=>)\s*$/.test(code.slice(typeStart, index))) break;
+      if (depth === 0 && (char === ";" || char === "," || char === ")" || char === "}")) return null;
+      if (char === "(" || char === "[" || char === "<" || char === "{") depth++;
+      else if (char === ")" || char === "]" || char === "}") depth--;
+      else if (char === ">" && code[index - 1] !== "=") depth--;
+    }
+  }
+  if (arrow) {
+    if (!code.startsWith("=>", index)) return null;
+    const start = skipSpace(code, index + 2);
+    if (code[start] === "{") return { start: start + 1, end: closingOf(code, start, "{", "}") };
+    return { start, end: expressionEnd(code, start) };
+  }
+  if (code[index] !== "{") return null;
+  return { start: index + 1, end: closingOf(code, index, "{", "}") };
+}
+
+/// Il nome del cancello in un parametro che ne nomina il tipo: `e: Expected`
+/// (anche `e?:` o con un default), o un parametro destrutturato col tipo
+/// scritto lì, che dà `Expected` a una chiave (`{ gate }: { gate: Expected }`,
+/// `{ gate: g }: { gate: Expected }`). `null` se non si sa leggere.
+function gateOfParameter(parameter, typeName) {
+  const type = typeName.replace(/\$/g, "\\$");
+  const plain = new RegExp(String.raw`^\s*([A-Za-z_$][\w$]*)\s*\??\s*:\s*${type}\s*(?:=[^]*)?$`).exec(parameter);
+  if (plain) return plain[1];
+  const destructured = /^\s*\{([^]*?)\}\s*:\s*\{([^]*)\}\s*(?:=[^]*)?$/.exec(parameter);
+  if (destructured === null) return null;
+  const key = new RegExp(String.raw`(?:^|[;,{\s])([A-Za-z_$][\w$]*)\s*\??\s*:\s*${type}\s*(?:[;,]|$)`).exec(destructured[2]);
+  if (key === null) return null;
+  for (const item of topLevelArguments(destructured[1], 0, destructured[1].length)) {
+    const binding = /^\s*([A-Za-z_$][\w$]*)\s*(?::\s*([A-Za-z_$][\w$]*))?\s*(?:=[^]*)?$/.exec(item);
+    if (binding && binding[1] === key[1]) return binding[2] ?? binding[1];
+  }
+  return null;
+}
+
 /// Le violazioni di un file e quanti giri ci ha letto.
 ///
 /// Ogni chiamata `.last(` (anche `.last<T>(`) con un argomento solo è un giro
@@ -223,23 +489,52 @@ function readHead(argument) {
 /// giro che sfugge in silenzio; così il metodo staccato dal suo oggetto
 /// (`race.last.bind(race)`).
 ///
+/// È un giro anche il corpo di ogni funzione (dichiarazione, freccia,
+/// `function` o metodo) con un parametro del tipo `Expected` importato da
+/// `ui/race`: il cancello è quel parametro (`expected: Expected`, anche
+/// opzionale, con un default, col tipo importato sotto un altro nome, o
+/// destrutturato col tipo scritto lì: `{ gate }: { gate: Expected }`). Chi
+/// riceve il cancello ne aspetta le promesse per conto del giro: senza
+/// leggerlo, un suo `await` nascosto scriveva a giro scaduto (il falso
+/// «ricerca non riuscita» del blocco query, l'«immagine mancante» dei media
+/// di una resa smontata). Un parametro col tipo che la guardia non sa
+/// leggere (`e: Expected | null`) è una violazione; un tipo funzione
+/// (`body: (e: Expected) => …`), la firma di un'interfaccia o di un overload
+/// non hanno un corpo e non sono giri.
+///
 /// Nel corpo:
 /// - ogni `await` attende una chiamata del cancello (`await expected(p)`,
 ///   anche con la sua catena dopo); nominarlo come valore
 ///   (`await f(expected)`) o chiamarlo dentro un'altra chiamata
 ///   (`await save(expected(p))`, `await Promise.all([expected(a()), b()])`)
 ///   non basta, perché la chiamata di fuori può aspettare quello che vuole;
-/// - nessun `try … catch`, e nessun `.catch`, `.finally` o `.then(ok, ko)`
-///   attaccato a una chiamata del cancello: ingoierebbero la scadenza;
+/// - nessun `try … catch` con un `await` nel `try`, e nessun `.catch`,
+///   `.finally` o `.then(ok, ko)` attaccato a una chiamata del cancello:
+///   ingoierebbero la scadenza. Un `try` senza `await` non la vede mai
+///   passare, e si può;
 /// - nessun `.then`, `.catch` o `.finally` fuori dal cancello: il loro
 ///   callback corre anche a giro scaduto. Dentro l'argomento del cancello
 ///   (`expected(p.then(trasforma))`) si può, e il callback deve solo dare
 ///   forma al valore: anche lui corre a giro scaduto, e la guardia non lo
 ///   distingue da uno che scrive.
 ///
+/// Il tipo del cancello si nomina solo dentro una lista di parametri (di una
+/// funzione, di un tipo funzione, di una firma, di una chiamata) o negli
+/// import coi nomi. Altrove è una violazione, perché porterebbe il cancello
+/// dove la guardia non lo segue: un alias (`type Gate = Expected`), un campo
+/// di un oggetto di opzioni col tipo scritto altrove (`interface Opzioni {
+/// gate: Expected }`, `type Opzioni = { gate: Expected }`), un campo di una
+/// classe, una variabile, un generico, un tipo di ritorno. Così anche un
+/// re-export, un import del modulo intero e `import("…/ui/race").Expected`,
+/// che darebbero al tipo un nome che la guardia non conosce. Un tipo
+/// funzione che riceve il cancello (`type Corpo = (e: Expected) => …`) resta
+/// lecito.
+///
 /// Limiti noti, che senza un parser vero non si chiudono: un cancello
-/// passato a una funzione (`hydrate(…, expected)`) porta le attese di quella
-/// funzione fuori dalla guardia; un cancello rinominato in un nome locale
+/// passato a una funzione il cui parametro non nomina `Expected` (`p: <T>(x:
+/// Promise<T>) => Promise<T>`, il tipo scritto per intero) porta le attese di
+/// quella funzione fuori dalla guardia; così un corpo tipato da un tipo
+/// funzione (`const corpo: Corpo = async (e) => …`); un cancello rinominato in un nome locale
 /// (`const g = expected`) dà una violazione anche quando è giusto; un nome
 /// interno che copre il cancello (`const expected = (p) => p`) passa;
 /// `race["last"](…)` e `const { last } = race` non si vedono; un cancello
@@ -251,6 +546,9 @@ export function violations(text, relative) {
   const found = [];
   let races = 0;
   const lineOf = (offset) => code.slice(0, offset).split("\n").length;
+  // Le teste dei giri già letti: la loro freccia ha anche lei il parametro
+  // `Expected`, e non si legge due volte.
+  const heads = [];
   for (const match of code.matchAll(/\.last\s*\.\s*(?:bind|call|apply)\s*\(/g)) {
     races++;
     found.push(
@@ -273,67 +571,64 @@ export function violations(text, relative) {
       );
       continue;
     }
-    const gate = head.gate;
     const start = call + 1 + head.start;
-    const body = code.slice(start, close);
-    const at = (offset) => `${relative}:${lineOf(start + offset)}`;
-    // Le chiamate del cancello: dentro i loro argomenti un callback si può.
-    const calls = gate === null
-      ? []
-      : [...body.matchAll(gateCallPattern(gate))].map((call) => {
-          const open = call.index + call[0].length - 1;
-          return { open, close: closingOf(body, open) };
-        });
-    const insideGate = (offset) => calls.some((call) => offset > call.open && offset < call.close);
-    for (const awaited of body.matchAll(/\bawait\b/g)) {
-      const from = awaited.index + "await".length;
-      const expression = body.slice(from, awaitedEnd(body, from));
-      if (gate !== null && awaitsGate(expression, gate)) continue;
-      found.push(
-        gate === null
-          ? `${at(awaited.index)}: an \`await\` inside a race whose body takes no gate.`
-          : `${at(awaited.index)}: an \`await\` inside a race does not go through \`${gate}(…)\`.`,
-      );
-    }
-    for (const caught of body.matchAll(/\}\s*catch\b/g)) {
-      found.push(
-        `${at(caught.index)}: a \`catch\` inside a race can swallow expiry; ` +
-          `use \`await ${gate ?? "expected"}(promise.catch(…))\`.`,
-      );
-    }
-    // La catena che segue una chiamata del cancello.
-    const chained = new Set();
-    for (const call of calls) {
-      let index = call.close + 1;
-      for (;;) {
-        const link = /^\s*(?:\?\.|\.)\s*([A-Za-z_$][\w$]*)\s*(\()?/.exec(body.slice(index));
-        if (link === null) break;
-        const linkAt = index + link[0].search(/\S/);
-        chained.add(linkAt);
-        const open = index + link[0].length - 1;
-        const end = link[2] ? closingOf(body, open) : open;
-        const method = link[1];
-        const swallows = method === "catch" || method === "finally" ||
-          (method === "then" && topLevelArguments(body, open + 1, end).length > 1);
-        if (link[2] && swallows && !insideGate(linkAt)) {
-          found.push(
-            `${at(linkAt)}: a \`.${method}\` after \`${gate}(…)\` runs even when the race has expired; ` +
-              `put it inside: \`${gate}(promise.${method}(…))\`.`,
-          );
-        }
-        index = link[2] ? end + 1 : index + link[0].length;
+    heads.push([call, start]);
+    found.push(...bodyViolations(code.slice(start, close), head.gate, (offset) => `${relative}:${lineOf(start + offset)}`, "a race"));
+  }
+  // Le funzioni che ricevono il cancello: un parametro col tipo `Expected`
+  // del modulo del cancello.
+  const read = new Set();
+  for (const typeName of gateTypeNames(text, relative)) {
+    const pattern = new RegExp(String.raw`(?<![\w$.#])${typeName.replace(/\$/g, "\\$")}(?![\w$])`, "g");
+    for (const mention of code.matchAll(pattern)) {
+      const open = enclosingParen(code, mention.index);
+      if (open === -1) {
+        // Fuori da una lista di parametri: lecito solo l'import coi nomi.
+        const brace = enclosingBrace(code, mention.index);
+        if (brace !== -1 && importBraces(code, brace)) continue;
+        found.push(
+          `${relative}:${lineOf(mention.index)}: the gate type \`${typeName}\` outside a parameter list ` +
+            "(an alias, a field of an options type, a variable): the guard reads only functions that name it in a parameter; " +
+            `write \`expected: ${typeName}\` (or \`{ gate }: { gate: ${typeName} }\`) there.`,
+        );
+        continue;
       }
+      if (read.has(open) || heads.some(([from, to]) => open > from && open < to)) continue;
+      const fn = functionAt(code, open);
+      if (fn === null) continue;
+      read.add(open);
+      races++;
+      const close = closingOf(code, open);
+      let cursor = open + 1;
+      let parameter = "";
+      for (const piece of topLevelArguments(code, open + 1, close)) {
+        const from = code.indexOf(piece, cursor);
+        cursor = from + piece.length;
+        if (mention.index >= from && mention.index < cursor) parameter = piece;
+      }
+      const gate = gateOfParameter(parameter, typeName);
+      if (gate === null) {
+        found.push(
+          `${relative}:${lineOf(mention.index)}: cannot read the gate in this parameter (\`${parameter.trim()}\`); ` +
+            `write it as \`expected: ${typeName}\`.`,
+        );
+        continue;
+      }
+      found.push(...bodyViolations(code.slice(fn.start, fn.end), gate, (offset) => `${relative}:${lineOf(fn.start + offset)}`, "a function that takes the gate"));
     }
-    for (const callback of body.matchAll(CALLBACK)) {
-      if (chained.has(callback.index) || insideGate(callback.index)) continue;
-      found.push(
-        `${at(callback.index)}: a \`.${callback[1]}\` inside a race runs its callback even after the race has expired; ` +
-          `await it through \`${gate ?? "expected"}(…)\`.`,
-      );
-    }
+  }
+  for (const [offset, what] of gateAliasImports(text, relative)) {
+    found.push(
+      `${relative}:${lineOf(offset)}: this ${what}, giving the gate a name the guard does not know; ` +
+        "import `Expected` by name from `ui/race` where it is used.",
+    );
   }
   return { found, races };
 }
+
+/// L'import del tipo del cancello, per i casi dell'autoprova (il file del
+/// caso è `caso.ts`, alla radice).
+const GATE_IMPORT = 'import type { Expected } from "./ui/race";\n';
 
 function selfTest() {
   const cases = [
@@ -409,6 +704,58 @@ function selfTest() {
     ["il metodo staccato dalla corsa (sfuggiva)", "const go = race.last.bind(race);\ngo(async (e) => { await f(); });", 1, 1],
     ["un'attesa a capo del cancello", "r.last(async (e) => {\n  const v = await e(\n    f(),\n  );\n});", 1, 0],
     ["un'attesa di un await", "r.last(async (e) => { const v = await await e(f()); });", 1, 0],
+    // GUARDIA-CANCELLO: la funzione che riceve il cancello (un parametro di
+    // tipo `Expected` di `ui/race`) è un giro anche lei. La guardia di prima
+    // non ne leggeva il corpo, e i casi rossi passavano.
+    ["una funzione col cancello, attesa nascosta (sfuggiva)", `${GATE_IMPORT}async function f(p: P, expected: Expected) { await g(p); }`, 1, 1],
+    ["una funzione col cancello, .catch attaccato (sfuggiva)", `${GATE_IMPORT}async function f(expected: Expected) { const v = await expected(g()).catch(() => null); }`, 1, 1],
+    ["una funzione col cancello, un try che ingoia (sfuggiva)", `${GATE_IMPORT}async function f(expected: Expected) { try { await expected(g()); } catch {} }`, 1, 1],
+    ["una freccia col cancello, attesa nascosta (sfuggiva)", `${GATE_IMPORT}const f = async (e: Expected) => { await g(); };`, 1, 1],
+    ["una freccia senza graffe col cancello, un .then fuori (sfuggiva)", `${GATE_IMPORT}const f = (e: Expected) => g().then(h);`, 1, 1],
+    ["un metodo col cancello, attesa nascosta (sfuggiva)", `${GATE_IMPORT}class A { async load(expected: Expected): Promise<void> { await g(); } }`, 1, 1],
+    ["un metodo col tipo di ritorno a graffe (sfuggiva)", `${GATE_IMPORT}class A { async m(e: Expected): Promise<{ a: T }> { await g(); } }`, 1, 1],
+    ["il tipo importato con un altro nome (sfuggiva)", `import { Race, type Expected as Gate } from "../ui/race";\nasync function f(g: Gate) { await h(); }`, 1, 1],
+    ["il cancello destrutturato (sfuggiva)", `${GATE_IMPORT}async function f({ gate }: { gate: Expected; n: number }) { await h(); }`, 1, 1],
+    ["il cancello destrutturato e rinominato (sfuggiva)", `${GATE_IMPORT}async function f({ gate: g }: { gate: Expected }) { await g(h()); await k(); }`, 1, 1],
+    ["un parametro opzionale col cancello (sfuggiva)", `${GATE_IMPORT}async function f(e?: Expected) { await g(); }`, 1, 1],
+    ["un parametro col cancello che non si legge", `${GATE_IMPORT}async function f(e: Expected | null) { }`, 1, 1],
+    ["una funzione col cancello, giusta", `${GATE_IMPORT}async function f(p: P, expected: Expected) { const v = await expected(g(p).catch(() => null)); return v; }`, 1, 0],
+    ["come drawingNameOf, giusta", `${GATE_IMPORT}async function f(port: P, id: string, expected: Expected): Promise<string | null> {\n  if (!ok(id)) return null;\n  return expected(port.name(id).catch(() => null));\n}`, 1, 0],
+    ["una freccia col cancello, giusta", `${GATE_IMPORT}const f = (e: Expected) => e(g().then(h));`, 1, 0],
+    ["il cancello destrutturato, giusto", `${GATE_IMPORT}async function f({ gate }: { gate: Expected }) { await gate(h()); }`, 1, 0],
+    ["un overload e la sua funzione", `${GATE_IMPORT}function f(e: Expected): Promise<void>;\nasync function f(e: Expected) { await e(g()); }`, 1, 0],
+    ["un giro col parametro tipato, letto una volta", `${GATE_IMPORT}r.last(async (e: Expected) => { await e(f()); });`, 1, 0],
+    ["un Expected di un altro modulo non è il cancello", `import type { Expected } from "./tools/recognize-corpus";\nasync function f(e: Expected) { await g(); }`, 0, 0],
+    ["un Expected senza import non è il cancello", "async function f(e: Expected) { await g(); }", 0, 0],
+    ["un parametro che riceve un giro, non il cancello", `${GATE_IMPORT}async function run(body: (e: Expected) => Promise<void>) { await g(); }`, 0, 0],
+    ["un tipo funzione", `${GATE_IMPORT}type Body = (e: Expected) => Promise<void>;`, 0, 0],
+    ["la firma di un'interfaccia", `${GATE_IMPORT}interface P { fill(e: Expected): Promise<void>; }`, 0, 0],
+    ["un Expected in una chiamata", `${GATE_IMPORT}go(x as Expected);`, 0, 0],
+    // Un `try` senza `await` non prende la scadenza: arriva solo a un `await`.
+    ["un try senza await nel giro", "r.last(async (e) => { try { f(); } catch { } await e(g()); });", 1, 0],
+    ["un try con un await dopo una chiamata", "r.last(async (e) => { try { f(); await e(g()); } catch { } });", 1, 1],
+    ["un try senza await in una funzione col cancello", `${GATE_IMPORT}async function f(e: Expected) { try { t(); } catch (x) { log(x); } await e(g()); }`, 1, 0],
+    // Il tipo del cancello fuori da una lista di parametri (CANCELLO-DISEGNO):
+    // un alias o un oggetto di opzioni col tipo scritto altrove portavano le
+    // attese fuori dalla guardia in silenzio.
+    ["un alias del tipo del cancello (sfuggiva)", `${GATE_IMPORT}type Gate = Expected;\nasync function f(g: Gate) { await h(); }`, 0, 1],
+    ["un alias esportato con un'unione (sfuggiva)", `${GATE_IMPORT}export type Gate = Expected | null;`, 0, 1],
+    ["un'interfaccia di opzioni col cancello (sfuggiva)", `${GATE_IMPORT}interface Opzioni { gate: Expected; n: number }\nasync function f(o: Opzioni) { await h(); }`, 0, 1],
+    ["un tipo di opzioni col cancello (sfuggiva)", `${GATE_IMPORT}type Opzioni = { readonly gate?: Expected };\nasync function f({ gate }: Opzioni) { await h(); }`, 0, 1],
+    ["un campo di una classe col cancello (sfuggiva)", `${GATE_IMPORT}class A { #gate: Expected | null = null; }`, 0, 1],
+    ["una variabile col cancello (sfuggiva)", `${GATE_IMPORT}let gate: Expected | undefined;`, 0, 1],
+    ["un generico col cancello (sfuggiva)", `${GATE_IMPORT}const gates = new Map<string, Expected>();`, 0, 1],
+    ["un tipo di ritorno col cancello (sfuggiva)", `${GATE_IMPORT}function gateOf(r: R): Expected { return r.g; }`, 0, 1],
+    ["l'alias del tipo importato con un altro nome (sfuggiva)", `import type { Expected as Gate } from "./ui/race";\ntype Porta = Gate;`, 0, 1],
+    ["un re-export del tipo del cancello (sfuggiva)", 'export type { Expected as Gate } from "./ui/race";', 0, 1],
+    ["un re-export di tutto il modulo (sfuggiva)", 'export * from "./ui/race";', 0, 1],
+    ["un import del modulo intero (sfuggiva)", 'import * as race from "./ui/race";\nasync function f(e: race.Expected) { await h(); }', 0, 1],
+    ["un tipo importato sul posto (sfuggiva)", 'async function f(e: import("./ui/race").Expected) { await h(); }', 0, 1],
+    ["l'import coi nomi non è un alias", 'import { Race, type Expected } from "./ui/race";\nexport type { Race };', 0, 0],
+    ["un re-export di un altro tipo dal modulo", 'export { Race } from "./ui/race";', 0, 0],
+    ["un alias di un Expected di un altro modulo", 'import type { Expected } from "./tools/recognize-corpus";\ntype E = Expected;', 0, 0],
+    ["un tipo di opzioni con un tipo funzione", `${GATE_IMPORT}interface Opzioni { run: (e: Expected) => Promise<void> }`, 0, 0],
+    ["un alias di un tipo funzione", `${GATE_IMPORT}export type Corpo = (expected: Expected) => Promise<void>;`, 0, 0],
   ];
   const failures = [];
   try {

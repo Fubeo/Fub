@@ -438,6 +438,103 @@ fn reopening_skips_unchanged_documents() {
     assert_eq!(search(&idx, "stabile").len(), 1);
 }
 
+/// #522: le consegne si accumulano fino al commit, e un commit chiude **un**
+/// segmento nuovo, comunque siano arrivate.
+///
+/// Il writer di tantivy ha più worker (3 con `WRITER_HEAP`, se ci sono almeno
+/// 3 CPU), e ciascuno tiene aperto il suo segmento fino al commit: mandare i
+/// documenti uno alla volta li spargeva su tutti, e un commit da 50 note
+/// toccate ad app chiusa chiudeva fino a 3 segmenti, cioè 3 volte gli fsync.
+/// Su una macchina con una CPU sola c'è un worker solo, e questo test
+/// passerebbe anche senza la coda: lì non può dimostrare niente.
+#[test]
+fn a_flush_closes_one_segment_however_many_deliveries() {
+    let (_g, path) = tmp();
+    let (mut idx, mut host) = fresh(&path);
+    for i in 0..64 {
+        let _ = idx.on_documents_indexed(std::slice::from_ref(&doc(
+            &format!("nota-{i}.md"),
+            &format!("parola{i} e un testo comune"),
+        )));
+    }
+    idx.flush(&mut host).unwrap();
+
+    let segments = idx.index.searchable_segment_ids().unwrap();
+    assert_eq!(
+        segments.len(),
+        1,
+        "one commit, one new segment: the deliveries wait for the commit together"
+    );
+    assert_eq!(search(&idx, "comune").len(), 10, "first page of 64");
+    assert_eq!(search(&idx, "parola63").len(), 1);
+}
+
+/// La coda non cresce senza limite (#522): passata la soglia, parte verso
+/// tantivy senza aspettare il commit, ma il documento resta fra le scritture
+/// in sospeso (`dirty`) finché un commit non lo rende visibile e durevole.
+#[test]
+fn a_full_queue_goes_to_tantivy_before_the_commit() {
+    let (_g, path) = tmp();
+    let (mut idx, mut host) = fresh(&path);
+    let _ = idx.on_documents_indexed(std::slice::from_ref(&doc("piccola.md", "minuscola")));
+    assert_eq!(
+        idx.pending.lock().unwrap().ops.len(),
+        2,
+        "delete + add wait"
+    );
+
+    let big = format!("{} enorme", "riempitivo ".repeat(PENDING_BYTES / 10));
+    let lost = idx.on_documents_indexed(std::slice::from_ref(&doc("grande.md", &big)));
+    assert!(lost.is_empty());
+    {
+        let pending = idx.pending.lock().unwrap();
+        assert!(pending.ops.is_empty(), "over the threshold the queue left");
+        assert!(pending.added.is_empty());
+        assert_eq!(pending.bytes, 0);
+    }
+    assert!(idx.dirty.load(Ordering::Acquire), "not committed yet");
+
+    idx.flush(&mut host).unwrap();
+    assert_eq!(search(&idx, "enorme").len(), 1);
+    assert_eq!(search(&idx, "minuscola").len(), 1);
+}
+
+/// La guardia della coda (#522): una rimozione che arriva **dopo** la
+/// consegna, prima del flush, vince. Con la coda l'aggiunta riceve il suo
+/// opstamp solo quando la coda si svuota: se la rimozione lo prendesse prima
+/// (`delete_term` diretto), non la colpirebbe, e il documento cancellato
+/// tornerebbe fra i risultati.
+#[test]
+fn a_removal_after_a_delivery_wins_inside_the_same_flush() {
+    let (_g, path) = tmp();
+    let (mut idx, mut host) = fresh(&path);
+    let _ = idx.on_documents_indexed(std::slice::from_ref(&doc("a.md", "effimero")));
+    let _ = idx.on_documents_removed(std::slice::from_ref(&DocId::new("a.md")));
+    idx.flush(&mut host).unwrap();
+    assert_eq!(search(&idx, "effimero").len(), 0, "removed, then flushed");
+
+    // Lo stesso con `reconcile`, l'altra strada da cui passa una
+    // cancellazione: un documento che a fine apertura non c'è più.
+    let _ = idx.on_documents_indexed(std::slice::from_ref(&doc("b.md", "fantasma")));
+    let _ = idx.on_documents_indexed(std::slice::from_ref(&doc("c.md", "presente")));
+    let _ = idx.reconcile(&[DocId::new("c.md")]);
+    idx.flush(&mut host).unwrap();
+    assert_eq!(
+        search(&idx, "fantasma").len(),
+        0,
+        "reconciled away, then flushed"
+    );
+    assert_eq!(search(&idx, "presente").len(), 1);
+
+    // E una consegna che torna dopo la rimozione resta: l'ordine conta nei
+    // due versi.
+    let _ = idx.on_documents_removed(std::slice::from_ref(&DocId::new("c.md")));
+    let _ = idx.on_documents_indexed(std::slice::from_ref(&doc("c.md", "risorto")));
+    idx.flush(&mut host).unwrap();
+    assert_eq!(search(&idx, "presente").len(), 0);
+    assert_eq!(search(&idx, "risorto").len(), 1);
+}
+
 #[test]
 fn reopening_reindexes_when_the_manifest_is_of_another_epoch() {
     let (_g, path) = tmp();

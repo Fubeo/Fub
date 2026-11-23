@@ -120,12 +120,36 @@ impl SearchIndex {
         let Some(writer) = guard.as_mut() else {
             return Ok(());
         };
-        let opstamp = writer
-            .commit()
-            .map_err(|and| PluginError::Internal(reason(INDEX_COMMIT, and)))?;
-        self.reader
-            .reload()
-            .map_err(|and| PluginError::Internal(reason(INDEX_RELOAD, and)))?;
+        // Prima la coda (#522): ciò che aspetta il commit entra in tantivy
+        // tutto insieme, e diventa un segmento solo. Se tantivy lo rifiuta,
+        // `dirty` resta acceso e il manifest non si scrive: lo stesso esito di
+        // un commit fallito.
+        drain(writer, &mut self.pending.lock().expect("mutex"))
+            .map_err(|(_, and)| PluginError::Internal(reason(INDEX_COMMIT, and)))?;
+        // Il commit di tantivy in due tempi, ognuno con il suo span (#522):
+        // `prepare_commit` aspetta i worker e chiude i loro segmenti (gli
+        // fsync dei file nuovi), `commit` scrive i `.del` dei segmenti vecchi
+        // e il `meta.json`. Sono le due voci che una riapertura tiepida paga,
+        // e la tabella di `open_30k` le tiene separate.
+        let opstamp = {
+            let prepared = {
+                let _phase =
+                    tracing::info_span!(target: "fub.apertura", "ricerca_segmenti").entered();
+                writer
+                    .prepare_commit()
+                    .map_err(|and| PluginError::Internal(reason(INDEX_COMMIT, and)))?
+            };
+            let _phase = tracing::info_span!(target: "fub.apertura", "ricerca_commit").entered();
+            prepared
+                .commit()
+                .map_err(|and| PluginError::Internal(reason(INDEX_COMMIT, and)))?
+        };
+        {
+            let _phase = tracing::info_span!(target: "fub.apertura", "ricerca_reload").entered();
+            self.reader
+                .reload()
+                .map_err(|and| PluginError::Internal(reason(INDEX_RELOAD, and)))?;
+        }
         self.opstamp.store(opstamp, Ordering::Relaxed);
         self.dirty.store(false, Ordering::Release);
         Ok(())
@@ -203,6 +227,7 @@ impl SearchIndex {
         if self.manifest_at == Some(opstamp) {
             return Ok(());
         }
+        let _phase = tracing::info_span!(target: "fub.apertura", "ricerca_manifest").entered();
         let manifest = Manifest {
             schema_version: SCHEMA_VERSION,
             opstamp,
@@ -856,4 +881,28 @@ pub(super) fn head_of(text: &str, max: usize) -> String {
         _ => head,
     };
     format!("{}…", trimmed.trim_end())
+}
+
+/// Dà a tantivy, in un solo `run`, tutto ciò che aspetta nella coda (#522).
+///
+/// Un `run` solo perché le aggiunte di un `run` finiscono nello stesso
+/// segmento, con opstamp contigui e nell'ordine della coda: è ciò che fa
+/// chiudere un segmento a commit e che fa vincere una cancellazione arrivata
+/// dopo un'aggiunta (vedi [`Pending`]). La coda si svuota comunque: se tantivy
+/// rifiuta il lotto, gli id delle aggiunte tornano indietro, perché chi chiama
+/// li dichiari perduti, insieme all'errore di tantivy.
+///
+/// Si chiama tenendo il lock del writer (l'ordine è `writer` → `pending`).
+pub(super) fn drain(
+    writer: &IndexWriter,
+    pending: &mut Pending,
+) -> Result<(), (Vec<DocId>, tantivy::TantivyError)> {
+    pending.bytes = 0;
+    let added = std::mem::take(&mut pending.added);
+    if pending.ops.is_empty() {
+        return Ok(());
+    }
+    let ops = std::mem::take(&mut pending.ops);
+    let _phase = tracing::info_span!(target: "fub.apertura", "ricerca_drain").entered();
+    writer.run(ops).map(|_| ()).map_err(|and| (added, and))
 }

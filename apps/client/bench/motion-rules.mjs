@@ -858,9 +858,14 @@ export const CHOREOGRAPHIES = [
     sources: ["src/shells/scrittoio/views-motion.ts"],
     scene: "inspector",
     // L'indice è la prima scheda dell'ispettore; un titolo è già scelto, così
-    // il gesto sposta la sagoma invece di farla nascere.
+    // il gesto sposta la sagoma invece di farla nascere. L'indice è quello
+    // della nota davanti: Sintassi di Fub, che ha i titoli per il gesto.
     setup: async (page) => {
+      await press(page, '#file-list li[data-path="Guida"] > .tree-row');
+      await press(page, '#file-list li[data-path="Guida/Sintassi di Fub.md"] > .tree-row');
+      await page.waitForFunction(() => document.querySelector('.tab[aria-selected="true"] .tab-name')?.textContent?.includes("Sintassi di Fub") ?? false);
       await press(page, "#right-pane .inspector-tab >> nth=0");
+      await page.waitForFunction(() => document.querySelectorAll("#right-pane .ui-tree-label").length > 4);
       await page.waitForSelector("#right-pane .ui-tree-label");
       await press(page, OUTLINE(1));
       await page.waitForFunction(() => document.querySelector('#right-pane .ui-tree-item[aria-selected="true"]') !== null);

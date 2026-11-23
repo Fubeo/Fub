@@ -1981,20 +1981,19 @@ function handleClick(e: MouseEvent, view: EditorView, cb: LivePreviewCallbacks):
 const theme = EditorView.baseTheme({
   ".cm-markdown-gap": { height: "0", lineHeight: "0", fontSize: "0", padding: "0" },
   // La stessa scala della Lettura (`preview.css`): relativa al corpo, e
-  // sempre in discesa, in misura e in peso.
-  ".cm-fub-h1": { fontSize: "max(1.75em, var(--text-3xl, 1.75em))", fontWeight: "700", letterSpacing: "-0.01em" },
-  ".cm-fub-h2": { fontSize: "max(1.45em, var(--text-2xl, 1.45em))", fontWeight: "700", letterSpacing: "-0.005em" },
+  // sempre in discesa, in misura e in peso. Le misure che leggono la scala
+  // del tema (`--text-3xl`, `--text-2xl`, `--tracking-caps`,
+  // `--leading-tight`) sono della pelle (`document.css`).
+  ".cm-fub-h1": { fontWeight: "700", letterSpacing: "-0.01em" },
+  ".cm-fub-h2": { fontWeight: "700", letterSpacing: "-0.005em" },
   ".cm-fub-h3": { fontSize: "1.22em", fontWeight: "650" },
   ".cm-fub-h4": { fontSize: "1.08em", fontWeight: "650" },
-  ".cm-fub-h5": { fontSize: "0.85em", fontWeight: "700", letterSpacing: "var(--tracking-caps, 0.06em)", textTransform: "uppercase" },
-  ".cm-fub-h6": { fontSize: "0.85em", fontWeight: "500", letterSpacing: "var(--tracking-caps, 0.06em)", textTransform: "uppercase" },
+  ".cm-fub-h5": { fontSize: "0.85em", fontWeight: "700", textTransform: "uppercase" },
+  ".cm-fub-h6": { fontSize: "0.85em", fontWeight: "500", textTransform: "uppercase" },
   ".cm-fub-heading-line": { paddingTop: "0.9em", paddingBottom: "0.2em" },
   ".cm-fub-h1-line": { paddingTop: "1.2em", paddingBottom: "0.3em", marginBottom: "0.4em" },
   ".cm-fub-h2-line": { paddingTop: "1.1em" },
   ".cm-line:first-child.cm-fub-heading-line": { paddingTop: "0" },
-  ".cm-fub-h1, .cm-fub-h2, .cm-fub-h3, .cm-fub-h4, .cm-fub-h5, .cm-fub-h6": {
-    lineHeight: "var(--leading-tight, 1.2)",
-  },
   ".cm-fub-h1 > span, .cm-fub-h2 > span, .cm-fub-h3 > span, .cm-fub-h4 > span, .cm-fub-h5 > span, .cm-fub-h6 > span": {
     color: "inherit",
   },
@@ -2018,8 +2017,8 @@ const theme = EditorView.baseTheme({
     transform: "translateX(-50%)",
   },
   ".cm-fub-bullet-task::before": { content: "none" },
+  // Il carattere del codice è della pelle (`document.css`).
   ".cm-fub-code": {
-    fontFamily: "var(--font-mono, monospace)",
     borderRadius: "3px",
     padding: "0 0.15em",
   },
@@ -2099,7 +2098,6 @@ const theme = EditorView.baseTheme({
     maxHeight: "16em",
     height: "auto",
     objectFit: "contain",
-    borderRadius: "var(--radius-sm, 4px)",
   },
   ".cm-fub-image .embed": { display: "inline-block", margin: "0", padding: "0", border: "0", background: "none" },
 });

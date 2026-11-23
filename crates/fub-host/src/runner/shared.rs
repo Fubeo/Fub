@@ -294,7 +294,12 @@ impl Shared {
         }
         // Il flush è una fase esterna separata: il token conserva gli indici,
         // mentre i lettori e la re-entry possono progredire senza guard Workspace.
-        let _ = crate::teardown::flush_indexes(&self.workspace)?;
+        // Lo span ha il nome di quello del percorso sincrono
+        // (`Workspace::finish_index`): la tabella di `open_30k` è una sola.
+        {
+            let _phase = tracing::info_span!(target: "fub.apertura", "flush_indexes").entered();
+            let _ = crate::teardown::flush_indexes(&self.workspace)?;
+        }
         if !opening.interrupted {
             // Gli intent possono dipendere dai provider di formato: il replay
             // parte soltanto dopo l'indice completo e senza il lock Workspace.

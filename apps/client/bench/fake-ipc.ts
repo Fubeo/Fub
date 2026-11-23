@@ -2814,83 +2814,119 @@ const RESPONSES: Partial<Record<IndexQuery["kind"], (q: IndexQuery) => IndexResu
     const total = q.kind === "backlinks" ? (NOTE_FACTS[q.target]?.links ?? 0) : 0;
     return { kind: "backlinks", value: { items: [], offset: 0, total } };
   },
-  // I titoli `#` di una nota del corpus, coi byte del sorgente: quelli che
-  // «Sposta in…» offre come destinazione. Lo slug è quello semplice, minuscole
-  // e trattini; una nota fuori dal corpus non ha titoli.
-  outline: (q) => {
-    const source = q.kind === "outline" ? (CORPUS[q.doc] ?? "") : "";
-    const encoder = new TextEncoder();
-    const value: Heading[] = [];
-    let offset = 0;
-    let fence = false;
-    for (const line of source.split("\n")) {
-      if (/^\s*(```|~~~)/.test(line)) fence = !fence;
-      const found = fence ? null : /^(#{1,6})\s+(.+?)\s*#*\s*$/.exec(line);
-      if (found) {
-        const text = found[2]!;
-        const start = encoder.encode(source.slice(0, offset)).length;
-        const slug = text.toLocaleLowerCase().replace(/[^\p{L}\p{N}\s-]/gu, "").trim().replace(/\s+/g, "-");
-        value.push({ level: found[1]!.length, text, slug, span: { start, end: start + encoder.encode(line).length }, explicit_anchor: null });
-      }
-      offset += line.length + 1;
-    }
-    return { kind: "outline", value };
-  },
+  // I titoli `#` di una nota del corpus (`headingsOf`): quelli che «Sposta
+  // in…» offre come destinazione, e quelli della Struttura.
+  outline: (q) => ({ kind: "outline", value: q.kind === "outline" ? headingsOf(q.doc) : [] }),
   jobs: () => ({ kind: "jobs", value: JOBS }),
 };
+
+/// I titoli `#` di una nota del vault finto, coi byte del sorgente: è l'indice
+/// dei titoli del finto (la domanda `outline`), letto dai file del vault come
+/// l'indice vero. Lo slug è quello semplice, minuscole e trattini; ogni
+/// documento che non è una nota Markdown (un PDF, le sue annotazioni, una
+/// lavagna) non ha titoli.
+function headingsOf(doc: string): Heading[] {
+  const source = doc.endsWith(".md") ? (options.file?.[doc] ?? "") : "";
+  const encoder = new TextEncoder();
+  const value: Heading[] = [];
+  let offset = 0;
+  let fence = false;
+  for (const line of source.split("\n")) {
+    if (/^\s*(```|~~~)/.test(line)) fence = !fence;
+    const found = fence ? null : /^(#{1,6})\s+(.+?)\s*#*\s*$/.exec(line);
+    if (found) {
+      const text = found[2]!;
+      const start = encoder.encode(source.slice(0, offset)).length;
+      const slug = text.toLocaleLowerCase().replace(/[^\p{L}\p{N}\s-]/gu, "").trim().replace(/\s+/g, "-");
+      value.push({ level: found[1]!.length, text, slug, span: { start, end: start + encoder.encode(line).length }, explicit_anchor: null });
+    }
+    offset += line.length + 1;
+  }
+  return value;
+}
+
+/// Il documento davanti, come la shell l'ha pubblicato (`setActiveContext`):
+/// la Struttura del finto lo legge come il provider vero legge
+/// `active_context` (`fub-features/src/outline.rs`).
+let frontDoc: string | null = null;
+
+/// Chi punta a una nota, nella scenografia: le righe di «In entrata» sotto la
+/// Struttura. Il provider le legge dai backlink dell'indice; il finto non li
+/// tiene, e le dichiara qui per le note che le foto mostrano (per Sintassi di
+/// Fub le stesse dei Collegamenti).
+const OUTLINE_INCOMING: Readonly<Record<string, readonly string[]>> = {
+  "Benvenuto.md": ["Guida/Sintassi di Fub.md", "Progetti/Il banco che vede.md", "Diario/2026-08-19.md"],
+  "Guida/Sintassi di Fub.md": ["Benvenuto.md", "Progetti/Il banco che vede.md"],
+};
+
+type TreeItem = Extract<UiNode, { node: "tree_item" }>;
+
+/// I titoli da `at` in poi che stanno sotto `parent`, e l'indice del primo che
+/// non ci sta più: «figlio» vuol dire di livello maggiore, come `subtree` del
+/// provider, così una nota che salta un livello non perde titoli. Il salto
+/// porta il posto del titolo (da 1), e solo chi ha figli nasce aperto.
+function headingItems(headings: readonly Heading[], at: number, parent: number): [TreeItem[], number] {
+  const items: TreeItem[] = [];
+  let index = at;
+  while (index < headings.length && headings[index]!.level > parent) {
+    const heading = headings[index]!;
+    const [children, next] = headingItems(headings, index + 1, heading.level);
+    items.push({
+      node: "tree_item",
+      label: heading.text,
+      selected: false,
+      expanded: children.length > 0,
+      action: { action: "goto", payload: index + 1 },
+      children,
+    });
+    index = next;
+  }
+  return [items, index];
+}
+
+/// «In entrata · N» sotto la Struttura, come `build_incoming_section`: il nome
+/// della nota e la sua cartella; senza riferimenti la sezione non c'è.
+function incomingSection(doc: string): UiNode | null {
+  const sources = OUTLINE_INCOMING[doc] ?? [];
+  if (sources.length === 0) return null;
+  return {
+    node: "section", title: `In entrata · ${sources.length}`, collapsed: false, key: "outline-incoming", children: [{
+      node: "list",
+      items: sources.map((source): UiNode => ({
+        node: "list_item",
+        title: pageName(source),
+        subtitle: source.includes("/") ? source.slice(0, source.lastIndexOf("/")).split("/").pop()! : null,
+        action: { action: "open", payload: { doc: source } },
+        selected: false,
+        key: `${source}#0`,
+        drag: { kind: "document", doc: source },
+      })),
+    }],
+  };
+}
+
+/// La Struttura del documento davanti, con la regola del provider `outline`:
+/// nessun documento, lo stato vuoto «nessuna nota»; un documento senza titoli
+/// (un PDF, le sue annotazioni, una lavagna, una nota senza `#`), lo stato
+/// vuoto «nessun titolo», con «In entrata» se qualcuno lo cita; altrimenti
+/// l'albero dei titoli e, sotto, «In entrata».
+function outlineTree(): UiNode {
+  if (frontDoc === null) return { node: "empty_state", title: "Nessuna nota aperta.", detail: null, action: null };
+  const headings = headingsOf(frontDoc);
+  const incoming = incomingSection(frontDoc);
+  if (headings.length === 0) {
+    const empty: UiNode = { node: "empty_state", title: "Nessun heading.", detail: null, action: null };
+    return incoming === null ? empty : { node: "stack", dir: "column", gap: 2, children: [empty, incoming] };
+  }
+  const [roots] = headingItems(headings, 0, 0);
+  return { node: "stack", dir: "column", gap: 2, children: [{ node: "tree", roots }, ...(incoming === null ? [] : [incoming])] };
+}
 
 /// Gli alberi delle view della scenografia, per id. Sono `UiNode` veri e li
 /// disegna `ui/node.ts` vero: è la ragione per cui il pannello di destra si può
 /// fotografare senza inventarsi del markup: **non c'è markup**, c'è un albero
 /// del contratto e il renderer della shell.
 const TREES: Record<string, UiNode> = {
-  // La forma è quella del provider `outline` (fub-features): l'albero dei
-  // titoli e, sotto, «In entrata» con le note che puntano qui (le tre del
-  // prototipo, per la nota Benvenuto che il banco apre per prima).
-  outline: {
-    node: "stack",
-    dir: "column",
-    gap: 2,
-    children: [
-      {
-        node: "tree",
-        roots: [
-          {
-            node: "tree_item",
-            label: "Sintassi di Fub",
-            selected: false,
-            expanded: true,
-            action: { action: "goto", payload: 1 },
-            children: [
-              { node: "tree_item", label: "Titoli", selected: false, expanded: false, action: { action: "goto", payload: 2 }, children: [] },
-              {
-                node: "tree_item",
-                label: "Testo",
-                selected: false,
-                expanded: true,
-                action: { action: "goto", payload: 3 },
-                children: [
-                  { node: "tree_item", label: "Riferimenti", selected: false, expanded: false, action: { action: "goto", payload: 4 }, children: [] },
-                ],
-              },
-              { node: "tree_item", label: "Tabella", selected: false, expanded: false, action: { action: "goto", payload: 5 }, children: [] },
-              { node: "tree_item", label: "Codice", selected: false, expanded: false, action: { action: "goto", payload: 6 }, children: [] },
-            ],
-          },
-        ],
-      },
-      {
-        node: "section", title: "In entrata · 3", collapsed: false, key: "outline-incoming", children: [{
-          node: "list",
-          items: [
-            { node: "list_item", title: "Sintassi di Fub", subtitle: "Guida", action: { action: "open", payload: { doc: "Guida/Sintassi di Fub.md" } }, selected: false, key: "Guida/Sintassi di Fub.md#0", drag: { kind: "document", doc: "Guida/Sintassi di Fub.md" } },
-            { node: "list_item", title: "Il banco che vede", subtitle: "Progetti", action: { action: "open", payload: { doc: "Progetti/Il banco che vede.md" } }, selected: false, key: "Progetti/Il banco che vede.md#0", drag: { kind: "document", doc: "Progetti/Il banco che vede.md" } },
-            { node: "list_item", title: "2026-08-19", subtitle: "Diario", action: { action: "open", payload: { doc: "Diario/2026-08-19.md" } }, selected: false, key: "Diario/2026-08-19.md#0", drag: { kind: "document", doc: "Diario/2026-08-19.md" } },
-          ],
-        }],
-      },
-    ],
-  },
   // Le forme sono quelle del provider `backlinks` (fub-features): una sezione
   // per parte, col numero nel titolo, chiusa quando è vuota; il filtro in
   // fondo, chiuso.
@@ -3506,12 +3542,16 @@ async function liveTrashAction(action: string, payload: unknown): Promise<ViewUp
 const HOST_TEXT: ReadonlySet<IndexQuery["kind"]> = new Set(["settings", "jobs"]);
 
 /// L'albero di una view della scenografia, nella lingua della shell. Della
-/// struttura soltanto «In entrata»: le voci dell'albero sono i titoli della nota.
+/// struttura soltanto gli stati vuoti e «In entrata»: le voci dell'albero sono
+/// i titoli della nota.
 function treeOf(view: string): UiNode | undefined {
+  if (view === "outline") {
+    const tree = outlineTree();
+    if (tree.node !== "stack") return inShellLanguage(tree);
+    return { ...tree, children: tree.children.map((child) => (child.node === "tree" ? child : inShellLanguage(child))) };
+  }
   const tree = TREES[view];
-  if (!tree || view !== "outline") return tree && inShellLanguage(tree);
-  if (tree.node !== "stack") return tree;
-  return { ...tree, children: tree.children.map((child) => (child.node === "tree" ? child : inShellLanguage(child))) };
+  return tree && inShellLanguage(tree);
 }
 
 /// L'albero con scelta la voce il cui salto porta `payload`, e nessun'altra.
@@ -3677,6 +3717,15 @@ function sheetPartOutcome(text: string | null, selection = { sheet: BENCH_SESSIO
 
 export const api: typeof host.module.api = {
   ...behind,
+  // Il documento davanti è quello che la Struttura legge: quando cambia, la
+  // Struttura è vecchia, come la dichiara il kernel (`follows` del provider).
+  setActiveContext: async (context) => {
+    const stale = await behind.setActiveContext(context);
+    const doc = context?.doc ?? null;
+    if (doc === frontDoc) return stale;
+    frontDoc = doc;
+    return stale.includes("outline") ? stale : [...stale, "outline"];
+  },
   ...(SHEET_PARTS === null ? {} : {
     openGridBytes: async (...args: Parameters<typeof behind.openGridBytes>) => {
       const session = await behind.openGridBytes(...args);

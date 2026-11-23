@@ -159,6 +159,40 @@ fn that_that_and_changed_ad_app_closed_not_results_a_place() {
     assert_eq!(search(&idx, "cane").len(), 0);
 }
 
+/// Il crash fra consegna e commit (#522): ciò che è stato consegnato e non
+/// committato non è durevole, e alla riapertura la nota si rilegge. Con la
+/// coda le consegne aspettano il commit più a lungo di prima, e questo test
+/// tiene fermo il verso giusto: perderle costa una rilettura, non un
+/// documento vecchio dato per nuovo.
+#[test]
+fn a_delivery_without_flush_is_not_up_to_date_on_reopen() {
+    let (_g, path) = tmp();
+    let mut host = MemoryHost::new();
+    {
+        let mut idx = open(&path, &mut host);
+        round(&mut idx, &[("a.md", "il gatto")]);
+        idx.flush(&mut host).unwrap();
+    }
+    {
+        let mut idx = open(&path, &mut host);
+        let already = round(&mut idx, &[("a.md", "il topo")]);
+        assert!(already.is_empty(), "the changed note is delivered");
+        // Nessun flush: l'indice muore qui, come l'app.
+    }
+
+    let idx = open(&path, &mut host);
+    assert!(
+        idx.up_to_date(&[entry("a.md", Some("il topo"))]).is_empty(),
+        "the delivery never reached a commit: the note must be read again"
+    );
+    assert_eq!(search(&idx, "topo").len(), 0);
+    assert_eq!(
+        search(&idx, "gatto").len(),
+        1,
+        "the committed text is still there"
+    );
+}
+
 #[test]
 fn without_fingerprint_declared_not_is_responds() {
     // Il kernel non calcola l'impronta di ciò che non deve leggere: chi non
