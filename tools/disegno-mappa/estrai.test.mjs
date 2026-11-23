@@ -126,7 +126,9 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // T16 testo base le sette del testo: `type.changeCase`, `type.createOutlines`,
   // `type.convertToAreaType`, `type.convertToPointType`, `edit.findReplace`, `edit.findNext`
   // e `text.editRange`.
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1104, fub: 114, escluso: 12, fatto: 321 });
+  // T14 pannello colore: il pannello `color` diventa «fatto» (la sezione Colore del Design, con la sua
+  // prova in colore.json); `ui.colorPicker` e `ui.colorPanel` restano «da fare», con la causa nella nota.
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1103, fub: 114, escluso: 12, fatto: 322 });
 });
 
 // --- un motore finto ---------------------------------------------------------------

@@ -5073,6 +5073,22 @@
     },
     {
       "fonte": "pannello",
+      "id": "color",
+      "chiamata": {
+        "client": "color"
+      },
+      "etichetta": {
+        "it": "Colore",
+        "en": "Color"
+      },
+      "posto": "ispettore/design",
+      "famiglia": "colore",
+      "tasto": null,
+      "effetto": "mostra",
+      "finestra": false
+    },
+    {
+      "fonte": "pannello",
       "id": "gradient",
       "chiamata": {
         "client": "gradient"

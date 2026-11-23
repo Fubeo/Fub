@@ -2896,6 +2896,153 @@
       "atteso": {
         "errore": "bad_args"
       }
+    },
+    {
+      "id": "paint.setFill",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "ob2b2b2b2"
+      ],
+      "argomenti": {
+        "color": "#00aa00"
+      },
+      "dopo": "colore-due-oggetti-dopo.svg",
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "set",
+                "id": "oa1a1a1a1",
+                "attrs": {
+                  "fill": "#00aa00"
+                }
+              },
+              {
+                "op": "set",
+                "id": "ob2b2b2b2",
+                "attrs": {
+                  "fill": "#00aa00"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "paint.setFill",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {
+        "color": "#ff0000"
+      },
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "paint.setFill",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {
+        "color": "#12"
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "paint.setFill",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {
+        "color": "zzz"
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "paint.setFill",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {
+        "color": "hsl(120 100% 50%)"
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "paint.setFill",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {
+        "none": true
+      },
+      "dopo": "colore-nessuno-dopo.svg",
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oa1a1a1a1",
+            "attrs": {
+              "fill": "none"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "paint.setFill",
+      "disegno": "contorno.svg",
+      "selezione": [
+        "ot1t1t1t1"
+      ],
+      "argomenti": {
+        "color": "#00aa00"
+      },
+      "dopo": "colore-testo-dopo.svg",
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "ot1t1t1t1",
+            "attrs": {
+              "fill": "#00aa00"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "paint.setFill",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "color": "#00aa00"
+      },
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "color",
+      "fonte": "pannello",
+      "prova": "apps/client/src/editors/spatial/completo/colore-sezione.test.ts"
     }
   ]
 }
