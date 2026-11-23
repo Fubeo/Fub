@@ -167,7 +167,10 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // (Taglio con rettangolo) e `path.mirrorCut` (Specchia e taglia). Casi in `tests/famiglie/tracciati.json`.
   // T15 giro 7 porta a «fatto» Seleziona testo per font e Opzioni modifica globale (livelli); Avvia la
   // modifica globale resta «da fare», con la causa nella nota.
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1065, fub: 114, escluso: 12, fatto: 360 });
+  // T12 strumenti dei punti porta a «fatto» quattro righe dei tracciati: la Gomma dei punti
+  // (`addon.pathtools.erase`), Allunga tracciato (`extend`), Imposta punto di ancoraggio (`setAnchor`) e
+  // Fai scorrere il punto (`slideAnchor`). Casi in `tests/famiglie/tracciati.json`.
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1061, fub: 114, escluso: 12, fatto: 364 });
 });
 
 // --- un motore finto ---------------------------------------------------------------

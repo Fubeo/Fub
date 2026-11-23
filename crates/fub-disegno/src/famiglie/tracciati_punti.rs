@@ -29,7 +29,7 @@ use crate::apertura::Copia;
 
 /// I comandi che nominano un tracciato con `element` e un suo punto (o
 /// segmento, o sottotracciato) per numero.
-pub(crate) const SU_UN_PUNTO: [&str; 17] = [
+pub(crate) const SU_UN_PUNTO: [&str; 19] = [
     "path.moveAnchor",
     "path.setHandle",
     "path.insertAnchor",
@@ -48,6 +48,9 @@ pub(crate) const SU_UN_PUNTO: [&str; 17] = [
     "addon.pen.removePoint",
     "addon.pen.togglePoint",
     "addon.pen.reshape",
+    // Allunga un estremo e fa scorrere un punto lungo il tracciato (K6 T12, strumenti dei punti).
+    "addon.pathtools.extend",
+    "addon.pathtools.slideAnchor",
 ];
 
 /// I comandi su un punto con `dx` e `dy`: lo spostamento è in scena e va al
@@ -168,6 +171,29 @@ fn controlla_gli_indici(id: &str, o: &Map<String, Value>, dati: &PathData) -> Re
             segmento(intero_dovuto(id, o, "segment")?)
         }
         "addon.pen.removePoint" | "addon.pen.togglePoint" => punto(intero_dovuto(id, o, "anchor")?),
+        // Far scorrere: un punto che c'è, e un parametro fra -0.98 e 0.98 (come dice il motore).
+        "addon.pathtools.slideAnchor" => {
+            match o.get("t").and_then(Value::as_f64) {
+                Some(t) if t.is_finite() && t.abs() <= 0.98 => {}
+                _ => return Err(sbagliato(id, "il parametro `t` è un numero da -0.98 a 0.98: dove va il punto sul tracciato")),
+            }
+            let ai = intero_dovuto(id, o, "anchor")?;
+            // L'estremo di un tracciato aperto non va da nessuna parte: lo dice l'italiano, non il motore.
+            if (ai == 0 || ai + 1 == sottotracciato(sotto.unwrap_or(0))?.anchors.len()) && !sottotracciato(sotto.unwrap_or(0))?.closed {
+                return Err(sbagliato(id, "questo è un estremo di un tracciato aperto: non scorre, non ha dove andare"));
+            }
+            punto(ai)
+        }
+        // Allungare: un tracciato aperto, con l'estremo «start» o «end».
+        "addon.pathtools.extend" => {
+            if sottotracciato(sotto.unwrap_or(0))?.closed {
+                return Err(sbagliato(id, "questo tracciato è chiuso: non ha estremi da allungare"));
+            }
+            match o.get("end").and_then(Value::as_str) {
+                Some("start" | "end") => Ok(()),
+                _ => Err(sbagliato(id, "`end` è «start» o «end»: l'estremo da allungare")),
+            }
+        }
         // La curvatura muove un punto o inserisce su un segmento: il numero che c'è si controlla.
         "path.curvatureEdit" => {
             if intero(id, o, "anchor")?.is_some() {
