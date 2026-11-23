@@ -67,6 +67,16 @@ I sedici modi, coi nomi e nei gruppi di Illustrator e di Photoshop:
 - **Un filtro scritto da un altro programma** si vede e si conserva come gli
   effetti di Fub.
 
+## Aggiungi riempimento e Aggiungi contorno
+
+Aggiungi riempimento mette in cima allo stack di ogni oggetto scelto una copia
+del suo riempimento più alto (con il colore predefinito, se non ne ha); Aggiungi
+contorno fa lo stesso col contorno, con spessore 1 se non ce n'è uno. Più
+oggetti scelti ricevono ciascuno il proprio, in un solo passo. Il file tiene
+più riempimenti come ricetta e si riapre con tutti. Su un testo, su una maschera
+di opacità, su un oggetto nascosto e su un tratto dell'Inchiostro il comando è
+spento, con la sua ragione (K6 T15 aggiungi aspetto).
+
 ## Riduci ad aspetto di base
 
 Il comando Riduci ad aspetto di base (il pannello Aspetto con i suoi comandi

@@ -488,3 +488,16 @@ describe("eseguiVoce, Riduci ad aspetto di base (K6 T15, aspetto)", () => {
     expect(azioni.commit).toHaveBeenCalledOnce();
   });
 });
+
+describe("eseguiVoce, Aggiungi riempimento e Aggiungi contorno (K6 T15, aggiungi aspetto)", () => {
+  it.each([
+    ["appearance.addFill", "Aggiungi riempimento"],
+    ["appearance.addStroke", "Aggiungi contorno"],
+  ])("%s manda al motore disegno.%s con la selezione, e il passo va alla cronologia", async (id, etichetta) => {
+    const { d, sessione, azioni } = dipendenze();
+    eseguiVoce(voce({ id, famiglia: "aspetto", etichetta: { it: etichetta, en: id }, chiamata: { comando: `disegno.${id}`, valore: {} } }), d);
+    await tick();
+    expect(sessione.comando).toHaveBeenCalledWith({ id: `disegno.${id}`, selection: ["n1", "n2"], value: {}, preview: false });
+    expect(azioni.commit).toHaveBeenCalledOnce();
+  });
+});
