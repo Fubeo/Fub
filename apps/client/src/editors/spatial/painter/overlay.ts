@@ -59,7 +59,12 @@ export type OverlayHandle =
   /// Il righello (P13): una riga larga `width` pixel dello schermo, col
   /// centro e il bordo girato di `angle` gradi nella scena, le tacche sui due
   /// bordi e l'angolo scritto in mezzo; `active` mentre lo si tira.
-  | { readonly kind: "ruler"; readonly center: Point; readonly angle: number; readonly width: number; readonly text: string; readonly active?: boolean };
+  | { readonly kind: "ruler"; readonly center: Point; readonly angle: number; readonly width: number; readonly text: string; readonly active?: boolean }
+  /// Un punto di ancoraggio di un tracciato (la Selezione diretta del motore):
+  /// un quadratino di misura fissa, pieno del colore della linea se è scelto.
+  | { readonly kind: "anchor"; readonly x: number; readonly y: number; readonly filled: boolean }
+  /// La fine di una maniglia di un punto scelto: un cerchietto pieno.
+  | { readonly kind: "control"; readonly x: number; readonly y: number };
 
 /// La forma della punta: `round` un cerchio, `flat` l'ellisse stretta della
 /// punta piatta, `block` il rettangolo tondo dell'evidenziatore, `eraser` il
@@ -81,6 +86,12 @@ const GRIP = 8;
 
 /// Il diametro della maniglia che ruota, in pixel CSS.
 const ROTOR = 10;
+
+/// Il lato del quadratino di un punto di ancoraggio, e il diametro della fine
+/// di una maniglia, in pixel CSS: più piccoli delle maniglie della cornice,
+/// perché un tracciato ne ha tanti.
+const ANCHOR = 6;
+const CONTROL = 5;
 
 /// Quanto una maniglia sporge dal suo punto, in pixel CSS: la metà della più
 /// grande, quella che ruota.
@@ -298,6 +309,23 @@ export function createOverlay(host: HTMLElement, owner: Lifetime): SceneOverlay 
         ctx.stroke();
       }
     }
+    for (const handle of handles) {
+      if (handle.kind === "control") {
+        const [px, py] = screen(handle.x, handle.y);
+        ctx.fillStyle = line;
+        ctx.beginPath();
+        ctx.arc(px, py, CONTROL / 2, 0, 2 * Math.PI);
+        ctx.fill();
+      } else if (handle.kind === "anchor") {
+        const [px, py] = screen(handle.x, handle.y);
+        const x = Math.round(px - ANCHOR / 2) + 0.5;
+        const y = Math.round(py - ANCHOR / 2) + 0.5;
+        ctx.fillStyle = handle.filled ? line : fill;
+        ctx.fillRect(x, y, ANCHOR, ANCHOR);
+        ctx.strokeRect(x, y, ANCHOR, ANCHOR);
+      }
+    }
+    ctx.fillStyle = fill;
     for (const handle of handles) {
       if (handle.kind !== "label") continue;
       const [px, py] = screen(handle.x, handle.y);

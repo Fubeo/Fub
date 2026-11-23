@@ -55,7 +55,12 @@ dice `busy`, tiene il tracciato aperto e disegna i segni del motore
 ponte tiene il tracciato nella sua copia finché il gesto continua (stesso
 strumento, stessa revisione); Invio, Esc o lo strumento cambiato mandano il
 `commit` con il tasto (o senza) e l'esito è un passo solo. Con la
-Selezione diretta lo stato porta i punti scelti (`DrawingToolState.anchors`);
+Selezione diretta lo stato porta i punti scelti (`DrawingToolState.anchors`).
+Il motore disegna i segni dei punti solo nell'anteprima di un gesto: a gesto
+fermo `tools/editor/marks.ts` mette sul foglio i punti dei tracciati scelti e
+di quelli dei punti scelti (`motore/punti-diretti.ts`, dal `d`, dai `points`
+o da `x1…y2`), pieni se fra gli `anchors`, e li ridisegna a ogni stato o
+strumento nuovo;
 la famiglia `tracciati` registra la sua fila (`ContestoCompleto.registraFila`,
 `completo/famiglie/tracciati/opzioni-punto.ts`), che manda i comandi sui
 punti con `anchors` nel `value` e dopo l'esito rilegge lo stato. Gli

@@ -11,7 +11,8 @@ import type { Elem } from "../../scene/serialize";
 import { t } from "../../strings";
 import type { OverlayHandle } from "../../painter/overlay";
 import { movedMatrix } from "../edit";
-import { linkTarget, nodeOf } from "../arrange";
+import { fubAttributes, linkTarget, nodeOf, plainAttributes } from "../arrange";
+import { segniDeiPunti } from "../../motore/punti-diretti";
 import {
   angleOf,
   FRAME_PX,
@@ -193,6 +194,24 @@ export function installMarks(ctx: EditorContext): void {
   /// motore, se ce n'è una.
   const motoreMatrix = (): Matrix | null => (ctx.current?.kind === "motore" ? ctx.current.matrix : null);
 
+  /// I punti di ancoraggio dei tracciati scelti con la Selezione diretta del
+  /// motore, a gesto fermo: durante un gesto li disegna l'anteprima del
+  /// motore, e quelli di prima starebbero dove il tracciato non è più. Un
+  /// tratto dell'Inchiostro non ne ha (`motore/punti-diretti.ts`).
+  const anchorHandles = (): OverlayHandle[] => {
+    const id = ctx.motoreTool;
+    if (id !== "directSelection" || !editable() || ctx.current !== null) return [];
+    // Gli oggetti scelti e quelli dei punti scelti: il motore può dire un
+    // punto senza mettere il suo tracciato nella scelta (l'id del file è la
+    // chiave dell'editor).
+    const punti = ctx.statoStrumento(id)?.anchors ?? [];
+    const tracciati = unitsOf([...ctx.selection, ...punti.map((p) => p.element)])
+      .filter((unit) => !fubAttributes(unit.node).has("ink"))
+      .map((unit) => ({ id: unit.id, tag: unit.tag, attributi: plainAttributes(unit.node), matrice: unit.matrix }));
+    if (tracciati.length === 0) return [];
+    return segniDeiPunti(tracciati, punti, 0.5 / ctx.camera.scale);
+  };
+
   const showHandles = (): void => {
     readFirst(placeHandles);
     ctx.statusChanged();
@@ -241,6 +260,7 @@ export function installMarks(ctx: EditorContext): void {
       }
     }
     handles.push(...frameHandles());
+    handles.push(...anchorHandles());
     handles.push(...ctx.nibHandles());
     handles.push(...ctx.rulerHandles());
     const lasso = ctx.current?.kind === "select" && ctx.current.mode === "marquee" ? ctx.current : null;

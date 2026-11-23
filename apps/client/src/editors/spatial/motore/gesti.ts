@@ -532,6 +532,11 @@ export function installGestiMotore(ctx: EditorContext): void {
   const avvisa = (): void => {
     for (const ascolto of [...cambi]) if (cambi.has(ascolto)) ascolto();
   };
+  // I punti della Selezione diretta stanno sul foglio a gesto fermo
+  // (`tools/editor/marks.ts`): un altro strumento, o un suo stato nuovo coi
+  // punti scelti, li ridisegna.
+  cambi.add(() => ctx.showHandles());
+  stati.ascolta(() => ctx.showHandles());
   ctx.motoreTool = null;
   /// Il tracciato aperto di uno strumento a più clic: il gesto del primo
   /// clic (il nome del passo e la selezione di partenza) e quello dell'ultimo
