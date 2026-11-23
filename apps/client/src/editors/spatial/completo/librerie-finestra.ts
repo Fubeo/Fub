@@ -108,6 +108,10 @@ export function apriFinestraLibrerie(porta: PortaLibrerie, vita: Lifetime): void
   elenco.className = "draw-libraries-list";
   elenco.setAttribute("role", "group");
   elenco.setAttribute("aria-label", t("draw.libraries.swatches"));
+  const segnaposto = document.createElement("option");
+  segnaposto.value = "";
+  segnaposto.textContent = t("draw.libraries.choose");
+  scelta.append(segnaposto);
   const info = formNote("", true);
   const errore = formError("");
   errore.hidden = true;
@@ -235,16 +239,15 @@ export function apriFinestraLibrerie(porta: PortaLibrerie, vita: Lifetime): void
   void finestra.result.then(() => own.close());
 
   // Il primo passo: l'elenco. Non arriva: lo si dice, e la scelta resta vuota.
+  // Subito: i pulsanti di aggiunta sono spenti finché una libreria non c'è, anche se l'elenco non arriva.
+  aggiornaAzioni();
   void porta.elenco().then((librerie) => {
     if (own.closed) return;
     if (librerie === null) {
       dimmi(t("draw.libraries.list_failed"));
+      aggiornaAzioni();
       return;
     }
-    const segnaposto = document.createElement("option");
-    segnaposto.value = "";
-    segnaposto.textContent = t("draw.libraries.choose");
-    scelta.append(segnaposto);
     for (const lib of librerie) {
       const voce = document.createElement("option");
       voce.value = lib.id;

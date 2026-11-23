@@ -179,6 +179,10 @@ describe("la finestra Librerie di campioni", () => {
     apriFinestraLibrerie(porta, vita());
     await attesa();
     expect(testo()).toContain(t("draw.libraries.list_failed"));
+    // Senza elenco la tendina ha il suo segnaposto, e Aggiungi è spento (non acceso a vuoto).
+    expect([...scelta().options].map((o) => o.value)).toEqual([""]);
+    expect(tasto("all").disabled).toBe(true);
+    expect(tasto("selected").disabled).toBe(true);
     tasto("cancel").click();
     await attesa();
     expect(finestra()).toBeNull();
