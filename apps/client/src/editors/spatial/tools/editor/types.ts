@@ -59,6 +59,7 @@ export type Gesture =
   | RulerGesture
   | MotoreGesture
   | PathEraseGesture
+  | BrushGesture
   | RefusedGesture;
 
 export interface GestureBase {
@@ -172,6 +173,16 @@ export interface SelectGesture extends GestureBase {
 
 /// La Gomma dei punti (K6 T12, giro 2): il trascinamento raccoglie il tratto nella scena, e
 /// al rilascio manda un solo comando (`motore/gomma-punti.ts`). Niente motore a ogni movimento.
+/// Il Pennello tondo (K6 T12, giro 2): il colpo si raccoglie qui, e al rilascio manda un solo comando
+/// (`motore/pennello-tondo.ts`). Il colore è quello di adesso, preso all'inizio.
+export interface BrushGesture extends GestureBase {
+  readonly kind: "brush";
+  /// Il colpo nella scena, in ordine.
+  readonly path: Point[];
+  /// Il colore del colpo (`#rrggbb`).
+  readonly color: string;
+}
+
 export interface PathEraseGesture extends GestureBase {
   readonly kind: "pathErase";
   /// Il tratto nella scena, in ordine.

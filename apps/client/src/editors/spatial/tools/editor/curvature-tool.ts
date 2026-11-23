@@ -15,6 +15,7 @@ import { gesture as asGesture, removeOps } from "../edit";
 import { gripAt } from "../frame";
 import { IDENTITY } from "../../scene/matrix";
 import { segnoDelTratto } from "../../motore/gomma-punti";
+import { segnoDelColpo } from "../../motore/pennello-tondo";
 import { toScene } from "../../view";
 import { Unit, type Erasable, type ForeignBlock } from "../hit";
 import { preciseEraseOps, type StrokeCut } from "../erase-precise";
@@ -401,6 +402,10 @@ export function installCurvatureTool(ctx: EditorContext): void {
           for (const sample of samples) g.path.push(toPoint(sample));
           ctx.showShape(segnoDelTratto(g.path), IDENTITY);
           break;
+        case "brush":
+          for (const sample of samples) g.path.push(toPoint(sample));
+          ctx.showShape(segnoDelColpo(g.path, g.color), IDENTITY);
+          break;
         case "refused":
           break;
       }
@@ -473,6 +478,11 @@ export function installCurvatureTool(ctx: EditorContext): void {
           ctx.current = null;
           ctx.showShape(null, IDENTITY);
           ctx.gommaPuntiEnd(g.path);
+          return;
+        case "brush":
+          ctx.current = null;
+          ctx.showShape(null, IDENTITY);
+          ctx.pennelloEnd(g.path, g.color);
           return;
         case "refused":
           ctx.current = null;

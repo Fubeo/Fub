@@ -3,6 +3,7 @@
 // condividono.
 
 import { STRUMENTO_GOMMA_PUNTI } from "../../motore/gomma-punti";
+import { STRUMENTO_PENNELLO } from "../../motore/pennello-tondo";
 import type { InkPointerType } from "../../../../ink/input/pointer";
 import type { StrokeStart } from "../../../../ink/input/session";
 import { penLook } from "../../../../ink/pens";
@@ -93,6 +94,9 @@ export function installGestureBegin(ctx: EditorContext): void {
     // La Gomma dei punti (K6 T12, giro 2) non passa dal motore a ogni movimento: il
     // tratto si raccoglie qui, e al rilascio parte un solo comando.
     if (ctx.motoreTool === STRUMENTO_GOMMA_PUNTI) return { ...base, kind: "pathErase", path: [] };
+    // Il Pennello tondo (K6 T12, giro 2) raccoglie il colpo qui, col colore di adesso, e a rilascio manda
+    // un solo comando.
+    if (ctx.motoreTool === STRUMENTO_PENNELLO) return { ...base, kind: "brush", path: [], color: ctx.style().color };
     if (ctx.motoreTool !== null) {
       const motore = ctx.motoreBegin(base);
       if (motore !== null) return motore;

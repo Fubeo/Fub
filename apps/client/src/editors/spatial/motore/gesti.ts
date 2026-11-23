@@ -67,6 +67,7 @@ import type { GestureBase, MotoreGesture } from "../tools/editor/types";
 import type { ToolId } from "../tools/registry";
 import { motivoDelRifiuto, motivoDelRifiutoDelloStrumento } from "./rifiuto";
 import { CodaGommaPunti, STRUMENTO_GOMMA_PUNTI } from "./gomma-punti";
+import { CodaPennello, STRUMENTO_PENNELLO } from "./pennello-tondo";
 import type { GestoMotore, MotoreAssente, SessioneMotore } from "./sessione";
 import { cursoreCss, motoreDelloStrumento, StatiStrumenti } from "./strumento";
 import { Scrittura, STRUMENTI_CHE_SCRIVONO } from "./scrittura";
@@ -493,6 +494,8 @@ export interface GestiMotoreContext {
   /// La Gomma dei punti (K6 T12, giro 2): a rilascio, il tratto del trascinamento
   /// va al motore in un solo comando (`gomma-punti.ts`).
   gommaPuntiEnd: (punti: readonly Point[]) => void;
+  /// Il Pennello tondo (K6 T12, giro 2): a rilascio il colpo va al motore in un solo comando col colore.
+  pennelloEnd: (punti: readonly Point[], colore: string) => void;
 }
 
 /// Ciò che il gesto tiene e gli altri pezzi non leggono.
@@ -1146,6 +1149,21 @@ export function installGestiMotore(ctx: EditorContext): void {
     },
   });
   ctx.gommaPuntiEnd = (punti) => gomma.lancia(punti);
+  // Il Pennello tondo (K6 T12, giro 2): un colpo, un comando, col colore di adesso (`pennello-tondo.ts`).
+  const pennello = new CodaPennello({
+    sessione: async () => {
+      if (porta === undefined || ctx.disposed) return null;
+      const pronta = await (preparazioni.get(STRUMENTO_PENNELLO) ?? Promise.resolve(true));
+      return pronta ? porta.pronta(ATTESA_APERTURA_MS) : null;
+    },
+    esito: (esito) => {
+      if (!ctx.disposed) applicaEsitoGomma(esito);
+    },
+    dici: (frase) => {
+      if (!ctx.disposed) ctx.announce(t(frase));
+    },
+  });
+  ctx.pennelloEnd = (punti, colore) => pennello.lancia(punti, colore);
 
   /// Un tocco della Selezione su un oggetto, senza trascinare: per il doppio
   /// tocco, che isola un gruppo come oggi.
