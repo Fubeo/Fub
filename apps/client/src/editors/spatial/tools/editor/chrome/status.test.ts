@@ -3,7 +3,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { openLifetime } from "../../../../../ui/lifetime";
 import { ZOOM_STEP } from "../constants";
 import type { EditorContext } from "../context";
-import { comandoDiFub, installStatus, voceClienteBanda, type DrawStatusItem, type StatusFrame } from "./status";
+import { t } from "../../../strings";
+import { comandoDiFub, installStatus, voceClienteBanda, voceClienteCompleto, type DrawStatusItem, type StatusFrame } from "./status";
+import { COMANDO_ZOOM_SCELTA } from "./visualizza";
 
 /// Un fotogramma finto: le richieste si accumulano, e `avanza` le esegue. Annullare
 /// una richiesta la toglie, come fa il browser.
@@ -196,6 +198,27 @@ describe("la banda di stato del disegno", () => {
     ctx.comandoVista("view.zoomIn");
     expect(ctx.zoomBy).toHaveBeenCalledWith(ZOOM_STEP);
     expect(camera.scale).toBeCloseTo(ZOOM_STEP);
+  });
+
+  it("Zoom sulla selezione dal Completo: con un oggetto scelto la voce è fitSelection, e basta", () => {
+    const { ctx, camera } = fingi({ completo: true });
+    const fitSelection = vi.fn();
+    Object.assign(ctx, { selection: ["o1a2b3c4d"], fitSelection });
+    expect(voceClienteCompleto(ctx, COMANDO_ZOOM_SCELTA)).toBeNull();
+    ctx.comandoVista(COMANDO_ZOOM_SCELTA);
+    expect(fitSelection).toHaveBeenCalledTimes(1);
+    // Niente zoom del comando e niente contorno: la vista la fa l'editor (`fitSelection`).
+    expect(ctx.zoomBy).not.toHaveBeenCalled();
+    expect(camera.scale).toBe(1);
+    expect(ctx.setOutline).not.toHaveBeenCalled();
+  });
+
+  it("Zoom sulla selezione dal Completo: senza niente di scelto la voce è spenta, con la frase in italiano", () => {
+    const { ctx } = fingi({ completo: true });
+    const fitSelection = vi.fn();
+    Object.assign(ctx, { selection: [], fitSelection });
+    expect(voceClienteCompleto(ctx, COMANDO_ZOOM_SCELTA)).toBe(t("draw.selection.empty"));
+    expect(fitSelection).not.toHaveBeenCalled();
   });
 });
 

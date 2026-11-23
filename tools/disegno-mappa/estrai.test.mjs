@@ -186,7 +186,8 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // T11 cursori: «Usa cursori di precisione» è fatta; T12: «Unisci» (gesto) è fatta; livelli: «Sposta sul livello corrente» è fatta.
   // T11 modo di disegno: `view.drawMode` diventa «fatto» (Normale e Dietro; Dentro spenta con la sua frase).
   // T11: «Aggancia ai pixel» è fatta.
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1043, fub: 114, escluso: 12, fatto: 382 });
+  // T11: «Zoom sulla selezione» è fatta (con la strada del Completo in chrome/status.ts).
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1042, fub: 114, escluso: 12, fatto: 383 });
 });
 
 // --- un motore finto ---------------------------------------------------------------

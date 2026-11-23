@@ -13,7 +13,7 @@ import { plural, t } from "../../../strings";
 import type { Point } from "../../../scene/matrix";
 import type { EditorContext } from "../context";
 import { creaMenuZoom, isComandoVista, type ComandoVista } from "./zoom-menu";
-import { comandoVisualizza, isComandoVisualizza, statoVisualizza, voceVisualizza, type ComandoVisualizza } from "./visualizza";
+import { COMANDO_ZOOM_SCELTA, comandoVisualizza, isComandoVisualizza, statoVisualizza, voceVisualizza, type ComandoVisualizza } from "./visualizza";
 
 /// Una voce della banda: un fatto, e se c'è che cosa fa un clic.
 export interface DrawStatusItem {
@@ -34,10 +34,10 @@ export interface DrawStatus {
 
 /// I comandi che la banda e Ctrl+/ fanno nel Disegno completo: quelli dello zoom, quelli
 /// di ≡ › Visualizza, e il navigatore.
-export type ComandoBanda = ComandoVista | ComandoVisualizza | "navigator";
+export type ComandoBanda = ComandoVista | ComandoVisualizza | typeof COMANDO_ZOOM_SCELTA | "navigator";
 
 export function isComandoBanda(id: string): id is ComandoBanda {
-  return isComandoVista(id) || isComandoVisualizza(id) || id === "navigator";
+  return isComandoVista(id) || isComandoVisualizza(id) || id === COMANDO_ZOOM_SCELTA || id === "navigator";
 }
 
 export interface StatusContext {
@@ -217,6 +217,11 @@ export function installStatus(ctx: EditorContext, frame: StatusFrame = FOTOGRAMM
   ctx.comandoVista = (id) => {
     if (id === "navigator") {
       ctx.setNavigator(!ctx.navigator);
+      return;
+    }
+    // «Zoom sulla selezione» è la vista dell'editor (`fitSelection`): niente file, niente cronologia.
+    if (id === COMANDO_ZOOM_SCELTA) {
+      ctx.fitSelection();
       return;
     }
     if (isComandoVisualizza(id)) {

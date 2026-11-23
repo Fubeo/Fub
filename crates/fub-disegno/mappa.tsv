@@ -883,7 +883,7 @@ motore	object.expandShape	Expand Shape	Object › Shape	forme	F1	T13	fatto	menu/
 motore	object.setLiveShape	Live Shape Properties		forme	F1	T13	da fare	ispettore/design	famiglia	aspetta T27	Proprietà forma dinamica
 interfaccia	addon.pathtools.cornerTool	Corner Tool		tracciati	F1	T12	da fare	ispettore/design	famiglia		Strumento Angoli
 interfaccia	addon.pathtools.sharedEdgeTool	Shared Edge Merge Tool		tracciati	F1	T12	da fare	ispettore/design	famiglia		Strumento Fondi bordo condiviso
-interfaccia	addon.arrange.zoomSelection	Zoom to Selection		trasforma	F1	T13	da fare	ispettore/design	famiglia	è una vista, non un comando del file: lo zoom sulla scelta è nell'editor (tools/editor/view.ts, fitSelection), e il Completo non lo collega ancora a questo comando; il lavoro è della vista del client	Zoom sulla selezione
+interfaccia	addon.arrange.zoomSelection	Zoom to Selection		vista	F1	T11	fatto	ispettore/design	famiglia	è una vista: lo zoom sulla scelta è l'editor (tools/editor/view.ts, fitSelection), chiamato dal Completo (chrome/status.ts); niente file, niente cronologia; senza scelta è spento con «Scegli prima degli oggetti.»	Zoom sulla selezione
 interfaccia	app.language	Interface Language		fub	—	T2	fub	fub	—	la lingua di Fub	Lingua interfaccia
 interfaccia	file.open	Open…		fub	—	T2	fub	fub	—	aprire dal vault	Apri…
 interfaccia	file.save	Save		fub	—	T2	fub	fub	—	il salvataggio di Fub (DocumentSession)	Salva
