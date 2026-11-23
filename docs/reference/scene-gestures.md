@@ -36,8 +36,10 @@ client li usa come risposte.
   il livello scelto nel menu dei livelli (`null`: quello che l'editor sceglie
   da sé); `selection` gli oggetti selezionati prima del gesto; `zoom` la scala
   della vista (spostamento zero).
-- `snap.grid` è il passo della griglia magnetica, `null` se è spenta;
-  `snap.free` è Ctrl/⌘ tenuto per tutto il gesto, che scioglie la griglia, e
+- `snap.grid` è il passo dell'aggancio in unità di scena, `null` se è spento:
+  quello della griglia magnetica, o `1` (un pixel) quando aggancia solo
+  l'aggancio ai pixel del Completo (K6 T11); la griglia, se aggancia, vince;
+  `snap.free` è Ctrl/⌘ tenuto per tutto il gesto, che scioglie l'aggancio, e
   si ripete nel `cmd` di ogni evento.
 - `style` è lo stile con cui lo strumento disegna, letto dall'editor
   (`null` per `select`); `fill` è sempre `null`, perché gli strumenti di
