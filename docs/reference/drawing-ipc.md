@@ -126,7 +126,7 @@ una richiesta di gesto porta al più 100.000 eventi, un esito al più 10.000
 operazioni in 8 MiB di JSON (lo controlla chi lo scrive) e 50.000 parti che
 restano come sono; una selezione ha al più 10.000 id, nessuno vuoto o
 ripetuto; un colore è al più di 64 byte. I numeri sono finiti, `zoom` e il
-passo della griglia sono sopra zero, la pressione sta fra 0 e 1, lo spessore
+passo dell'aggancio (`snap.grid`, la griglia o il pixel) sono sopra zero, la pressione sta fra 0 e 1, lo spessore
 è zero o più. La matrice di una cornice ha un'inversa finita e i suoi
 riquadri non finiscono prima di cominciare. Un gesto senza `revision` o `phase` (come i
 [vettori dei gesti](scene-gestures.md)) vale revisione 0 e `commit`.

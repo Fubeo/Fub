@@ -542,12 +542,14 @@ impl DrawingInput {
     }
 }
 
-/// La griglia magnetica del gesto.
+/// L'aggancio del gesto: la griglia magnetica, o il pixel.
 #[derive(Clone, Copy, Debug, PartialEq, Default, Serialize, Deserialize)]
 pub struct DrawingSnap {
-    /// Il passo della griglia, in unità di scena; `None` se è spenta.
+    /// Il passo dell'aggancio, in unità di scena; `None` se è spento. È il passo
+    /// della griglia, o 1 (un pixel) quando aggancia solo il pixel: con la griglia
+    /// accesa vince la griglia.
     pub grid: Option<f64>,
-    /// Ctrl/⌘ tenuto per tutto il gesto: la griglia non aggancia.
+    /// Ctrl/⌘ tenuto per tutto il gesto: l'aggancio non agisce.
     pub free: bool,
 }
 
