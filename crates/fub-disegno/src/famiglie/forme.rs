@@ -310,7 +310,7 @@ impl StatoFamiglia for Stato {
     /// un livello scelto: il più alto che non è nascosto né bloccato. Senza
     /// livelli, la radice (`None`). Un livello bloccato o nascosto per tutti
     /// dice perché, come il gesto.
-    fn livello(id: &str, copia: &Copia) -> Result<Option<NodeId>, DrawingRefusal> {
+    fn livello(id: &str, copia: &Copia, _valore: &Value) -> Result<Option<NodeId>, DrawingRefusal> {
         if !COMANDI_DI_FORMA.contains(&id) {
             return Ok(None);
         }
