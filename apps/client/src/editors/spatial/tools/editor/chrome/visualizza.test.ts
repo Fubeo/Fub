@@ -24,6 +24,9 @@ function fingi(angle = 0) {
     setOutline: vi.fn(),
     setEdgeRulers: vi.fn(),
     turnView: vi.fn(),
+    preciseCursors: false,
+    setPreciseCursors: vi.fn(),
+    applyToolCursor: vi.fn(),
   };
 }
 
@@ -37,6 +40,7 @@ describe("le righe view.* di ≡ › Visualizza del Disegno completo", () => {
       "view.rulers",
       "view.edges",
       "view.boundingBox",
+      "view.preciseCursors",
       "view.rotate",
       "view.rotateReset",
     ]);
@@ -54,7 +58,7 @@ describe("le righe view.* di ≡ › Visualizza del Disegno completo", () => {
 
   it("le file del menu portano ognuna voce una volta sola, nell'ordine dei comandi", () => {
     expect(FILE_VISUALIZZA.flat()).toEqual([...COMANDI_VISUALIZZA]);
-    expect(FILE_VISUALIZZA.map((file) => file.length)).toEqual([2, 3, 2, 2]);
+    expect(FILE_VISUALIZZA.map((file) => file.length)).toEqual([2, 3, 2, 1, 2]);
   });
 
   it("una voce che il client fa è attiva; rotateReset è spenta col perché se la vista non è girata", () => {
@@ -149,5 +153,26 @@ describe("le righe view.* di ≡ › Visualizza del Disegno completo", () => {
     expect(ctx.setOutline).not.toHaveBeenCalled();
     expect(ctx.setEdgeRulers).not.toHaveBeenCalled();
     expect(ctx.turnView).not.toHaveBeenCalled();
+  });
+});
+
+describe("«Usa cursori di precisione» (K6 T11, cursori): la voce di ≡ › Visualizza", () => {
+  it("la voce è attiva anche senza motore, e la spunta dice se i cursori sono accesi", () => {
+    // La voce non chiede il motore: la scelta è della superficie. Senza motore non si sceglie uno strumento
+    // che disegna, ma la spunta e il comando funzionano lo stesso.
+    const ctx = fingi(0);
+    expect(voceVisualizza(ctx as unknown as EditorContext, "view.preciseCursors")).toBeNull();
+    expect(statoVisualizza(ctx as unknown as EditorContext, "view.preciseCursors")).toBe(false);
+    ctx.preciseCursors = true;
+    expect(statoVisualizza(ctx as unknown as EditorContext, "view.preciseCursors")).toBe(true);
+  });
+
+  it("ogni scelta chiede il contrario di ciò che è acceso, e la scrittura la fa il contesto", () => {
+    const ctx = fingi(0);
+    comandoVisualizza(ctx as unknown as EditorContext, "view.preciseCursors");
+    expect(ctx.setPreciseCursors).toHaveBeenLastCalledWith(true);
+    ctx.preciseCursors = true;
+    comandoVisualizza(ctx as unknown as EditorContext, "view.preciseCursors");
+    expect(ctx.setPreciseCursors).toHaveBeenLastCalledWith(false);
   });
 });

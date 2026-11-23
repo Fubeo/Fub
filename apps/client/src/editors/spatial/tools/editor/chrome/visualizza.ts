@@ -19,6 +19,7 @@ export const COMANDI_VISUALIZZA = [
   "view.rulers",
   "view.edges",
   "view.boundingBox",
+  "view.preciseCursors",
   "view.rotate",
   "view.rotateReset",
 ] as const;
@@ -27,11 +28,12 @@ export type ComandoVisualizza = (typeof COMANDI_VISUALIZZA)[number];
 /// Le file di ≡ › Visualizza, in ordine, con una riga di separazione fra l'una e
 /// l'altra: griglia e aggancio, poi come si vede la carta e il disegno (la griglia di
 /// trasparenza, contorno, righelli), poi ciò che si nasconde attorno agli oggetti
-/// scelti (bordi, riquadro), poi la rotazione della vista.
+/// scelti (bordi, riquadro), poi i cursori di precisione, poi la rotazione della vista.
 export const FILE_VISUALIZZA: readonly (readonly ComandoVisualizza[])[] = [
   ["view.grid", "view.snapToGrid"],
   ["view.transparencyGrid", "view.outline", "view.rulers"],
   ["view.edges", "view.boundingBox"],
+  ["view.preciseCursors"],
   ["view.rotate", "view.rotateReset"],
 ];
 
@@ -65,6 +67,8 @@ export function statoVisualizza(ctx: EditorContext, id: string): boolean | undef
       return ctx.grid.hideEdges === true;
     case "view.boundingBox":
       return ctx.grid.hideBoundingBox === true;
+    case "view.preciseCursors":
+      return ctx.preciseCursors;
     default:
       return undefined;
   }
@@ -99,6 +103,9 @@ export function comandoVisualizza(ctx: EditorContext, id: ComandoVisualizza): vo
       void chiediAngoloVista(ctx.camera.angle).then((gradi) => {
         if (gradi !== null) ctx.turnView(gradi);
       });
+      return;
+    case "view.preciseCursors":
+      ctx.setPreciseCursors(!ctx.preciseCursors);
       return;
     case "view.rotateReset":
       ctx.turnView(0);

@@ -774,7 +774,7 @@ motore	path.knife	Knife		tracciati	F1	T12	fatto	ispettore/design	famiglia		Colte
 motore	path.eraseRegion	Eraser		tracciati	F1	T12	fatto	ispettore/design	famiglia		Gomma
 motore	path.eraseSegments	Path Eraser		tracciati	F1	T12	fatto	ispettore/design	famiglia		Gomma tracciato
 motore	path.smoothRegion	Smooth		tracciati	F1	T12	fatto	ispettore/design	famiglia		Smussa
-motore	path.joinScrub	Join		tracciati	F1	T12	da fare	ispettore/design	famiglia		Unisci
+motore	path.joinScrub	Join		tracciati	F1	T12	fatto	ispettore/design	famiglia		Unisci
 motore	path.blob	Blob Brush		tracciati	F1	T12	da fare	ispettore/design	famiglia		Pennello tondo
 motore	document.open	Open Document		fub	—	T2	fub	fub	—	aprire dal vault (il motore non legge il disco)	Apri documento
 motore	file.list	List Folder		fub	—	T2	fub	fub	—	le schede aperte di Fub	Elenca cartella
@@ -988,10 +988,10 @@ interfaccia	ui.shortcutImportDialog	Import Shortcut Set…		fub	—	T9	fub	fub	�
 interfaccia	view.outline	Outline		vista	F1	T11	fatto	menu/visualizza	famiglia		Contorno
 interfaccia	view.pixelPreview	Pixel Preview		vista	F1	T11	da fare	menu/visualizza	famiglia	l'anteprima dei pixel non la disegna ancora il client	Anteprima pixel
 interfaccia	view.trimView	Trim View		stampa	F4	T25	da fare	menu/visualizza	famiglia		Vista rifilata
-interfaccia	view.cornerWidget	Hide Corner Widget		vista	F1	T11	da fare	menu/visualizza	famiglia	i widget d'angolo arrivano con i punti di T12 (le azioni sul punto): nel Completo non ce ne sono ancora	Nascondi widget angolo
+interfaccia	view.cornerWidget	Hide Corner Widget		vista	F1	T11	da fare	menu/visualizza	famiglia	widget d'angolo (raggio trascinabile sul vertice) non ancora nel Completo: il motore ha solo la preferenza hideCornerWidgetAbove e il comando cornerSet (T12 fatto). Serve una lettura del raggio per vertice e un widget da trascinare (T12, azioni sul punto)	Nascondi widget angolo
 interfaccia	view.snapToPixel	Snap to Pixel		vista	F1	T11	da fare	menu/visualizza	famiglia	l'aggancio al pixel non c'è ancora: quello alla griglia è un passo diverso	Aggancia ai pixel
 interfaccia	view.snapToGlyph	Snap to Glyph		testo	F2	T16	da fare	menu/visualizza	famiglia		Aggancia a glifo
-interfaccia	view.preciseCursors	Use Precise Cursors		vista	F1	T11	da fare	menu/visualizza	famiglia	il cursore a croce di precisione non c'è ancora nel client	Usa cursori di precisione
+interfaccia	view.preciseCursors	Use Precise Cursors		vista	F1	T11	fatto	menu/visualizza	famiglia	la croce per penna, matita, forme, pennelli e gomma dei punti di ancoraggio; la scelta sta nello stato di vista (draw.preciseCursors), come la griglia	Usa cursori di precisione
 interfaccia	imageTrace.preview	Image Trace Preview		immagini	F3	T20	da fare	ispettore/design	famiglia		Anteprima di Ricalco immagine
 interfaccia	view.textThreads	Hide Text Threads		testo	F2	T16	da fare	menu/visualizza	famiglia		Nascondi concatenamenti testo
 interfaccia	view.gradientAnnotator	Hide Gradient Annotator		aspetto	F1	T15	da fare	menu/visualizza	famiglia	l'annotatore si vede con lo strumento Sfumatura (T15 giro 6); nasconderlo vuole una scelta che il gesto porti al ponte degli strumenti, che non c'è ancora	Nascondi annotatore sfumatura

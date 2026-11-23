@@ -7936,6 +7936,200 @@
       "atteso": {
         "rifiuto": "unsupported"
       }
+    },
+    {
+      "id": "path.joinScrub",
+      "disegno": "base.svg",
+      "selezione": [
+        "oc1c1c1c1",
+        "od2d2d2d2"
+      ],
+      "argomenti": {
+        "points": [
+          [
+            150,
+            100
+          ],
+          [
+            175,
+            130
+          ]
+        ]
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "od2d2d2d2"
+              },
+              {
+                "op": "set",
+                "id": "oc1c1c1c1",
+                "attrs": {
+                  "d": "M40 60 L100 60 L160 60 L163 122 L230 124"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "unisci-vicini.svg"
+    },
+    {
+      "id": "path.joinScrub",
+      "disegno": "base.svg",
+      "selezione": [
+        "oc1c1c1c1",
+        "od2d2d2d2"
+      ],
+      "argomenti": {
+        "points": [
+          [
+            300,
+            300
+          ],
+          [
+            320,
+            320
+          ]
+        ]
+      },
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "path.joinScrub",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "points": [
+          [
+            150,
+            100
+          ],
+          [
+            175,
+            130
+          ]
+        ]
+      },
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "path.joinScrub",
+      "disegno": "unisci-testo.svg",
+      "selezione": [
+        "ot1t1t1t1"
+      ],
+      "argomenti": {
+        "points": [
+          [
+            30,
+            240
+          ],
+          [
+            60,
+            260
+          ]
+        ]
+      },
+      "atteso": {
+        "rifiuto": "unmapped"
+      }
+    },
+    {
+      "id": "path.joinScrub",
+      "disegno": "base.svg",
+      "selezione": [
+        "oe3e3e3e3"
+      ],
+      "argomenti": {
+        "points": [
+          [
+            220,
+            20
+          ],
+          [
+            280,
+            20
+          ]
+        ]
+      },
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "path.joinScrub",
+      "disegno": "unisci-bloccato.svg",
+      "selezione": [
+        "oc1c1c1c1",
+        "od2d2d2d2"
+      ],
+      "argomenti": {
+        "points": [
+          [
+            150,
+            100
+          ],
+          [
+            175,
+            130
+          ]
+        ]
+      },
+      "atteso": {
+        "rifiuto": "locked"
+      }
+    },
+    {
+      "id": "path.joinScrub",
+      "disegno": "base.svg",
+      "selezione": [
+        "oc1c1c1c1",
+        "od2d2d2d2"
+      ],
+      "argomenti": {
+        "points": [
+          [
+            160,
+            120
+          ]
+        ]
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "path.joinScrub",
+      "disegno": "base.svg",
+      "selezione": [
+        "oc1c1c1c1",
+        "od2d2d2d2"
+      ],
+      "argomenti": {
+        "points": [
+          [
+            150,
+            100
+          ],
+          [
+            175,
+            130
+          ]
+        ],
+        "tolerance": 150
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
     }
   ]
 }

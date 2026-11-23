@@ -1,8 +1,9 @@
 //! I gesti a mano libera dei tracciati come comandi del disegno (piano K6, T12,
 //! giro 9): Matita (`path.freehand`), Gomma (`path.eraseRegion`), Cancella
 //! tracciato (`path.eraseSegments`), Coltello (`path.knife`) e Smussa
-//! (`path.smoothRegion`). Gli strumenti di «disegnare» con lo stesso nome
-//! (`gesti/strumento.rs`) li fanno dal gesto; questi sono gli stessi comandi
+//! (`path.smoothRegion`) e Unisci (`path.joinScrub`, il passo sopra le estremità).
+//! Gli strumenti di «disegnare» con lo stesso nome (`gesti/strumento.rs`) li fanno
+//! dal gesto; questi sono gli stessi comandi
 //! del motore, con il loro valore, per chi li chiama con un comando.
 //!
 //! - **La Matita** non vuole una selezione: il suo tracciato è nuovo. Il
@@ -34,13 +35,18 @@ use crate::apertura::Copia;
 pub(super) const MATITA: &str = "path.freehand";
 
 /// I comandi a mano libera, nell'ordine della mappa.
-pub(super) const MANO: [&str; 5] = [
+pub(super) const MANO: [&str; 6] = [
     MATITA,
     "path.eraseRegion",
     "path.eraseSegments",
     "path.knife",
     "path.smoothRegion",
+    UNISCI,
 ];
+
+/// Unisci: il passo sopra due estremità aperte le unisce; senza una selezione di tracciati è spento
+/// (come Smussa), e il valore porta il passo in coordinate di scena e la tolleranza.
+pub(super) const UNISCI: &str = "path.joinScrub";
 
 /// Il comando lavora sui tracciati scelti, o su tutti se non c'è selezione
 /// (Gomma e Coltello).
@@ -142,10 +148,34 @@ pub(super) fn argomenti(id: &str, copia: &Copia, mut valore: Value) -> Result<Va
                 .into(),
         ));
     }
+    if id == UNISCI {
+        let passo_valido = o
+            .get("points")
+            .and_then(Value::as_array)
+            .is_some_and(|p| p.len() >= 2 && p.iter().all(punto_numerico));
+        if !passo_valido {
+            return Err(PluginError::BadArgs(
+                "Unisci vuole il suo passo: almeno due punti [x, y].".into(),
+            ));
+        }
+        if let Some(t) = o.get("tolerance").filter(|v| !v.is_null()) {
+            match t.as_f64() {
+                Some(t) if t.is_finite() && (1.0..=100.0).contains(&t) => {}
+                _ => return Err(PluginError::BadArgs("La tolleranza di Unisci va da 1 a 100 punti.".into())),
+            }
+        }
+    }
     if let Some(Value::Array(punti)) = o.get_mut("points") {
         nel_documento(punti, copia);
     }
     Ok(valore)
+}
+
+/// Un punto `[x, y]` (o `[x, y, pressione]`) di numeri finiti.
+fn punto_numerico(p: &Value) -> bool {
+    p.as_array().is_some_and(|a| {
+        (a.len() == 2 || a.len() == 3) && a.iter().all(|n| n.as_f64().is_some_and(f64::is_finite))
+    })
 }
 
 /// Porta i punti `[x, y]` o `[x, y, pressione]` dalla scena al documento; ciò che

@@ -68,7 +68,7 @@ import type { ToolId } from "../tools/registry";
 import { motivoDelRifiuto, motivoDelRifiutoDelloStrumento } from "./rifiuto";
 import { CodaGommaPunti, STRUMENTO_GOMMA_PUNTI } from "./gomma-punti";
 import type { GestoMotore, MotoreAssente, SessioneMotore } from "./sessione";
-import { cursoreCss, motoreDelloStrumento, StatiStrumenti } from "./strumento";
+import { cursoreDelloStrumento, motoreDelloStrumento, StatiStrumenti } from "./strumento";
 import { Scrittura, STRUMENTI_CHE_SCRIVONO } from "./scrittura";
 import { A_PIU_CLIC, segniComeForma, STRUMENTI_DEI_TRACCIATI } from "./tracciati";
 import { toScreen } from "../view";
@@ -583,6 +583,14 @@ export function installGestiMotore(ctx: EditorContext): void {
     return porta === undefined ? Promise.resolve(true) : porta(id).catch(() => false);
   };
 
+  /// Il cursore della superficie per lo strumento del motore scelto: la croce se la voce è accesa e lo strumento
+  /// disegna; altrimenti il cursore che lo strumento dice, o quello di serie finché il suo stato non si legge.
+  const applyToolCursor = (): void => {
+    const id = ctx.motoreTool;
+    ctx.surface.style.cursor = cursoreDelloStrumento(id, id === null ? undefined : stati.stato(id)?.cursor, ctx.preciseCursors);
+  };
+  ctx.applyToolCursor = applyToolCursor;
+
   /// Sceglie lo strumento del motore `id`, o torna a quelli di oggi con
   /// `null`. Il gesto in corso si annulla (come per ogni cambio di strumento).
   /// Se la famiglia non arriva, lo strumento di prima torna e lo si dice.
@@ -599,6 +607,7 @@ export function installGestiMotore(ctx: EditorContext): void {
     }
     const precedente = ctx.motoreTool;
     ctx.motoreTool = id;
+    applyToolCursor();
     const pronta = ctx.preparaStrumento(id);
     preparazioni.set(id, pronta);
     avvisa();
@@ -628,7 +637,10 @@ export function installGestiMotore(ctx: EditorContext): void {
       .then(() => sessione.comando({ id: DRAWING_COMMAND_TOOL_STATE, selection: [], value: { strumento: id } }))
       .then((esito) => {
         if (ctx.disposed || esito === null || "kind" in esito) return;
-        if (esito.state && (forza || stati.stato(id) === null)) stati.registra(id, esito.state);
+        if (esito.state && (forza || stati.stato(id) === null)) {
+          stati.registra(id, esito.state);
+          if (ctx.motoreTool === id) applyToolCursor();
+        }
       })
       .catch((error: unknown) => {
         console.error(error);
@@ -778,7 +790,7 @@ export function installGestiMotore(ctx: EditorContext): void {
         // dopo lo legge, e il cursore del foglio segue lo strumento scelto.
         if (typeof g.tool === "object" && outcome.state) {
           stati.registra(g.tool.engine.id, outcome.state);
-          if (ctx.motoreTool === g.tool.engine.id) ctx.surface.style.cursor = cursoreCss(outcome.state.cursor);
+          if (ctx.motoreTool === g.tool.engine.id) applyToolCursor();
         }
         return outcome;
       }

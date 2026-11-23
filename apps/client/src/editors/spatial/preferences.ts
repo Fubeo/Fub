@@ -80,6 +80,10 @@ export const SUGGESTIONS_KEY = "draw.suggestions";
 /// che non servono più.
 export const SUGGESTED_KEY = "draw.suggested";
 
+/// La chiave dello stato di vista che ricorda «Usa cursori di precisione» (K6 T11, cursori): la croce al posto
+/// del cursore degli strumenti che disegnano. Sta nello stato di vista della macchina, come la griglia.
+export const PRECISE_CURSORS_KEY = "draw.preciseCursors";
+
 let lastGrid: Grid = DEFAULT_GRID;
 /// Le scritture della griglia in fila, e quante ne sono partite.
 let saving: Promise<void> = Promise.resolve();
@@ -98,6 +102,11 @@ let suggesting: Promise<void> = Promise.resolve();
 let suggestedSaves = 0;
 /// Le superfici aperte che seguono i suggerimenti.
 const suggestedWatchers = new Set<(suggested: Suggested) => void>();
+/// La scelta dei cursori di precisione dell'ultima lettura o scrittura riuscita, e le scritture in fila (come
+/// la griglia, ma una scrittura che non riesce non la cambia).
+let lastPreciseCursors = false;
+let preciseCursorsSaving: Promise<void> = Promise.resolve();
+let preciseCursorsSaves = 0;
 
 /// Lo spazio di lavoro e gli strumenti della colonna, come li dicono le
 /// impostazioni.
@@ -302,6 +311,46 @@ export function saveGrid(grid: Grid): void {
     .catch((error: unknown) => {
       notify(t("vector.grid.save_failed", { reason: errorText(error) }), "guasto");
     });
+}
+
+/// La scelta dei cursori di precisione dell'ultima lettura o scrittura riuscita; di serie spenti.
+export function currentPreciseCursors(): boolean {
+  return lastPreciseCursors;
+}
+
+/// Legge la scelta dei cursori di precisione: spenta se non c'è, o se il valore non è vero o falso. Legge dopo
+/// le scritture in corso, e se la lettura non riesce resta quella di prima.
+export async function readPreciseCursors(): Promise<boolean> {
+  await preciseCursorsSaving;
+  const ticket = preciseCursorsSaves;
+  try {
+    const read = (await api.viewState<unknown>(PRECISE_CURSORS_KEY)) === true;
+    // Una scelta fatta mentre si leggeva è più recente di ciò che si è letto.
+    if (ticket === preciseCursorsSaves) lastPreciseCursors = read;
+  } catch {
+    // Lo stato di vista che non si legge lascia l'ultima scelta.
+  }
+  return lastPreciseCursors;
+}
+
+/// Ricorda `on` per i disegni che si aprono dopo. Conta solo se la scrittura riesce: altrimenti resta la scelta
+/// di prima, e lo si dice. Le scritture vanno in fila.
+export function savePreciseCursors(on: boolean): Promise<boolean> {
+  preciseCursorsSaves += 1;
+  const done = preciseCursorsSaving
+    .then(() => api.setViewState(PRECISE_CURSORS_KEY, on))
+    .then(
+      () => {
+        lastPreciseCursors = on;
+        return true;
+      },
+      (error: unknown) => {
+        notify(t("vector.cursors.save_failed", { reason: errorText(error) }), "guasto");
+        return false;
+      },
+    );
+  preciseCursorsSaving = done.then(() => undefined);
+  return done;
 }
 
 /// `value` come colori recenti, dal più recente: i codici `#rrggbb` del suo

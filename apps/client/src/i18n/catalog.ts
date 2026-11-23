@@ -3820,6 +3820,7 @@ export const IT = { // --- la scocca -------------------------------------------
   "vector.foreign.editable": "Rendi modificabile…",
   "vector.foreign.editable.hint": "«Rendi modificabile…» riscrive anche le sue parti nel formato dei disegni di Fub, dove si può senza che cambi ciò che si vede.",
   "vector.grid.save_failed": "Non riesco a ricordare la griglia per i prossimi disegni: {reason}",
+  "vector.cursors.save_failed": "I cursori di precisione restano come prima: non riesco a salvarli. {reason}",
   "vector.pens.save_failed": "Non riesco a ricordare le penne salvate: {reason}",
   "vector.workspace.save_failed": "Non riesco a salvare lo spazio di lavoro dei disegni: {reason}",
   "vector.suggestions.save_failed": "Non riesco a cambiare i suggerimenti dei disegni: {reason}",

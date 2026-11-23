@@ -43,6 +43,39 @@ export function cursoreCss(nome: string): string {
   return Object.prototype.hasOwnProperty.call(CURSORI, nome) ? CURSORI[nome]! : CURSORE_DI_SERIE;
 }
 
+/// Gli strumenti del motore che disegnano: con «Usa cursori di precisione» mostrano la croce al posto del
+/// cursore di serie (K6 T11, cursori). Sono la penna e la penna intelligente, la matita, le forme (il
+/// rettangolo, il rettangolo arrotondato, l'ellisse, il poligono, la stella, il segmento, l'arco, la spirale
+/// e le due griglie), i pennelli (non ancora nella colonna: T17) e la gomma dei punti di ancoraggio. La
+/// selezione, il testo, i tracciati e le trasformazioni tengono il loro cursore.
+export const STRUMENTI_CHE_DISEGNANO: ReadonlySet<string> = new Set([
+  "pen",
+  "smartPen",
+  "pencil",
+  "rectangle",
+  "roundedRectangle",
+  "ellipse",
+  "polygon",
+  "star",
+  "lineSegment",
+  "arc",
+  "spiral",
+  "rectangularGrid",
+  "polarGrid",
+  "paintbrush",
+  "blobBrush",
+  "anchorEraserBrush",
+]);
+
+/// Il `cursor` CSS che lo strumento del motore `id` mostra sulla superficie. `null` vuol dire nessuno strumento
+/// del motore scelto: il cursore è quello di serie. `nome` è il cursore che lo strumento dice nel suo stato,
+/// `undefined` finché lo stato non si legge. Con la voce accesa, uno strumento che disegna mostra la croce.
+export function cursoreDelloStrumento(id: string | null, nome: string | undefined, preciso: boolean): string {
+  if (id === null) return "";
+  if (preciso && STRUMENTI_CHE_DISEGNANO.has(id)) return "crosshair";
+  return nome === undefined ? "" : cursoreCss(nome);
+}
+
 /// Lo stato di ogni strumento del motore, come l'ha lasciato l'ultimo esito che
 /// l'ha portato. Chi mostra lo stato (la fila delle opzioni) si iscrive con
 /// `ascolta`: ogni iscrizione ha il suo disposer, e dopo quello non riceve più

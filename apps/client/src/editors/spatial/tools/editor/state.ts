@@ -301,6 +301,7 @@ export function installState(ctx: EditorContext): void {
   ctx.loads = 0;
   ctx.chosen = null;
   ctx.grid = options.grid === undefined ? DEFAULT_GRID : checkedGrid(options.grid, DEFAULT_GRID);
+  ctx.preciseCursors = options.preciseCursors === true;
   ctx.free = false;
   ctx.alt = false;
   ctx.kept = null;

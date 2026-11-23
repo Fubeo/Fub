@@ -666,3 +666,42 @@ describe("lo spazio di lavoro del disegno", () => {
     expect(bare.recentNotices().map((notice) => notice.text)).toEqual([expect.stringMatching(/disco pieno/)]);
   });
 });
+
+describe("i cursori di precisione: la scelta sta nello stato di vista della macchina", () => {
+  it("di serie sono spenti, e la scelta fatta resta quando il disegno si apre di nuovo", async () => {
+    const host = createFakeHost();
+    const prima = await boot(host);
+    expect(await prima.readPreciseCursors()).toBe(false);
+    expect(await prima.savePreciseCursors(true)).toBe(true);
+    expect(prima.currentPreciseCursors()).toBe(true);
+    // Il disegno si riapre: moduli nuovi sullo stesso stato di vista.
+    const dopo = await boot(host);
+    expect(dopo.currentPreciseCursors()).toBe(false);
+    expect(await dopo.readPreciseCursors()).toBe(true);
+    expect(host.atGate("viewState").map((call) => call.args)).toContainEqual(["draw.preciseCursors"]);
+  });
+
+  it("una scrittura che non riesce lascia la scelta di prima, e lo dice", async () => {
+    const host = createFakeHost();
+    const { readPreciseCursors, savePreciseCursors, currentPreciseCursors, recentNotices } = await boot(host);
+    await readPreciseCursors();
+    const guasti = () => recentNotices().filter((notice) => notice.tone === "guasto").length;
+    const prima = guasti();
+    const annulla = host.fault("setViewState", "disco pieno");
+    expect(await savePreciseCursors(true)).toBe(false);
+    annulla();
+    // La scelta in uso resta quella di prima, e chi disegna lo vede dall'avviso. Il finto host salva il valore
+    // prima di far fallire la chiamata (`setViewState` in host/fake.ts): per questo non si rilegge lo stato.
+    expect(currentPreciseCursors()).toBe(false);
+    expect(guasti()).toBe(prima + 1);
+  });
+
+  it("un valore che non è vero o falso non accende la voce", async () => {
+    for (const broken of ["yes", 1, { on: true }]) {
+      const host = createFakeHost();
+      const { readPreciseCursors } = await boot(host);
+      await host.module.api.setViewState("draw.preciseCursors", broken);
+      expect(await readPreciseCursors(), JSON.stringify(broken)).toBe(false);
+    }
+  });
+});

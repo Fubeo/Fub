@@ -66,10 +66,12 @@ Nel Disegno completo, ≡ › Visualizza ha la griglia («Mostra griglia» e
 «Aggancia alla griglia», le stesse impostazioni del Semplice), «Mostra griglia
 trasparenza», il contorno, i righelli del bordo del foglio («Mostra righelli»),
 «Nascondi bordi» e «Nascondi riquadro di delimitazione», e «Reimposta rotazione
-vista», che è spenta finché la vista non è girata. Le voci stanno in quattro
+vista», che è spenta finché la vista non è girata. Le voci stanno in cinque
 file, separate da una riga: griglia e aggancio; trasparenza, contorno e
-righelli; bordi e riquadro; la rotazione. Le voci «Nascondi» hanno la spunta
-quando nascondono davvero.
+righelli; bordi e riquadro; la croce di precisione; la rotazione. Le voci «Nascondi» hanno la
+spunta quando nascondono davvero. «Usa cursori di precisione» mette la croce al posto del cursore
+degli strumenti che disegnano (penna, matita, forme, pennelli e gomma dei punti di ancoraggio); la
+scelta resta su questa macchina, come la griglia.
 
 La griglia di trasparenza mette la carta a scacchi, dove il foglio non ha un
 fondo suo: un PDF di sfondo, con la sua pagina, la copre. «Nascondi bordi»

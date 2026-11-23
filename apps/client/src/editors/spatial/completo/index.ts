@@ -375,21 +375,26 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila" | "e
     void eseguiPerId("path.deleteAnchors", {}, { senzaFinestra: true });
     return true;
   };
-  /// Il modo di disegno che il motore ha accettato per ultimo (K6 T11): il segno di «Disegna normale» e
-  /// «Disegna dietro». Ogni apertura del Completo parte da «normale», come la sessione del motore.
-  let modoDiDisegno: "normal" | "behind" = "normal";
   /// Il percorso unico dei comandi (`eseguiVoce`), che ricorda l'ultima elaborazione andata.
-  const lancia =async (voce: VoceIndice): Promise<void> => {
-    // ≡ › Modifica › Cancella con dei punti scelti toglie quei punti, come Canc.
-    if (voce.id === "edit.clear" && cancellaPunti()) return;
-    const coiPunti = (dipendenze.punti?.() ?? []).length > 0;
-    const andata = await eseguiVoce(voce, dipendenze);
-    if (andata && ripetibili.has(voce.id)) ultimaElaborazione = voce.id;
-    // Il segno di Normale e Dietro segue il modo che il motore ha accettato: un rifiuto non lo cambia (K6 T11).
-    const modo = (voce.chiamata as { readonly valore?: { readonly mode?: unknown } }).valore?.mode;
-    if (andata && voce.id === "view.drawMode" && (modo === "normal" || modo === "behind")) modoDiDisegno = modo;
-    // I punti scelti possono essere cambiati: lo stato dello strumento si rilegge.
-    if (andata && coiPunti && !chiuso) opzioni.tasti?.rileggiStato?.();
+  // I comandi in volo, per voce, valori e selezione: un secondo clic identico mentre il primo è in
+  // volo (il doppio clic) non manda un altro comando al motore, che lo riceverebbe con la stessa copia.
+  // Un comando diverso (altri valori, altra selezione) parte lo stesso.
+  const inVolo = new Set<string>();
+  const lancia = async (voce: VoceIndice): Promise<void> => {
+    const chiave = JSON.stringify([voce.id, voce.chiamata, dipendenze.selezione()]);
+    if (inVolo.has(chiave)) return;
+    inVolo.add(chiave);
+    try {
+      // ≡ › Modifica › Cancella con dei punti scelti toglie quei punti, come Canc.
+      if (voce.id === "edit.clear" && cancellaPunti()) return;
+      const coiPunti = (dipendenze.punti?.() ?? []).length > 0;
+      const andata = await eseguiVoce(voce, dipendenze);
+      if (andata && ripetibili.has(voce.id)) ultimaElaborazione = voce.id;
+      // I punti scelti possono essere cambiati: lo stato dello strumento si rilegge.
+      if (andata && coiPunti && !chiuso) opzioni.tasti?.rileggiStato?.();
+    } finally {
+      inVolo.delete(chiave);
+    }
   };
   // La sezione «Allinea» (T13, giro 2): dall'indice, senza caricare la famiglia `trasforma`,
   // che parte solo al clic di un suo comando.
@@ -420,17 +425,6 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila" | "e
   // Ricolora grafica (K6 T14): la voce di Modifica › Modifica colori apre la sua finestra. Il suo
   // stato è quello del comando che la finestra scrive (`conVociClient`).
   vociDelCompleto.set(VOCE_RICOLORA, { stato: () => null, esegui: () => void apriRicolora(dipendenze) });
-  // Modo di disegno (K6 T11): Normale e Dietro mandano `view.drawMode` col loro modo, e il segno è quello
-  // accettato dal motore. Dentro è spenta con la sua frase: il file non ha ancora il gruppo di ritaglio.
-  vociDelCompleto.set("view.drawNormal", {
-    stato: () => null,
-    esegui: () => void eseguiPerId("view.drawMode", { mode: "normal" }, { senzaFinestra: true }),
-  });
-  vociDelCompleto.set("view.drawBehind", {
-    stato: () => null,
-    esegui: () => void eseguiPerId("view.drawMode", { mode: "behind" }, { senzaFinestra: true }),
-  });
-  vociDelCompleto.set("view.drawInside", { stato: () => t("draw.view.dentroNonC"), esegui: () => undefined });
   registraColore(sezioni, (id, valori) => void eseguiPerId(id, valori, { senzaFinestra: true }), ctx.life, latoAttivo);
   // La «Guida colori» del Design (K6 T14, giro 3): le armonie del lato attivo, lette dal motore.
   registraGuidaColori(sezioni, (id, valori) => void eseguiPerId(id, valori, { senzaFinestra: true }), () => dipendenze, ctx.life, latoAttivo);
@@ -597,11 +591,7 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila" | "e
       const propria = vociDelCompleto.get(id);
       return propria !== undefined ? propria.stato() : opzioni.clientVoce?.(id);
     },
-    clientStato: (id) => {
-      if (id === "view.drawNormal") return modoDiDisegno === "normal";
-      if (id === "view.drawBehind") return modoDiDisegno === "behind";
-      return opzioni.clientStato?.(id);
-    },
+    clientStato: opzioni.clientStato,
   });
   let chiuso = false;
   // I tasti dell'utente (`draw.keys`, T9c): con un editor e senza modifiche
