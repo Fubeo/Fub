@@ -141,6 +141,18 @@ describe("la sezione Colore del Design", () => {
     c.chiudi();
   });
 
+  it("più colori diversi mostrano «Misto» sul pozzo; un riempimento «nessuno» dice «Nessuno»", () => {
+    const misto = completo(2, { riempimento: { valore: null }, contorno: { valore: "#0000ff" } });
+    const [riempimento] = pozzi(misto.corpo);
+    expect(riempimento!.querySelector(".kit-color-well-name")?.textContent).toBe(t("draw.properties.mixed"));
+    expect(riempimento!.querySelector(".kit-color-chip")!.classList.contains("mixed")).toBe(true);
+    misto.c.chiudi();
+    const nessuno = completo(1, { riempimento: { valore: "none" } });
+    const [riempimentoNessuno] = pozzi(nessuno.corpo);
+    expect(riempimentoNessuno!.querySelector(".kit-color-chip")!.classList.contains("none")).toBe(true);
+    nessuno.c.chiudi();
+  });
+
   it("aprire il pozzo del contorno lo fa attivo con un comando solo; un colore scelto va sul suo lato", async () => {
     const { c, corpo, comando } = completo(1);
     const [, contorno] = pozzi(corpo);

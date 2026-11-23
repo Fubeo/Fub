@@ -129,7 +129,9 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // T14 librerie 2 porta a «fatto» `swatch.library.add`: copia una libreria di base nel disegno, con i
   // campioni globali e senza gruppo (casi in `tests/famiglie/colore.json`). Restano «da fare» le finestre
   // delle librerie e le librerie dell'utente (la cartella del desktop non c'è nel Completo).
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1103, fub: 114, escluso: 12, fatto: 322 });
+  // T14 pannello colore: il pannello `color` diventa «fatto» (la sezione Colore del Design, con la sua
+  // prova in colore.json); `ui.colorPicker` e `ui.colorPanel` restano «da fare», con la causa nella nota.
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1102, fub: 114, escluso: 12, fatto: 323 });
 });
 
 // --- un motore finto ---------------------------------------------------------------
