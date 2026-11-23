@@ -79,7 +79,10 @@ quello di sempre.
   «Tratteggiato», che acceso apre Trattino e Spazio; spento, il contorno torna
   pieno. Un tratteggio con più di due lunghezze lo dice, e scrivere un trattino
   o uno spazio lo sostituisce con quei due. Lo spessore e le lunghezze non
-  scendono sotto zero: un valore negativo diventa zero. Il Limite dell’angolo e
+  scendono sotto zero: un valore negativo diventa zero, e uno sopra 1000 porta a
+  1000. Lo stesso spessore che c’è già non fa nessun passo di Annulla. Un oggetto
+  senza contorno ha la sezione spenta: il pannello non gliene aggiunge uno. Il
+  Limite dell’angolo e
   l’Allineamento si vedono spenti, a 4 e «Al centro», perché il file SVG non li
   scrive. Con niente di scelto, con soli testi o tratti dell’Inchiostro, che un
   contorno non l’hanno, o con un oggetto bloccato, la sezione è spenta e dice
