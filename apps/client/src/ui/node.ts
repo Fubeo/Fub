@@ -625,10 +625,19 @@ function update(
       // che, per chi la legge, non si è aperta.
       if (next.selected) el.setAttribute("aria-selected", "true");
       else el.removeAttribute("aria-selected");
-      if (next.children.length > 0) el.setAttribute("aria-expanded", String(next.expanded));
-      else el.removeAttribute("aria-expanded");
-      childrenContainer(el).hidden = !next.expanded;
-      children(childrenContainer(el), next.children, onAction);
+      // Anche il gruppo, come nel disegno: una foglia che diventa ramo (l'indice
+      // dei titoli che arriva dopo il primo disegno) lascerebbe i suoi figli
+      // `treeitem` senza un genitore che li contenga.
+      const group = childrenContainer(el);
+      if (next.children.length > 0) {
+        el.setAttribute("aria-expanded", String(next.expanded));
+        group.setAttribute("role", "group");
+      } else {
+        el.removeAttribute("aria-expanded");
+        group.removeAttribute("role");
+      }
+      group.hidden = !next.expanded;
+      children(group, next.children, onAction);
       return true;
     }
     case "tab":

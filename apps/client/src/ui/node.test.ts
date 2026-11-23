@@ -1608,6 +1608,36 @@ describe("le righe di un elenco e di un albero non hanno stile in linea (S2 T9)"
   });
 });
 
+describe("un ramo che riceve i figli in un ridisegno è un gruppo dell'albero", () => {
+  // Il contenitore dei figli di un `treeitem` porta `role="group"`: senza, i
+  // figli sono `treeitem` senza un genitore che li contenga (axe,
+  // aria-required-parent). Una foglia riusata come ramo — l'indice dei titoli
+  // che arriva dopo il primo disegno — deve prenderlo anche lei.
+  const tree = (children: UiNode[]): UiNode =>
+    ({
+      node: "tree",
+      roots: [{ node: "tree_item", label: "Titoli", action: null, selected: false, expanded: true, children }],
+    }) as unknown as UiNode;
+  const leaf = { node: "tree_item", label: "Primo", action: null, selected: false, expanded: true, children: [] } as unknown as UiNode;
+
+  it("lo prende quando arrivano i figli e lo lascia quando se ne vanno", () => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    mountTree(host, tree([]), async () => {});
+    const group = () => host.querySelector<HTMLElement>(".ui-tree > .ui-tree-item > .ui-children")!;
+    const before = group();
+    expect(before.hasAttribute("role")).toBe(false);
+    mountTree(host, tree([leaf]), async () => {});
+    expect(group()).toBe(before);
+    expect(group().getAttribute("role")).toBe("group");
+    expect(host.querySelector(".ui-tree > .ui-tree-item")!.getAttribute("aria-expanded")).toBe("true");
+    mountTree(host, tree([]), async () => {});
+    expect(group().hasAttribute("role")).toBe(false);
+    unmountTree(host);
+    host.remove();
+  });
+});
+
 describe("una voce che nomina una nota ne porta l'icona (S2 T13)", () => {
   const item = (title: string, doc?: string): UiNode =>
     ({
