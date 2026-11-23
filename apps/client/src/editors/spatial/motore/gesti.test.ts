@@ -1384,6 +1384,19 @@ async function apriIlTesto(fake: FakeHost): Promise<DrawEditor> {
 }
 
 describe("il Testo del motore: si scrive con la tastiera (K6 T16)", () => {
+  it.each(["areaType", "typeOnPath"])("anche %s scrive: il clic apre la casella e le parole vanno al motore", async (strumento) => {
+    const fake = createFakeHost({ drawing: testoFinto() });
+    const editor = await montaConPreparazione(EMPTY, fake);
+    editor.setEngineTool(strumento);
+    await clic(editor, 40, 60);
+    await settle(16, 8);
+    expect(casella()).not.toBeNull();
+    expect(document.activeElement).toBe(casella());
+    await scrivi("Ciao");
+    expect(gestures(fake).map((each) => each.phase)).not.toContain("commit");
+    expect(ingressiDi(fake)).toEqual([{ kind: "text", text: "Ciao" }]);
+  });
+
   it("un clic apre la casella a fuoco; le parole e i tasti vanno al motore, il testo si vede, e Esc lo chiude in un passo e torna alla Selezione", async () => {
     const fake = createFakeHost({ drawing: testoFinto() });
     const editor = await apriIlTesto(fake);
