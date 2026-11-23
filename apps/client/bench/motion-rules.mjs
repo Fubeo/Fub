@@ -469,11 +469,11 @@ async function gripOf(page, selector) {
 /// mezzo metro di schermo al secondo, è una mano che trascina svelta.
 const STEP_PX = 8;
 
-/// Il puntatore da dov'è a `to`, un fotogramma per passo di al più `STEP_PX`.
-async function sweep(page, to) {
+/// Il puntatore da dov'è a `to`, un fotogramma per passo di al più `stepPx` (di norma `STEP_PX`).
+async function sweep(page, to, stepPx = STEP_PX) {
   const state = pointers.get(page);
   const from = state.at;
-  const steps = Math.max(1, Math.ceil(Math.hypot(to.x - from.x, to.y - from.y) / STEP_PX));
+  const steps = Math.max(1, Math.ceil(Math.hypot(to.x - from.x, to.y - from.y) / stepPx));
   for (let step = 1; step <= steps; step += 1) {
     const at = { x: from.x + ((to.x - from.x) * step) / steps, y: from.y + ((to.y - from.y) * step) / steps };
     await page.mouse.move(at.x, at.y);
@@ -862,6 +862,13 @@ export const CHOREOGRAPHIES = [
     // della nota davanti: Sintassi di Fub, che ha i titoli per il gesto.
     setup: async (page) => {
       await press(page, '#file-list li[data-path="Guida"] > .tree-row');
+      // La cartella si apre scorrendo: finché corre, le righe sotto passano
+      // sopra la nota e il clic prende «Benvenuto».
+      await page.waitForFunction(() => {
+        const list = document.querySelector("#file-list");
+        return !!list?.querySelector('li[data-path="Guida/Sintassi di Fub.md"]') &&
+          list.getAnimations({ subtree: true }).every((animation) => animation.playState !== "running");
+      });
       await press(page, '#file-list li[data-path="Guida/Sintassi di Fub.md"] > .tree-row');
       await page.waitForFunction(() => document.querySelector('.tab[aria-selected="true"] .tab-name')?.textContent?.includes("Sintassi di Fub") ?? false);
       await press(page, "#right-pane .inspector-tab >> nth=0");
@@ -1234,8 +1241,12 @@ export const CHOREOGRAPHIES = [
     act: async (page) => {
       const grip = await pick(page, ".cm-fub-code-line:has-text('const giorni')");
       await sweep(page, { x: grip.x, y: grip.y + 200 });
-      // Meno di un blocco indietro: il posto resta dopo la tabella.
-      await sweep(page, { x: grip.x, y: grip.y + 170 });
+      // Meno di un blocco indietro, in un fotogramma solo: il posto resta dopo
+      // la tabella e non riparte. Lo scivolare cominciato all'andata è ancora
+      // in corsa a metà, ed è quello che l'inversione interrompe: il posto
+      // scivola una volta per cambio, e quattro fotogrammi di ritorno lo
+      // lasciavano già fermo.
+      await sweep(page, { x: grip.x, y: grip.y + 170 }, 30);
     },
     arrived: held(false),
     undo: backTo(),
