@@ -5,6 +5,12 @@
 import type { Etichette } from "../../opzioni";
 
 export const TESTI: Etichette = {
+  // La fila della Trasformazione libera (`opzioni-libera.ts`), coi nomi di VectorCraft.
+  "libera.vincola": { it: "Vincola", en: "Constrain" },
+  "libera.modo": { it: "Modo", en: "Mode" },
+  "libera.modo.free": { it: "Trasformazione libera", en: "Free Transform" },
+  "libera.modo.perspective": { it: "Distorsione prospettica", en: "Perspective Distort" },
+  "libera.modo.distort": { it: "Distorsione libera", en: "Free Distort" },
   "azione:object.move": { it: "Sposta", en: "Move" },
   "azione:object.rotate": { it: "Ruota", en: "Rotate" },
   "azione:object.scale": { it: "Scala", en: "Scale" },

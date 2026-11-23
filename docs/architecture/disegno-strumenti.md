@@ -47,6 +47,16 @@ spegne. Lo stato arriva con un esito: un gesto, `disegno.strumento.opzione`, o
 (`preparaStrumento`) manda appena la famiglia è pronta, così la fila c'è prima
 del primo gesto.
 
+Una famiglia può registrare una fila propria per uno strumento
+(`registraFila`): riceve lo stato intero e le azioni della fila
+(`AzioniFila`: un comando, una lettura, una frase e `opzione`, che cambia
+un'opzione dello strumento con `disegno.strumento.opzione` come la fila
+generica). Così fanno i punti della Selezione diretta (`tracciati`), il
+Contagocce (`colore`) e la Trasformazione libera (`trasforma`,
+`opzioni-libera.ts`): Vincola sopra i tre modi del riquadro di VectorCraft
+(libera, prospettica, libera distorsione), perché il modo è un testo che la
+fila generica non disegna; Vincola è spenta fuori dal modo libero.
+
 **I tracciati e i punti (T12).** La penna, la penna intelligente e la
 curvatura fanno un tracciato a più clic (`motore/tracciati.ts`,
 `A_PIU_CLIC`): al rilascio `gesti.ts` manda un'anteprima e, finché lo stato

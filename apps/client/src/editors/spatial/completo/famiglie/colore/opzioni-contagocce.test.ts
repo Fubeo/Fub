@@ -23,7 +23,7 @@ function azioniFinte(letto: unknown = null) {
   const esegui = vi.fn<AzioniFila["esegui"]>();
   const leggi = vi.fn<AzioniFila["leggi"]>(() => Promise.resolve(letto));
   const annuncia = vi.fn<AzioniFila["annuncia"]>();
-  return { vita, azioni: { esegui, leggi, annuncia } satisfies AzioniFila, esegui, leggi };
+  return { vita, azioni: { esegui, leggi, annuncia, opzione: vi.fn() } satisfies AzioniFila, esegui, leggi };
 }
 
 /// Il pulsante del campione con questa parola, e la casella con questa frase.

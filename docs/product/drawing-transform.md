@@ -87,6 +87,18 @@ trasforma la selezione attorno a quel centro, e il rilascio è un solo passo di
 annulla. Con un oggetto bloccato nella
 selezione il gesto è rifiutato, con la stessa frase della finestra.
 
+Nella stessa casella c'è la **Trasformazione libera** (`E`): si trascina una
+maniglia della cornice per scalare (`Maiusc` proporzionale, `Alt` dal centro),
+dentro per spostare, appena fuori da un angolo per ruotare; `Ctrl` su una
+maniglia di lato inclina lungo quel lato.
+Nella riga delle opzioni in alto, come nel riquadro di VectorCraft, ci sono
+**Vincola** (come tenere `Maiusc`: scala proporzionale, spostamenti e rotazioni
+a 45°) e i tre modi: Trasformazione libera, Distorsione prospettica (gli angoli
+si muovono a coppie lungo il loro lato) e Distorsione libera (ogni angolo per
+conto suo). Vincola vale solo nel primo modo, e negli altri è spenta. `Ctrl` su
+un angolo deforma anche nel modo libero, come nell'Illustrator classico. La deformazione vale per i tracciati:
+su un rettangolo o un'ellisse è rifiutata.
+
 La sezione Trasforma, nella scheda Design, dà posizione, misura, rotazione e
 inclinazione, e Reimposta riquadro. I campi mostrano i valori della selezione,
 nell'unità del pannello, e restano vuoti se la selezione non ha un valore solo.

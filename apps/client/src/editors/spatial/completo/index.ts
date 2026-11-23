@@ -761,6 +761,7 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila" | "e
           esegui: (id: string, valore: unknown, etichetta: string) => void comandoDellaFila(id, valore, etichetta, ambiente?.rileggi),
           leggi: (id: string, valore: unknown) => leggiPerLaFila(id, valore),
           annuncia: dipendenze.annuncia,
+          opzione: cambia,
         };
         return propria(ambiente?.stato ?? null, azioni, vita);
       }
