@@ -220,15 +220,12 @@ function drawWorkspace(value: string, source: "default" | "vault" = "vault"): Se
 /// Gli strumenti della colonna del Semplice, coi primi delle tendine: la
 /// colonna di serie.
 const COLUMN_TOOLS = ["select", "hand", "pen", "eraser", "rect", "text"];
-/// La colonna del Completo (K6 T8): sei gruppi nell'ordine del prototipo, con
-/// la Mano in fondo al suo gruppo e «Tutti gli strumenti» dopo; con il motore
-/// acceso, le caselle della Selezione diretta e del Lazo del nucleo (K6 T11),
-/// e il gruppo «disegnare» con tre caselle: la Penna di Bézier, la Matita (che
-/// tiene l'Inchiostro di Fub) e la Gomma del Completo (K6 T12), il gruppo
-/// «modificare» con la Ruota (K6 T13 giro 5: le sue altre tre voci stanno nella stessa casella)
-/// e la casella del colore con lo strumento Sfumatura (K6 T15 giro 6) e il Contagocce (K6 T14 giro 6).
-// La casella «modificare» mostra il Generatore forme (`shapeBuilder`, T13 giro 7) dopo la Ruota.
-const COLUMN_TOOLS_COMPLETO = ["select", "motore:directSelection", "motore:lasso", "motore:pen", "pen", "motore:eraser", "rect", "text", "motore:rotate", "motore:shapeBuilder", "motore:gradient", "motore:eyedropper", "hand", "all"];
+/// La colonna del Completo col motore acceso: solo gli strumenti di
+/// VectorCraft, i primi di ogni casella, e «Tutti gli strumenti» in fondo.
+const COLUMN_TOOLS_COMPLETO = ["motore:selection", "motore:directSelection", "motore:lasso", "motore:pen", "motore:pencil", "motore:eraser", "motore:rectangle", "motore:type", "motore:rotate", "motore:warp", "motore:shapeBuilder", "motore:gradient", "motore:eyedropper", "motore:hand", "all"];
+/// La colonna del Completo col motore spento: gli strumenti di Fub, che
+/// funzionano anche senza.
+const COLUMN_TOOLS_COMPLETO_SENZA_MOTORE = ["select", "pen", "eraser", "rect", "text", "hand", "all"];
 
 /// Lo spazio di lavoro del disegno nel riquadro attivo.
 const workspace = (): string | undefined => focusedPane().querySelector<HTMLElement>(".draw-editor")?.dataset.workspace;
@@ -525,6 +522,11 @@ const COPIA_IN_SOLA_LETTURA: DrawingFake = {
       ...extra,
     });
     switch (request.id) {
+      case "disegno.famiglia.prepara":
+        return esito({ reading: { stato: "pronta" } });
+      // Ctrl+A col motore è il suo «Seleziona tutto», come in VectorCraft.
+      case "disegno.select.all":
+        return esito({ selection: ["o1a2b3c4d"] });
       case "disegno.edit.copy":
         return esito({ refused: "empty" });
       case "disegno.clipboard.flavours":
@@ -560,6 +562,7 @@ describe("gli appunti del Completo con Ctrl+C", () => {
       supports: (tipo) => tipo === "text/plain" || tipo === "image/svg+xml" || tipo === "image/png",
     });
     try {
+      focusedPane().querySelector<HTMLElement>(".draw-surface")!.focus();
       press("a", { ctrlKey: true });
       await settle();
       // Ctrl+C: il browser manda l'evento di copia sulla superficie.
@@ -616,7 +619,8 @@ describe("lo spazio e la griglia del disegno", () => {
     await open("casa.svg");
     const editor = focusedPane().querySelector(".draw-editor");
     // La colonna del Completo c'è quando il suo modulo è montato: prima c'è quella semplice.
-    await waitFor("la colonna del Completo", () => tools().join(",") === COLUMN_TOOLS_COMPLETO.join(","));
+    // Qui il motore non c'è: restano gli strumenti di Fub.
+    await waitFor("la colonna del Completo", () => tools().join(",") === COLUMN_TOOLS_COMPLETO_SENZA_MOTORE.join(","));
 
     await host.module.api.setSetting("draw.workspace", "simple");
     await waitFor("il Semplice", () => workspace() === "simple");

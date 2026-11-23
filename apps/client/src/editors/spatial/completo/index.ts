@@ -708,6 +708,22 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila" | "e
     for (const ascolto of [...ascoltiColonna]) if (ascoltiColonna.has(ascolto)) ascolto();
   };
   ctx.life.add(carica.quandoCambia(() => avvisaColonna()));
+  /// Il motore c'è (aperto o in apertura, non spento né fermo) e l'indice è
+  /// arrivato: allora la colonna e i tasti sono solo quelli di VectorCraft.
+  /// Spento o fermo, tornano gli strumenti semplici, che senza motore
+  /// funzionano: una colonna di strumenti morti non serve a nessuno.
+  const motoreAttivo = (): boolean => ctx.motore !== null && ctx.motore.assente() === null && indiceArrivato !== null;
+  let attivo = false;
+  /// La colonna si rifà solo quando `motoreAttivo()` cambia davvero.
+  const ricontrollaMotore = (): void => {
+    const adesso = motoreAttivo();
+    if (adesso === attivo) return;
+    attivo = adesso;
+    avvisaColonna();
+  };
+  /// Il motore si ascolta dal primo che ascolta la colonna (`ascoltaColonna`):
+  /// prima nessuno la rifà.
+  let ascoltoMotore = false;
   const completo: Completo = {
     indice,
     carica,
@@ -786,7 +802,9 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila" | "e
       if (preset === null) return;
       applicaSpazio(preset, effetti, carica);
     },
-    colonna: (offerti) => layoutCompleto(offerti, MOTORE_PRONTO, ctx.motore !== null && indiceArrivato !== null),
+    // Col motore attivo solo i suoi strumenti; spento o fermo, solo quelli
+    // di Fub, perché i suoi non farebbero niente.
+    colonna: (offerti) => (motoreAttivo() ? layoutCompleto(offerti, MOTORE_PRONTO, true) : layoutCompleto(offerti)),
     strumentoMotore(strumento) {
       // Senza motore uno strumento del motore non fa niente: non si mostra.
       if (ctx.motore === null || indiceArrivato === null) return null;
@@ -799,7 +817,7 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila" | "e
       return { nome, icona: iconaMotore(strumento), famiglia: stato };
     },
     conMotore() {
-      return ctx.motore !== null && indiceArrivato !== null;
+      return motoreAttivo();
     },
     eseguiComando(id, valori = {}) {
       void eseguiPerId(id, valori, { senzaFinestra: true });
@@ -811,6 +829,10 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila" | "e
     },
     ascoltaColonna(ascolto) {
       ascoltiColonna.add(ascolto);
+      if (!ascoltoMotore && ctx.motore !== null) {
+        ascoltoMotore = true;
+        ctx.life.add(ctx.motore.quandoCambia(ricontrollaMotore));
+      }
       return () => {
         ascoltiColonna.delete(ascolto);
       };
@@ -858,6 +880,7 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila" | "e
   void indice().then(
     (pronto) => {
       indiceArrivato = pronto;
+      attivo = motoreAttivo();
       avvisaColonna();
     },
     () => {},
