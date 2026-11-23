@@ -278,7 +278,9 @@ export function installWorkspace(ctx: EditorContext): void {
           // con lo stato della loro famiglia, e la casella accesa con lo
           // strumento scelto: la colonna si risincronizza.
           const risincronizza = (): void => {
-            if (!ctx.disposed) ctx.syncRail(ctx.editable());
+            if (ctx.disposed) return;
+            ctx.syncRail(ctx.editable());
+            ctx.syncInsert();
           };
           ctx.life.add(aperto.ascoltaColonna(risincronizza));
           ctx.life.add(ctx.ascoltaStrumentoMotore(risincronizza));

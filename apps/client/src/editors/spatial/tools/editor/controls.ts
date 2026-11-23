@@ -48,6 +48,9 @@ export interface ControlsContext {
   rootText: (role: "title" | "desc") => string;
   currentTitle: () => string;
   syncControls: () => void;
+  /// Mostra il pulsante delle immagini del vault nella colonna: non col motore del
+  /// Completo, dove come in VectorCraft l'immagine si mette da File › Inserisci.
+  syncInsert: () => void;
   refresh: () => void;
 }
 
@@ -414,6 +417,9 @@ export function installControls(ctx: EditorContext): void {
     else surface.focus({ preventScroll: true });
   };
 
+  ctx.syncInsert = () => {
+    insertGroup.hidden = !ctx.insertsImages(ctx.features) || ctx.completoMotore?.()?.conMotore?.() === true;
+  };
   const syncControls = (): void => readFirst(syncEverything);
   ctx.syncControls = syncControls;
 
@@ -465,7 +471,7 @@ export function installControls(ctx: EditorContext): void {
       if (!panel.element.hidden) showPanel(false, false, false);
     }
     pageButton.hidden = !has("grid") && !has("recognize") && !has("gestures");
-    insertGroup.hidden = !ctx.insertsImages(ctx.features);
+    ctx.syncInsert();
     imageButton.disabled = !canEdit;
     historyButton.hidden = !has("history");
     if (historyButton.hidden && !historyPanel.element.hidden) showHistory(false);
