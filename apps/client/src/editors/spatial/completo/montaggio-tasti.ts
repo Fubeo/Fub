@@ -12,13 +12,15 @@ import { composingKey } from "../../../kit/ime";
 import { isWritingField } from "../../../ui/field-history";
 import type { Lifetime } from "../../../ui/lifetime";
 import type { Indice, VoceIndice } from "./indice";
-import { decidiTasto, risolviTasti, TASTI_DELLA_FINESTRA, type ModificheTasti, type Piattaforma, type RegolaTasti } from "./tasti";
+import { decidiTasto, risolviTasti, tastoStrumento, TASTI_DELLA_FINESTRA, type ModificheTasti, type Piattaforma, type RegolaTasti } from "./tasti";
 
 export interface OpzioniMontaggioTasti {
   /// La radice dell'editor: i tasti si ascoltano lì. `null` senza editor: la
   /// regola c'è lo stesso (il menu e la tavolozza la leggono da qui), e nessun
   /// tasto parte.
   readonly radice: HTMLElement | null;
+  /// Il Completo è acceso adesso; spento (il Semplice), nessun tasto parte. Senza, sempre acceso.
+  readonly attivo?: () => boolean;
   /// La vita del Completo: chiusa, l'ascoltatore si toglie.
   readonly vita: Lifetime;
   /// L'indice dei comandi del Completo (`completo.indice()`): chiesto al
@@ -54,10 +56,37 @@ function tastoDiStrumento(voce: VoceIndice): boolean {
   return "strumento" in voce.chiamata && STRUMENTI_CON_TASTO.has(voce.id);
 }
 
+/// Il tasto senza Ctrl, Cmd o Alt di un evento nella forma di `tastoStrumento`
+/// (`d`, `Shift-x`, `/`), o `null` con un modificatore. Maiusc conta solo su una
+/// lettera: `/` si scrive con Maiusc su una tastiera italiana.
+function tastoNudo(event: KeyboardEvent): string | null {
+  if (event.ctrlKey || event.metaKey || event.altKey) return null;
+  if (event.key === "Delete" || event.key === "Backspace") return "Delete";
+  if ([...event.key].length !== 1) return null;
+  const lettera = /^[a-z]$/i.test(event.key);
+  return `${lettera && event.shiftKey ? "Shift-" : ""}${event.key.toLowerCase()}`;
+}
+
+/// I comandi del motore con un tasto di un solo carattere nell'indice (`D`, `X`,
+/// `Shift+X`, `/`, `,`, `.`, `Shift+D`), come `single_key_shortcuts` di
+/// VectorCraft, più Canc e Backspace per Cancella (`nudge_and_clear`). La
+/// regola della shell non li accetta, perché un tasto nudo non è una scorciatoia.
+function comandiNudi(voci: Iterable<VoceIndice>): Map<string, string> {
+  const nudi = new Map<string, string>();
+  for (const voce of voci) {
+    if (!("comando" in voce.chiamata)) continue;
+    const tasto = voce.tasto === "Delete" ? "Delete" : tastoStrumento(voce.tasto);
+    if (tasto !== null && !nudi.has(tasto)) nudi.set(tasto, voce.id);
+  }
+  return nudi;
+}
+
 export function montaTasti(opzioni: OpzioniMontaggioTasti): MontaggioTasti {
   // Solo i comandi del motore: gli strumenti e i pezzi del client non partono qui.
   let comandi: Map<string, VoceIndice> | null = null;
   let regola: RegolaTasti | null = null;
+  // I comandi di un tasto nudo, tasto → comando.
+  let nudi = new Map<string, string>();
   let chiuso = false;
   // La richiesta dell'indice in corso, se c'è.
   let richiesta: Promise<void> | null = null;
@@ -80,6 +109,7 @@ export function montaTasti(opzioni: OpzioniMontaggioTasti): MontaggioTasti {
         richiesta = null;
         if (chiuso) return;
         comandi = new Map(indice.voci.filter((voce) => "comando" in voce.chiamata || tastoDiStrumento(voce)).map((voce) => [voce.id, voce]));
+        nudi = comandiNudi(comandi.values());
         ricalcola();
       },
       () => {
@@ -91,7 +121,7 @@ export function montaTasti(opzioni: OpzioniMontaggioTasti): MontaggioTasti {
   chiedi();
 
   const alTasto = (event: KeyboardEvent): void => {
-    if (event.defaultPrevented) return;
+    if (event.defaultPrevented || opzioni.attivo?.() === false) return;
     if (comandi === null || regola === null) {
       // Senza indice il tasto non parte: lo chiede di nuovo, e il tasto dopo parte.
       chiedi();
@@ -108,8 +138,15 @@ export function montaTasti(opzioni: OpzioniMontaggioTasti): MontaggioTasti {
       },
       opzioni.piattaforma,
     );
-    if (decisione.tipo === "passa") return;
-    const voce = comandi.get(decisione.comando);
+    const nudo = tastoNudo(event);
+    const comando =
+      decisione.tipo === "esegue"
+        ? decisione.comando
+        : nudo !== null && !stato.vuoleTesto && !stato.componendo && !composingKey(event) && !isWritingField(event.target)
+          ? (nudi.get(nudo) ?? null)
+          : null;
+    if (comando === null) return;
+    const voce = comandi.get(comando);
     if (voce === undefined) return;
     event.preventDefault();
     opzioni.esegui(voce);

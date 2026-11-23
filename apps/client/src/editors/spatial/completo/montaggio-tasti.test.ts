@@ -233,3 +233,69 @@ describe("montaTasti", () => {
     expect(indice).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("montaTasti, i tasti di un carattere di VectorCraft", () => {
+  const NUDI: Indice = indiceDi({
+    voci: [
+      voce("paint.default", "D"),
+      voce("paint.swap", "Shift+X"),
+      voce("paint.toggleActive", "X"),
+      voce("paint.none", "/"),
+      voce("edit.clear", "Delete"),
+      voce("lasso", "Q", { fonte: "strumento", chiamata: { strumento: "lasso" } }),
+    ],
+  });
+
+  async function montaNudi(over: { vuoleTesto?: boolean; attivo?: () => boolean } = {}) {
+    const { root, campo } = radice();
+    const esegui = vi.fn((_voce: VoceIndice) => undefined);
+    montaTasti({
+      radice: root,
+      ...(over.attivo !== undefined ? { attivo: over.attivo } : {}),
+      vita: vita(),
+      indice: () => Promise.resolve(NUDI),
+      modifiche: () => ({}),
+      stato: () => ({ vuoleTesto: over.vuoleTesto === true, componendo: false }),
+      piattaforma: "other",
+      esegui,
+    });
+    await new Promise((r) => setTimeout(r, 0));
+    const partito = (init: KeyboardEventInit, bersaglio: EventTarget = root): string | null => {
+      esegui.mockClear();
+      const evento = premi(bersaglio, init);
+      const id = esegui.mock.calls[0]?.[0].id ?? null;
+      expect(evento.defaultPrevented).toBe(id !== null);
+      return id;
+    };
+    return { partito, campo };
+  }
+
+  it("la lettera, la lettera con Maiusc e il segno fanno partire il loro comando", async () => {
+    const { partito } = await montaNudi();
+    expect(partito({ key: "d" })).toBe("paint.default");
+    expect(partito({ key: "x" })).toBe("paint.toggleActive");
+    expect(partito({ key: "X", shiftKey: true })).toBe("paint.swap");
+    // `/` con Maiusc, come sulla tastiera italiana.
+    expect(partito({ key: "/", shiftKey: true })).toBe("paint.none");
+  });
+
+  it("Canc e Backspace cancellano, come `nudge_and_clear`", async () => {
+    const { partito } = await montaNudi();
+    expect(partito({ key: "Delete" })).toBe("edit.clear");
+    expect(partito({ key: "Backspace" })).toBe("edit.clear");
+  });
+
+  it("con Ctrl o Alt, in un campo, col testo che si scrive o col Completo spento non parte niente", async () => {
+    const { partito, campo } = await montaNudi();
+    expect(partito({ key: "d", ctrlKey: true })).toBeNull();
+    expect(partito({ key: "d", altKey: true })).toBeNull();
+    expect(partito({ key: "d" }, campo)).toBeNull();
+    expect((await montaNudi({ vuoleTesto: true })).partito({ key: "d" })).toBeNull();
+    expect((await montaNudi({ attivo: () => false })).partito({ key: "d" })).toBeNull();
+  });
+
+  it("un tasto di uno strumento non è un comando", async () => {
+    const { partito } = await montaNudi();
+    expect(partito({ key: "q" })).toBeNull();
+  });
+});

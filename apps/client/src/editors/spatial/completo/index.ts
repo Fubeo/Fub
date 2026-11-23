@@ -128,6 +128,8 @@ export interface Completo {
   strumentoDelTasto(premuto: string): string | null;
   /// Il motore c'è e l'indice è arrivato: la colonna e i tasti sono solo quelli di VectorCraft.
   conMotore(): boolean;
+  /// Fa partire il comando `id` del motore coi suoi valori, senza la sua finestra.
+  eseguiComando(id: string, valori?: Readonly<Record<string, unknown>>): void;
   /// Le parole `testo` per il testo in area `elemento`, dal campo «Testo»
   /// dell'ispettore: passano da `text.editRange`, che rifà gli a capo nel
   /// riquadro, con un passo d'annulla solo e i rifiuti detti come per ogni
@@ -208,6 +210,8 @@ export interface OpzioniCompleto {
 /// modifiche dell'utente quando ci sono.
 export interface OpzioniTastiCompleto extends AzioniEsito {
   readonly radice: HTMLElement;
+  /// Il Completo è acceso adesso (non il Semplice): spento, nessun tasto del motore parte.
+  readonly attivo?: () => boolean;
   /// Sceglie lo strumento del motore `id`, come la colonna (`sceltaMotore`): un tasto di strumento lo usa.
   readonly strumento?: (id: string) => void;
   readonly selezione: () => readonly string[];
@@ -659,6 +663,7 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila" | "e
   // (la radice); senza, la regola c'è lo stesso.
   const montaggio = montaTasti({
     radice: opzioni.tasti?.radice ?? null,
+    ...(opzioni.tasti?.attivo !== undefined ? { attivo: opzioni.tasti.attivo } : {}),
     vita: ctx.life,
     indice,
     modifiche: modificheUtente,
@@ -794,6 +799,9 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila" | "e
     },
     conMotore() {
       return ctx.motore !== null && indiceArrivato !== null;
+    },
+    eseguiComando(id, valori = {}) {
+      void eseguiPerId(id, valori, { senzaFinestra: true });
     },
     strumentoDelTasto(premuto) {
       if (ctx.motore === null || indiceArrivato === null) return null;

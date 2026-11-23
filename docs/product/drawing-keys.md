@@ -61,6 +61,27 @@ stesso di questa regola: un comando il cui tasto è di Fub, o che ha perso un
 conflitto, non ne mostra nessuno. Finché l'indice dei comandi non è arrivato,
 nessun tasto è mostrato.
 
+## I tasti senza Ctrl col motore
+
+Col motore presente i tasti senza `Ctrl` o `Alt` sono quelli di VectorCraft:
+
+- le frecce spostano la selezione (`Maiusc` per il passo grande, `Alt` per
+  spostare una copia), col comando Sposta leggermente del motore;
+- `Canc` e `Backspace` cancellano la selezione (o i punti scelti con la
+  Selezione diretta);
+- `D` riempimento e contorno predefiniti, `X` scambia il lato attivo,
+  `Maiusc+X` scambia i colori, `/` nessun colore, `,` l'ultimo colore, `.`
+  l'ultima sfumatura, `Maiusc+D` la modalità di disegno;
+- `Esc` e `Invio` vanno prima allo strumento; senza niente da chiudere `Esc`
+  toglie la selezione;
+- la lettera di uno strumento lo sceglie (sopra).
+
+Mentre lo strumento Testo scrive, le lettere, le frecce, `Invio` e `Canc` sono
+del testo. I tasti che aveva solo lo Standard (`Tab` fra gli oggetti,
+`Pag Su/Giù`, `Home` e `Fine`, `Spazio` per afferrare, `F2`, `?`, le cifre,
+`Maiusc+1` e `Maiusc+2`, `[` e `]` per ruotare, `#` e `%` per la griglia) non
+valgono.
+
 ## Cambiare i tasti
 
 In **Impostazioni › Scorciatoie**, la sezione **«Disegno completo»** elenca i

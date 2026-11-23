@@ -228,6 +228,7 @@ export function installWorkspace(ctx: EditorContext): void {
             // o i contorni nuovi in coordinate di scena; `null` la toglie.
             tasti: {
               radice: ctx.root,
+              attivo: () => vuoleCompleto(),
               selezione: () => ctx.selection,
               strumento: (id) => ctx.sceltaMotore(id),
               seleziona: (ids) => ctx.select(ids),

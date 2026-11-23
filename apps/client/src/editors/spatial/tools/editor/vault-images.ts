@@ -2,6 +2,7 @@
 // (`../editor.ts`): lavora sul contesto che i pezzi condividono.
 
 import { showContextMenu } from "../../../../ui/menu";
+import { isWritingField } from "../../../../ui/field-history";
 import { t } from "../../strings";
 import { nextTurn } from "../../view";
 import { carriesFiles, type Decoded } from "../images";
@@ -207,6 +208,20 @@ export function installVaultImages(ctx: EditorContext): void {
     }
     const onSurface = event.target === surface;
     const inTree = event.target instanceof Node && tree.element.contains(event.target);
+    const completo = ctx.completoMotore?.() ?? null;
+    const comeVectorCraft = completo?.conMotore?.() === true;
+    // Lo strumento del motore che scrive (il Testo) prende i tasti, come in VectorCraft.
+    const scriveTesto = comeVectorCraft && ctx.motoreTool !== null && ctx.statoStrumento(ctx.motoreTool)?.wants_text === true;
+    // Nel Completo col motore le frecce spostano come VectorCraft (`nudge_and_clear`):
+    // `object.nudge` del motore, Maiusc per il passo grande, Alt per spostare una copia.
+    const freccia = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[event.key];
+    if (comeVectorCraft && !scriveTesto && freccia !== undefined && !isWritingField(event.target)) {
+      event.preventDefault();
+      if (ctx.current === null && ctx.selection.length > 0 && editable()) {
+        completo?.eseguiComando?.("object.nudge", { dx: freccia[0], dy: freccia[1], big: event.shiftKey, copy: event.altKey });
+      }
+      return;
+    }
     if (onSurface && !event.altKey && arrows(event)) {
       event.preventDefault();
       return;
@@ -219,8 +234,6 @@ export function installVaultImages(ctx: EditorContext): void {
     // (`completo/tasti.ts`): con Ctrl o Alt l'editor tiene solo annulla e ripeti, gli
     // appunti (che il browser manda al Completo) e i tasti della vista di VectorCraft;
     // gli altri vanno ai comandi del motore (`completo/montaggio-tasti.ts`).
-    const completo = ctx.completoMotore?.() ?? null;
-    const comeVectorCraft = completo?.conMotore?.() === true;
     if (comeVectorCraft && (mod || event.altKey)) {
       if (mod && vistaComeVectorCraft(event)) event.preventDefault();
       return;
@@ -364,6 +377,36 @@ export function installVaultImages(ctx: EditorContext): void {
     // Col Completo aperto e il motore presente i tasti di una lettera sono quelli di
     // VectorCraft: le lettere, le cifre e i riflessi degli strumenti di Fub non valgono.
     const strumentoDelMotore = completo?.strumentoDelTasto?.(`${event.shiftKey ? "Shift-" : ""}${event.key.toLowerCase()}`) ?? null;
+    if (comeVectorCraft) {
+      // Come `shortcuts.rs` di VectorCraft: Esc e Invio vanno prima allo strumento,
+      // Canc toglie i punti scelti, la lettera di uno strumento lo sceglie. Ogni altro
+      // tasto va ai comandi del motore (`montaggio-tasti.ts`: D, X, Maiusc+X, /, la
+      // virgola, il punto, Maiusc+D, Canc e Backspace). I tasti che solo Fub aveva
+      // (Tab fra gli oggetti, Pag Su/Giù, Home e Fine, Spazio, F2, ?, le cifre,
+      // Maiusc+1 e Maiusc+2) non valgono.
+      if (event.key === "Escape") {
+        if (ctx.current !== null) cancelGesture();
+        else if (ctx.motoreTasto?.("Escape") === true) {
+          // Il tracciato aperto si chiude; senza, lo strumento torna alla Selezione.
+        } else if (scriveTesto) {
+          return;
+        } else if (ctx.selection.length > 0) {
+          select([]);
+          announceSelection();
+        } else return;
+      } else if (scriveTesto) {
+        // Le lettere, Invio e Canc sono del testo che si scrive.
+        return;
+      } else if (onSurface && event.key === "Enter" && ctx.current === null && ctx.motoreTasto?.("Enter") === true) {
+        // Chiuso dal motore.
+      } else if ((event.key === "Delete" || event.key === "Backspace") && ctx.current === null && completo?.cancellaPunti?.() === true) {
+        // Tolti i punti scelti dalla Selezione diretta.
+      } else if (strumentoDelMotore !== null && editable()) {
+        ctx.sceltaMotore(strumentoDelMotore);
+      } else return;
+      event.preventDefault();
+      return;
+    }
     if (onSurface && event.key === "Tab") {
       if (!walk(event.shiftKey ? -1 : 1)) return;
     } else if (onSurface && (event.key === "PageUp" || event.key === "PageDown") && !event.shiftKey && folio !== undefined) {
@@ -414,7 +457,7 @@ export function installVaultImages(ctx: EditorContext): void {
       }
       if (ctx.selection.length === 0) return;
       deleteSelection();
-    } else if (!comeVectorCraft && event.shiftKey && onSurface && (event.code === "KeyH" || event.code === "KeyV") && ctx.selection.length > 0 && editable()) {
+    } else if (event.shiftKey && onSurface && (event.code === "KeyH" || event.code === "KeyV") && ctx.selection.length > 0 && editable()) {
       // Maiusc+H e Maiusc+V riflettono la selezione, come in Illustrator e Figma.
       if (ctx.current !== null || ctx.pressed !== null) return;
       ctx.flipSelection(event.code === "KeyH" ? "x" : "y");
@@ -429,20 +472,11 @@ export function installVaultImages(ctx: EditorContext): void {
         select([]);
         announceSelection();
       } else return;
-    } else if (comeVectorCraft && strumentoDelMotore === null) {
-      // Un tasto che VectorCraft non dà a uno strumento: nessuno strumento di Fub.
-      return;
     } else if (event.shiftKey && event.code === "Digit1") {
       fit();
     } else if (event.shiftKey && event.code === "Digit2") {
       // Maiusc+2 inquadra la selezione.
       ctx.fitSelection();
-    } else if (strumentoDelMotore !== null) {
-      // Nel Completo il tasto di uno strumento di VectorCraft (V, A, P, M, R…) sceglie
-      // quello strumento, come la sua casella: vince sullo strumento di Fub con la
-      // stessa lettera, e anche su + e - (aggiungi e togli punto).
-      if (!editable()) return;
-      ctx.sceltaMotore(strumentoDelMotore);
     } else if (event.key === "+" || event.key === "=") {
       zoomBy(ZOOM_STEP);
     } else if (event.key === "-") {

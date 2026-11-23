@@ -28,6 +28,8 @@ export interface CompletoMotore {
   strumentoDelTasto?(premuto: string): string | null;
   /// Il motore c'è e il suo indice è arrivato: i tasti e gli strumenti sono quelli di VectorCraft.
   conMotore?(): boolean;
+  /// Fa partire il comando del motore `id` coi suoi valori, senza la sua finestra (le frecce: `object.nudge`).
+  eseguiComando?(id: string, valori?: Readonly<Record<string, unknown>>): void;
   fila(
     strumento: string,
     opzioni: unknown,
