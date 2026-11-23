@@ -263,6 +263,14 @@
       "dopo": "raggruppa-due-livelli.svg"
     },
     {
+      "id": "object.arrange.sendToCurrentLayer",
+      "disegno": "due-livelli.svg",
+      "selezione": ["oc3c3c3c3"],
+      "argomenti": { "layer": "l1a2b3c4d" },
+      "atteso": { "ops": [{ "op": "move", "target": "oc3c3c3c3", "parent": "l1a2b3c4d", "pos": { "after": "oi8b8b8b8" } }] },
+      "dopo": "sul-livello-corrente.svg"
+    },
+    {
       "id": "object.group",
       "disegno": "sola-lettura.svg",
       "selezione": ["oa1a1a1a1", "ob2b2b2b2"],

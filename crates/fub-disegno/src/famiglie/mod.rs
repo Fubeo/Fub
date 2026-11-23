@@ -122,10 +122,12 @@ pub(crate) trait StatoFamiglia: Send + Sync + 'static {
         None
     }
 
-    /// Il livello dove il comando `id` mette ciò che crea, quando la richiesta
-    /// non ne dà uno (un comando non porta il livello, lo strumento sì). Di
-    /// serie `None`: il motore lascia lo stato del documento com'è.
-    fn livello(_id: &str, _copia: &Copia) -> Result<Option<NodeId>, DrawingRefusal>
+    /// Il livello dove il comando `id` mette ciò che crea o sposta: la
+    /// richiesta non ha un campo per il livello (lo strumento sì), e un
+    /// comando che lo vuole lo legge dal suo `valore` (Sposta sul livello
+    /// corrente). Di serie `None`: il motore lascia lo stato del documento
+    /// com'è.
+    fn livello(_id: &str, _copia: &Copia, _valore: &Value) -> Result<Option<NodeId>, DrawingRefusal>
     where
         Self: Sized,
     {
@@ -336,10 +338,11 @@ macro_rules! famiglie {
                 self,
                 id: &str,
                 copia: &Copia,
+                valore: &Value,
             ) -> Result<Option<NodeId>, DrawingRefusal> {
                 match self {
                     $(Famiglia::$variante => {
-                        <$modulo::Stato as StatoFamiglia>::livello(id, copia)
+                        <$modulo::Stato as StatoFamiglia>::livello(id, copia, valore)
                     })*
                 }
             }
@@ -1094,7 +1097,7 @@ pub(crate) fn esegui(
     {
         return Ok(rifiuta(motivo));
     }
-    let livello = match famiglia.livello(&riga.id, copia) {
+    let livello = match famiglia.livello(&riga.id, copia, &richiesta.value) {
         Ok(livello) => livello,
         Err(motivo) => return Ok(rifiuta(motivo)),
     };

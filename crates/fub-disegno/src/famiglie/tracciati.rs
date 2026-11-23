@@ -456,7 +456,7 @@ impl StatoFamiglia for Stato {
     /// Elaborazione tracciati con meno di due oggetti non ha niente da
     /// combinare: `empty`; con un oggetto che il motore toglierebbe senza
     /// usarlo, `unmapped`.
-    fn livello(id: &str, copia: &Copia) -> Result<Option<NodeId>, DrawingRefusal> {
+    fn livello(id: &str, copia: &Copia, _valore: &Value) -> Result<Option<NodeId>, DrawingRefusal> {
         mano::livello(id, copia)
     }
 

@@ -3,12 +3,22 @@
 
 use std::sync::Arc;
 
-use fub_abi::{DrawingDisabledReason, DrawingRefusal};
+use fub_abi::{DrawingDisabledReason, DrawingRefusal, PluginError};
 use fub_motori::{ErroreMotore, Servizi};
 use fub_scene::Role;
+use serde_json::Value;
+use vectorcraft_doc::NodeId;
 
 use super::{nodi_scelti, StatoFamiglia};
 use crate::apertura::Copia;
+
+/// Sposta sul livello corrente (K6 T11): il livello corrente sta nel client,
+/// nella sessione del documento, e arriva nel valore del comando.
+pub(crate) const SUL_LIVELLO_CORRENTE: &str = "object.arrange.sendToCurrentLayer";
+
+/// Il campo del valore di Sposta sul livello corrente con l'id di Fub del
+/// livello corrente. Il ponte lo toglie prima del motore.
+const CAMPO_LIVELLO: &str = "layer";
 
 /// Lo stato della famiglia: non tiene niente.
 pub(crate) struct Stato;
@@ -66,6 +76,57 @@ impl StatoFamiglia for Stato {
         let tratto = |nome: &String| copia.mappa.dell_id(nome).and_then(|i| copia.mappa.elemento(i)).is_some_and(|e| e.ruolo == Role::Stroke);
         (id == "object.setProps" && selezione.iter().any(tratto)).then_some(DrawingRefusal::Unmapped)
     }
+
+    /// Il livello corrente di Sposta sul livello corrente (`livello_corrente`).
+    fn livello(id: &str, copia: &Copia, valore: &Value) -> Result<Option<NodeId>, DrawingRefusal> {
+        if id != SUL_LIVELLO_CORRENTE {
+            return Ok(None);
+        }
+        let scelto = valore.get(CAMPO_LIVELLO).and_then(Value::as_str);
+        livello_corrente(copia, scelto).map(Some)
+    }
+
+    /// Sposta sul livello corrente: l'id del livello corrente esce dal valore
+    /// (il motore non lo conosce); un id che non è una stringa è `BadArgs`.
+    fn argomenti_della_copia(id: &str, _copia: &Copia, _selezione: &[String], mut valore: Value) -> Result<Value, PluginError> {
+        if id != SUL_LIVELLO_CORRENTE {
+            return Ok(valore);
+        }
+        if let Some(campi) = valore.as_object_mut() {
+            match campi.remove(CAMPO_LIVELLO) {
+                None | Some(Value::String(_)) => {}
+                Some(_) => return Err(PluginError::BadArgs("il livello corrente è l'id di un livello, scritto come testo".into())),
+            }
+        }
+        Ok(valore)
+    }
+}
+
+/// Il livello corrente nel documento del motore, dato l'id di Fub che il client
+/// ha scelto (`scelto`): quel livello, se c'è; se non c'è più, o il client non
+/// ne ha uno, il più alto né nascosto né bloccato, come le forme nuove. Il
+/// livello corrente nascosto è `hidden`, bloccato `locked`, e nessun livello
+/// dove andare `locked`. Senza livelli di Fub è la radice, il livello che
+/// l'import crea: gli oggetti vanno in cima al disegno.
+fn livello_corrente(copia: &Copia, scelto: Option<&str>) -> Result<NodeId, DrawingRefusal> {
+    let mut livelli: Vec<_> = copia.mappa.elementi().iter().filter(|e| e.ruolo == Role::Layer).collect();
+    if livelli.is_empty() {
+        return copia
+            .documento
+            .layers
+            .iter()
+            .map(|l| l.id)
+            .find(|id| copia.mappa.e_radice(*id))
+            .ok_or(DrawingRefusal::Unmapped);
+    }
+    livelli.sort_by(|a, b| a.percorso.cmp(&b.percorso));
+    let e = match scelto.and_then(|id| livelli.iter().find(|e| e.id.as_deref() == Some(id))) {
+        Some(e) if e.nascosto => return Err(DrawingRefusal::Hidden),
+        Some(e) if e.bloccato => return Err(DrawingRefusal::Locked),
+        Some(e) => *e,
+        None => *livelli.iter().rev().find(|e| !e.nascosto && !e.bloccato).ok_or(DrawingRefusal::Locked)?,
+    };
+    e.nodo.ok_or(DrawingRefusal::Unmapped)
 }
 
 /// I comandi che cambiano il file: gli oggetti, le incolle, pulisci e duplica,

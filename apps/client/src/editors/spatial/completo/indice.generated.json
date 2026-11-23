@@ -1571,6 +1571,22 @@
     },
     {
       "fonte": "motore",
+      "id": "object.arrange.sendToCurrentLayer",
+      "chiamata": {
+        "comando": "disegno.object.arrange.sendToCurrentLayer"
+      },
+      "etichetta": {
+        "it": "Sposta sul livello corrente",
+        "en": "Send to Current Layer"
+      },
+      "posto": "menu/oggetto",
+      "famiglia": "nucleo",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "object.clippingMask.editContents",
       "chiamata": {
         "comando": "disegno.object.clippingMask.editContents"

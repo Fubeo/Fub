@@ -158,10 +158,22 @@ l'arte visibile e sbloccata del livello, e con un livello bloccato non sceglie
 niente (`Empty`). Nascondi altri e Blocca altri (`layer.hideOthers`,
 `layer.lockOthers`) tengono i livelli di primo livello della selezione: Fub li
 calcola e li passa al motore come `ids`; senza scelta né righe la voce è spenta
-col suo perché e il comando rifiuta `Empty`. Duplica, raccogli in un livello
-nuovo e il livello corrente restano «da fare»: il file non scrive un livello
-dentro un livello, né dice quale livello è corrente fra un comando e il
-successivo.
+col suo perché e il comando rifiuta `Empty`. Duplica e raccogli in un livello
+nuovo restano «da fare»: il file non scrive un livello dentro un livello.
+
+Il livello corrente sta nel client, nella sessione del documento
+(`apps/client/src/editors/spatial/livello-corrente.ts`): una cella per
+`DocumentSession`, per chiave del livello (id di Fub, o `@posto`), condivisa
+dagli editor sullo stesso documento e mai scritta nel file né nella sessione
+del motore, che `Banco::ripristina` rifà a ogni comando. Un livello sparito non
+svuota la cella: finché manca si usa il più alto né nascosto né bloccato.
+Sposta sul livello corrente (`object.arrange.sendToCurrentLayer`, famiglia
+`nucleo`) riceve l'id nel `value` (`layer`); il ponte lo toglie prima del motore
+(`famiglie/nucleo.rs`), lo risolve sui livelli della copia e lo mette come
+livello attivo del documento del motore. Un id che non c'è, o nessuno, vale il
+livello più alto libero; il livello nascosto è `Hidden`, quello bloccato
+`Locked`, un id che non è testo `BadArgs`; senza livelli di Fub gli oggetti
+vanno in cima alla radice.
 
 La carta (`fub-paper`) resta fuori dalla copia del motore quando gli altri figli
 della radice sono tutti livelli di Fub (`src/apertura.rs`): così il motore apre

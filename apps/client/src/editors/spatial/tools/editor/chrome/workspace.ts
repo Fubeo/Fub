@@ -246,6 +246,8 @@ export function installWorkspace(ctx: EditorContext): void {
                 const punti = id === null ? undefined : ctx.statoStrumento(id)?.anchors;
                 return Array.isArray(punti) ? punti : [];
               },
+              // Il livello corrente del disegno, per Sposta sul livello corrente.
+              livello: () => ctx.currentLayer()?.id ?? null,
               rileggiStato: () => {
                 const id = ctx.motoreTool;
                 if (id !== null && !ctx.disposed) ctx.rileggiStato(id);

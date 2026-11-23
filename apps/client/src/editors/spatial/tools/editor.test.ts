@@ -28,6 +28,7 @@ import { DEFAULT_CURVE } from "../../../ink/input/pressure";
 import { closeRadial } from "./radial";
 import type { Workspace } from "./registry";
 import { setReducedMotionPreference } from "../../../theme/reduced-motion";
+import { cellaLivello } from "../livello-corrente";
 
 // happy-dom non disegna: il PNG degli appunti è il testo che riceve.
 vi.mock("./png", async (real) => ({
@@ -1414,6 +1415,56 @@ describe("i livelli, nel Completo", () => {
     expect(editor.engine.text).toMatch(new RegExp(`<rect id="${B}"[^>]*/>\\s*<rect id="o[a-z0-9]{8}"[^>]*/>\\s*</g>\\s*</svg>`));
   });
 
+  it("il livello corrente è del disegno: due editor lo condividono, e resta dopo il rimontaggio e la rilettura", () => {
+    // La cella del disegno, come la dà la sessione del documento (`livello-corrente.ts`).
+    const cella = cellaLivello();
+    mount(TWO, { livello: cella });
+    expect(shownName()).toBe("Note");
+    choose("Sfondo");
+    expect(shownName()).toBe("Sfondo");
+    // Un secondo riquadro sullo stesso disegno, aperto dopo, disegna già in «Sfondo»…
+    const otherHost = document.createElement("div");
+    document.body.append(otherHost);
+    const otherLife = openLifetime();
+    const other = createDrawEditor(otherHost, SceneEngine.open(TWO), otherLife, { livello: cella });
+    const otherName = (): string => otherHost.querySelector(".draw-layer-name")!.textContent ?? "";
+    expect(otherName()).toBe("Sfondo");
+    // …e segue la scelta fatta nell'altro.
+    choose("Note");
+    expect(otherName()).toBe("Note");
+    choose("Sfondo");
+    expect(otherName()).toBe("Sfondo");
+    // Rimontato (il motore riaperto, la superficie rifatta): la scelta resta.
+    otherLife.close();
+    otherHost.remove();
+    const again = document.createElement("div");
+    document.body.append(again);
+    const againLife = openLifetime();
+    createDrawEditor(again, SceneEngine.open(TWO), againLife, { livello: cella });
+    expect(again.querySelector(".draw-layer-name")!.textContent).toBe("Sfondo");
+    againLife.close();
+    again.remove();
+    expect(other).toBeDefined();
+    // Il file riletto da disco: la scelta resta.
+    editor.load(SceneEngine.open(TWO));
+    expect(shownName()).toBe("Sfondo");
+    // Cancellato da un altro pannello (il testo arriva senza «Sfondo»): si
+    // disegna nel livello in cima; con Annulla torna.
+    const senza = TWO.replace(/<g id="l1"[^]*?<\/g>/, "");
+    editor.setEngine(SceneEngine.open(senza));
+    expect(shownName()).toBe("Note");
+    editor.setEngine(SceneEngine.open(TWO));
+    expect(shownName()).toBe("Sfondo");
+  });
+
+  it("senza cella del disegno l'editor ne ha una sua: un livello sparito lascia il più alto", () => {
+    mount(TWO);
+    choose("Sfondo");
+    expect(shownName()).toBe("Sfondo");
+    editor.setEngine(SceneEngine.open(TWO.replace(/<g id="l1"[^]*?<\/g>/, "")));
+    expect(shownName()).toBe("Note");
+  });
+
   it("scegliere oggetti di un livello solo lo rende corrente, e l'albero lo dice", () => {
     mount(TWO);
     host.querySelector<HTMLButtonElement>('[role="toolbar"] button[aria-label="Oggetti"]')!.click();
@@ -1474,8 +1525,11 @@ describe("i livelli, nel Completo", () => {
     editor.undo();
     expect(editor.engine.text).toBe(TWO);
     expect(spoken()).toBe("Annullato: Nuovo livello.");
-    // Il livello che se n'è andato lascia corrente quello che aveva sotto.
-    expect(shownName()).toBe("Sfondo");
+    // Il livello che se n'è andato lascia corrente quello in cima (DECISIONS,
+    // livello corrente opzione (a)); con Ripeti torna corrente.
+    expect(shownName()).toBe("Note");
+    editor.redo();
+    expect(shownName()).toBe("Livello 3");
   });
 
   it("un livello bloccato non riceve né si elimina; i suoi oggetti escono dalla selezione", () => {

@@ -156,23 +156,21 @@ export function installControls(ctx: EditorContext): void {
   // --- Il livello corrente ---------------------------------------------------
 
   /// Il livello scelto, se c'è ancora: per chiave; o allo stesso posto, se ha
-  /// perso l'id con annulla o se non l'aveva e l'ha ricevuto; o, se se n'è
-  /// andato, quello che gli stava sotto, o il più basso.
+  /// perso l'id con annulla o se non l'aveva e l'ha ricevuto. Se se n'è
+  /// andato (cancellato da un altro riquadro, dal testo, da un altro
+  /// programma), `null`: si disegna nel livello in cima (`currentLayer`).
   const chosenIn = (layers: readonly LayerInfo[]): LayerInfo | null => {
     if (ctx.chosen === null) return null;
     const { key, at } = ctx.chosen;
-    const same = layers.find((layer) => keyOf(layer) === key)
-      ?? layers.find((layer) => layer.path[0] === at && (layer.id === null || key.startsWith("@")));
-    if (same !== undefined) return same;
-    let below: LayerInfo | null = null;
-    for (const layer of layers) if (layer.path[0]! < at) below = layer;
-    return below ?? layers[0] ?? null;
+    return layers.find((layer) => keyOf(layer) === key)
+      ?? layers.find((layer) => layer.path[0] === at && (layer.id === null || key.startsWith("@")))
+      ?? null;
   };
 
   /// Il livello in cui si disegna, quando l'interfaccia offre i livelli:
-  /// quello scelto; se
-  /// nessuno l'ha scelto, il più alto che si vede e non è bloccato, o il più
-  /// alto. `null` se il disegno non ha livelli.
+  /// quello scelto; se nessuno l'ha scelto, o se non c'è più, il più alto che
+  /// si vede e non è bloccato, o il più alto. `null` se il disegno non ha
+  /// livelli.
   function currentLayer(): LayerInfo | null {
     const layers = currentIndex().layers;
     const found = chosenIn(layers);
@@ -233,6 +231,11 @@ export function installControls(ctx: EditorContext): void {
     syncTree();
   }
   ctx.syncLayers = syncLayers;
+  // Un altro editor sullo stesso disegno sceglie un altro livello: il
+  // pulsante e l'albero lo mostrano anche qui.
+  ctx.life.add(ctx.livello.ascolta(() => {
+    if (!ctx.disposed) syncLayers();
+  }));
 
   // --- Stato dei controlli --------------------------------------------------
 
@@ -517,10 +520,11 @@ export function installControls(ctx: EditorContext): void {
     ctx.index = null;
     ctx.marks = null;
     ctx.selection = inOrder(ctx.selection);
-    // Il livello scelto si ritrova anche se ha cambiato posto o chiave.
+    // Il livello scelto si ritrova anche se ha cambiato posto o chiave; se
+    // non c'è più la scelta resta, e torna se il livello torna (annulla).
     if (ctx.chosen !== null) {
       const layer = chosenIn(currentIndex().layers);
-      ctx.chosen = layer === null ? null : { key: keyOf(layer), at: layer.path[0]! };
+      if (layer !== null) ctx.chosen = { key: keyOf(layer), at: layer.path[0]! };
     }
     syncControls();
     if (ctx.hotGuide !== null && (ctx.scene.root.guides?.[ctx.hotGuide] === undefined || ctx.scene.root.guides[ctx.hotGuide]!.locked)) ctx.hotGuide = null;
