@@ -304,7 +304,11 @@ export function installVaultImages(ctx: EditorContext): void {
       showContextMenu(at, menu.items, { labelledBy: selectionButton.id, clipboard: menu.clipboard, searchable: menu.searchable });
       return;
     }
-    const strumentoDelMotore = ctx.completoMotore?.()?.strumentoDelTasto?.(`${event.shiftKey ? "Shift-" : ""}${event.key.toLowerCase()}`) ?? null;
+    // Col Completo aperto e il motore presente i tasti di una lettera sono quelli di
+    // VectorCraft: le lettere, le cifre e i riflessi degli strumenti di Fub non valgono.
+    const completo = ctx.completoMotore?.() ?? null;
+    const comeVectorCraft = completo?.conMotore?.() === true;
+    const strumentoDelMotore = completo?.strumentoDelTasto?.(`${event.shiftKey ? "Shift-" : ""}${event.key.toLowerCase()}`) ?? null;
     if (onSurface && event.key === "Tab") {
       if (!walk(event.shiftKey ? -1 : 1)) return;
     } else if (onSurface && (event.key === "PageUp" || event.key === "PageDown") && !event.shiftKey && folio !== undefined) {
@@ -355,7 +359,7 @@ export function installVaultImages(ctx: EditorContext): void {
       }
       if (ctx.selection.length === 0) return;
       deleteSelection();
-    } else if (event.shiftKey && onSurface && (event.code === "KeyH" || event.code === "KeyV") && ctx.selection.length > 0 && editable()) {
+    } else if (!comeVectorCraft && event.shiftKey && onSurface && (event.code === "KeyH" || event.code === "KeyV") && ctx.selection.length > 0 && editable()) {
       // Maiusc+H e Maiusc+V riflettono la selezione, come in Illustrator e Figma.
       if (ctx.current !== null || ctx.pressed !== null) return;
       ctx.flipSelection(event.code === "KeyH" ? "x" : "y");
@@ -370,6 +374,9 @@ export function installVaultImages(ctx: EditorContext): void {
         select([]);
         announceSelection();
       } else return;
+    } else if (comeVectorCraft && strumentoDelMotore === null) {
+      // Un tasto che VectorCraft non dà a uno strumento: nessuno strumento di Fub.
+      return;
     } else if (event.shiftKey && event.code === "Digit1") {
       fit();
     } else if (event.shiftKey && event.code === "Digit2") {

@@ -26,6 +26,8 @@ export interface CompletoMotore {
   cancellaPunti?(): boolean;
   /// Lo strumento di VectorCraft che un tasto di strumento sceglie (`v`, `Shift-b`); `null` se nessuno.
   strumentoDelTasto?(premuto: string): string | null;
+  /// Il motore c'è e il suo indice è arrivato: i tasti e gli strumenti sono quelli di VectorCraft.
+  conMotore?(): boolean;
   fila(
     strumento: string,
     opzioni: unknown,

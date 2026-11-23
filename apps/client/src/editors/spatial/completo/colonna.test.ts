@@ -49,6 +49,13 @@ describe("la colonna del Disegno completo", () => {
     expect(tutti(layout)).not.toContain("motore:lasso");
   });
 
+  it("col motore presente ci sono solo i suoi strumenti pronti, nessuno di Fub", () => {
+    const layout = layoutCompleto(VECTOR, new Set(["selection", "pen"]), true);
+    expect(tutti(layout).sort()).toEqual(["motore:pen", "motore:selection"]);
+    const extra = { ...VECTOR[0]!, id: "fuori" } as (typeof VECTOR)[number];
+    expect(tutti(layoutCompleto([...VECTOR, extra], new Set(), true))).toEqual([]);
+  });
+
   it("uno strumento offerto che il prototipo non nomina va in fondo al suo gruppo", () => {
     const solo = VECTOR.filter((spec) => spec.id !== "rect");
     const extra: ToolSpec = { ...VECTOR.find((spec) => spec.id === "rect")!, id: "note" as ToolSpec["id"], group: "shape" };

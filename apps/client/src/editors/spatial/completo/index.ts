@@ -126,6 +126,8 @@ export interface Completo {
   /// di Fub con la stessa lettera. `null` se nessuno strumento pronto ha quel tasto,
   /// o finché l'indice non arriva: il tasto resta a Fub (`tasti.ts`, `strumentoDelTasto`).
   strumentoDelTasto(premuto: string): string | null;
+  /// Il motore c'è e l'indice è arrivato: la colonna e i tasti sono solo quelli di VectorCraft.
+  conMotore(): boolean;
   /// Le parole `testo` per il testo in area `elemento`, dal campo «Testo»
   /// dell'ispettore: passano da `text.editRange`, che rifà gli a capo nel
   /// riquadro, con un passo d'annulla solo e i rifiuti detti come per ogni
@@ -778,7 +780,7 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila" | "e
       if (preset === null) return;
       applicaSpazio(preset, effetti, carica);
     },
-    colonna: (offerti) => layoutCompleto(offerti, MOTORE_PRONTO),
+    colonna: (offerti) => layoutCompleto(offerti, MOTORE_PRONTO, ctx.motore !== null && indiceArrivato !== null),
     strumentoMotore(strumento) {
       // Senza motore uno strumento del motore non fa niente: non si mostra.
       if (ctx.motore === null || indiceArrivato === null) return null;
@@ -789,6 +791,9 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila" | "e
       const nome = corto !== undefined ? (inglese ? corto.en : corto.it) : (nomeCortoColonna(strumento) ?? (inglese ? voce.etichetta.en : voce.etichetta.it));
       const stato = carica.stato(voce.famiglia).kind;
       return { nome, icona: iconaMotore(strumento), famiglia: stato };
+    },
+    conMotore() {
+      return ctx.motore !== null && indiceArrivato !== null;
     },
     strumentoDelTasto(premuto) {
       if (ctx.motore === null || indiceArrivato === null) return null;

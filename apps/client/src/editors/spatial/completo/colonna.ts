@@ -238,8 +238,11 @@ export interface GruppoLayout {
 /// sua riga è «fatto». Una casella senza strumenti non c'è, e un gruppo senza
 /// caselle non c'è. Uno strumento offerto che il prototipo non nomina va in
 /// fondo al gruppo della sua famiglia, da solo, come nella colonna di Fub.
-export function layoutCompleto(offerti: readonly ToolSpec[], pronti: ReadonlySet<string> = new Set()): GruppoLayout[] {
-  const offerto = new Set(offerti.map((spec) => spec.id as string));
+export function layoutCompleto(offerti: readonly ToolSpec[], pronti: ReadonlySet<string> = new Set(), soloMotore = false): GruppoLayout[] {
+  // Col motore presente la colonna è quella di VectorCraft e basta: nessuno strumento
+  // di Fub (la richiesta dell'utente del 23/11). Senza motore restano quelli di Fub,
+  // perché il disegno si possa ancora fare.
+  const offerto = new Set(soloMotore ? [] : offerti.map((spec) => spec.id as string));
   const visibile = (strumento: string): boolean => (strumento.startsWith("motore:") ? pronti.has(strumento.slice("motore:".length)) : offerto.has(strumento));
   const scelti = new Set<string>();
   const gruppi = new Map<GruppoColonna, string[][]>(GRUPPI_COLONNA.map((id) => [id, []]));
@@ -250,7 +253,7 @@ export function layoutCompleto(offerti: readonly ToolSpec[], pronti: ReadonlySet
     gruppi.get(casella.gruppo)!.push(strumenti);
   }
   for (const spec of offerti) {
-    if (scelti.has(spec.id)) continue;
+    if (soloMotore || scelti.has(spec.id)) continue;
     gruppi.get(GRUPPO_DI_FAMIGLIA[spec.group])!.push([spec.id]);
   }
   return GRUPPI_COLONNA.map((id) => ({ id, caselle: gruppi.get(id)! })).filter((gruppo) => gruppo.caselle.length > 0);

@@ -282,8 +282,8 @@ export function installWorkspace(ctx: EditorContext): void {
           ctx.life.add(aperto.ascoltaColonna(risincronizza));
           ctx.life.add(ctx.ascoltaStrumentoMotore(risincronizza));
           completo = "aperto";
-          // Come in VectorCraft si parte dalla sua Selezione, non da quella di Fub.
-          if (ctx.motoreTool === null && ctx.tool === "select" && vuoleCompleto()) ctx.tornaAllaSelezione();
+          // Come in VectorCraft si parte dalla sua Selezione: nessuno strumento di Fub resta acceso.
+          if (ctx.motoreTool === null && ctx.current === null && vuoleCompleto()) ctx.tornaAllaSelezione();
           applicaSpazio();
           mostraRisorse();
           ctx.syncRail(ctx.editable());
