@@ -716,7 +716,7 @@ motore	addon.color.applyNearestSwatch	Apply Nearest Swatch	Object › Plug-ins �
 motore	addon.document.saveTimestampedCopy	Save a Timestamped Copy	Object › Plug-ins › Document Tools	pulizia	F2	T17	da fare	menu/oggetto	famiglia		Salva una copia con data e ora
 motore	addon.document.exportAllOpen	Export All Open Documents	Object › Plug-ins › Document Tools	pulizia	F2	T17	da fare	menu/oggetto	famiglia		Export All Open Documents
 motore	addon.document.symbolsFromLayers	New Symbols from Layers	Object › Plug-ins › Document Tools	pulizia	F2	T17	da fare	menu/oggetto	famiglia		Nuovi simboli dai livelli
-motore	addon.pathtools.erase	Anchor Eraser Brush		tracciati	F1	T12	da fare	ispettore/design	famiglia	manca il gesto nel client: il pennello sui punti va trascinato e il client non lo raccoglie ancora	Pennello gomma punti di ancoraggio
+motore	addon.pathtools.erase	Anchor Eraser Brush		tracciati	F1	T12	fatto	ispettore/design	famiglia		Pennello gomma punti di ancoraggio
 motore	addon.pathtools.extend	Extend Path		tracciati	F1	T12	fatto	ispettore/design	famiglia		Estendi tracciato
 motore	addon.pathtools.inspect	Measure & Inspect		tracciati	F1	T12	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Misura e ispeziona
 motore	addon.pathtools.setAnchor	Set Anchor		tracciati	F1	T12	fatto	ispettore/design	famiglia		Imposta punto di ancoraggio
