@@ -5025,6 +5025,22 @@
     },
     {
       "fonte": "interfaccia",
+      "id": "ui.newColorGroup",
+      "chiamata": {
+        "client": "ui.newColorGroup"
+      },
+      "etichetta": {
+        "it": "Nuovo gruppo colori…",
+        "en": "New Color Group…"
+      },
+      "posto": "ispettore/risorse",
+      "famiglia": "colore",
+      "tasto": null,
+      "effetto": "mostra",
+      "finestra": true
+    },
+    {
+      "fonte": "interfaccia",
       "id": "ui.newSwatch",
       "chiamata": {
         "client": "ui.newSwatch"

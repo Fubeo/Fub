@@ -144,6 +144,11 @@
     },
     {
       "fonte": "interfaccia",
+      "id": "ui.newColorGroup",
+      "campi": []
+    },
+    {
+      "fonte": "interfaccia",
       "id": "ui.newSwatch",
       "campi": []
     },
