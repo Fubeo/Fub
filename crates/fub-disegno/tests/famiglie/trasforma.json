@@ -2422,6 +2422,41 @@
       "atteso": {
         "rifiuto": "empty"
       }
+    },
+    {
+      "id": "object.nudge",
+      "disegno": "t13-tre-livelli.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "ob2b2b2b2"
+      ],
+      "argomenti": {
+        "dx": 1
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "set",
+                "id": "oa1a1a1a1",
+                "attrs": {
+                  "transform": "matrix(1 0 0 1 1 0)"
+                }
+              },
+              {
+                "op": "set",
+                "id": "ob2b2b2b2",
+                "attrs": {
+                  "transform": "matrix(1 0 0 1 1 0)"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "t13-due-livelli-dopo.svg"
     }
   ]
 }
