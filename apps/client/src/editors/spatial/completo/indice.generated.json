@@ -5111,6 +5111,22 @@
     },
     {
       "fonte": "interfaccia",
+      "id": "view.snapToPixel",
+      "chiamata": {
+        "client": "view.snapToPixel"
+      },
+      "etichetta": {
+        "it": "Aggancia ai pixel",
+        "en": "Snap to Pixel"
+      },
+      "posto": "menu/visualizza",
+      "famiglia": "vista",
+      "tasto": null,
+      "effetto": "mostra",
+      "finestra": false
+    },
+    {
+      "fonte": "interfaccia",
       "id": "view.zoomIn",
       "chiamata": {
         "client": "view.zoomIn"

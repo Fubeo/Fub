@@ -10,7 +10,7 @@ import type { ContainerNode } from "../../scene/model";
 import type { Tool } from "../../scene/analysis";
 import { t } from "../../strings";
 import { destination, destinationIn, destinationInto, NewIds, type Destination } from "../edit";
-import { snapPoint } from "../grid";
+import { snapActive, snapPoint } from "../grid";
 import { turnTo } from "../../view";
 import { SceneIndex, type Unit } from "../hit";
 import { COVER_COLOR, customColor, DEFAULT_COLOR, HIGHLIGHTER_COLOR, RECENT_COLORS, swatchOf } from "../palette";
@@ -34,6 +34,8 @@ export interface ToolingContext {
   cancelGesture: () => void;
   target: (ids: NewIds) => Destination | null;
   gridOn: (at?: ReadonlySet<Feature>) => boolean;
+  snapOn: (at?: ReadonlySet<Feature>) => boolean;
+  snapStep: () => number;
   snapped: (p: Point) => Point;
   pageBox: () => Bounds | null;
   seenUnits: (open?: readonly ContainerNode[]) => readonly Unit[];
@@ -48,7 +50,7 @@ export interface ToolingContext {
 export function installTooling(ctx: EditorContext): void {
   const {
     profile, folio, has, styles, style, toolLabel, widthsNow, showSurfaceHint, suggestions, indexer, isolatedNode, isolatedThrough, isolationSteps, currentIndex, currentPage, announce, showPage, showGrid,
-    setCamera, stepNow, viewCenter, showGrip, showHandles,
+    setCamera, snapStep, viewCenter, showGrip, showHandles,
     showPanelByDefault, currentLayer, syncControls, nameOfNode, options
   } = ctx;
   // --- Strumenti --------------------------------------------------------------
@@ -196,9 +198,14 @@ export function installTooling(ctx: EditorContext): void {
   const gridOn = (at: ReadonlySet<Feature> = ctx.features): boolean => at.has("grid") && ctx.grid.snap;
   ctx.gridOn = gridOn;
 
-  /// Un punto di un gesto: sull'incrocio più vicino quando la griglia
-  /// aggancia e Ctrl o ⌘ non è tenuto.
-  const snapped = (p: Point): Point => (gridOn() && !ctx.free ? snapPoint(p, stepNow()) : p);
+  /// L'aggancio agisce se il livello offre la griglia e la griglia o il pixel
+  /// aggancia: `gridOn` resta la sola griglia, per le scritte della tastiera.
+  const snapOn = (at: ReadonlySet<Feature> = ctx.features): boolean => at.has("grid") && snapActive(ctx.grid);
+  ctx.snapOn = snapOn;
+
+  /// Un punto di un gesto: sull'incrocio più vicino quando l'aggancio agisce e
+  /// Ctrl o ⌘ non è tenuto.
+  const snapped = (p: Point): Point => (snapOn() && !ctx.free ? snapPoint(p, snapStep()) : p);
   ctx.snapped = snapped;
 
   /// La pagina nella scena, se c'è.

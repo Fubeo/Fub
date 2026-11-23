@@ -55,7 +55,7 @@ export interface KeysContext {
 /// Monta le frecce, le finestre e l'elenco dei tasti.
 export function installKeys(ctx: EditorContext): void {
   const {
-    folio, has, arrangeBar, editable, currentIndex, announce, lengthSpoken, lengthField, fieldValue, selectedUnits, labelOf, showPanel, rootText, commit, moveSelection, select, frameBounds, cancelGesture, gridOn, moveCursor, moveCursorOnGrid, arrangeFocus, boundsOf, placeSelection, resizeSelection, moveOnGrid, resizeOnGrid,
+    folio, has, arrangeBar, editable, currentIndex, announce, lengthSpoken, lengthField, fieldValue, selectedUnits, labelOf, showPanel, rootText, commit, moveSelection, select, frameBounds, cancelGesture, gridOn, snapOn, moveCursor, moveCursorOnGrid, arrangeFocus, boundsOf, placeSelection, resizeSelection, moveOnGrid, resizeOnGrid,
     options
   } = ctx;
   // --- Frecce, finestre ed elenco dei tasti -----------------------------------
@@ -92,7 +92,7 @@ export function installKeys(ctx: EditorContext): void {
     if (ctx.pressed === null && ctx.selection.length > 0 && editable()) {
       const step = event.shiftKey ? NUDGE_SHIFT : NUDGE;
       const [gx, gy] = [x === 0 ? 0 : grow, y === 0 ? 0 : grow];
-      if (gridOn()) {
+      if (snapOn()) {
         if (fine) resizeOnGrid(gx, gy, lines);
         else moveOnGrid(x, y, lines);
       } else if (fine) {
@@ -103,7 +103,7 @@ export function installKeys(ctx: EditorContext): void {
       return true;
     }
     // Ctrl o ⌘ lascia il cursore libero, come lascia libero il puntatore.
-    if (gridOn() && !fine) {
+    if (snapOn() && !fine) {
       moveCursorOnGrid(x, y, lines);
       return true;
     }

@@ -86,8 +86,8 @@ export interface ArrangingContext {
 /// Monta i comandi per disporre.
 export function installArranging(ctx: EditorContext): void {
   const {
-    has, editable, currentIndex, currentPage, grownPage, newIds, announce, objects, stepNow, selectedUnits, openLink, commit,
-    withLabels, select, cancelGesture, gridOn, boundsOf, options
+    has, editable, currentIndex, currentPage, grownPage, newIds, announce, objects, snapStep, selectedUnits, openLink, commit,
+    withLabels, select, cancelGesture, snapOn, boundsOf, options
   } = ctx;
   // --- Disporre ----------------------------------------------------------------
 
@@ -196,7 +196,7 @@ export function installArranging(ctx: EditorContext): void {
     // Con l'aggancio le copie si scostano di passi interi della griglia, e
     // ciò che ci stava sopra ci resta.
     const distance = COPY_STEP_PX / ctx.camera.scale;
-    const step = gridOn() ? wholeSteps(distance, stepNow()) : roundDelta(distance);
+    const step = snapOn() ? wholeSteps(distance, snapStep()) : roundDelta(distance);
     const copied = withLabels(units);
     const arranged = duplicateOps(ctx.engine.model!, copied, step, step, newIds());
     if (arranged === null) {

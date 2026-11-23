@@ -57,9 +57,9 @@ export interface SelectionGesturesContext {
 /// Monta le forme e i gesti della selezione.
 export function installSelectionGestures(ctx: EditorContext): void {
   const {
-    folio, has, painter, editable, currentIndex, newIds, announce, announceSelection, readFirst, stepNow, lengthSpoken, selectedUnits, inOrder, frameOf, frameNow, frameCursor, degreesText, showGrip,
+    folio, has, painter, editable, currentIndex, newIds, announce, announceSelection, readFirst, snapStep, lengthSpoken, selectedUnits, inOrder, frameOf, frameNow, frameCursor, degreesText, showGrip,
     showHandles, showShape, syncControls, hookedIn, detachedNote, moveSelection, select, isolate, leaveIsolation, isolable,
-    gridOn, noted, snapped
+    snapOn, noted, snapped
   } = ctx;
 
   /// Gli estremi di una forma nelle coordinate del suo livello, con Maiusc
@@ -102,7 +102,7 @@ export function installSelectionGestures(ctx: EditorContext): void {
   /// `source`: con la griglia il punto preso va sull'incrocio. Ctrl o ⌘ lo
   /// lascia libero.
   const snappedDelta = (dx: number, dy: number, source: Point | null): [number, number] => {
-    const line = gridOn() && !ctx.free && source !== null ? snapDelta(source, dx, dy, stepNow()) : null;
+    const line = snapOn() && !ctx.free && source !== null ? snapDelta(source, dx, dy, snapStep()) : null;
     return line ?? [roundDelta(dx), roundDelta(dy)];
   };
   ctx.snappedDelta = snappedDelta;
@@ -128,7 +128,7 @@ export function installSelectionGestures(ctx: EditorContext): void {
     if (inverse === null) return null;
     const [a, b, c, d] = inverse;
     const delta = apply([a, b, c, d, 0, 0], [roundDelta(g.end[0] - g.from[0]), roundDelta(g.end[1] - g.from[1])]);
-    const snap = gridOn() && !ctx.free ? gridSnap(frame.matrix, stepNow()) : null;
+    const snap = snapOn() && !ctx.free ? gridSnap(frame.matrix, snapStep()) : null;
     const work = snap === null ? frame.box : frame.geometry;
     const [m0, m1, m2, m3] = frame.matrix;
     const minimum: [number, number] = [MIN_SIZE / Math.hypot(m0, m1), MIN_SIZE / Math.hypot(m2, m3)];

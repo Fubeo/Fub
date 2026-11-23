@@ -171,6 +171,26 @@ describe("la griglia ricordata", () => {
     expect(await readGrid()).toEqual(DEFAULT_GRID);
   });
 
+  it("l'aggancio al pixel (K6 T11) torna se acceso, spento non c'è, e una scrittura che non riesce lo dice come quella della griglia", async () => {
+    const host = createFakeHost();
+    const { clearHistory, readGrid, recentNotices, saveGrid } = await boot(host);
+    await host.module.api.setViewState(GRID_KEY, { shown: false, snap: false, step: 20, snapPixel: true });
+    expect(await readGrid()).toEqual({ ...DEFAULT_GRID, snapPixel: true });
+    await host.module.api.setViewState(GRID_KEY, { shown: false, snap: false, step: 20, snapPixel: false });
+    expect(await readGrid()).toEqual(DEFAULT_GRID);
+    await host.module.api.setViewState(GRID_KEY, { shown: false, snap: false, step: 20, snapPixel: "sì" });
+    expect(await readGrid()).toEqual(DEFAULT_GRID);
+
+    clearHistory();
+    const heal = host.fault("setViewState", "disco pieno");
+    saveGrid({ ...DEFAULT_GRID, snapPixel: true });
+    await settle();
+    expect(recentNotices().map(({ text, tone }) => ({ text, tone }))).toEqual([
+      { text: "Non riesco a ricordare la griglia per i prossimi disegni: disco pieno", tone: "guasto" },
+    ]);
+    heal();
+  });
+
   it("la gomma e la penna ricordate tornano; quelle che non si leggono valgono quelle di serie", async () => {
     const host = createFakeHost();
     const { readGrid } = await boot(host);

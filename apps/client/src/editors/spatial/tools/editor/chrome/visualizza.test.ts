@@ -8,6 +8,7 @@ import { COMANDI_VISUALIZZA, comandoVisualizza, FILE_VISUALIZZA, isComandoVisual
 interface GrigliaFinta {
   shown: boolean;
   snap: boolean;
+  snapPixel?: boolean;
   transparencyGrid?: boolean;
   hideEdges?: boolean;
   hideBoundingBox?: boolean;
@@ -32,6 +33,7 @@ describe("le righe view.* di ≡ › Visualizza del Disegno completo", () => {
     expect(COMANDI_VISUALIZZA).toEqual([
       "view.grid",
       "view.snapToGrid",
+      "view.snapToPixel",
       "view.transparencyGrid",
       "view.outline",
       "view.rulers",
@@ -41,6 +43,7 @@ describe("le righe view.* di ≡ › Visualizza del Disegno completo", () => {
       "view.rotateReset",
     ]);
     expect(isComandoVisualizza("view.grid")).toBe(true);
+    expect(isComandoVisualizza("view.snapToPixel")).toBe(true);
     expect(isComandoVisualizza("view.transparencyGrid")).toBe(true);
     expect(isComandoVisualizza("view.edges")).toBe(true);
     expect(isComandoVisualizza("view.boundingBox")).toBe(true);
@@ -54,7 +57,7 @@ describe("le righe view.* di ≡ › Visualizza del Disegno completo", () => {
 
   it("le file del menu portano ognuna voce una volta sola, nell'ordine dei comandi", () => {
     expect(FILE_VISUALIZZA.flat()).toEqual([...COMANDI_VISUALIZZA]);
-    expect(FILE_VISUALIZZA.map((file) => file.length)).toEqual([2, 3, 2, 2]);
+    expect(FILE_VISUALIZZA.map((file) => file.length)).toEqual([3, 3, 2, 2]);
   });
 
   it("una voce che il client fa è attiva; rotateReset è spenta col perché se la vista non è girata", () => {
@@ -113,6 +116,24 @@ describe("le righe view.* di ≡ › Visualizza del Disegno completo", () => {
     ctx.grid = { shown: false, snap: false, hideEdges: true, hideBoundingBox: true };
     expect(statoVisualizza(editor, "view.edges")).toBe(true);
     expect(statoVisualizza(editor, "view.boundingBox")).toBe(true);
+  });
+
+  it("l'aggancio al pixel (K6 T11) ha la spunta quando è acceso, e lo accende o spegne come la griglia, nella stessa scrittura", () => {
+    const acceso = fingi();
+    acceso.grid = { shown: false, snap: false, snapPixel: true };
+    const editorAcceso = acceso as unknown as EditorContext;
+    expect(statoVisualizza(editorAcceso, "view.snapToPixel")).toBe(true);
+    comandoVisualizza(editorAcceso, "view.snapToPixel");
+    expect(acceso.changeGrid).toHaveBeenLastCalledWith({ shown: false, snap: false, snapPixel: false });
+
+    const spento = fingi();
+    const editorSpento = spento as unknown as EditorContext;
+    expect(statoVisualizza(editorSpento, "view.snapToPixel")).toBe(false);
+    comandoVisualizza(editorSpento, "view.snapToPixel");
+    expect(spento.changeGrid).toHaveBeenLastCalledWith({ shown: false, snap: false, snapPixel: true });
+    // È una scrittura della griglia: il contorno e i righelli non si toccano.
+    expect(spento.setOutline).not.toHaveBeenCalled();
+    expect(spento.setEdgeRulers).not.toHaveBeenCalled();
   });
 
   it("ogni comando cambia lo stato che gli compete, senza toccare gli altri", () => {

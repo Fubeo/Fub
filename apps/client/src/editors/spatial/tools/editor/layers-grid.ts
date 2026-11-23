@@ -371,6 +371,7 @@ export function installLayersGrid(ctx: EditorContext): void {
     const unit = docUnit();
     if (ctx.grid.shown !== before.shown) announce(t(ctx.grid.shown ? "draw.grid.shown" : "draw.grid.hidden"));
     else if (ctx.grid.snap !== before.snap) announce(t(ctx.grid.snap ? "draw.grid.snap.on" : "draw.grid.snap.off"));
+    else if (ctx.grid.snapPixel !== before.snapPixel) announce(t(ctx.grid.snapPixel ? "draw.grid.pixel.on" : "draw.grid.pixel.off"));
     else if (!sameStep(gridStep(ctx.grid, unit), gridStep(before, unit))) announce(t("draw.grid.stepped", { step: lengthSpoken(stepNow()) }));
     else if (ctx.grid.shapes !== before.shapes) announce(t(ctx.grid.shapes ? "draw.recognize.on" : "draw.recognize.off"));
     else if (ctx.grid.bar !== before.bar) announce(t(ctx.grid.bar ? "draw.bar.beside.on" : "draw.bar.beside.off"));

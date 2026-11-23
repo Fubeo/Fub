@@ -7,13 +7,16 @@ import {
   DEFAULT_GRID,
   GRID_MIN_PX,
   GRID_STEPS,
+  PIXEL_STEP,
   gridLines,
   gridStep,
   lineBeyond,
   nearestCorner,
   sameStep,
+  snapActive,
   snapDelta,
   snapPoint,
+  snapStepOf,
   snapValue,
   stabilizerOf,
   validSteady,
@@ -28,6 +31,7 @@ import {
   withStep,
 } from "./grid";
 import { DEFAULT_CURVE } from "../../../ink/input/pressure";
+import { toScene, type View } from "../view";
 
 /// Le coordinate delle righe di un `d`, in ordine.
 const coordinates = (d: string, axis: "x" | "y"): number[] =>
@@ -193,5 +197,49 @@ describe("lo stabilizzatore della griglia", () => {
     expect(stabilizerOf(undefined).amount).toBe(0);
     expect(stabilizerOf({ amount: 0, string: true }).amount).toBe(0);
     expect(stabilizerOf({ amount: 0.6, string: true })).toEqual({ amount: 0.6, pulledString: true, catchUp: true, catchUpOnEnd: true });
+  });
+});
+
+describe("l'aggancio al pixel (K6 T11)", () => {
+  const pixel = { ...DEFAULT_GRID, snapPixel: true };
+  const both = { ...DEFAULT_GRID, snap: true, step: 20, snapPixel: true };
+
+  it("un pixel è un'unità di scena, la stessa in ogni unità del documento", () => {
+    expect(PIXEL_STEP).toBe(1);
+    for (const unit of UNITS) expect(snapStepOf(pixel, unit)).toBe(1);
+  });
+
+  it("è acceso col suo segno, e la griglia, se aggancia, vince sul pixel come nel motore", () => {
+    expect(snapActive(DEFAULT_GRID)).toBe(false);
+    expect(snapActive(pixel)).toBe(true);
+    expect(snapStepOf(both, "px")).toBe(20);
+    expect(snapStepOf(both, "mm")).toBe(gridStep(both, "mm"));
+  });
+
+  it("porta un punto all'intero più vicino: un rettangolo a x = 10,4 va su 10", () => {
+    expect(snapPoint([10.4, 3.2], snapStepOf(pixel, "px"))).toEqual([10, 3]);
+    expect(snapPoint([10.6, 40.4], snapStepOf(pixel, "px"))).toEqual([11, 40]);
+  });
+
+  it("uno spostamento di 3,6 da un angolo intero va su 4; da un angolo fuori intero arriva all'intero", () => {
+    expect(snapDelta([10, 11], 3.6, 0, snapStepOf(pixel, "px"))).toEqual([4, 0]);
+    // Da 10,4 con 3,6 si arriva a 14,0: lo spostamento è 3,6.
+    expect(snapDelta([10.4, 11], 3.6, 0, snapStepOf(pixel, "px"))).toEqual([3.6, 0]);
+  });
+
+  it("a ogni zoom e con la vista girata di 45°, il punto agganciato è un intero di scena a meno di mezzo pixel", () => {
+    const viste: readonly View[] = [
+      { scale: 0.5, angle: 0, tx: 0, ty: 0 },
+      { scale: 1, angle: 0, tx: 0, ty: 0 },
+      { scale: 2, angle: 0, tx: 30, ty: -12 },
+      { scale: 2, angle: 45, tx: 30, ty: -12 },
+      { scale: 0.5, angle: -45, tx: -80, ty: 40 },
+    ];
+    for (const view of viste) {
+      const scena = toScene(view, [123.4, 77.7]);
+      const agganciato = snapPoint(scena, snapStepOf(pixel, "px"));
+      expect(agganciato.map((n) => Number.isInteger(n)), JSON.stringify(view)).toEqual([true, true]);
+      expect(Math.abs(agganciato[0] - scena[0]) <= 0.5 && Math.abs(agganciato[1] - scena[1]) <= 0.5, JSON.stringify(view)).toBe(true);
+    }
   });
 });

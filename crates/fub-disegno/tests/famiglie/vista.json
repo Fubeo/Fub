@@ -42,6 +42,11 @@
       "prova": "apps/client/src/editors/spatial/tools/editor/chrome/visualizza.test.ts"
     },
     {
+      "id": "view.snapToPixel",
+      "fonte": "interfaccia",
+      "prova": "apps/client/src/editors/spatial/tools/editor/chrome/visualizza.test.ts"
+    },
+    {
       "id": "view.outline",
       "fonte": "interfaccia",
       "prova": "apps/client/src/editors/spatial/tools/editor/chrome/visualizza.test.ts"

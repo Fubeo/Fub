@@ -171,8 +171,8 @@ export interface ClipboardCommandsContext {
 export function installClipboardCommands(ctx: EditorContext): void {
   const {
     life, has, measureText, pictureFonts, root, surface, progressBar, progressLabel, progressMeter, progressStop, editable, grownPage, newIds, announce,
-    objects, numberText, stepNow, viewArea, viewCenter, selectedUnits, showHandles, askDescriptions, withFaces, syncControls, commit, withLabels, select,
-    cancelGesture, target, gridOn, boundsOf, arranging, arrange, options
+    objects, numberText, snapStep, viewArea, viewCenter, selectedUnits, showHandles, askDescriptions, withFaces, syncControls, commit, withLabels, select,
+    cancelGesture, target, snapOn, boundsOf, arranging, arrange, options
   } = ctx;
   // --- Le immagini incollate --------------------------------------------------
 
@@ -310,7 +310,7 @@ export function installClipboardCommands(ctx: EditorContext): void {
     // Le immagini stanno in ciò che si vede tutto, anche sul foglio girato.
     const view = seenBox(ctx.camera, viewArea());
     const distance = COPY_STEP_PX / ctx.camera.scale;
-    const step = gridOn() ? wholeSteps(distance, stepNow()) : distance;
+    const step = snapOn() ? wholeSteps(distance, snapStep()) : distance;
     // La scala del livello: una unità della scena vale `1 / k` unità sue.
     const k = Math.sqrt(Math.abs(to.matrix[0] * to.matrix[3] - to.matrix[1] * to.matrix[2]));
     const ops: Op[] = [...to.prelude];
@@ -321,7 +321,7 @@ export function installClipboardCommands(ctx: EditorContext): void {
       let box = placeImage(picture.width, picture.height, view, [base[0] + i * step, base[1] + i * step]);
       // Con l'aggancio, l'angolo in alto a sinistra va sull'incrocio più
       // vicino.
-      if (gridOn()) box = translated(box, ...snapDelta(box.min, 0, 0, stepNow()))!;
+      if (snapOn()) box = translated(box, ...snapDelta(box.min, 0, 0, snapStep()))!;
       const [cx, cy] = apply(to.inverse, [(box.min[0] + box.max[0]) / 2, (box.min[1] + box.max[1]) / 2]);
       const w = (box.max[0] - box.min[0]) / k;
       const h = (box.max[1] - box.min[1]) / k;
@@ -679,7 +679,7 @@ export function installClipboardCommands(ctx: EditorContext): void {
       const inView = at !== null && inSight(at);
       const base: Point = inView ? at : toScene(ctx.camera, viewCenter());
       const distance = COPY_STEP_PX / ctx.camera.scale;
-      const step = gridOn() ? wholeSteps(distance, stepNow()) : roundDelta(distance);
+      const step = snapOn() ? wholeSteps(distance, snapStep()) : roundDelta(distance);
       // Gli incolla di seguito dello stesso SVG si scostano; uno che sa dove
       // va, no.
       const lone = !inPlace && how.box === undefined && sources.length === 1 ? sources[0]!.text : null;
@@ -699,8 +699,8 @@ export function installClipboardCommands(ctx: EditorContext): void {
           const frame = pasteFrame(source, model);
           const offset = (first + i) * step;
           delta = [roundDelta(base[0] + offset - (frame.min[0] + frame.max[0]) / 2), roundDelta(base[1] + offset - (frame.min[1] + frame.max[1]) / 2)];
-          if (gridOn()) {
-            const [sx, sy] = snapDelta(translated(frame, delta[0], delta[1])!.min, 0, 0, stepNow());
+          if (snapOn()) {
+            const [sx, sy] = snapDelta(translated(frame, delta[0], delta[1])!.min, 0, 0, snapStep());
             delta = [delta[0] + sx, delta[1] + sy];
           }
         }

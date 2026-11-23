@@ -1,7 +1,8 @@
 // Le righe `view.*` di ≡ › Visualizza del Disegno completo (K6 T11, giro E e giro H).
 // Lo stato è della superficie, non del file: sta nella griglia (`Grid`), come lo
 // stato della griglia, e non entra nella cronologia. Griglia e aggancio sono quelli
-// del Semplice (lo stesso `changeGrid`, così restano uguali fra i due spazi); il
+// del Semplice (lo stesso `changeGrid`, così restano uguali fra i due spazi); l'aggancio
+// al pixel è la stessa scrittura, col passo di un pixel (`snapPixel`); il
 // contorno è la vista del contorno; i righelli di bordo stanno in `edge-rulers.ts`;
 // la rotazione è quella della vista; la griglia di trasparenza, i bordi e il
 // riquadro di delimitazione li disegnano `view.ts` e `marks.ts`. Una voce che il
@@ -14,6 +15,7 @@ import { chiediAngoloVista } from "./vista-ruota";
 export const COMANDI_VISUALIZZA = [
   "view.grid",
   "view.snapToGrid",
+  "view.snapToPixel",
   "view.transparencyGrid",
   "view.outline",
   "view.rulers",
@@ -29,7 +31,7 @@ export type ComandoVisualizza = (typeof COMANDI_VISUALIZZA)[number];
 /// trasparenza, contorno, righelli), poi ciò che si nasconde attorno agli oggetti
 /// scelti (bordi, riquadro), poi la rotazione della vista.
 export const FILE_VISUALIZZA: readonly (readonly ComandoVisualizza[])[] = [
-  ["view.grid", "view.snapToGrid"],
+  ["view.grid", "view.snapToGrid", "view.snapToPixel"],
   ["view.transparencyGrid", "view.outline", "view.rulers"],
   ["view.edges", "view.boundingBox"],
   ["view.rotate", "view.rotateReset"],
@@ -55,6 +57,8 @@ export function statoVisualizza(ctx: EditorContext, id: string): boolean | undef
       return ctx.grid.shown;
     case "view.snapToGrid":
       return ctx.grid.snap;
+    case "view.snapToPixel":
+      return ctx.grid.snapPixel === true;
     case "view.transparencyGrid":
       return ctx.grid.transparencyGrid === true;
     case "view.outline":
@@ -79,6 +83,9 @@ export function comandoVisualizza(ctx: EditorContext, id: ComandoVisualizza): vo
       return;
     case "view.snapToGrid":
       ctx.changeGrid({ ...ctx.grid, snap: !ctx.grid.snap });
+      return;
+    case "view.snapToPixel":
+      ctx.changeGrid({ ...ctx.grid, snapPixel: ctx.grid.snapPixel !== true });
       return;
     case "view.transparencyGrid":
       ctx.changeGrid({ ...ctx.grid, transparencyGrid: ctx.grid.transparencyGrid !== true });
