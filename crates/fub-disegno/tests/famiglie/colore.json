@@ -4277,6 +4277,89 @@
       "atteso": {
         "rifiuto": "empty"
       }
+    },
+    {
+      "id": "paint.none",
+      "disegno": "ricetta-maschera.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "oa1a1a1a1"
+              },
+              {
+                "op": "remove",
+                "target": {
+                  "path": [
+                    1
+                  ],
+                  "tag": "metadata"
+                }
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "last": true
+                },
+                "raw": "<g id=\"oa1a1a1a1\"><defs><mask id=\"rdkoq2pk2\" maskUnits=\"userSpaceOnUse\" color-interpolation=\"sRGB\" x=\"-100000\" y=\"-100000\" width=\"200000\" height=\"200000\"><ellipse cx=\"250\" cy=\"150\" rx=\"40\" ry=\"30\" fill=\"#0000ff\"/></mask></defs><g id=\"oldjuaj0u\" mask=\"url(#rdkoq2pk2)\"><rect id=\"omf66m2b7\" x=\"100\" y=\"100\" width=\"100\" height=\"50\" fill=\"none\"/></g></g>"
+              },
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<metadata><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"oa1a1a1a1\" hash=\"8566a263ce65cfa7\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjo2LCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJub25lIn19XX0sIm1hc2siOnsiYXJ0Ijp7ImlkIjo0LCJuYW1lIjoib2UxZTFlMWUxIiwiYXBwZWFyYW5jZSI6eyJpdGVtcyI6W3sia2luZCI6ImZpbGwiLCJwYWludCI6eyJ0eXBlIjoic29saWQiLCJjb2xvciI6eyJtb2RlbCI6InJnYiIsInIiOjAuMCwiZyI6MC4wLCJiIjoxLjB9fX1dfSwia2luZCI6eyJ0eXBlIjoicGF0aCIsInBhdGgiOnsic3VicGF0aHMiOlt7ImFuY2hvcnMiOlt7InAiOlsyOTAuMCwxNTAuMF0sImluIjpbMjkwLjAsMTMzLjQzMTQ1NzUwNTA3NjJdLCJvdXQiOlsyOTAuMCwxNjYuNTY4NTQyNDk0OTIzOF0sImtpbmQiOiJTbW9vdGgifSx7InAiOlsyNTAuMCwxODAuMF0sImluIjpbMjcyLjA5MTM4OTk5MzIzMTc2LDE4MC4wXSwib3V0IjpbMjI3LjkwODYxMDAwNjc2ODI0LDE4MC4wXSwia2luZCI6IlNtb290aCJ9LHsicCI6WzIxMC4wLDE1MC4wXSwiaW4iOlsyMTAuMCwxNjYuNTY4NTQyNDk0OTIzOF0sIm91dCI6WzIxMC4wLDEzMy40MzE0NTc1MDUwNzYyXSwia2luZCI6IlNtb290aCJ9LHsicCI6WzI1MC4wLDEyMC4wXSwiaW4iOlsyMjcuOTA4NjEwMDA2NzY4MjQsMTIwLjBdLCJvdXQiOlsyNzIuMDkxMzg5OTkzMjMxNzYsMTIwLjBdLCJraW5kIjoiU21vb3RoIn1dLCJjbG9zZWQiOnRydWV9XX19fSwiY2xpcCI6dHJ1ZSwiaW52ZXJ0IjpmYWxzZSwiZGlzYWJsZWQiOmZhbHNlLCJsaW5rZWQiOnRydWV9LCJraW5kIjp7InR5cGUiOiJwYXRoIiwicGF0aCI6eyJzdWJwYXRocyI6W3siYW5jaG9ycyI6W3sicCI6WzEwMC4wLDEwMC4wXX0seyJwIjpbMjAwLjAsMTAwLjBdfSx7InAiOlsyMDAuMCwxNTAuMF19LHsicCI6WzEwMC4wLDE1MC4wXX1dLCJjbG9zZWQiOnRydWV9XX19fX0=</vectorcraft:recipe></metadata>"
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "ricetta-maschera-senza-colore.svg"
+    },
+    {
+      "id": "addon.color.applyNearestSwatch",
+      "disegno": "campioni-scenari.svg",
+      "selezione": [
+        "ox4x4x4x4"
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "ox4x4x4x4"
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "after": "ox3x3x3x3"
+                },
+                "raw": "<g id=\"ox4x4x4x4\"><defs><linearGradient id=\"r7jq9xxp2\" x1=\"300\" y1=\"20\" x2=\"380\" y2=\"20\" gradientUnits=\"userSpaceOnUse\"><stop offset=\"0\" stop-color=\"#cc79a7\"/><stop offset=\"1\" stop-color=\"#0072b2\"/></linearGradient></defs><rect id=\"omjh5wz5d\" x=\"200\" y=\"20\" width=\"40\" height=\"40\" fill=\"url(#r7jq9xxp2)\"/></g>"
+              },
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<metadata><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"ox4x4x4x4\" hash=\"ec7583dde76c989f\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjo2LCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJncmFkaWVudCIsImdyYWRpZW50Ijp7ImtpbmQiOiJMaW5lYXIiLCJzdG9wcyI6W3sib2Zmc2V0IjowLjAsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MC44MDAwMDAwMTE5MjA5MjksImciOjAuNDc0NTA5ODA1NDQwOTAyNywiYiI6MC42NTQ5MDE5ODEzNTM3NTk4fSwib3BhY2l0eSI6MS4wLCJtaWRwb2ludCI6MC41LCJzd2F0Y2giOiJWaW9sYSJ9LHsib2Zmc2V0IjoxLjAsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MC4wLCJnIjowLjQ0NzA1ODgyNjY4NDk1MTgsImIiOjAuNjk4MDM5MjMzNjg0NTM5OH0sIm9wYWNpdHkiOjEuMCwibWlkcG9pbnQiOjAuNSwic3dhdGNoIjoiQmx1In1dfSwiZ2VvbSI6eyJzdGFydCI6eyJ4IjozMDAuMCwieSI6MjAuMH0sImVuZCI6eyJ4IjozODAuMCwieSI6MjAuMH0sImFzcGVjdCI6MS4wfSwiYW5nbGUiOi0wLjB9fV19LCJraW5kIjp7InR5cGUiOiJwYXRoIiwicGF0aCI6eyJzdWJwYXRocyI6W3siYW5jaG9ycyI6W3sicCI6WzIwMC4wLDIwLjBdfSx7InAiOlsyNDAuMCwyMC4wXX0seyJwIjpbMjQwLjAsNjAuMF19LHsicCI6WzIwMC4wLDYwLjBdfV0sImNsb3NlZCI6dHJ1ZX1dfX19fQ==</vectorcraft:recipe></metadata>"
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "colore-scenari-sfumatura.svg"
     }
   ]
 }

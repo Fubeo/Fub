@@ -694,6 +694,95 @@
       "disegno": "base.svg",
       "argomenti": { "sourceDocument": 999, "ids": [3], "grab": [0, 0], "at": [0, 0] },
       "atteso": { "errore": "bad_args" }
+    },
+    {
+      "id": "object.hide",
+      "disegno": "ricetta.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oa1a1a1a1",
+            "attrs": {
+              "display": "none"
+            }
+          }
+        ]
+      },
+      "dopo": "ricetta-nascosta.svg"
+    },
+    {
+      "id": "object.showAll",
+      "disegno": "ricetta-nascosta.svg",
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oa1a1a1a1",
+            "attrs": {
+              "display": null
+            }
+          }
+        ]
+      },
+      "dopo": "ricetta.svg"
+    },
+    {
+      "id": "object.lock",
+      "disegno": "ricetta.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oa1a1a1a1",
+            "attrs": {
+              "fub:locked": "true"
+            }
+          }
+        ]
+      },
+      "dopo": "ricetta-bloccata.svg"
+    },
+    {
+      "id": "object.unlockAll",
+      "disegno": "ricetta-bloccata.svg",
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oa1a1a1a1",
+            "attrs": {
+              "fub:locked": null
+            }
+          }
+        ]
+      },
+      "dopo": "ricetta.svg"
+    },
+    {
+      "id": "object.hide",
+      "disegno": "ricetta-gruppo.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oa1a1a1a1",
+            "attrs": {
+              "display": "none"
+            }
+          }
+        ]
+      },
+      "dopo": "ricetta-gruppo-nascosta.svg"
     }
   ]
 }
