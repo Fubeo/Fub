@@ -2375,7 +2375,9 @@ rifiutati e con argomenti sbagliati. Restano da fare `path.joinScrub`,
 l'unione con la scelta vanno decisi). Rischi: `setAnchors` su un
 triangolo scrive un `transform` invece di riscrivere `d`; Curvatura senza
 `element` crea un tracciato col riempimento bianco della sessione del
-motore.
+motore. Imposta angoli e Rimuovi angoli uniti in d24a60a66; il difetto
+visto nel banco era del banco (il metadata della ricetta prima della
+carta), non del comando.
 Aspetta: niente
 
 ## T13 · Le forme e le trasformazioni
@@ -2489,7 +2491,13 @@ griglie rettangolare e polare (comandi e strumenti), Generatore forme
 casella «modificare» come nel prototipo). Rischi: il gesto del Generatore
 con meno di due forme tace (il contratto non ha un motivo); «Trasforma
 singolarmente…» tagliata nel menu a 1280 px (aspetto); il trascinamento
-del Generatore va guardato nell'app vera.
+del Generatore va guardato nell'app vera. Sposta leggermente e Distorci
+uniti in 56a83d11c: tutti e due rifiutano l'Inchiostro (`unmapped`).
+Converti in forma resta «da fare» (il motore la fa come forma viva, che il
+formato non scrive) e lo zoom sulla scelta è una vista, non un comando del
+file. Rischio accettato: Sposta su un oggetto nascosto scelto a mano lo
+sposta (fissato nei casi). In giro: Distorci sul testo, le trasformazioni
+sull'Inchiostro e sul testo, Rendi perfetto al pixel.
 Aspetta: niente
 
 ## T14 · Il colore
@@ -2612,7 +2620,11 @@ ricette. Ricolora unito in 03317a5cc: un oggetto legato a un campione
 globale se ne stacca (drawing-colors.md); rischi: un oggetto nascosto scelto
 a mano si ricolora, la sfumatura vecchia resta nei defs. Letture del colore
 (`paint.toggleActive`, `recent`, `proxies`, `recolor.colors`, `reduce`,
-`randomize`) unite. In giro: la guida colori, i temi colore.
+`randomize`) unite. Temi colore uniti in 80a9e24ec (lastre, elenco,
+salva, togli); `colorTheme.addToSwatches` resta «da fare» perché crea un
+gruppo di colori, che il formato non ha. Rischi: nome vuoto o già usato
+danno la frase del motore in inglese; Togli è acceso con la libreria
+vuota. In giro: la guida colori, le frasi dei temi e il pannello dei temi.
 Aspetta: niente
 
 ## T15 · L'aspetto e i livelli
@@ -2779,8 +2791,10 @@ unito in 81b6cbc4a; Mostra tutti e Sblocca tutti uniti in 189acf0f1.
 Nascondi altri e Blocca altri restano «da fare»: con la carta (`fub-paper`
 figlio della radice) il motore importa un solo livello (`import.rs`
 `layer_mode`) e «gli altri» si contano sul livello corrente, non sulla
-scelta; vanno col modello dei livelli. In giro: Seleziona per tipo di
-testo e maniglie.
+scelta; vanno col modello dei livelli. Seleziona testo di punto e
+testo in area uniti in 503c1ccf8; rischio: Seleziona testo di punto può
+prendere un testo con `fub:wrap`. In giro: Seleziona per carattere e
+Modifica globale; le ricette all'Opus prima del modello dei livelli.
 Aspetta: niente
 
 ## T16 · Il testo
