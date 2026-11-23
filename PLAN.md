@@ -2590,6 +2590,14 @@ gruppi e i campioni di serie (il formato non li ha) e l'ordine per specie
 chiama «… copy» in inglese (stringa del motore);
 `docs/reference/scene-format-resources.md` non dice ancora che l'ordine dei
 campioni è quello del file; Ordina per nome tace se la lista è già in ordine.
+Colori recenti uniti in 66f41e191: `paint.recent` e le letture dei
+sostituti; la sfumatura libera (sette righe) resta «da fare» perché il
+formato non la scrive. Librerie dei campioni unite in cab430dc0:
+`swatch.library.list` e `get` in sola lettura. `swatch.library.add` segue
+la decisione del 23/11 (campioni globali, gruppi appiattiti, nessun
+formato nuovo): giro Haiku in corso; la finestra viene al giro dopo, le
+librerie dell'utente (`window.userSwatchLibrary1…10`) restano «da fare»
+(cartella del desktop).
 Aspetta: niente
 
 ## T15 · L'aspetto e i livelli
@@ -2731,6 +2739,16 @@ livelli per Blocca e Nascondi; sono un giro sul motore (modello dei
 livelli). Il ramo `feat/k6-t15-livelli-pulsanti` (porta con unisci e
 inverti, pulsanti non collegati) non è entrato: lo riprende quel giro,
 con la selezione di più livelli e la selezione nell'esito della porta.
+Maschere unite in 1a733d8b1: Crea maschera di opacità
+(`transparency.makeOpacityMask`) e le sue letture; modifica, rilascio,
+disattiva, scollega e le opzioni delle maschere nuove restano «da fare»
+col perché (stato di sessione del motore, attributi che la scena non ha).
+Rischi: la riapertura della maschera non era provata (giro in corso),
+regione della maschera di 200000 unità, `transform` scritto invece di `d`.
+Stili grafici: il formato ha il posto (`fub:style` e le defs, scene-format
+§3–4) ma il ponte non li importa né li scrive; `graphicStyle.list`,
+`apply` e `breakLink` aspettano un giro Opus sul ponte degli stili (disco),
+dopo il modello dei livelli.
 Aspetta: niente
 
 ## T16 · Il testo
