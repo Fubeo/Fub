@@ -1049,8 +1049,8 @@ interfaccia	view.snapToGrid	Snap to Grid		vista	F1	T11	fatto	menu/visualizza	fam
 interfaccia	view.snapToPoint	Snap to Point		vista	F1	T11	da fare	menu/visualizza	famiglia	l'aggancio ai punti lo fa già il motore, ma il gesto non porta il flag di vista: serve un campo nuovo del contratto (fub-abi), decisione in attesa	Aggancia al punto
 interfaccia	view.presentation	Presentation Mode		vista	F1	T11	da fare	menu/visualizza	famiglia	la modalità presentazione non c'è ancora nel client	Modalità presentazione
 interfaccia	view.screenMode	Screen Mode		vista	F1	T11	da fare	menu/visualizza	famiglia	la modalità schermo non c'è ancora nel client	Modalità schermo
-interfaccia	view.rotate	Rotate View		vista	F1	T11	da fare	menu/visualizza	famiglia	chiede un angolo: la finestra per l'angolo non c'è ancora nel client	Ruota vista
-interfaccia	view.rotateToSelection	Rotate View to Selection		vista	F1	T11	da fare	menu/visualizza	famiglia	il client non legge ancora la rotazione condivisa della selezione	Ruota vista in base alla selezione
+interfaccia	view.rotate	Rotate View		vista	F1	T11	fatto	menu/visualizza	famiglia	chiede un angolo in una finestra (tools/editor/chrome/vista-ruota.ts); gira la vista soltanto	Ruota vista
+interfaccia	view.rotateToSelection	Rotate View to Selection		vista	F1	T11	da fare	menu/visualizza	famiglia	il motore non ha una lettura della rotazione condivisa della selezione (nessuna query in cmd/: document.info, select, bounds non la danno): da fare col motore	Ruota vista in base alla selezione
 interfaccia	view.rotateReset	Reset Rotate View		vista	F1	T11	fatto	menu/visualizza	famiglia		Reimposta rotazione vista
 interfaccia	window.control	Control		fub	—	T8	fub	fub	—	la testata del disegno	Controllo
 interfaccia	window.toolbar	Tools		fub	—	T8	fub	fub	—	la colonna del disegno	Strumenti

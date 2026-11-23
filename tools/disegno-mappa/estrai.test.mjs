@@ -181,7 +181,9 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // colori pieni globali, e il comando dà `empty` (casi in colore.json, campioni_ordine.rs). Una riga in più.
   // T14 librerie: le letture salva e carica sono nel motore e nei casi, ma restano «da fare»: l'indice del
   // client non legge il loro schema (path e data senza tipo).
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1049, fub: 114, escluso: 12, fatto: 376 });
+  // T11 ruota vista: `view.rotate` (Ruota vista…, una finestra con l'angolo) diventa «fatto», con la sua
+  // prova in vista.json; `view.rotateToSelection` resta «da fare»: il motore non ha la rotazione condivisa.
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1048, fub: 114, escluso: 12, fatto: 377 });
 });
 
 // --- un motore finto ---------------------------------------------------------------
