@@ -183,8 +183,8 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // client non legge il loro schema (path e data senza tipo).
   // T11 ruota vista: `view.rotate` (Ruota vista…, una finestra con l'angolo) diventa «fatto», con la sua
   // prova in vista.json; `view.rotateToSelection` resta «da fare»: il motore non ha la rotazione condivisa.
-  // T11 cursori: «Usa cursori di precisione» è fatta; T12: «Unisci» (gesto) è fatta.
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1046, fub: 114, escluso: 12, fatto: 379 });
+  // T11 cursori: «Usa cursori di precisione» è fatta; T12: «Unisci» (gesto) è fatta; livelli: «Sposta sul livello corrente» è fatta.
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1045, fub: 114, escluso: 12, fatto: 380 });
 });
 
 // --- un motore finto ---------------------------------------------------------------
