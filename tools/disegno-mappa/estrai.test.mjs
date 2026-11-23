@@ -152,7 +152,12 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // T13 sposta e distorci: `object.nudge` (Sposta leggermente) e `object.distort` (Distorsione libera)
   // diventano «fatto», con i loro casi in trasforma.json. `object.shape.convertToShape` e lo zoom sulla
   // selezione restano «da fare», con la causa nella nota (la forma viva non c'è nel formato; lo zoom è della vista).
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1079, fub: 114, escluso: 12, fatto: 346 });
+  // T14 letture colore (temi): `color.plates` e `colorTheme.list` sono «fatto» (letture senza
+  // finestra, casi in colore.json): due in più. Il salvataggio dei temi resta «da fare» (disco).
+  // T14 temi del colore: `colorTheme.save` e `colorTheme.delete` sono «fatto» (letture: la libreria
+  // sta nelle preferenze, casi in colore.json e temi_colore.rs): due in più. `addToSwatches` resta
+  // «da fare» (il formato non ha gruppi di colori).
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1075, fub: 114, escluso: 12, fatto: 350 });
 });
 
 // --- un motore finto ---------------------------------------------------------------

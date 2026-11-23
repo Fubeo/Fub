@@ -314,6 +314,12 @@ fn una_selezione_con_un_elemento_non_mappato_non_cambia_niente() {
         // La Guida colori e la conversione (K6 T14, letture) prendono il colore dal valore, non dalla scelta.
         "disegno.color.harmony",
         "disegno.color.convert",
+        // Le lastre (K6 T14, temi) guardano il documento, e la libreria dei temi le preferenze: non la scelta.
+        "disegno.color.plates",
+        "disegno.colorTheme.list",
+        // Salvare e togliere un tema prendono il nome o i colori dal valore, non dalla scelta (K6 T14, temi).
+        "disegno.colorTheme.save",
+        "disegno.colorTheme.delete",
     ];
     let comandi = d.comandi(&["oa1a1a1a1".into(), "onessuno1".into()]);
     let accesi: Vec<&str> = comandi

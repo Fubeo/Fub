@@ -659,6 +659,70 @@
     },
     {
       "fonte": "motore",
+      "id": "color.plates",
+      "chiamata": {
+        "comando": "disegno.color.plates"
+      },
+      "etichetta": {
+        "it": "Lastre",
+        "en": "Plates"
+      },
+      "posto": "interno",
+      "famiglia": "colore",
+      "tasto": null,
+      "effetto": "legge",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "colorTheme.delete",
+      "chiamata": {
+        "comando": "disegno.colorTheme.delete"
+      },
+      "etichetta": {
+        "it": "Elimina tema",
+        "en": "Delete Theme"
+      },
+      "posto": "ispettore/risorse",
+      "famiglia": "colore",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "colorTheme.list",
+      "chiamata": {
+        "comando": "disegno.colorTheme.list"
+      },
+      "etichetta": {
+        "it": "Temi colore",
+        "en": "Color Themes"
+      },
+      "posto": "interno",
+      "famiglia": "colore",
+      "tasto": null,
+      "effetto": "legge",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "colorTheme.save",
+      "chiamata": {
+        "comando": "disegno.colorTheme.save"
+      },
+      "etichetta": {
+        "it": "Salva tema",
+        "en": "Save Theme"
+      },
+      "posto": "ispettore/risorse",
+      "famiglia": "colore",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "document.find",
       "chiamata": {
         "comando": "disegno.document.find"
