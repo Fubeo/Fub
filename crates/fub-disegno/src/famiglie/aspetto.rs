@@ -41,6 +41,11 @@ const CREA_MASCHERA: &str = "transparency.makeOpacityMask";
 /// Riduci ad aspetto di base (K6 T15, aspetto): lascia un solo riempimento e un solo contorno visibili.
 const RIDUCI: &str = "appearance.reduceToBasic";
 
+/// Aggiungi riempimento e Aggiungi contorno (K6 T15, aggiungi aspetto): una copia del riempimento o del
+/// contorno in cima allo stack di ogni oggetto scelto, con il colore predefinito se non ce n'è uno.
+const AGGIUNGI_RIEMPIMENTO: &str = "appearance.addFill";
+const AGGIUNGI_CONTORNO: &str = "appearance.addStroke";
+
 /// I valori del pannello Trasparenza per la scelta, e la maschera di opacità della scelta: letture.
 const LETTURA_TRASPARENZA: &str = "transparency.info";
 const LETTURA_MASCHERA: &str = "transparency.opacityMaskInfo";
@@ -142,8 +147,8 @@ impl StatoFamiglia for Stato {
         if id == CREA_MASCHERA {
             return spento_maschera(copia, selezione);
         }
-        if id == RIDUCI {
-            return spento_riduci(copia, selezione);
+        if matches!(id, RIDUCI | AGGIUNGI_RIEMPIMENTO | AGGIUNGI_CONTORNO) {
+            return spento_oggetti(copia, selezione);
         }
         if id != TRASPARENZA && id != CONTORNO {
             return None;
@@ -176,8 +181,8 @@ impl StatoFamiglia for Stato {
         if let Some(sfumatura) = come_sfumatura(id) {
             return Colore::rifiuto(sfumatura, copia, selezione);
         }
-        if id == RIDUCI {
-            return match spento_riduci(copia, selezione)? {
+        if matches!(id, RIDUCI | AGGIUNGI_RIEMPIMENTO | AGGIUNGI_CONTORNO) {
+            return match spento_oggetti(copia, selezione)? {
                 DrawingDisabledReason::NoSelection => Some(DrawingRefusal::Empty),
                 DrawingDisabledReason::ReadOnly => Some(DrawingRefusal::Locked),
                 DrawingDisabledReason::Unmapped | DrawingDisabledReason::FubInk => Some(DrawingRefusal::Unmapped),
@@ -320,10 +325,11 @@ fn piu_alto(copia: &Copia, nodi: &[NodeId]) -> Option<NodeId> {
     cima
 }
 
-/// Perché Riduci ad aspetto di base non vale sulle scelte (K6 T15, aspetto): niente scelto, un oggetto
-/// bloccato, un tratto dell'Inchiostro, un oggetto nascosto o un testo. Un oggetto con una maschera di
-/// opacità si riduce: la ricetta riscritta si riapre con la maschera (`tests/ricette_riapertura.rs`).
-fn spento_riduci(copia: &Copia, selezione: &[String]) -> Option<DrawingDisabledReason> {
+/// Perché Riduci ad aspetto di base, Aggiungi riempimento e Aggiungi contorno non valgono sulle scelte
+/// (K6 T15, aspetto): niente scelto, un oggetto bloccato, un tratto dell'Inchiostro, un oggetto nascosto
+/// o un testo. Un oggetto con una maschera di opacità si cambia: la ricetta riscritta si riapre con la
+/// maschera (`tests/ricette_riapertura.rs`).
+fn spento_oggetti(copia: &Copia, selezione: &[String]) -> Option<DrawingDisabledReason> {
     if selezione.is_empty() {
         return Some(DrawingDisabledReason::NoSelection);
     }
@@ -350,6 +356,6 @@ fn spento_riduci(copia: &Copia, selezione: &[String]) -> Option<DrawingDisabledR
     // lo spegnerebbe per intero. Il testo non si riduce ancora.
     let testo = |n: &NodeId| copia.documento.node(*n).is_some_and(|nodo| matches!(nodo.kind, NodeKind::Text(_)));
     scelti.iter().any(testo).then(|| DrawingDisabledReason::Other {
-        text: "Il testo non si riduce ancora: il suo colore sta nei caratteri.".into(),
+        text: "Il testo non si cambia ancora nell'aspetto: il suo colore sta nei caratteri.".into(),
     })
 }

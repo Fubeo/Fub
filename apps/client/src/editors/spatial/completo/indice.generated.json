@@ -195,6 +195,38 @@
     },
     {
       "fonte": "motore",
+      "id": "addon.pathtools.cornerRemove",
+      "chiamata": {
+        "comando": "disegno.addon.pathtools.cornerRemove"
+      },
+      "etichetta": {
+        "it": "Rimuovi angoli",
+        "en": "Remove Corners"
+      },
+      "posto": "ispettore/design",
+      "famiglia": "tracciati",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "addon.pathtools.cornerSet",
+      "chiamata": {
+        "comando": "disegno.addon.pathtools.cornerSet"
+      },
+      "etichetta": {
+        "it": "Imposta angoli",
+        "en": "Set Corners"
+      },
+      "posto": "ispettore/design",
+      "famiglia": "tracciati",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "motore",
       "id": "addon.pathtools.crossings",
       "chiamata": {
         "comando": "disegno.addon.pathtools.crossings"
@@ -403,6 +435,38 @@
     },
     {
       "fonte": "motore",
+      "id": "appearance.addFill",
+      "chiamata": {
+        "comando": "disegno.appearance.addFill"
+      },
+      "etichetta": {
+        "it": "Aggiungi nuovo riempimento",
+        "en": "Add New Fill"
+      },
+      "posto": "ispettore/design",
+      "famiglia": "aspetto",
+      "tasto": "Cmd+/",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "appearance.addStroke",
+      "chiamata": {
+        "comando": "disegno.appearance.addStroke"
+      },
+      "etichetta": {
+        "it": "Aggiungi nuovo tratto",
+        "en": "Add New Stroke"
+      },
+      "posto": "ispettore/design",
+      "famiglia": "aspetto",
+      "tasto": "Cmd+Alt+/",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "appearance.reduceToBasic",
       "chiamata": {
         "comando": "disegno.appearance.reduceToBasic"
@@ -541,6 +605,54 @@
       },
       "posto": "interno",
       "famiglia": "nucleo",
+      "tasto": null,
+      "effetto": "legge",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "color.convert",
+      "chiamata": {
+        "comando": "disegno.color.convert"
+      },
+      "etichetta": {
+        "it": "Converti colore",
+        "en": "Convert Color"
+      },
+      "posto": "interno",
+      "famiglia": "colore",
+      "tasto": null,
+      "effetto": "legge",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "color.gamutCheck",
+      "chiamata": {
+        "comando": "disegno.color.gamutCheck"
+      },
+      "etichetta": {
+        "it": "Avviso gamut",
+        "en": "Gamut Warning"
+      },
+      "posto": "interno",
+      "famiglia": "colore",
+      "tasto": null,
+      "effetto": "legge",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "color.harmony",
+      "chiamata": {
+        "comando": "disegno.color.harmony"
+      },
+      "etichetta": {
+        "it": "Guida colori",
+        "en": "Color Guide"
+      },
+      "posto": "interno",
+      "famiglia": "colore",
       "tasto": null,
       "effetto": "legge",
       "finestra": false
@@ -1184,6 +1296,38 @@
       "tasto": null,
       "effetto": "cambia",
       "finestra": true
+    },
+    {
+      "fonte": "motore",
+      "id": "layer.showAll",
+      "chiamata": {
+        "comando": "disegno.layer.showAll"
+      },
+      "etichetta": {
+        "it": "Mostra tutti i livelli",
+        "en": "Show All Layers"
+      },
+      "posto": "ispettore/livelli",
+      "famiglia": "livelli",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "layer.unlockAll",
+      "chiamata": {
+        "comando": "disegno.layer.unlockAll"
+      },
+      "etichetta": {
+        "it": "Sblocca tutti i livelli",
+        "en": "Unlock All Layers"
+      },
+      "posto": "ispettore/livelli",
+      "famiglia": "livelli",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
     },
     {
       "fonte": "motore",
@@ -2707,6 +2851,70 @@
     },
     {
       "fonte": "motore",
+      "id": "recolor.apply",
+      "chiamata": {
+        "comando": "disegno.recolor.apply"
+      },
+      "etichetta": {
+        "it": "Ricolora grafica",
+        "en": "Recolor Artwork"
+      },
+      "posto": "interno",
+      "famiglia": "colore",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "recolor.colors",
+      "chiamata": {
+        "comando": "disegno.recolor.colors"
+      },
+      "etichetta": {
+        "it": "Colori della grafica",
+        "en": "Artwork Colors"
+      },
+      "posto": "interno",
+      "famiglia": "colore",
+      "tasto": null,
+      "effetto": "legge",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "recolor.randomize",
+      "chiamata": {
+        "comando": "disegno.recolor.randomize"
+      },
+      "etichetta": {
+        "it": "Colori casuali",
+        "en": "Randomize Colors"
+      },
+      "posto": "interno",
+      "famiglia": "colore",
+      "tasto": null,
+      "effetto": "legge",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "recolor.reduce",
+      "chiamata": {
+        "comando": "disegno.recolor.reduce"
+      },
+      "etichetta": {
+        "it": "Riduci colori",
+        "en": "Reduce Colors"
+      },
+      "posto": "interno",
+      "famiglia": "colore",
+      "tasto": null,
+      "effetto": "legge",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "select.add",
       "chiamata": {
         "comando": "disegno.select.add"
@@ -2835,6 +3043,22 @@
     },
     {
       "fonte": "motore",
+      "id": "select.object.areaText",
+      "chiamata": {
+        "comando": "disegno.select.object.areaText"
+      },
+      "etichetta": {
+        "it": "Oggetti testo in area",
+        "en": "Area Text Objects"
+      },
+      "posto": "menu/selezione/oggetto",
+      "famiglia": "livelli",
+      "tasto": null,
+      "effetto": "mostra",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "select.object.clippingMasks",
       "chiamata": {
         "comando": "disegno.select.object.clippingMasks"
@@ -2858,6 +3082,22 @@
       "etichetta": {
         "it": "Tracciati aperti",
         "en": "Open Paths"
+      },
+      "posto": "menu/selezione/oggetto",
+      "famiglia": "livelli",
+      "tasto": null,
+      "effetto": "mostra",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "select.object.pointText",
+      "chiamata": {
+        "comando": "disegno.select.object.pointText"
+      },
+      "etichetta": {
+        "it": "Oggetti testo per punti",
+        "en": "Point Text Objects"
       },
       "posto": "menu/selezione/oggetto",
       "famiglia": "livelli",
@@ -4161,6 +4401,22 @@
     },
     {
       "fonte": "interfaccia",
+      "id": "ui.recolorDialog",
+      "chiamata": {
+        "client": "ui.recolorDialog"
+      },
+      "etichetta": {
+        "it": "Ricolora grafica…",
+        "en": "Recolor Artwork…"
+      },
+      "posto": "menu/modifica/colori",
+      "famiglia": "colore",
+      "tasto": null,
+      "effetto": "mostra",
+      "finestra": true
+    },
+    {
+      "fonte": "interfaccia",
       "id": "ui.saturateDialog",
       "chiamata": {
         "client": "ui.saturateDialog"
@@ -4379,6 +4635,22 @@
       },
       "posto": "banda",
       "famiglia": "vista",
+      "tasto": null,
+      "effetto": "mostra",
+      "finestra": false
+    },
+    {
+      "fonte": "interfaccia",
+      "id": "window.swatchLibrary",
+      "chiamata": {
+        "client": "window.swatchLibrary"
+      },
+      "etichetta": {
+        "it": "Libreria campioni",
+        "en": "Swatch Library"
+      },
+      "posto": "ispettore/design",
+      "famiglia": "colore",
       "tasto": null,
       "effetto": "mostra",
       "finestra": false

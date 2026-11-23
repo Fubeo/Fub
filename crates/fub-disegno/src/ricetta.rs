@@ -394,7 +394,10 @@ pub fn costrutti(n: &Node) -> Vec<Costrutto> {
             Paint::Pattern { .. } => out.push(Motivo),
         }
     }
-    if riempimenti > 1 || contorni > 1 {
+    // Un riempimento o un contorno di un gruppo si disegna sopra i suoi oggetti: è un aspetto in
+    // più, che `fill` e `stroke` del `<g>` non dicono (li erediterebbero i figli).
+    let gruppo = matches!(kind, NodeKind::Group { .. });
+    if riempimenti > 1 || contorni > 1 || (gruppo && riempimenti + contorni > 0) {
         out.push(AspettoImpilato);
     }
     for effetto in &appearance.effects {
@@ -1057,6 +1060,22 @@ mod prove {
         assert_ne!(impronta(figlio_mostrato), impronta(base));
         let altro = "<g id=\"oa\" opacity=\"0.5\"><rect display=\"none\" x=\"1\"/></g>";
         assert_ne!(impronta(altro), impronta(base));
+    }
+
+    /// Un riempimento solo è un corpo su un tracciato, ma su un gruppo è un
+    /// aspetto in più, sopra i suoi oggetti: il gruppo diventa ricco.
+    #[test]
+    fn un_riempimento_del_gruppo_e_un_aspetto_impilato() {
+        let rosso: AppearanceItem = serde_json::from_value(serde_json::json!({
+            "kind": "fill",
+            "paint": { "type": "solid", "color": { "model": "rgb", "r": 1.0, "g": 0.0, "b": 0.0 } }
+        }))
+        .expect("un riempimento");
+        let mut gruppo = Node::group(NodeId(1), vec![]);
+        assert!(!costrutti(&gruppo).contains(&Costrutto::AspettoImpilato));
+        gruppo.appearance.items.push(rosso);
+        assert!(costrutti(&gruppo).contains(&Costrutto::AspettoImpilato));
+        assert!(esito(&gruppo) > Esito::Corpo);
     }
 
     /// Il limite delle ricette, da solo (il file vero si ferma prima, al

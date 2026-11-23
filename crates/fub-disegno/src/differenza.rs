@@ -846,9 +846,25 @@ impl Lavoro<'_> {
         Ok(())
     }
 
-    /// `n` senza gli oggetti che contiene con una ricetta applicata nel file:
-    /// la parte di cui `n` risponde da sé quando si chiede se è ricco. Lo
-    /// stesso `Arc` se dentro non ce ne sono.
+    /// La parte di cui `n` risponde da sé quando si chiede se è ricco. Un
+    /// gruppo risponde solo di sé: i suoi oggetti sono elementi del file, e il
+    /// confronto scende fino a loro, che si scrivono ognuno per sé (un oggetto
+    /// diventato ricco si riscrive con la sua ricetta, il gruppo resta). Ogni
+    /// altro contenitore risponde di ciò che contiene, tranne gli oggetti con
+    /// una ricetta applicata nel file.
+    fn propria(&self, n: &Arc<Node>) -> Arc<Node> {
+        if !matches!(n.kind, NodeKind::Group { .. }) {
+            return self.senza_ricette(n);
+        }
+        let mut solo = (**n).clone();
+        if let Some(f) = solo.children_mut() {
+            f.clear();
+        }
+        Arc::new(solo)
+    }
+
+    /// `n` senza gli oggetti che contiene con una ricetta applicata nel file.
+    /// Lo stesso `Arc` se dentro non ce ne sono.
     fn senza_ricette(&self, n: &Arc<Node>) -> Arc<Node> {
         let Some(figli) = n.children() else {
             return n.clone();
@@ -1141,10 +1157,10 @@ impl Lavoro<'_> {
                 self.riscritti.insert(a.id);
                 return Ok(());
             }
-            // Gli oggetti dentro che hanno una ricetta loro non fanno ricco
-            // questo: il confronto scende fino a loro, e ognuno si scrive
-            // per sé (spostato, o riscritto con la sua ricetta).
-            let (propria_a, propria_b) = (self.senza_ricette(a), self.senza_ricette(b));
+            // Gli oggetti di un gruppo, e quelli con una ricetta loro, non
+            // fanno ricco questo: il confronto scende fino a loro, e ognuno si
+            // scrive per sé (spostato, o riscritto con la sua ricetta).
+            let (propria_a, propria_b) = (self.propria(a), self.propria(b));
             if ricetta::esito_albero(&propria_a) > Esito::Corpo {
                 // Ricco. Se i suoi costrutti cambiano, gli attributi non li
                 // direbbero: si riscrive intero con la sua ricetta. Il

@@ -16,6 +16,10 @@ const NUOVI = [
   { id: "layer.selectAll", etichetta: "Seleziona grafica" },
   { id: "layer.merge", etichetta: "Unisci selezionati" },
   { id: "layer.reverse", etichetta: "Inverti ordine" },
+  // T15 livelli altri: la visita dell'albero (Mostra tutti, Sblocca tutti); Nascondi altri e Blocca
+  // altri restano da fare, con la causa nella mappa.
+  { id: "layer.showAll", etichetta: "Mostra tutti i livelli" },
+  { id: "layer.unlockAll", etichetta: "Sblocca tutti i livelli" },
 ] as const;
 
 /// La voce dell'indice di questo comando.

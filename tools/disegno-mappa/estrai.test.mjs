@@ -136,7 +136,20 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // T14 colori aggiunti (giro 9, punto 1): Seleziona per tipo di colore (con la sua finestra),
   // Trova e Applica il campione più vicino: tre in più. Le letture del colore e le tinte piatte
   // restano «da fare» in questo giro; stampa e filtro restano «da fare» con la causa.
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1098, fub: 114, escluso: 12, fatto: 327 });
+  // T14 librerie finestra porta a «fatto» `window.swatchLibrary`: la finestra elenca le librerie, mostra
+  // i campioni e aggiunge (prova: `librerie-finestra.test.ts`). Resta «da fare» Altra libreria… (un file).
+  // T14 ricolora: cinque righe fatte in più (tre letture, Ricolora grafica e la sua finestra).
+  // T14 letture colore: `color.harmony`, `color.convert` e `color.gamutCheck` sono «fatto»
+  // (letture senza finestra, casi in colore.json): tre in più.
+  // T15 aggiungi aspetto: Aggiungi riempimento e Aggiungi contorno («fatto», con le riaperture nei test);
+  // il pannello Aspetto e il resto dell'aspetto restano «da fare».
+  // T15 livelli altri: `layer.showAll` e `layer.unlockAll` diventano «fatto» (la visita dell'albero, con
+  // i loro casi in livelli.json); `layer.hideOthers` e `layer.lockOthers` restano «da fare», con la causa.
+  // T12 angoli porta a «fatto» `addon.pathtools.cornerSet` («Imposta angoli», con la finestra del raggio) e
+  // `addon.pathtools.cornerRemove` («Rimuovi angoli»): la ricetta riscritta si applica nella scena del client.
+  // T15 seleziona tipo: Seleziona testo di punto e in area («fatto», nel sottomenu Oggetto); le maniglie
+  // di direzione e i pennelli restano «da fare», con la causa provata nella nota.
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1081, fub: 114, escluso: 12, fatto: 344 });
 });
 
 // --- un motore finto ---------------------------------------------------------------

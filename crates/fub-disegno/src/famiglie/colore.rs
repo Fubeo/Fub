@@ -89,6 +89,36 @@ pub(crate) const SFUMATURE: [&str; 3] = ["paint.editGradient", "paint.setGradien
 /// come li mostrano i proxy) e non cambiano il file. Non portano una scelta.
 pub(crate) const LETTURE: [&str; 3] = ["paint.toggleActive", "paint.recent", "paint.proxies"];
 
+/// Gli argomenti delle letture del colore che il motore lascerebbe passare in silenzio (K6 T14,
+/// letture): un modello che non c'è dà il RGB, e un colore che non è `#rrggbb` si salta. Il perché
+/// è in italiano, prima del motore.
+fn argomenti_delle_letture(id: &str, argomenti: &Value) -> Option<&'static str> {
+    let assente = |v: Option<&Value>| v.is_none_or(Value::is_null);
+    let hex6 = |c: &Value| {
+        c.as_str().is_some_and(|s| {
+            s.len() == 7 && s.starts_with('#') && s[1..].chars().all(|ch| ch.is_ascii_hexdigit())
+        })
+    };
+    match id {
+        "color.convert" => {
+            let to = argomenti.get("to");
+            (assente(to) || !matches!(to.and_then(Value::as_str), Some("rgb" | "cmyk" | "gray" | "lab")))
+                .then_some("«to» è rgb, cmyk, gray o lab.")
+        }
+        "color.gamutCheck" => {
+            let colori = argomenti.get("colors");
+            if assente(colori) {
+                return None;
+            }
+            match colori.and_then(Value::as_array) {
+                Some(lista) if lista.iter().all(hex6) => None,
+                _ => Some("«colors» è una lista di colori #rrggbb."),
+            }
+        }
+        _ => None,
+    }
+}
+
 /// Il perché di Applica e Trova campione più vicino quando il documento non ha campioni
 /// (K6 T14 giro 9): il motore lo direbbe in inglese, e la frase è questa.
 pub(crate) const TESTO_SENZA_CAMPIONI: &str =
@@ -111,6 +141,16 @@ pub(crate) const DAGLI_OGGETTI_AGGIUNTI: [&str; 2] = [
     "addon.color.applyNearestSwatch",
     "addon.color.nearestSwatch",
 ];
+
+/// Ricolora la grafica (T14): la scrittura che la finestra `ui.recolorDialog` manda dopo le
+/// anteprime. Vale sugli oggetti scelti; senza scelta il motore chiede la scelta o un gruppo di
+/// colori (che Fub non ha ancora, T30), e la voce è spenta.
+pub(crate) const RICOLORA: &str = "recolor.apply";
+
+/// Le letture di Ricolora che guardano la scelta (i suoi colori, e le proposte di riduzione e
+/// casuali): sono spente come la scrittura quando la scelta non va (niente, bloccata, Inchiostro,
+/// non mappata), perché la finestra non si apre su una scelta che non si può ricolorare.
+pub(crate) const LETTURE_DELLA_SCELTA: [&str; 3] = ["recolor.colors", "recolor.reduce", "recolor.randomize"];
 
 /// Le voci di Modifica › Modifica colori.
 pub(crate) const MODIFICA_COLORI: [&str; 10] = [
@@ -244,6 +284,8 @@ fn sugli_scelti(id: &str) -> bool {
         || MODIFICA_COLORI.contains(&id)
         || SFUMATURE.contains(&id)
         || DAGLI_OGGETTI_AGGIUNTI.contains(&id)
+        || id == RICOLORA
+        || LETTURE_DELLA_SCELTA.contains(&id)
 }
 
 /// Gli argomenti di una sfumatura chiedono ciò che la scena non scrive: una
@@ -300,12 +342,17 @@ impl StatoFamiglia for Stato {
     }
 
     fn legge(&self, id: &str) -> bool {
-        LETTURE.contains(&id)
+        // Le letture del colore e quelle di Ricolora (i colori della scelta, le proposte di
+        // riduzione e casuali) non cambiano il file; `recolor.apply` sì.
+        LETTURE.contains(&id) || LETTURE_DELLA_SCELTA.contains(&id)
     }
 
     /// Un campione nuovo, cambiato o fatto dai colori usati è globale;
     /// eliminarne uno lascia a chi lo usava il suo colore.
     fn adatta(&self, id: &str, argomenti: Value) -> Result<Value, PluginError> {
+        if let Some(motivo) = argomenti_delle_letture(id, &argomenti) {
+            return Err(PluginError::BadArgs(motivo.into()));
+        }
         if !CAMPIONI.contains(&id) {
             return Ok(argomenti);
         }
@@ -379,6 +426,11 @@ impl StatoFamiglia for Stato {
     /// sono spenti col perché. `paint.toggleActive` non cambia il file: resta
     /// acceso.
     fn spento(id: &str, copia: &Copia, selezione: &[String]) -> Option<DrawingDisabledReason> {
+        // Il controllo gamut legge ciò che è scelto (senza scelta, tutto il disegno): una scelta
+        // non mappata lo spegne come gli altri comandi sugli oggetti (K6 T14, letture).
+        if id == "color.gamutCheck" {
+            return super::selezione_spenta(copia, selezione);
+        }
         // Il campione più vicino cerca nei campioni del documento: senza, il motore
         // risponderebbe in inglese. Il perché si dice qui, in italiano (K6 T14 giro 9).
         if DAGLI_OGGETTI_AGGIUNTI.contains(&id) && senza_campioni(copia) {

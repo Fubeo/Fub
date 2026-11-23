@@ -27,6 +27,7 @@ import { registraElaborazione } from "./elaborazione";
 import { registraTrasforma } from "./trasforma-sezione";
 import { registraColore, type LatoAttivo } from "./colore-sezione";
 import { registraCampioni } from "./campioni-sezione";
+import { apriRicolora, motivoRicolora, VOCE_RICOLORA } from "./ricolora";
 import { registraContorno } from "./contorno-sezione";
 import { registraSfumatura } from "./sfumatura-sezione";
 import { creaPortaPreimpostate } from "./sfumature-preimpostate";
@@ -47,6 +48,7 @@ import { applicaEsito, eseguiVoce, type AzioniEsito, type DipendenzeComando, typ
 // Gli appunti del motore (K6 T11): copia, taglia e incolla passano dal motore.
 import { creaAppuntiCompleto } from "./appunti";
 import { creaPortaLivelli, type PortaLivelli } from "./livelli-porta";
+import { apriFinestraLibrerie, creaPortaLibrerie } from "./librerie-finestra";
 export type { EsitoLivello, PortaLivelli, RichiestaLivello } from "./livelli-porta";
 import { registraAppuntiCompleto } from "../tools/clipboard";
 import { montaTasti } from "./montaggio-tasti";
@@ -406,9 +408,18 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila" | "e
       if (ultimaElaborazione !== null) void eseguiPerId(ultimaElaborazione, {}, { senzaFinestra: true });
     },
   });
+  // Ricolora grafica (K6 T14): la voce di Modifica › Modifica colori apre la sua finestra. Il suo
+  // stato è quello del comando che la finestra scrive (`conVociClient`).
+  vociDelCompleto.set(VOCE_RICOLORA, { stato: () => null, esegui: () => void apriRicolora(dipendenze) });
   registraColore(sezioni, (id, valori) => void eseguiPerId(id, valori, { senzaFinestra: true }), ctx.life, latoAttivo);
   // La sezione «Campioni» di Risorse (K6 T14, giro 2): la griglia, la scelta, le finestre del kit.
   registraCampioni(sezioni, (id, valori) => void eseguiPerId(id, valori, { senzaFinestra: true }), ctx.life, latoAttivo, vociDelCompleto);
+  // La finestra «Librerie di campioni» (K6 T14, finestra): la voce `window.swatchLibrary` apre il dialogo,
+  // che parla col motore attraverso `dipendenze` (le letture e Aggiungi, col passo di Annulla).
+  vociDelCompleto.set("window.swatchLibrary", {
+    stato: () => null,
+    esegui: () => apriFinestraLibrerie(creaPortaLibrerie(dipendenze, t("draw.libraries.undo")), ctx.life),
+  });
   // La sezione «Contorno» (K6 T15, giro 5): spessore, estremi, angoli e tratteggio.
   registraContorno(sezioni, eseguiPerId);
   // La sezione «Sfumatura» (K6 T15, giro 5): tipo, angolo e punti della sfumatura lineare o radiale.
@@ -557,6 +568,7 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila" | "e
   const conVociClient = (stato: StatoComandi): StatoComandi => ({
     ...stato,
     clientVoce: (id) => {
+      if (id === VOCE_RICOLORA) return motivoRicolora(stato);
       const propria = vociDelCompleto.get(id);
       return propria !== undefined ? propria.stato() : opzioni.clientVoce?.(id);
     },

@@ -137,9 +137,12 @@ come operazioni sulla scena ([operazioni sulla scena](scene-operations.md)):
   grafica dell'oggetto anche se è nascosto; se è nascosto o bloccato, un
   `set` di `display="none"` o `fub:locked="true"` sull'id del corpo viene
   dopo l'`add`;
-- un gruppo che contiene oggetti con una ricetta loro non diventa ricco per
-  loro: il confronto scende fino a quegli oggetti, e ognuno si scrive per
-  sé;
+- un gruppo è ricco solo per ciò che è suo (la sua opacità, il suo modo di
+  fusione, il suo riempimento o contorno, che è un aspetto impilato perché si
+  disegna sopra gli oggetti), mai per gli oggetti che contiene: il confronto
+  scende fino a loro, e ognuno si scrive per sé (riscritto con la sua
+  ricetta se diventa ricco); il gruppo si riscrive intero solo quando cambia
+  ciò che è suo;
 - quando le ricette cambiano, il loro `<metadata>` si toglie (`remove` col
   percorso) e se ne aggiunge uno nuovo (`add` `raw`, primo figlio di
   `<svg>`) con le ricette che restano, le nuove e il resto del blocco

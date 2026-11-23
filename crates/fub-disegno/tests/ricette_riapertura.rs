@@ -297,6 +297,7 @@ fn ogni_comando_che_riscrive_la_maschera_la_riapre_due_volte() {
         ("transparency.set", json!({ "opacity": 50 })),
         ("stroke.set", json!({ "weight": 6 })),
         ("appearance.addFill", json!({})),
+        ("appearance.addStroke", json!({})),
         ("paint.setFill", json!({ "color": "#00aa00" })),
         ("paint.swap", json!({})),
         ("edit.colors.invert", json!({})),
@@ -352,4 +353,45 @@ fn il_campione_piu_vicino_su_una_sfumatura_privata_si_riapre_due_volte() {
         Ok(ancora) => senza_perdite_nuove(CAMPIONI, &ancora),
         Err(r) => assert_eq!(r, "Empty"),
     }
+}
+
+// --- 4. un gruppo con dentro un oggetto con la ricetta -----------------------------------------------
+
+/// Aggiungi riempimento sugli oggetti del gruppo: il gruppo resta lo stesso elemento, senza una
+/// ricetta sua, e ogni oggetto si riscrive per sé con la sua; due volte di fila, senza perdite.
+#[test]
+fn aggiungere_un_riempimento_agli_oggetti_del_gruppo_lascia_il_gruppo() {
+    let mut testo = GRUPPO.to_string();
+    for _ in 0..2 {
+        testo = dopo(
+            &testo,
+            "appearance.addFill",
+            &["o8hhrn30a"],
+            json!({ "target": "contents" }),
+        )
+        .unwrap_or_else(|r| panic!("rifiutato: {r}"));
+        senza_perdite(&testo);
+        assert!(testo.contains("<g id=\"o8hhrn30a\">"), "{testo}");
+        assert!(
+            !ricette(&testo)
+                .iter()
+                .any(|r| r.contains("for=\"o8hhrn30a\"")),
+            "il gruppo non ha una ricetta sua: {testo}"
+        );
+        assert_eq!(ricette(&testo).len(), 2, "una ricetta per oggetto: {testo}");
+    }
+}
+
+/// Aggiungi riempimento sul gruppo intero: il riempimento è del gruppo, che si riscrive con la sua
+/// ricetta, e si riapre senza perdite.
+#[test]
+fn aggiungere_un_riempimento_al_gruppo_lo_riscrive_con_la_sua_ricetta() {
+    let riempito = fatto(GRUPPO, "appearance.addFill", &["o8hhrn30a"]);
+    senza_perdite(&riempito);
+    assert!(
+        ricette(&riempito)
+            .iter()
+            .any(|r| r.contains("for=\"o8hhrn30a\"")),
+        "{riempito}"
+    );
 }

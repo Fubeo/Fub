@@ -95,6 +95,13 @@ dall'isolamento prima di svuotare la selezione, e riaprendo il disegno non si
 «Selezione avanzata», nella barra dopo «Elimina», apre il menu della
 selezione, con tutte le voci che seguono.
 
+Oggetto › «Oggetti testo per punti» e «Oggetti testo in area» scelgono tutti i testi del
+tipo sul disegno, anche dentro un gruppo: sono solo una scelta, senza passo
+nella cronologia. Un testo nascosto, bloccato, o su un livello nascosto o
+bloccato, resta fuori. Senza testi di quel tipo la voce è spenta e dice perché
+(K6 T15 seleziona tipo). Le maniglie di direzione e i pennelli non ci sono
+ancora: il file non porta i punti scelti, né i pennelli del motore.
+
 **Riseleziona** ripete l'ultimo comando di selezione (per esempio Uguale ›
 Colore riempimento): dopo Deseleziona riparte dalla selezione di prima. Il
 ricordo sta nella sessione del disegno aperto: si perde chiudendo il disegno

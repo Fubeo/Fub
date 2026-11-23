@@ -1,5 +1,5 @@
 {
-  "$nota": "I casi della famiglia colore (piano K6, T14, giro 1): il colore attivo di Design › Colore (`paint.*`) e Modifica › Modifica colori (`edit.colors.*`) sugli oggetti scelti. Un tratto dell'Inchiostro di Fub scelto non cambia (`unmapped`), un oggetto bloccato nemmeno (`locked`); una fusione vuole tre riempimenti pieni; i colori di un SVG sono già RGB, e Converti in RGB non cambia niente (`empty`), e nemmeno Sovrastampa nero, che tocca solo l'inchiostro nero CMYK o grigio (`empty`). Le finestre di Satura e Regola bilanciamento colore sono voci del client: la loro prova è il test che le apre. Giro librerie (K6 T14): swatch.library.list e swatch.library.get leggono le librerie di base del motore (la mappa le dà «fatto»); la lettura non cambia il disegno, e una libreria che non c'è è un errore degli argomenti. Giro librerie 2 (K6 T14): swatch.library.add copia una libreria di base. I campioni diventano globali e senza gruppo, nell'ordine della libreria; un nome già presente con lo stesso colore non si raddoppia (si salta), con un colore diverso prende un numero («Clay 1 2»). Una libreria o un campione che non c'è, o `apply`, sono errori degli argomenti in italiano.",
+  "$nota": "I casi della famiglia colore (piano K6, T14, giro 1): il colore attivo di Design › Colore (`paint.*`) e Modifica › Modifica colori (`edit.colors.*`) sugli oggetti scelti. Un tratto dell'Inchiostro di Fub scelto non cambia (`unmapped`), un oggetto bloccato nemmeno (`locked`); una fusione vuole tre riempimenti pieni; i colori di un SVG sono già RGB, e Converti in RGB non cambia niente (`empty`), e nemmeno Sovrastampa nero, che tocca solo l'inchiostro nero CMYK o grigio (`empty`). Le finestre di Satura e Regola bilanciamento colore sono voci del client: la loro prova è il test che le apre. Giro librerie (K6 T14): swatch.library.list e swatch.library.get leggono le librerie di base del motore (la mappa le dà «fatto»); la lettura non cambia il disegno, e una libreria che non c'è è un errore degli argomenti. Giro librerie 2 (K6 T14): swatch.library.add copia una libreria di base. I campioni diventano globali e senza gruppo, nell'ordine della libreria; un nome già presente con lo stesso colore non si raddoppia (si salta), con un colore diverso prende un numero («Clay 1 2»). Una libreria o un campione che non c'è, o `apply`, sono errori degli argomenti in italiano. Giro finestra (K6 T14): la finestra «Librerie di campioni» (window.swatchLibrary) è una voce del client che legge l'elenco e i campioni, e aggiunge con swatch.library.add; la sua prova è il test del client.",
   "casi": [
     {
       "id": "paint.setFill",
@@ -4276,6 +4276,1547 @@
       },
       "atteso": {
         "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "window.swatchLibrary",
+      "fonte": "interfaccia",
+      "prova": "apps/client/src/editors/spatial/completo/librerie-finestra.test.ts"
+    },
+    {
+      "id": "recolor.colors",
+      "disegno": "ricolora.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "ob2b2b2b2",
+        "oc3c3c3c3"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "lettura": {
+          "colors": [
+            {
+              "key": "rgb 255 0 0",
+              "hex": "#ff0000",
+              "count": 2
+            },
+            {
+              "key": "rgb 0 0 0",
+              "hex": "#000000",
+              "count": 1
+            },
+            {
+              "key": "rgb 0 0 255",
+              "hex": "#0000ff",
+              "count": 1
+            },
+            {
+              "key": "rgb 0 255 0",
+              "hex": "#00ff00",
+              "count": 1
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "recolor.colors",
+      "disegno": "ricolora.svg",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": {
+        "lettura": {
+          "colors": [
+            {
+              "key": "rgb 255 0 0",
+              "hex": "#ff0000",
+              "count": 3
+            },
+            {
+              "key": "rgb 0 0 0",
+              "hex": "#000000",
+              "count": 1
+            },
+            {
+              "key": "rgb 0 0 255",
+              "hex": "#0000ff",
+              "count": 1
+            },
+            {
+              "key": "rgb 0 255 0",
+              "hex": "#00ff00",
+              "count": 1
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "recolor.colors",
+      "disegno": "ricolora.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "oz9z9z9z9"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "rifiuto": "locked"
+      }
+    },
+    {
+      "id": "recolor.colors",
+      "disegno": "ricolora.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {
+        "ids": 5
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "recolor.reduce",
+      "disegno": "ricolora.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "ob2b2b2b2",
+        "oc3c3c3c3",
+        "od4d4d4d4"
+      ],
+      "argomenti": {
+        "colors": 2
+      },
+      "atteso": {
+        "lettura": {
+          "map": [
+            {
+              "from": [
+                "rgb 255 0 0",
+                "rgb 0 255 0"
+              ],
+              "to": "rgb 255 0 0"
+            },
+            {
+              "from": [
+                "rgb 0 0 255"
+              ],
+              "to": "rgb 0 0 255"
+            }
+          ],
+          "preserved": [
+            "rgb 0 0 0"
+          ],
+          "method": "scaleTints"
+        }
+      }
+    },
+    {
+      "id": "recolor.reduce",
+      "disegno": "ricolora.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "ob2b2b2b2",
+        "oc3c3c3c3",
+        "od4d4d4d4"
+      ],
+      "argomenti": {
+        "method": "inesistente"
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "recolor.reduce",
+      "disegno": "ricolora.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "oz9z9z9z9"
+      ],
+      "argomenti": {
+        "colors": 2
+      },
+      "atteso": {
+        "rifiuto": "locked"
+      }
+    },
+    {
+      "id": "recolor.randomize",
+      "disegno": "ricolora.svg",
+      "selezione": [],
+      "argomenti": {
+        "map": [
+          {
+            "from": [
+              "rgb 255 0 0"
+            ],
+            "to": "#123456"
+          },
+          {
+            "from": [
+              "rgb 0 255 0"
+            ],
+            "to": "#654321"
+          }
+        ],
+        "saturationBrightness": true,
+        "seed": 7
+      },
+      "atteso": {
+        "lettura": {
+          "map": [
+            {
+              "from": [
+                "rgb 255 0 0"
+              ],
+              "to": "rgb 81.1 131.55 182"
+            },
+            {
+              "from": [
+                "rgb 0 255 0"
+              ],
+              "to": "rgb 212.74 181.05 149.36"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "recolor.randomize",
+      "disegno": "ricolora.svg",
+      "selezione": [],
+      "argomenti": {
+        "map": [
+          {
+            "from": [
+              "rgb 255 0 0"
+            ],
+            "to": "#123456"
+          },
+          {
+            "from": [
+              "rgb 0 255 0"
+            ],
+            "to": "#654321"
+          }
+        ],
+        "saturationBrightness": true,
+        "seed": 8
+      },
+      "atteso": {
+        "lettura": {
+          "map": [
+            {
+              "from": [
+                "rgb 255 0 0"
+              ],
+              "to": "rgb 249.84 167.97 86.1"
+            },
+            {
+              "from": [
+                "rgb 0 255 0"
+              ],
+              "to": "rgb 18.08 59.93 101.79"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "recolor.randomize",
+      "disegno": "ricolora.svg",
+      "selezione": [],
+      "argomenti": {
+        "seed": 7
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "recolor.randomize",
+      "disegno": "ricolora.svg",
+      "selezione": [],
+      "argomenti": {
+        "map": 5
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "recolor.apply",
+      "disegno": "ricolora.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "ob2b2b2b2",
+        "oc3c3c3c3"
+      ],
+      "argomenti": {
+        "map": [
+          {
+            "from": [
+              "rgb 255 0 0"
+            ],
+            "to": "#00ff00"
+          }
+        ]
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "set",
+                "id": "oa1a1a1a1",
+                "attrs": {
+                  "fill": "#00ff00"
+                }
+              },
+              {
+                "op": "set",
+                "id": "oc3c3c3c3",
+                "attrs": {
+                  "stroke": "#00ff00"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "ricolora-applica.svg"
+    },
+    {
+      "id": "recolor.apply",
+      "disegno": "ricolora.svg",
+      "selezione": [
+        "ob2b2b2b2"
+      ],
+      "argomenti": {
+        "map": [
+          {
+            "from": [
+              "#00ff00"
+            ],
+            "to": "#0000ff"
+          }
+        ]
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "ob2b2b2b2",
+            "attrs": {
+              "fill": "#0000ff"
+            }
+          }
+        ]
+      },
+      "dopo": "ricolora-una.svg"
+    },
+    {
+      "id": "recolor.apply",
+      "disegno": "ricolora.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "oz9z9z9z9"
+      ],
+      "argomenti": {
+        "map": [
+          {
+            "from": [
+              "rgb 255 0 0"
+            ],
+            "to": "#00ff00"
+          }
+        ]
+      },
+      "atteso": {
+        "rifiuto": "locked"
+      }
+    },
+    {
+      "id": "recolor.apply",
+      "disegno": "base.svg",
+      "selezione": [
+        "oi8b8b8b8"
+      ],
+      "argomenti": {
+        "map": [
+          {
+            "from": [
+              "rgb 255 0 0"
+            ],
+            "to": "#00ff00"
+          }
+        ]
+      },
+      "atteso": {
+        "rifiuto": "unmapped"
+      }
+    },
+    {
+      "id": "recolor.apply",
+      "disegno": "ricolora.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "ob2b2b2b2",
+        "oc3c3c3c3"
+      ],
+      "argomenti": {
+        "map": [
+          {
+            "from": [
+              "rgb 255 0 0"
+            ],
+            "to": "#ff0000"
+          }
+        ]
+      },
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "recolor.apply",
+      "disegno": "ricolora.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "ob2b2b2b2",
+        "oc3c3c3c3"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "recolor.apply",
+      "disegno": "ricolora.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "ob2b2b2b2",
+        "oc3c3c3c3"
+      ],
+      "argomenti": {
+        "map": 5
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "recolor.apply",
+      "disegno": "ricolora.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "ob2b2b2b2",
+        "oc3c3c3c3"
+      ],
+      "argomenti": {
+        "map": [
+          {
+            "from": [
+              "rgb 255 0 0"
+            ],
+            "to": "rosso"
+          }
+        ]
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "recolor.apply",
+      "disegno": "ricolora.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "ob2b2b2b2",
+        "oc3c3c3c3"
+      ],
+      "argomenti": {
+        "map": [
+          {
+            "from": [
+              "rgb 255 0 0"
+            ],
+            "to": "#00ff00"
+          }
+        ],
+        "method": "inesistente"
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "recolor.apply",
+      "disegno": "ricolora.svg",
+      "selezione": [],
+      "argomenti": {
+        "map": [
+          {
+            "from": [
+              "rgb 255 0 0"
+            ],
+            "to": "#00ff00"
+          }
+        ]
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "ui.recolorDialog",
+      "fonte": "interfaccia",
+      "prova": "apps/client/src/editors/spatial/completo/ricolora.test.ts"
+    },
+    {
+      "id": "recolor.apply",
+      "disegno": "ricolora-scena.svg",
+      "selezione": [
+        "os1s1s1s1"
+      ],
+      "argomenti": {
+        "map": [
+          {
+            "from": [
+              "rgb 255 0 0"
+            ],
+            "to": "#00ff00"
+          }
+        ]
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "os1s1s1s1",
+            "attrs": {
+              "fill": "#00ff00"
+            }
+          }
+        ]
+      },
+      "dopo": "ricolora-campione.svg"
+    },
+    {
+      "id": "recolor.apply",
+      "disegno": "ricolora-scena.svg",
+      "selezione": [
+        "og1g1g1g1"
+      ],
+      "argomenti": {
+        "map": [
+          {
+            "from": [
+              "rgb 255 0 0"
+            ],
+            "to": "#00ff00"
+          }
+        ]
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oc1c1c1c1",
+            "attrs": {
+              "fill": "#00ff00"
+            }
+          }
+        ]
+      },
+      "dopo": "ricolora-gruppo.svg"
+    },
+    {
+      "id": "recolor.apply",
+      "disegno": "ricolora-scena.svg",
+      "selezione": [
+        "oc1c1c1c1"
+      ],
+      "argomenti": {
+        "map": [
+          {
+            "from": [
+              "rgb 255 0 0"
+            ],
+            "to": "#00ff00"
+          }
+        ]
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oc1c1c1c1",
+            "attrs": {
+              "fill": "#00ff00"
+            }
+          }
+        ]
+      },
+      "dopo": "ricolora-figlio.svg"
+    },
+    {
+      "id": "recolor.apply",
+      "disegno": "ricolora-scena.svg",
+      "selezione": [
+        "ox1x1x1x1"
+      ],
+      "argomenti": {
+        "map": [
+          {
+            "from": [
+              "rgb 255 0 0"
+            ],
+            "to": "#00ff00"
+          }
+        ]
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "add",
+                "parent": "fub-defs",
+                "pos": {
+                  "last": true
+                },
+                "elem": {
+                  "tag": "linearGradient",
+                  "attrs": {
+                    "id": "rv39y8bw8",
+                    "fub:role": "private",
+                    "gradientUnits": "userSpaceOnUse",
+                    "x1": "0",
+                    "y1": "0",
+                    "x2": "100",
+                    "y2": "0"
+                  },
+                  "children": [
+                    {
+                      "tag": "stop",
+                      "attrs": {
+                        "offset": "0",
+                        "stop-color": "#00ff00"
+                      }
+                    },
+                    {
+                      "tag": "stop",
+                      "attrs": {
+                        "offset": "1",
+                        "stop-color": "#0000ff"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "op": "set",
+                "id": "ox1x1x1x1",
+                "attrs": {
+                  "fill": "url(#rv39y8bw8) #008080"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "ricolora-sfumatura.svg"
+    },
+    {
+      "id": "recolor.apply",
+      "disegno": "ricolora-scena.svg",
+      "selezione": [
+        "oq1q1q1q1"
+      ],
+      "argomenti": {
+        "map": [
+          {
+            "from": [
+              "rgb 255 0 0"
+            ],
+            "to": "#00ff00"
+          }
+        ]
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oq1q1q1q1",
+            "attrs": {
+              "fill": "#00ff00",
+              "stroke": "#00ff00"
+            }
+          }
+        ]
+      },
+      "dopo": "ricolora-contorno.svg"
+    },
+    {
+      "id": "recolor.apply",
+      "disegno": "ricolora-scena.svg",
+      "selezione": [
+        "ot1t1t1t1"
+      ],
+      "argomenti": {
+        "map": [
+          {
+            "from": [
+              "rgb 255 0 0"
+            ],
+            "to": "#00ff00"
+          }
+        ]
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "ot1t1t1t1",
+            "attrs": {
+              "fill": "#00ff00"
+            }
+          }
+        ]
+      },
+      "dopo": "ricolora-testo.svg"
+    },
+    {
+      "id": "recolor.apply",
+      "disegno": "ricolora-scena.svg",
+      "selezione": [
+        "oh1h1h1h1"
+      ],
+      "argomenti": {
+        "map": [
+          {
+            "from": [
+              "rgb 255 0 0"
+            ],
+            "to": "#00ff00"
+          }
+        ]
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oh1h1h1h1",
+            "attrs": {
+              "fill": "#00ff00"
+            }
+          }
+        ]
+      },
+      "dopo": "ricolora-nascosto.svg"
+    },
+    {
+      "id": "recolor.apply",
+      "disegno": "ricolora-scena.svg",
+      "selezione": [
+        "oj2j2j2j2"
+      ],
+      "argomenti": {
+        "map": [
+          {
+            "from": [
+              "rgb 255 0 0"
+            ],
+            "to": "#00ff00"
+          }
+        ]
+      },
+      "atteso": {
+        "rifiuto": "unmapped"
+      }
+    },
+    {
+      "id": "recolor.apply",
+      "disegno": "ricolora-scena.svg",
+      "selezione": [
+        "oz2z2z2z2"
+      ],
+      "argomenti": {
+        "map": [
+          {
+            "from": [
+              "rgb 255 0 0"
+            ],
+            "to": "#00ff00"
+          }
+        ]
+      },
+      "atteso": {
+        "rifiuto": "locked"
+      }
+    },
+    {
+      "id": "recolor.apply",
+      "disegno": "ricolora-scena.svg",
+      "selezione": [
+        "ozz9z9z9z9"
+      ],
+      "argomenti": {
+        "map": [
+          {
+            "from": [
+              "rgb 255 0 0"
+            ],
+            "to": "#00ff00"
+          }
+        ]
+      },
+      "atteso": {
+        "rifiuto": "unmapped"
+      }
+    },
+    {
+      "id": "recolor.apply",
+      "disegno": "ricolora-applica.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "ob2b2b2b2",
+        "oc3c3c3c3"
+      ],
+      "argomenti": {
+        "map": [
+          {
+            "from": [
+              "rgb 255 0 0"
+            ],
+            "to": "#00ff00"
+          }
+        ]
+      },
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "recolor.reduce",
+      "disegno": "ricolora.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "ob2b2b2b2",
+        "oc3c3c3c3",
+        "od4d4d4d4"
+      ],
+      "argomenti": {
+        "colors": -1
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "recolor.randomize",
+      "disegno": "ricolora.svg",
+      "selezione": [],
+      "argomenti": {
+        "map": [
+          {
+            "from": [
+              "rgb 255 0 0"
+            ],
+            "to": "#123456"
+          },
+          {
+            "from": [
+              "rgb 0 255 0"
+            ],
+            "to": "#654321"
+          }
+        ],
+        "saturationBrightness": true,
+        "seed": 7
+      },
+      "atteso": {
+        "lettura": {
+          "map": [
+            {
+              "from": [
+                "rgb 255 0 0"
+              ],
+              "to": "rgb 81.1 131.55 182"
+            },
+            {
+              "from": [
+                "rgb 0 255 0"
+              ],
+              "to": "rgb 212.74 181.05 149.36"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "color.harmony",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "color": "#ff0000",
+        "rule": "complementary"
+      },
+      "atteso": {
+        "lettura": {
+          "rule": "complementary",
+          "colors": [
+            "#ff0000",
+            "#00ffff"
+          ],
+          "grid": [
+            [
+              "#800000",
+              "#9f0000",
+              "#bf0000",
+              "#df0000",
+              "#ff0000",
+              "#ff2020",
+              "#ff4040",
+              "#ff6060",
+              "#ff8080"
+            ],
+            [
+              "#008080",
+              "#009f9f",
+              "#00bfbf",
+              "#00dfdf",
+              "#00ffff",
+              "#20ffff",
+              "#40ffff",
+              "#60ffff",
+              "#80ffff"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "id": "color.harmony",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "color": "#808080",
+        "rule": "monochromatic",
+        "steps": 1
+      },
+      "atteso": {
+        "lettura": {
+          "rule": "monochromatic",
+          "colors": [
+            "#808080",
+            "#808080",
+            "#4d4d4d",
+            "#808080",
+            "#2d2d2d"
+          ],
+          "grid": [
+            [
+              "#404040",
+              "#808080",
+              "#c0c0c0"
+            ],
+            [
+              "#404040",
+              "#808080",
+              "#c0c0c0"
+            ],
+            [
+              "#262626",
+              "#4d4d4d",
+              "#a6a6a6"
+            ],
+            [
+              "#404040",
+              "#808080",
+              "#c0c0c0"
+            ],
+            [
+              "#161616",
+              "#2d2d2d",
+              "#969696"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "id": "color.harmony",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {
+        "color": "#ff0000",
+        "rule": "complementary"
+      },
+      "atteso": {
+        "lettura": {
+          "rule": "complementary",
+          "colors": [
+            "#ff0000",
+            "#00ffff"
+          ],
+          "grid": [
+            [
+              "#800000",
+              "#9f0000",
+              "#bf0000",
+              "#df0000",
+              "#ff0000",
+              "#ff2020",
+              "#ff4040",
+              "#ff6060",
+              "#ff8080"
+            ],
+            [
+              "#008080",
+              "#009f9f",
+              "#00bfbf",
+              "#00dfdf",
+              "#00ffff",
+              "#20ffff",
+              "#40ffff",
+              "#60ffff",
+              "#80ffff"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "id": "color.harmony",
+      "disegno": "base.svg",
+      "selezione": [
+        "oi8b8b8b8"
+      ],
+      "argomenti": {
+        "color": "#ff0000",
+        "rule": "complementary"
+      },
+      "atteso": {
+        "lettura": {
+          "rule": "complementary",
+          "colors": [
+            "#ff0000",
+            "#00ffff"
+          ],
+          "grid": [
+            [
+              "#800000",
+              "#9f0000",
+              "#bf0000",
+              "#df0000",
+              "#ff0000",
+              "#ff2020",
+              "#ff4040",
+              "#ff6060",
+              "#ff8080"
+            ],
+            [
+              "#008080",
+              "#009f9f",
+              "#00bfbf",
+              "#00dfdf",
+              "#00ffff",
+              "#20ffff",
+              "#40ffff",
+              "#60ffff",
+              "#80ffff"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "id": "color.harmony",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "color": "#ff0000",
+        "rule": "zzz"
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "color.harmony",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "rule": "triad"
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "color.harmony",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "color": "#12",
+        "rule": "triad"
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "color.harmony",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "color": "#ff0000",
+        "rule": "triad",
+        "steps": "x"
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "color.convert",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "color": "#000000",
+        "to": "rgb"
+      },
+      "atteso": {
+        "lettura": {
+          "model": "rgb",
+          "values": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "hex": "#000000",
+          "lab": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "outOfGamut": false,
+          "deltaE": 0.0011785555398091674
+        }
+      }
+    },
+    {
+      "id": "color.convert",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "color": "#ffffff",
+        "to": "lab"
+      },
+      "atteso": {
+        "lettura": {
+          "model": "lab",
+          "values": [
+            100.0,
+            0.0,
+            0.0
+          ],
+          "hex": "#ffffff",
+          "lab": [
+            100.0,
+            0.0,
+            0.0
+          ],
+          "outOfGamut": false,
+          "deltaE": 0.0
+        }
+      }
+    },
+    {
+      "id": "color.convert",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "color": "#000000",
+        "to": "lab"
+      },
+      "atteso": {
+        "lettura": {
+          "model": "lab",
+          "values": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "hex": "#000000",
+          "lab": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "outOfGamut": false,
+          "deltaE": 0.0011785555398091674
+        }
+      }
+    },
+    {
+      "id": "color.convert",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "color": "#ff0000",
+        "to": "lab"
+      },
+      "atteso": {
+        "lettura": {
+          "model": "lab",
+          "values": [
+            54.29173278808594,
+            80.81245422363281,
+            69.88504028320312
+          ],
+          "hex": "#ff0000",
+          "lab": [
+            54.29173278808594,
+            80.81245422363281,
+            69.88504028320312
+          ],
+          "outOfGamut": true,
+          "deltaE": 5.523568153381348
+        }
+      }
+    },
+    {
+      "id": "color.convert",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "color": "#ff0000",
+        "to": "cmyk"
+      },
+      "atteso": {
+        "lettura": {
+          "model": "cmyk",
+          "values": [
+            0.0,
+            0.9724488854408264,
+            1.0,
+            0.0
+          ],
+          "hex": "#ff0000",
+          "lab": [
+            54.29173278808594,
+            80.81245422363281,
+            69.88504028320312
+          ],
+          "outOfGamut": true,
+          "deltaE": 5.523568153381348
+        }
+      }
+    },
+    {
+      "id": "color.convert",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "color": "#808080",
+        "to": "gray"
+      },
+      "atteso": {
+        "lettura": {
+          "model": "gray",
+          "values": [
+            0.498039186000824
+          ],
+          "hex": "#808080",
+          "lab": [
+            53.58502197265625,
+            0.0,
+            0.0
+          ],
+          "outOfGamut": false,
+          "deltaE": 0.00013484098599292338
+        }
+      }
+    },
+    {
+      "id": "color.convert",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {
+        "color": "#ff0000",
+        "to": "lab"
+      },
+      "atteso": {
+        "lettura": {
+          "model": "lab",
+          "values": [
+            54.29173278808594,
+            80.81245422363281,
+            69.88504028320312
+          ],
+          "hex": "#ff0000",
+          "lab": [
+            54.29173278808594,
+            80.81245422363281,
+            69.88504028320312
+          ],
+          "outOfGamut": true,
+          "deltaE": 5.523568153381348
+        }
+      }
+    },
+    {
+      "id": "color.convert",
+      "disegno": "base.svg",
+      "selezione": [
+        "oi8b8b8b8"
+      ],
+      "argomenti": {
+        "color": "#ff0000",
+        "to": "lab"
+      },
+      "atteso": {
+        "lettura": {
+          "model": "lab",
+          "values": [
+            54.29173278808594,
+            80.81245422363281,
+            69.88504028320312
+          ],
+          "hex": "#ff0000",
+          "lab": [
+            54.29173278808594,
+            80.81245422363281,
+            69.88504028320312
+          ],
+          "outOfGamut": true,
+          "deltaE": 5.523568153381348
+        }
+      }
+    },
+    {
+      "id": "color.convert",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "color": "#ff0000",
+        "to": "xyz"
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "color.convert",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "to": "lab"
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "color.convert",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "color": "#12",
+        "to": "lab"
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "color.convert",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "color": "zzz",
+        "to": "lab"
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "color.convert",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "color": "#ff0000"
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "color.gamutCheck",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "colors": [
+          "#0000ff",
+          "#808080",
+          "#000000",
+          "#ffffff"
+        ]
+      },
+      "atteso": {
+        "lettura": {
+          "checked": 4,
+          "outOfGamut": [
+            {
+              "hex": "#0000ff",
+              "deltaE": 13.897602081298828,
+              "count": 1
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "color.gamutCheck",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "colors": [
+          "#ffffff"
+        ]
+      },
+      "atteso": {
+        "lettura": {
+          "checked": 1,
+          "outOfGamut": []
+        }
+      }
+    },
+    {
+      "id": "color.gamutCheck",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": {
+        "lettura": {
+          "checked": 9,
+          "outOfGamut": [
+            {
+              "hex": "#0000ff",
+              "deltaE": 13.897602081298828,
+              "count": 2
+            },
+            {
+              "hex": "#00ff00",
+              "deltaE": 19.431005477905273,
+              "count": 1
+            },
+            {
+              "hex": "#d55e00",
+              "deltaE": 2.5464680194854736,
+              "count": 1
+            },
+            {
+              "hex": "#ff0000",
+              "deltaE": 5.523568153381348,
+              "count": 1
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "color.gamutCheck",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "lettura": {
+          "checked": 2,
+          "outOfGamut": [
+            {
+              "hex": "#0000ff",
+              "deltaE": 13.897602081298828,
+              "count": 1
+            },
+            {
+              "hex": "#ff0000",
+              "deltaE": 5.523568153381348,
+              "count": 1
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "color.gamutCheck",
+      "disegno": "base.svg",
+      "selezione": [
+        "oi8b8b8b8"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "lettura": {
+          "checked": 1,
+          "outOfGamut": [
+            {
+              "hex": "#d55e00",
+              "deltaE": 2.5464680194854736,
+              "count": 1
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "color.gamutCheck",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "colors": [
+          "#12"
+        ]
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "color.gamutCheck",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "colors": "#ff0000"
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "color.gamutCheck",
+      "disegno": "bloccato.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "ob2b2b2b2"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "rifiuto": "locked"
       }
     },
     {

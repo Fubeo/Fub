@@ -2595,9 +2595,24 @@ sostituti; la sfumatura libera (sette righe) resta «da fare» perché il
 formato non la scrive. Librerie dei campioni unite in cab430dc0:
 `swatch.library.list` e `get` in sola lettura. `swatch.library.add` segue
 la decisione del 23/11 (campioni globali, gruppi appiattiti, nessun
-formato nuovo): giro Haiku in corso; la finestra viene al giro dopo, le
+formato nuovo): unito in 27dc617fe (stesso nome e stesso colore saltato,
+colore diverso col numero; il gancio `traduci_dopo` porta il documento nel
+formato solo per la differenza). La finestra delle librerie è unita in dab0ba7da
+(«Altra libreria…» resta «da fare»); le
 librerie dell'utente (`window.userSwatchLibrary1…10`) restano «da fare»
-(cartella del desktop).
+(cartella del desktop). Pannello Colore unito in 97709e755: `color` è la
+sezione Colore del Design; `ui.colorPicker` (il selettore del kit) e
+`ui.colorPanel` (stato di sessione del motore) restano «da fare». Rischio:
+il pozzo dice «Misto» per una sola sfumatura (`kit/color/well.ts`).
+Campione più vicino e Seleziona per tipo uniti in 2399db133: senza campioni
+Applica e Trova sono spenti con la frase in italiano. Rischi: una sfumatura
+privata fa scrivere una rimozione verso «@1» (caso tolto dal banco), un
+oggetto nascosto con id esplicito cambia: tutti e due al giro Opus sulle
+ricette. Ricolora unito in 03317a5cc: un oggetto legato a un campione
+globale se ne stacca (drawing-colors.md); rischi: un oggetto nascosto scelto
+a mano si ricolora, la sfumatura vecchia resta nei defs. Letture del colore
+(`paint.toggleActive`, `recent`, `proxies`, `recolor.colors`, `reduce`,
+`randomize`) unite. In giro: la guida colori, i temi colore.
 Aspetta: niente
 
 ## T15 · L'aspetto e i livelli
@@ -2748,7 +2763,24 @@ regione della maschera di 200000 unità, `transform` scritto invece di `d`.
 Stili grafici: il formato ha il posto (`fub:style` e le defs, scene-format
 §3–4) ma il ponte non li importa né li scrive; `graphicStyle.list`,
 `apply` e `breakLink` aspettano un giro Opus sul ponte degli stili (disco),
-dopo il modello dei livelli.
+dopo il modello dei livelli. Pannello Contorno unito in 5db75613b: i
+campi che il formato non scrive (limite dell'angolo, allineamento) sono
+spenti col perché; i profili di spessore restano a T27. Riduci ad aspetto
+di base unito in ec8c3ac96, con la riapertura dei due riempimenti; la
+maschera del giro prima era salvata con id rinominati: rigenerata con gli
+id veri, ora si riapre senza perdite. Svuota resta «da fare» (un oggetto
+senza riempimento né contorno non si riapre come oggetto del motore).
+Riduci è spento su testi, maschere e oggetti nascosti, con la frase.
+Difetti trovati, al giro Opus sulle ricette (feat/k6-ricette-riapertura):
+nascondi e blocca scrivono sul corpo senza aggiornare la ricetta, e una
+ricetta riscritta su un oggetto con maschera non si riapre (test ignorato
+in `tests/riapertura_aspetto.rs`). Aggiungi riempimento e contorno
+unito in 81b6cbc4a; Mostra tutti e Sblocca tutti uniti in 189acf0f1.
+Nascondi altri e Blocca altri restano «da fare»: con la carta (`fub-paper`
+figlio della radice) il motore importa un solo livello (`import.rs`
+`layer_mode`) e «gli altri» si contano sul livello corrente, non sulla
+scelta; vanno col modello dei livelli. In giro: Seleziona per tipo di
+testo e maniglie.
 Aspetta: niente
 
 ## T16 · Il testo
@@ -2837,6 +2869,15 @@ spenti: il motore li rifiuta (`unsupported`). Aperto: il carattere di
 serie del motore (Source Sans 3, 12) non è quello di Fub (Inter). Mancano:
 testo d'area, su tracciato e verticale, OpenType, glifi, stili, ≡ › Testo,
 caratteri mancanti, cerca e sostituisci.
+Testo base unito in adc668ac5: le sette del testo (`type.changeCase`,
+`createOutlines`, `convertToAreaType`, `convertToPointType`,
+`edit.findReplace`, `findNext`, `text.editRange`). Rischi: senza caratteri
+installati Crea contorni si rifiuta; `areaOptions` da fare; sottolineato e
+barrato restano quelli del formato. Correzioni unite in d3a7ed269: il campo
+Testo c'è anche su un testo in area (manda a `text.editRange`), gli spazi
+in fondo alle righe di un testo di punto non entrano più nel motore, un
+paragrafo vuoto si scrive come spazio indivisibile, gli a capo restano
+uguali dopo salva e riapri (`tests/testo_in_area.rs`).
 Aspetta: niente
 
 ## T17 · I pennelli, le deformazioni e la pulizia

@@ -241,6 +241,7 @@ const FILE_RITAGLIO: readonly (readonly string[])[] = [
 /// Le file di Modifica › Modifica colori (K6 T14): le finestre che regolano i colori, le tre
 /// fusioni, le conversioni di spazio, e Inverti con Sovrastampa nero.
 const FILE_COLORI: readonly (readonly string[])[] = [
+  ["ui.recolorDialog"],
   ["edit.colors.adjustBalance", "edit.colors.saturate"],
   ["edit.colors.blendFrontToBack", "edit.colors.blendHorizontally", "edit.colors.blendVertically"],
   ["edit.colors.toCMYK", "edit.colors.toGrayscale", "edit.colors.toRGB"],

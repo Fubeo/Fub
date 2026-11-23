@@ -259,6 +259,9 @@ fn una_selezione_con_un_elemento_non_mappato_non_cambia_niente() {
         "disegno.addon.pen.removePoint",
         "disegno.addon.pen.togglePoint",
         "disegno.addon.pen.reshape",
+        // Mostra tutti e Sblocca tutti (K6 T15, livelli altri) guardano tutti i livelli, non la scelta.
+        "disegno.layer.showAll",
+        "disegno.layer.unlockAll",
         // I colori recenti e i proxy di riempimento e tratto (K6 T14) sono letture della sessione:
         // non guardano la scelta.
         "disegno.paint.recent",
@@ -308,6 +311,9 @@ fn una_selezione_con_un_elemento_non_mappato_non_cambia_niente() {
         "disegno.text.editRange",
         // Seleziona per tipo di colore (K6 T14 giro 9) sceglie fra tutti gli oggetti, non guarda la scelta.
         "disegno.addon.color.select",
+        // La Guida colori e la conversione (K6 T14, letture) prendono il colore dal valore, non dalla scelta.
+        "disegno.color.harmony",
+        "disegno.color.convert",
     ];
     let comandi = d.comandi(&["oa1a1a1a1".into(), "onessuno1".into()]);
     let accesi: Vec<&str> = comandi

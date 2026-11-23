@@ -1084,6 +1084,18 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
+            "crates/fub-disegno/src/famiglie/colore.rs::libreria_di_base",
+            (
+                Family::AsciiCase,
+                "ritrova una libreria di campioni di base del motore di disegno per id, o per \
+                 nome senza badare alle maiuscole, come fa il motore stesso \
+                 (`vendor/vectorcraft/crates/engine/src/cmd/swatchlib.rs`): i nomi sono quelli \
+                 inglesi e ASCII del catalogo chiuso delle librerie del motore («Earth Tones»), \
+                 per controllare gli argomenti di `swatch.library.add` prima del motore. Non è il \
+                 nome di una nota, di un tag, di un path o di un campione dell'utente.",
+            ),
+        ),
+        (
             "crates/fub-disegno/src/catalogo.rs::sostituisci",
             (
                 Family::PerCharacterCase,

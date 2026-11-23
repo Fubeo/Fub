@@ -1,7 +1,7 @@
 # Mappa di VectorCraft cfb30d8139161cf1722dfabf3046741a0b21b3da in Fub. Le righe e le colonne fonte, id, etichetta, menu ed etichetta_it si rigenerano con `node tools/disegno-mappa/estrai.mjs`; le altre si scrivono a mano (tools/disegno-mappa/README.md).
 fonte	id	etichetta	menu	famiglia	fase	task	stato	posto	pigro	nota	etichetta_it
-motore	appearance.addFill	Add New Fill	Window › Appearance	aspetto	F1	T15	da fare	ispettore/design	famiglia		Aggiungi nuovo riempimento
-motore	appearance.addStroke	Add New Stroke	Window › Appearance	aspetto	F1	T15	da fare	ispettore/design	famiglia		Aggiungi nuova traccia
+motore	appearance.addFill	Add New Fill	Window › Appearance	aspetto	F1	T15	fatto	ispettore/design	famiglia	aggiunge una copia del riempimento (o del contorno) in cima allo stack di ogni oggetto scelto, col colore predefinito se non ce n'è uno; il file la scrive come sopra e si riapre con la copia (K6 T15 aggiungi aspetto); testo, nascosto e inchiostro sono spenti con la stessa ragione di Riduci; con una maschera di opacità la ricetta riscritta si riapre con la maschera, e sugli oggetti di un gruppo il gruppo resta e ogni oggetto si riscrive con la sua ricetta (test ricette_riapertura)	Aggiungi nuovo riempimento
+motore	appearance.addStroke	Add New Stroke	Window › Appearance	aspetto	F1	T15	fatto	ispettore/design	famiglia	aggiunge una copia del riempimento (o del contorno) in cima allo stack di ogni oggetto scelto, col colore predefinito se non ce n'è uno; il file la scrive come sopra e si riapre con la copia (K6 T15 aggiungi aspetto); testo, nascosto e inchiostro sono spenti con la stessa ragione di Riduci; con una maschera di opacità la ricetta riscritta si riapre con la maschera, e sugli oggetti di un gruppo il gruppo resta e ogni oggetto si riscrive con la sua ricetta (test ricette_riapertura)	Aggiungi nuova traccia
 motore	appearance.clear	Clear Appearance	Window › Appearance	aspetto	F1	T15	da fare	ispettore/design	famiglia	Svuota porta l'oggetto senza riempimento né contorno: la riapertura di quel file lo segna «il motore non ne fa un oggetto suo» (perdita scritta), quindi il file non riapre uguale; con un contorno colorato il file non sa scrivere lo spessore senza colore (K6 T15 aspetto)	Cancella aspetto
 motore	appearance.reduceToBasic	Reduce to Basic Appearance	Window › Appearance	aspetto	F1	T15	fatto	ispettore/design	famiglia	tiene un riempimento e un contorno visibili: con due riempimenti il file è una ricetta, che si riapre con due e Riduci ne toglie uno (test riapertura_aspetto); con una maschera di opacità la ricetta riscritta si riapre con la maschera (test ricette_riapertura)	Riduci ad aspetto di base
 motore	appearance.setItem	Appearance Item		aspetto	F1	T15	da fare	ispettore/design	famiglia		Elemento aspetto
@@ -89,14 +89,14 @@ motore	edit.colors.adjustBalance	Adjust Color Balance…	Edit › Edit Colors	co
 motore	edit.colors.blendFrontToBack	Blend Front to Back	Edit › Edit Colors	colore	F1	T14	fatto	menu/modifica/colori	famiglia		Fusione da davanti a dietro
 motore	edit.colors.blendHorizontally	Blend Horizontally	Edit › Edit Colors	colore	F1	T14	fatto	menu/modifica/colori	famiglia		Fusione orizzontale
 motore	edit.colors.blendVertically	Blend Vertically	Edit › Edit Colors	colore	F1	T14	fatto	menu/modifica/colori	famiglia		Fusione verticale
-motore	color.harmony	Color Guide		colore	F1	T14	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Guida colori
+motore	color.harmony	Color Guide		colore	F1	T14	fatto	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Guida colori
 motore	edit.colorSettings	Color Settings…	Edit	stampa	F4	T25	da fare	menu/modifica	famiglia	finestra	Impostazioni colore…
 motore	color.loadProfile	Load Color Profile…		colore	F1	T14	da fare	ispettore/design	famiglia	finestra	Carica profilo colore…
 motore	color.removeProfile	Remove Color Profile…		colore	F1	T14	da fare	ispettore/design	famiglia	finestra	Rimuovi profilo colore…
 motore	edit.assignProfile	Assign Profile…	Edit	stampa	F4	T25	da fare	menu/modifica	famiglia	finestra	Assegna profilo…
 motore	object.convertDocumentColorMode	Convert Document Color Mode		stampa	F4	T25	da fare	menu/file	famiglia		Converti metodo colore documento
-motore	color.convert	Convert Color		colore	F1	T14	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Converti colore
-motore	color.gamutCheck	Gamut Warning		colore	F1	T14	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Avviso gamut
+motore	color.convert	Convert Color		colore	F1	T14	fatto	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Converti colore
+motore	color.gamutCheck	Gamut Warning		colore	F1	T14	fatto	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Avviso gamut
 motore	view.proofSetup	Proof Setup	View › Proof Setup	stampa	F4	T25	da fare	menu/visualizza	famiglia		Impostazione prova
 motore	view.proofColors	Proof Colors	View	stampa	F4	T25	da fare	menu/visualizza	famiglia		Colori di prova
 motore	view.overprintPreview	Overprint Preview	View	stampa	F4	T25	da fare	menu/visualizza	famiglia		Anteprima sovrastampa
@@ -163,10 +163,10 @@ motore	select.same.fontFamilyStyleSize	Font Family, Style & Size	Select › Same
 motore	select.same.fontSize	Font Size	Select › Same	livelli	F1	T15	fatto	menu/selezione/uguale	famiglia		Dimensione font
 motore	select.same.textFillColor	Text Fill Color	Select › Same	livelli	F1	T15	fatto	menu/selezione/uguale	famiglia		Colore riempimento testo
 motore	select.same.textStrokeColor	Text Stroke Color	Select › Same	livelli	F1	T15	fatto	menu/selezione/uguale	famiglia		Colore traccia testo
-motore	select.object.directionHandles	Direction Handles	Select › Object	livelli	F1	T15	da fare	menu/selezione	famiglia	le ancore dei tracciati scelti sono nel motore (sel.anchors), ma la risposta a Fub porta solo gli oggetti: servono i punti nella risposta (fub-abi), da chiedere	Maniglie di direzione
-motore	select.object.pointText	Point Text Objects	Select › Object	livelli	F1	T15	da fare	menu/selezione	famiglia	il motore legge il testo in area solo dai flowRoot, e il testo con fub:wrap di Fub risulta di punto: pointText e areaText darebbero una selezione sbagliata (K6 T15 giro 2; aspetta T27)	Oggetti testo per punti
-motore	select.object.areaText	Area Text Objects	Select › Object	livelli	F1	T15	da fare	menu/selezione	famiglia	il motore legge il testo in area solo dai flowRoot, e il testo con fub:wrap di Fub risulta di punto: pointText e areaText darebbero una selezione sbagliata (K6 T15 giro 2; aspetta T27)	Oggetti testo in area
-motore	select.object.brushStrokes	Brush Strokes	Select › Object	livelli	F1	T15	da fare	menu/selezione	famiglia	aspetta T27	Pennellate
+motore	select.object.directionHandles	Direction Handles	Select › Object	livelli	F1	T15	da fare	menu/selezione	famiglia	il motore sceglie i punti dei tracciati (sel.anchors), ma la risposta a Fub porta solo oggetti: provato su tracciato liscio e curvo, la scelta torna vuota e non si mostra nulla. Serve un campo punti nella risposta (fub-abi), da chiedere (K6 T15 seleziona tipo)	Maniglie di direzione
+motore	select.object.pointText	Point Text Objects	Select › Object	livelli	F1	T15	fatto	menu/selezione/oggetto	famiglia	sceglie i testi di punto (o in area) visibili e sbloccati, anche dentro i gruppi, su tutto il disegno; il testo con fub:wrap è in area nel motore (K6 T16); un testo su livello bloccato o nascosto resta fuori; senza testi del tipo la voce dice che non ce ne sono (K6 T15 seleziona tipo)	Oggetti testo per punti
+motore	select.object.areaText	Area Text Objects	Select › Object	livelli	F1	T15	fatto	menu/selezione/oggetto	famiglia	sceglie i testi di punto (o in area) visibili e sbloccati, anche dentro i gruppi, su tutto il disegno; il testo con fub:wrap è in area nel motore (K6 T16); un testo su livello bloccato o nascosto resta fuori; senza testi del tipo la voce dice che non ce ne sono (K6 T15 seleziona tipo)	Oggetti testo in area
+motore	select.object.brushStrokes	Brush Strokes	Select › Object	livelli	F1	T15	da fare	menu/selezione	famiglia	il formato non ha i pennelli del motore: i tratti a penna sono l'Inchiostro di Fub, che il motore non sceglie come pennellata (provato su inchiostro.svg: scelta vuota). Da fare finché il formato non li ha (K6 T15 seleziona tipo)	Pennellate
 motore	select.object.bristleBrushStrokes	Bristle Brush Strokes	Select › Object	livelli	F1	T15	da fare	menu/selezione	famiglia	aspetta T27	Pennellate a setole
 motore	select.save	Save Selection…	Select	livelli	F1	T15	da fare	menu/selezione	famiglia	il motore tiene le selezioni salvate in saved_selections del documento (vectorcraft-doc), e il formato della scena (fub-scene) non ha un posto dove scriverle: salvarne una non arriverebbe su disco, quindi niente voce finché non c’è (K6 T15 giro 2, da chiedere con T27)	Salva selezione…
 motore	select.update	Update Selection	Select	livelli	F1	T15	da fare	menu/selezione	famiglia	il motore tiene le selezioni salvate in saved_selections del documento (vectorcraft-doc), e il formato della scena (fub-scene) non ha un posto dove scriverle: salvarne una non arriverebbe su disco, quindi niente voce finché non c’è (K6 T15 giro 2, da chiedere con T27)	Aggiorna selezione
@@ -295,12 +295,12 @@ motore	layer.releaseToLayers	Release to Layers (Sequence)	Window › Layers	live
 motore	layer.releaseToLayersBuild	Release to Layers (Build)	Window › Layers	livelli	F1	T15	da fare	ispettore/livelli	famiglia		Rilascia su livelli (accumulo)
 motore	layer.reverse	Reverse Order	Window › Layers	livelli	F1	T15	fatto	ispettore/livelli	famiglia		Inverti ordine
 motore	layer.template	Template	Window › Layers	livelli	F1	T15	da fare	ispettore/livelli	famiglia		Modello
-motore	layer.hideOthers	Hide Others	Window › Layers	livelli	F1	T15	da fare	ispettore/livelli	famiglia		Nascondi altri
-motore	layer.showAll	Show All Layers	Window › Layers	livelli	F1	T15	da fare	ispettore/livelli	famiglia		Mostra tutti i livelli
+motore	layer.hideOthers	Hide Others	Window › Layers	livelli	F1	T15	da fare	ispettore/livelli	famiglia	il comando non cambia niente sui livelli di un disegno di Fub, nemmeno con il livello scelto: lavora sui livelli di primo livello (layerpanel.rs, others) e la prova di tre livelli dà «empty»; la causa non è ancora trovata, va indagata con una prova a parte	Nascondi altri
+motore	layer.showAll	Show All Layers	Window › Layers	livelli	F1	T15	fatto	ispettore/livelli	famiglia		Mostra tutti i livelli
 motore	layer.outlineOthers	Outline Others	Window › Layers	livelli	F1	T15	da fare	ispettore/livelli	famiglia		Altri in contorno
 motore	layer.previewAll	Preview All Layers	Window › Layers	livelli	F1	T15	da fare	ispettore/livelli	famiglia		Anteprima di tutti i livelli
-motore	layer.lockOthers	Lock Others	Window › Layers	livelli	F1	T15	da fare	ispettore/livelli	famiglia		Blocca altri
-motore	layer.unlockAll	Unlock All Layers	Window › Layers	livelli	F1	T15	da fare	ispettore/livelli	famiglia		Sblocca tutti i livelli
+motore	layer.lockOthers	Lock Others	Window › Layers	livelli	F1	T15	da fare	ispettore/livelli	famiglia	il comando non cambia niente sui livelli di un disegno di Fub, nemmeno con il livello scelto: lavora sui livelli di primo livello (layerpanel.rs, others) e la prova di tre livelli dà «empty»; la causa non è ancora trovata, va indagata con una prova a parte	Blocca altri
+motore	layer.unlockAll	Unlock All Layers	Window › Layers	livelli	F1	T15	fatto	ispettore/livelli	famiglia		Sblocca tutti i livelli
 motore	layer.locate	Locate Object	Window › Layers	livelli	F1	T15	da fare	ispettore/livelli	famiglia		Individua oggetto
 motore	library.list	Libraries		simboli	F3	T22	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Librerie
 motore	library.get	Library		simboli	F3	T22	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Libreria
@@ -485,10 +485,10 @@ motore	view.printTiling	Show Print Tiling	View	stampa	F4	T25	da fare	menu/visual
 motore	print.tiling.set	Print Tiling		stampa	F4	T25	da fare	menu/file	sotto:disegno-formati		Affiancamento di stampa
 motore	print.tiling	Print Tiling Pages		stampa	F4	T25	da fare	interno	sotto:disegno-formati	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Pagine affiancamento di stampa
 motore	document.rasterEffectsSettings	Document Raster Effects Settings…	Effect	raster	F3	T24	da fare	menu/effetto	famiglia	finestra	Impostazioni effetti raster documento…
-motore	recolor.colors	Artwork Colors		colore	F1	T14	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Colori della grafica
-motore	recolor.apply	Recolor Artwork	Edit › Edit Colors	colore	F1	T14	da fare	menu/modifica	famiglia		Ricolora grafica
-motore	recolor.reduce	Reduce Colors		colore	F1	T14	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Riduci colori
-motore	recolor.randomize	Randomize Colors		colore	F1	T14	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Colori casuali
+motore	recolor.colors	Artwork Colors		colore	F1	T14	fatto	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Colori della grafica
+motore	recolor.apply	Recolor Artwork	Edit › Edit Colors	colore	F1	T14	fatto	interno	famiglia		Ricolora grafica
+motore	recolor.reduce	Reduce Colors		colore	F1	T14	fatto	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Riduci colori
+motore	recolor.randomize	Randomize Colors		colore	F1	T14	fatto	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Colori casuali
 motore	file.recovery.save	Save Recovery Data		fub	—	T2	fub	fub	—	bozze e versioni del kernel	Salva dati di recupero
 motore	file.recovery.list	Recovery Data		fub	—	T2	fub	fub	—	bozze e versioni del kernel	Dati di recupero
 motore	file.recovery.restore	Restore Recovered Documents		fub	—	T2	fub	fub	—	bozze e versioni del kernel	Ripristina documenti recuperati
@@ -746,8 +746,8 @@ motore	addon.cleanup.splitText	Split Text at Cursor	Object › Plug-ins › Artw
 motore	addon.cleanup.alignInPlace	Set Alignment, Keep Position	Object › Plug-ins › Artwork Cleanup	pulizia	F2	T17	da fare	menu/oggetto	famiglia		Imposta allineamento mantenendo la posizione
 motore	addon.cleanup.resetTextTransform	Reset Text Transform	Object › Plug-ins › Artwork Cleanup	pulizia	F2	T17	da fare	menu/oggetto	famiglia		Reimposta trasformazione testo
 motore	addon.cleanup.replaceFonts	Replace Missing Fonts…	Object › Plug-ins › Artwork Cleanup	pulizia	F2	T17	da fare	menu/oggetto	famiglia	finestra	Sostituisci font mancanti…
-motore	addon.pathtools.cornerSet	Set Corners		tracciati	F1	T12	da fare	ispettore/design	famiglia		Imposta angoli
-motore	addon.pathtools.cornerRemove	Remove Corners		tracciati	F1	T12	da fare	ispettore/design	famiglia		Rimuovi angoli
+motore	addon.pathtools.cornerSet	Set Corners		tracciati	F1	T12	fatto	ispettore/design	famiglia	finestra	Imposta angoli
+motore	addon.pathtools.cornerRemove	Remove Corners		tracciati	F1	T12	fatto	ispettore/design	famiglia		Rimuovi angoli
 motore	addon.pathtools.shape.create	Parametric Shape		tracciati	F1	T12	da fare	ispettore/design	famiglia		Forma parametrica
 motore	addon.pathtools.shape.set	Edit Parametric Shape		tracciati	F1	T12	da fare	ispettore/design	famiglia		Modifica forma parametrica
 motore	addon.pathtools.shape.convert	Convert to Parametric Shape	Object › Plug-ins › Path Precision Tools	tracciati	F1	T12	da fare	menu/oggetto/tracciato	famiglia	la forma viva non si scrive come tracciato semplice, aspetta T13 (le forme)	Converti in forma parametrica
@@ -1091,7 +1091,7 @@ interfaccia	tool.select	Select Tool		nucleo	F1	T11	fatto	colonna	nucleo		Selezio
 interfaccia	tool.setOption	Tool Option		nucleo	F1	T11	fatto	colonna	nucleo		Opzione strumento
 interfaccia	effect.dialog	Effect…		effetti	F2	T18	da fare	menu/effetto	famiglia		Effetto…
 interfaccia	ui.paramDialog	Command Dialog		fub	—	T11	fub	fub	—	le finestre dei comandi di Fub (completo/finestre)	Finestra dei comandi
-interfaccia	ui.recolorDialog	Recolor Artwork…		colore	F1	T14	da fare	finestra	famiglia		Ricolora grafica…
+interfaccia	ui.recolorDialog	Recolor Artwork…		colore	F1	T14	fatto	menu/modifica/colori	famiglia		Ricolora grafica…
 interfaccia	ui.cropImage	Crop Image		immagini	F3	T20	da fare	finestra	famiglia		Ritaglia immagine
 interfaccia	effect.applyLast	Apply Last Effect		effetti	F2	T18	da fare	menu/effetto	famiglia		Applica ultimo effetto
 interfaccia	pathfinder.repeat	Repeat Pathfinder		forme	F1	T13	fatto	menu/oggetto/elaborazione	famiglia		Ripeti Elaborazione tracciati
@@ -1117,7 +1117,7 @@ interfaccia	tool.options	Tool Options…		nucleo	F1	T11	fatto	colonna	nucleo	la 
 interfaccia	ui.colorGuideOptions	Color Guide Options…		colore	F1	T14	da fare	finestra	famiglia		Opzioni guida colori…
 interfaccia	ui.colorBalanceDialog	Adjust Color Balance…		colore	F1	T14	fatto	finestra	famiglia		Regola bilanciamento colore…
 interfaccia	ui.saturateDialog	Saturate…		colore	F1	T14	fatto	finestra	famiglia		Satura…
-interfaccia	window.swatchLibrary	Swatch Library		colore	F1	T14	da fare	ispettore/design	famiglia	la finestra elenca le librerie e mostra i campioni (le letture sono fatte), ma la sua azione è Aggiungi, che il formato rifiuta per le librerie di base: senza di quella sarebbe solo un elenco. Da fare nel prossimo giro, con un elenco suo (Aggiungi c'è già: swatch.library.add)	Libreria campioni
+interfaccia	window.swatchLibrary	Swatch Library		colore	F1	T14	fatto	ispettore/design	famiglia	la finestra elenca le librerie (`swatch.library.list`), mostra i campioni di quella scelta (`get`), e Aggiungi manda `swatch.library.add`; la prova è il test del client (`librerie-finestra.test.ts`). Altra libreria… (`window.swatchLibrary.other`) carica un file: da fare	Libreria campioni
 interfaccia	window.swatchLibrary.other	Other Library…		colore	F1	T14	da fare	ispettore/design	famiglia	Altra libreria… carica un file (swatch.library.load, non in questo giro): da fare con la finestra	Altra libreria…
 interfaccia	ui.libraryPanel	Library Panel Options		simboli	F3	T22	da fare	finestra	famiglia		Opzioni pannello libreria
 interfaccia	ui.libraryPanel.locate	Locate Library…		simboli	F3	T22	da fare	finestra	famiglia		Individua libreria…
