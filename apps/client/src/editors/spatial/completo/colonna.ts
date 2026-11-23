@@ -118,6 +118,14 @@ export const MOTORE_PRONTO: ReadonlySet<string> = new Set([
   // Rimodella e la Trasformazione libera (E), nella stessa casella.
   "reshape",
   "freeTransform",
+  // I pennelli che deformano (la casella «Larghezza»): un comando, `object.liquify`.
+  "warp",
+  "twirl",
+  "pucker",
+  "bloat",
+  "scallop",
+  "crystallize",
+  "wrinkle",
   // T16 giro 1: il Testo di punto.
   "type",
   // T15 giro 6: lo strumento Sfumatura, con il suo annotatore.
@@ -147,6 +155,13 @@ export const ICONE_MOTORE: Readonly<Record<string, string>> = {
   scale: "draw-scale",
   shear: "draw-shear",
   reshape: "draw-reshape",
+  warp: "draw-warp",
+  twirl: "draw-twirl",
+  pucker: "draw-pucker",
+  bloat: "draw-bloat",
+  scallop: "draw-scallop",
+  crystallize: "draw-crystallize",
+  wrinkle: "draw-wrinkle",
   freeTransform: "draw-free-transform",
   lineSegment: "draw-line",
   arc: "draw-arc",

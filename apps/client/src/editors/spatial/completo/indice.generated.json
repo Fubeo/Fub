@@ -1923,6 +1923,22 @@
     },
     {
       "fonte": "motore",
+      "id": "object.liquify",
+      "chiamata": {
+        "comando": "disegno.object.liquify"
+      },
+      "etichetta": {
+        "it": "Fluidifica",
+        "en": "Liquify"
+      },
+      "posto": "ispettore/risorse",
+      "famiglia": "pennelli",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "object.lock",
       "chiamata": {
         "comando": "disegno.object.lock"
@@ -5543,6 +5559,22 @@
     },
     {
       "fonte": "strumento",
+      "id": "bloat",
+      "chiamata": {
+        "strumento": "bloat"
+      },
+      "etichetta": {
+        "it": "Strumento Gonfia",
+        "en": "Bloat Tool"
+      },
+      "posto": "colonna/disegna",
+      "famiglia": "pennelli",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "strumento",
       "id": "blobBrush",
       "chiamata": {
         "strumento": "blobBrush"
@@ -5569,6 +5601,22 @@
       },
       "posto": "colonna/disegna",
       "famiglia": "tracciati",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "strumento",
+      "id": "crystallize",
+      "chiamata": {
+        "strumento": "crystallize"
+      },
+      "etichetta": {
+        "it": "Strumento Cristallizza",
+        "en": "Crystallize Tool"
+      },
+      "posto": "colonna/disegna",
+      "famiglia": "pennelli",
       "tasto": null,
       "effetto": "cambia",
       "finestra": false
@@ -5927,6 +5975,22 @@
     },
     {
       "fonte": "strumento",
+      "id": "pucker",
+      "chiamata": {
+        "strumento": "pucker"
+      },
+      "etichetta": {
+        "it": "Strumento Contrai",
+        "en": "Pucker Tool"
+      },
+      "posto": "colonna/disegna",
+      "famiglia": "pennelli",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "strumento",
       "id": "rectCut",
       "chiamata": {
         "strumento": "rectCut"
@@ -6066,6 +6130,22 @@
       "posto": "colonna/trasforma",
       "famiglia": "trasforma",
       "tasto": "S",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "strumento",
+      "id": "scallop",
+      "chiamata": {
+        "strumento": "scallop"
+      },
+      "etichetta": {
+        "it": "Strumento Smerla",
+        "en": "Scallop Tool"
+      },
+      "posto": "colonna/disegna",
+      "famiglia": "pennelli",
+      "tasto": null,
       "effetto": "cambia",
       "finestra": false
     },
@@ -6231,6 +6311,22 @@
     },
     {
       "fonte": "strumento",
+      "id": "twirl",
+      "chiamata": {
+        "strumento": "twirl"
+      },
+      "etichetta": {
+        "it": "Strumento Vortice",
+        "en": "Twirl Tool"
+      },
+      "posto": "colonna/disegna",
+      "famiglia": "pennelli",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "strumento",
       "id": "type",
       "chiamata": {
         "strumento": "type"
@@ -6242,6 +6338,38 @@
       "posto": "colonna/testo",
       "famiglia": "testo",
       "tasto": "T",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "strumento",
+      "id": "warp",
+      "chiamata": {
+        "strumento": "warp"
+      },
+      "etichetta": {
+        "it": "Strumento Altera",
+        "en": "Warp Tool"
+      },
+      "posto": "colonna/disegna",
+      "famiglia": "pennelli",
+      "tasto": "Shift+R",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "strumento",
+      "id": "wrinkle",
+      "chiamata": {
+        "strumento": "wrinkle"
+      },
+      "etichetta": {
+        "it": "Strumento Grinza",
+        "en": "Wrinkle Tool"
+      },
+      "posto": "colonna/disegna",
+      "famiglia": "pennelli",
+      "tasto": null,
       "effetto": "cambia",
       "finestra": false
     },

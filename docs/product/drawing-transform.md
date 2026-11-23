@@ -105,6 +105,15 @@ VectorCraft; `Maiusc` tiene la direzione a multipli di 45°, `Esc` lascia tutto
 com'era. Un tiro lontano dal contorno non cambia niente, e un tratto della
 penna di Fub non si rimodella: lo si dice.
 
+Nella casella «Larghezza» ci sono i sette **pennelli che deformano**, come in
+VectorCraft: Altera spinge il contorno nel verso in cui si trascina, Vortice lo
+avvolge, Contrai lo stringe verso il centro del pennello, Gonfia lo allarga,
+Smerla, Cristallizza e Grinza lo increspano. Con una selezione cambiano solo
+gli oggetti scelti; senza, tutto ciò che il pennello tocca. Il tiro intero è un
+passo di annulla, e `Esc` lo lascia com'era. Un tiro che non tocca niente non
+cambia niente, e un tratto della penna di Fub non si deforma: lo si dice.
+Larghezza, la prima della casella, non c'è ancora.
+
 Come in VectorCraft, rettangoli, ellissi, cerchi e poligoni si comportano da
 tracciati: con la Selezione diretta se ne spostano i punti, e la
 Trasformazione libera li distorce. Una forma deformata diventa un tracciato al

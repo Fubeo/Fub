@@ -138,7 +138,7 @@ motore	stroke.widthPoint.set	Width Point		aspetto	F1	T15	da fare	ispettore/desig
 motore	stroke.widthPoint.remove	Delete Width Point		aspetto	F1	T15	da fare	ispettore/design	famiglia	il profilo di spessore del motore non passa ancora alla linea a spessore variabile della scena (fub:shape=width): aspetta T27	Elimina punto di larghezza
 motore	stroke.widthPoint.copy	Copy Width Point		aspetto	F1	T15	da fare	ispettore/design	famiglia	il profilo di spessore del motore non passa ancora alla linea a spessore variabile della scena (fub:shape=width): aspetta T27	Copia punto di larghezza
 motore	stroke.widthProfile.set	Width Profile		aspetto	F1	T15	da fare	ispettore/design	famiglia	il profilo di spessore del motore non passa ancora alla linea a spessore variabile della scena (fub:shape=width): aspetta T27	Profilo larghezza
-motore	object.liquify	Liquify		pennelli	F2	T17	da fare	ispettore/risorse	famiglia		Fluidifica
+motore	object.liquify	Liquify		pennelli	F2	T17	fatto	ispettore/risorse	famiglia	il comando dei pennelli che deformano: i punti del pennello e le sue misure; con una selezione i tracciati scelti, senza quelli sotto il pennello; un tratto della penna di Fub è unmapped	Fluidifica
 motore	object.puppetWarp	Puppet Warp		trasforma	F1	T13	fatto	ispettore/design	famiglia		Alterazione marionetta
 motore	object.puppetWarp.pins	Puppet Warp Pins		trasforma	F1	T13	fatto	ispettore/design	famiglia		Perni alterazione marionetta
 motore	perspective.grid.set	Define Perspective Grid		prospettiva	F4	T25	da fare	menu/visualizza	famiglia		Definisci griglia prospettica
@@ -1325,13 +1325,13 @@ strumento	scale	Scale Tool		trasforma	F1	T13	fatto	colonna/trasforma	famiglia	ri
 strumento	shear	Shear Tool		trasforma	F1	T13	fatto	colonna/trasforma	famiglia	riquadro «scale»	Strumento Inclina
 strumento	reshape	Reshape Tool		trasforma	F1	T13	fatto	colonna/trasforma	famiglia	riquadro «scale»	Strumento Rimodella
 strumento	width	Width Tool		pennelli	F2	T17	da fare	colonna/disegna	famiglia	riquadro «width»	Strumento Larghezza
-strumento	warp	Warp Tool		pennelli	F2	T17	da fare	colonna/disegna	famiglia	riquadro «width»	Strumento Altera
-strumento	twirl	Twirl Tool		pennelli	F2	T17	da fare	colonna/disegna	famiglia	riquadro «width»	Strumento Vortice
-strumento	pucker	Pucker Tool		pennelli	F2	T17	da fare	colonna/disegna	famiglia	riquadro «width»	Strumento Contrai
-strumento	bloat	Bloat Tool		pennelli	F2	T17	da fare	colonna/disegna	famiglia	riquadro «width»	Strumento Gonfia
-strumento	scallop	Scallop Tool		pennelli	F2	T17	da fare	colonna/disegna	famiglia	riquadro «width»	Strumento Smerla
-strumento	crystallize	Crystallize Tool		pennelli	F2	T17	da fare	colonna/disegna	famiglia	riquadro «width»	Strumento Cristallizza
-strumento	wrinkle	Wrinkle Tool		pennelli	F2	T17	da fare	colonna/disegna	famiglia	riquadro «width»	Strumento Grinza
+strumento	warp	Warp Tool		pennelli	F2	T17	fatto	colonna/disegna	famiglia	riquadro «width»; object.liquify a ogni campione, un passo al rilascio, Esc annulla	Strumento Altera
+strumento	twirl	Twirl Tool		pennelli	F2	T17	fatto	colonna/disegna	famiglia	riquadro «width»; object.liquify a ogni campione, un passo al rilascio, Esc annulla	Strumento Vortice
+strumento	pucker	Pucker Tool		pennelli	F2	T17	fatto	colonna/disegna	famiglia	riquadro «width»; object.liquify a ogni campione, un passo al rilascio, Esc annulla	Strumento Contrai
+strumento	bloat	Bloat Tool		pennelli	F2	T17	fatto	colonna/disegna	famiglia	riquadro «width»; object.liquify a ogni campione, un passo al rilascio, Esc annulla	Strumento Gonfia
+strumento	scallop	Scallop Tool		pennelli	F2	T17	fatto	colonna/disegna	famiglia	riquadro «width»; object.liquify a ogni campione, un passo al rilascio, Esc annulla	Strumento Smerla
+strumento	crystallize	Crystallize Tool		pennelli	F2	T17	fatto	colonna/disegna	famiglia	riquadro «width»; object.liquify a ogni campione, un passo al rilascio, Esc annulla	Strumento Cristallizza
+strumento	wrinkle	Wrinkle Tool		pennelli	F2	T17	fatto	colonna/disegna	famiglia	riquadro «width»; object.liquify a ogni campione, un passo al rilascio, Esc annulla	Strumento Grinza
 strumento	freeTransform	Free Transform Tool		trasforma	F1	T13	fatto	colonna/trasforma	famiglia	riquadro «freeTransform»	Strumento Trasformazione libera
 strumento	puppetWarp	Puppet Warp Tool		trasforma	F1	T13	da fare	colonna/trasforma	famiglia	riquadro «freeTransform»	Strumento Alterazione marionetta
 strumento	shapeBuilder	Shape Builder Tool		forme	F1	T13	fatto	colonna/forme	famiglia	riquadro «shapeBuilder»	Strumento Generatore forme

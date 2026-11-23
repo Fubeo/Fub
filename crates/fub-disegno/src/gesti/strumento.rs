@@ -254,9 +254,10 @@ pub(crate) fn gesto(
         return rifiuta(banco, esito, DrawingRefusal::Unsupported);
     };
     // Uno strumento dei tracciati (forbici, coltello, gomma, penna…), o un altro che ne
-    // sposta i punti come Rimodella, non cambia un tratto della penna di Fub: `unmapped`, e
-    // niente cambia.
+    // sposta i punti come Rimodella e i pennelli che deformano, non cambia un tratto della
+    // penna di Fub: `unmapped`, e niente cambia.
     let dei_tracciati = id == "reshape"
+        || crate::famiglie::STRUMENTI_LIQUEFA.contains(&id)
         || crate::famiglie::riga(crate::famiglie::Fonte::Strumento, id).and_then(|r| r.famiglia)
             == Some(crate::famiglie::Famiglia::Tracciati);
     if dei_tracciati && crate::famiglie::inchiostro_toccato(copia, &dopo) {

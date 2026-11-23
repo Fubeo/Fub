@@ -434,6 +434,9 @@ macro_rules! famiglie {
 /// chiede a ogni `commit`.
 pub(crate) use tracciati::inchiostro_toccato;
 
+/// I pennelli che deformano (T17): spostano i punti come gli strumenti dei tracciati.
+pub(crate) use pennelli::STRUMENTI_LIQUEFA;
+
 famiglie! {
     Aspetto, aspetto, "aspetto";
     Automazione, automazione, "automazione";

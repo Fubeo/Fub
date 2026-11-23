@@ -198,7 +198,7 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // T11 guide e agganci del motore: `view.smartGuides`, `view.snapToPoint` e `view.snapToGlyph` diventano
   // «fatto», con le prove in vista.json e testo.json: il gesto porta i tre interruttori (`snap.guides`,
   // `snap.points`, `snap.glyphs`) alla vista del motore. Tre righe in più.
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1025, fub: 114, escluso: 12, fatto: 400 });
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1017, fub: 114, escluso: 12, fatto: 408 });
 });
 
 // --- un motore finto ---------------------------------------------------------------
