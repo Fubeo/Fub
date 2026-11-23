@@ -2688,6 +2688,147 @@
       "atteso": {
         "rifiuto": "unsupported"
       }
+    },
+    {
+      "id": "object.rotate",
+      "disegno": "testo.svg",
+      "selezione": [
+        "ot1t1t1t1"
+      ],
+      "argomenti": {
+        "angle": 90
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "ot1t1t1t1",
+            "attrs": {
+              "transform": "matrix(0 -1 1 0 -204 284)"
+            }
+          }
+        ]
+      },
+      "dopo": "testo-ruota.svg"
+    },
+    {
+      "id": "object.rotate",
+      "disegno": "t13-testo-su-tracciato.svg",
+      "selezione": [
+        "ot9t9t9t9"
+      ],
+      "argomenti": {
+        "angle": 90
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "ot9t9t9t9",
+            "attrs": {
+              "transform": "matrix(0 -1 1 0 7.0796 392.9204)"
+            }
+          }
+        ]
+      },
+      "dopo": "testo-tracciato-ruota.svg"
+    },
+    {
+      "id": "object.nudge",
+      "disegno": "testo.svg",
+      "selezione": [
+        "ot1t1t1t1"
+      ],
+      "argomenti": {
+        "dx": 1
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "ot1t1t1t1",
+            "attrs": {
+              "transform": "matrix(1 0 0 1 1 0)"
+            }
+          }
+        ]
+      },
+      "dopo": "testo-sposta.svg"
+    },
+    {
+      "id": "object.rotate",
+      "disegno": "testo.svg",
+      "selezione": [
+        "ot1t1t1t1",
+        "oa1a1a1a1"
+      ],
+      "argomenti": {
+        "angle": 90
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "set",
+                "id": "oa1a1a1a1",
+                "attrs": {
+                  "transform": "matrix(0 -1 1 0 -57 297)"
+                }
+              },
+              {
+                "op": "set",
+                "id": "ot1t1t1t1",
+                "attrs": {
+                  "transform": "matrix(0 -1 1 0 -57 297)"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "testo-misto-ruota.svg"
+    },
+    {
+      "id": "object.rotate",
+      "disegno": "t13-testo-in-area.svg",
+      "selezione": [
+        "oz1z1z1z1"
+      ],
+      "argomenti": {
+        "angle": 90
+      },
+      "atteso": {
+        "rifiuto": "unsupported"
+      }
+    },
+    {
+      "id": "object.shear",
+      "disegno": "t13-testo-in-area.svg",
+      "selezione": [
+        "oz1z1z1z1"
+      ],
+      "argomenti": {
+        "angle": 15,
+        "axis": "horizontal"
+      },
+      "atteso": {
+        "rifiuto": "unsupported"
+      }
+    },
+    {
+      "id": "object.reflect",
+      "disegno": "t13-testo-in-area.svg",
+      "selezione": [
+        "oz1z1z1z1"
+      ],
+      "argomenti": {
+        "axis": "vertical"
+      },
+      "atteso": {
+        "rifiuto": "unsupported"
+      }
     }
   ]
 }
