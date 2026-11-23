@@ -15,10 +15,11 @@
 //!   prospettiva, grafici).
 //!
 //! All'apertura ([`leggi`]) una ricetta vale se il suo elemento c'è e il suo
-//! `hash` è quello del corpo dell'elemento senza la sua `transform`: allora
-//! l'oggetto del motore diventa quello della ricetta, messo dove l'elemento
-//! sta. Una ricetta che non vale non blocca mai l'apertura e non si perde:
-//! l'elemento resta grafica semplice con un avviso, e la ricetta resta nel
+//! `hash` è quello del corpo dell'elemento senza la sua `transform`, il suo
+//! `display` e il suo `fub:locked` ([`impronta`]): allora l'oggetto del
+//! motore diventa quello della ricetta, messo dove l'elemento sta, nascosto e
+//! bloccato come l'elemento. Una ricetta che non vale non blocca mai
+//! l'apertura e non si perde: l'elemento resta grafica semplice con un avviso, e la ricetta resta nel
 //! file finché si può leggere (rotta) o cade alla scrittura dopo (cambiata
 //! fuori da Fub, orfana, doppia). Una versione più nuova apre il disegno in
 //! sola lettura. Alla scrittura ([`Scritte`]) la differenza riscrive il blocco
@@ -51,6 +52,40 @@ pub const MAX_RICETTE: usize = fub_abi::MAX_DRAWING_LOSSES;
 /// grafica semplice e si modifica come tale, quindi l'avviso non blocca i
 /// gesti ([`perdite::controlla`] lo salta).
 pub const AVVISO: &str = "la ricetta ";
+
+/// Gli attributi dell'elemento con la ricetta che l'impronta non conta, oltre
+/// alla sua `transform`: lo stato dell'oggetto, nascosto e bloccato, che il
+/// corpo espanso non porta e che la differenza scrive con un `set`, come lo
+/// spostamento.
+const STATO: [&str; 2] = ["display", "fub:locked"];
+
+/// L'impronta del testo di un elemento con la ricetta (formato della ricetta,
+/// §2): quella del motore ([`vectorcraft_svg::element_hash`], che non conta la
+/// `transform` dell'elemento) senza nemmeno il suo `display` e il suo
+/// `fub:locked`. Così nascondere, mostrare, bloccare e sbloccare l'oggetto,
+/// che cambiano solo quegli attributi, tengono la ricetta come spostarlo.
+/// Quelli dei figli contano: sono la grafica espansa.
+pub(crate) fn impronta(corpo: &str) -> String {
+    let via: Vec<Range<usize>> = crate::apertura::attributi(corpo, 0)
+        .map(|(_, attr)| {
+            attr.into_iter()
+                .filter(|a| STATO.contains(&a.nome.as_str()))
+                .map(|a| a.da..a.a)
+                .collect()
+        })
+        .unwrap_or_default();
+    if via.is_empty() {
+        return vectorcraft_svg::element_hash(corpo);
+    }
+    let mut senza = String::with_capacity(corpo.len());
+    let mut da = 0;
+    for r in via {
+        senza.push_str(&corpo[da..r.start]);
+        da = r.end;
+    }
+    senza.push_str(&corpo[da..]);
+    vectorcraft_svg::element_hash(&senza)
+}
 
 /// Il motivo degli elementi dentro un oggetto rifatto da una ricetta: fanno
 /// parte della sua grafica semplice, non sono oggetti del motore e non sono
@@ -609,7 +644,7 @@ pub(crate) fn leggi(
                 .get(e.percorso.as_slice())
                 .and_then(|[da, a]| testo.get(*da..*a))
                 .unwrap_or_default();
-            if v.hash.as_deref() != Some(vectorcraft_svg::element_hash(corpo).as_str()) {
+            if v.hash.as_deref() != Some(impronta(corpo).as_str()) {
                 return Err((
                     Stato::DaTogliere,
                     "non vale più: l'elemento è cambiato fuori da Fub, si apre come grafica semplice"
@@ -636,7 +671,12 @@ pub(crate) fn leggi(
             }
         };
         let (i, nome) = (elemento.unwrap_or_default(), nome.unwrap_or_default());
-        match applica(doc, &elementi[i], &per_nome, &byte) {
+        let nodo = match per_nome.get(&elementi[i].nome).map(Vec::as_slice) {
+            Some([n]) => Ok(*n),
+            None | Some([]) => Err(Posto::di(elementi, i)),
+            Some(_) => Err(None),
+        };
+        match applica(doc, &elementi[i], nodo, &byte) {
             Ok(()) => {
                 voce.stato = Stato::Valida;
                 ricette.applicate.insert(v.for_id.clone());
@@ -733,21 +773,89 @@ enum Rifiutata {
     Motivo(String),
 }
 
-/// Applica i byte di una ricetta all'oggetto dell'elemento `e`.
+/// Dove va, nel motore, l'oggetto di un elemento che l'import non ha portato:
+/// il nome del genitore e quelli dei fratelli che lo seguono nel file.
+struct Posto {
+    genitore: String,
+    dopo: Vec<String>,
+}
+
+impl Posto {
+    /// Il posto dell'elemento `i`, se ha un genitore fra gli elementi (sotto
+    /// la radice l'import mette gli oggetti in un livello suo).
+    fn di(elementi: &[Elemento], i: usize) -> Option<Posto> {
+        let e = &elementi[i];
+        let g = e.genitore?;
+        let mut fratelli: Vec<&Elemento> = elementi
+            .iter()
+            .filter(|f| f.genitore == Some(g) && f.percorso > e.percorso)
+            .collect();
+        fratelli.sort_by(|a, b| a.percorso.cmp(&b.percorso));
+        Some(Posto {
+            genitore: elementi[g].nome.clone(),
+            dopo: fratelli.into_iter().map(|f| f.nome.clone()).collect(),
+        })
+    }
+
+    /// Mette in `doc` un gruppo vuoto col nome `nome` al posto, prima
+    /// dell'oggetto del primo fratello che segue o in fondo, e ne dà l'id.
+    /// `None` se il motore non ha un oggetto solo col nome del genitore, o
+    /// se quell'oggetto non ha figli.
+    fn segnaposto(&self, doc: &mut Document, nome: &str, visibile: bool) -> Option<NodeId> {
+        let mut trovati = Vec::new();
+        doc.walk(|n| {
+            if n.name.as_deref() == Some(self.genitore.as_str()) {
+                trovati.push(n.id);
+            }
+        });
+        let [genitore] = trovati[..] else {
+            return None;
+        };
+        let id = doc.alloc_id();
+        let mut gruppo = Node::group(id, Vec::new());
+        gruppo.name = Some(nome.to_string());
+        gruppo.visible = visibile;
+        let figli = doc.node_mut(genitore)?.children_mut()?;
+        let dove = self
+            .dopo
+            .iter()
+            .find_map(|f| figli.iter().position(|c| c.name.as_deref() == Some(f)))
+            .unwrap_or(figli.len());
+        figli.insert(dove, std::sync::Arc::new(gruppo));
+        Some(id)
+    }
+}
+
+/// Toglie da `doc` l'oggetto `id` che [`Posto::segnaposto`] ha messo.
+fn togli_segnaposto(doc: &mut Document, id: NodeId) {
+    if let Some(figli) = doc
+        .parent_of(id)
+        .and_then(|g| doc.node_mut(g))
+        .and_then(Node::children_mut)
+    {
+        figli.retain(|c| c.id != id);
+    }
+}
+
+/// Applica i byte di una ricetta all'oggetto dell'elemento `e`: `nodo` è
+/// l'oggetto del motore con il suo nome, o il posto dove metterlo se l'import
+/// non l'ha portato (`None`: nessuno o più di uno).
+///
+/// L'import non porta un corpo che non disegna niente (un oggetto senza
+/// riempimento e senza contorno, anche sotto una maschera): la ricetta, che
+/// è valida, lo rimette al posto dell'elemento. Lo stato dell'oggetto,
+/// nascosto e bloccato, è quello dell'elemento, non quello della ricetta
+/// (l'impronta non lo conta, [`impronta`]).
 fn applica(
     doc: &mut Document,
     e: &Elemento,
-    per_nome: &HashMap<String, Vec<NodeId>>,
+    nodo: Result<NodeId, Option<Posto>>,
     byte: &[u8],
 ) -> Result<(), Rifiutata> {
-    let nodo = match per_nome.get(&e.nome).map(Vec::as_slice) {
-        Some([n]) => *n,
-        _ => {
-            return Err(Rifiutata::Motivo(
-                "non trova il suo oggetto nel motore".into(),
-            ))
-        }
-    };
+    let manca = || Rifiutata::Motivo("non trova il suo oggetto nel motore".into());
+    if matches!(nodo, Err(None)) {
+        return Err(manca());
+    }
     let ctm = e
         .ctm()
         .ok_or_else(|| Rifiutata::Motivo("non trova la transform del suo elemento".into()))?;
@@ -757,13 +865,32 @@ fn applica(
         altro => Rifiutata::Motivo(format!("non si legge ({altro})")),
     })?;
     risorse_presenti(doc, &letto)?;
-    vectorcraft_svg::apply_recipe(doc, nodo, byte).map_err(|e| match e {
-        RecipeError::Newer(n) => Rifiutata::Nuova(n),
-        altro => Rifiutata::Motivo(format!("non si applica ({altro})")),
-    })?;
+    let (nodo, messo) = match nodo {
+        Ok(n) => (n, false),
+        Err(posto) => {
+            let n = posto
+                .and_then(|p| p.segnaposto(doc, &e.nome, !e.nascosto))
+                .ok_or_else(manca)?;
+            (n, true)
+        }
+    };
+    let (visibile, bloccato) = doc
+        .node(nodo)
+        .map_or((!e.nascosto, e.bloccato), |n| (n.visible, n.locked));
+    if let Err(errore) = vectorcraft_svg::apply_recipe(doc, nodo, byte) {
+        if messo {
+            togli_segnaposto(doc, nodo);
+        }
+        return Err(match errore {
+            RecipeError::Newer(n) => Rifiutata::Nuova(n),
+            altro => Rifiutata::Motivo(format!("non si applica ({altro})")),
+        });
+    }
     if let Some(n) = doc.node_mut(nodo) {
         senza_nomi_dentro(n);
         n.transform(ctm, Scaling::from(true));
+        n.visible = visibile;
+        n.locked = bloccato;
     }
     Ok(())
 }
@@ -917,6 +1044,20 @@ pub(crate) fn e_un_avviso(dettaglio: &str) -> bool {
 #[cfg(test)]
 mod prove {
     use super::*;
+
+    /// L'impronta non conta la `transform`, il `display` e il `fub:locked`
+    /// dell'elemento, ma quelli dei figli sì.
+    #[test]
+    fn l_impronta_non_conta_lo_stato_dell_elemento() {
+        let base = "<g id=\"oa\"><rect display=\"none\" x=\"1\"/></g>";
+        let con_stato = "<g display=\"none\" id=\"oa\" fub:locked=\"true\" transform=\"translate(2 0)\"><rect display=\"none\" x=\"1\"/></g>";
+        assert_eq!(impronta(con_stato), impronta(base));
+        assert_eq!(impronta(base), vectorcraft_svg::element_hash(base));
+        let figlio_mostrato = "<g id=\"oa\"><rect x=\"1\"/></g>";
+        assert_ne!(impronta(figlio_mostrato), impronta(base));
+        let altro = "<g id=\"oa\" opacity=\"0.5\"><rect display=\"none\" x=\"1\"/></g>";
+        assert_ne!(impronta(altro), impronta(base));
+    }
 
     /// Il limite delle ricette, da solo (il file vero si ferma prima, al
     /// tetto degli elementi della scena): oltre, nessuna si applica, tutte

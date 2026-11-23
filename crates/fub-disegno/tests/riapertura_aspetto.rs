@@ -67,13 +67,11 @@ fn la_maschera_di_opacita_si_riapre_senza_perdite_e_resta_una_maschera() {
     assert_eq!(m["linked"], json!(true), "{m}");
 }
 
-/// Rischio noto, da correggere in un giro dedicato (non qui): quando un comando riscrive la ricetta di un
-/// oggetto con una maschera di opacità, la riapertura non trova più l'oggetto nel motore. Qui il comando
-/// è Svuota (`appearance.clear`), che la famiglia Aspetto non serve più sulle maschere: la prova va
-/// direttamente al motore. Il file esce con la perdita «la ricetta non trova il suo oggetto nel motore»,
-/// e l'oggetto non è più una maschera. Si toglie `#[ignore]` quando la riapertura lo tiene.
+/// Svuota (`appearance.clear`) riscrive la ricetta dell'oggetto con la maschera in un corpo che non
+/// disegna niente: l'import del motore non lo porta, e la ricetta, che vale, lo rimette al posto del suo
+/// elemento (`ricetta::applica`). Il file si riapre senza perdite e l'oggetto resta una maschera; gli
+/// altri comandi che riscrivono la ricetta sono in `ricette_riapertura.rs`.
 #[test]
-#[ignore = "rischio noto: la ricetta riscritta su un oggetto con maschera non riapre l'oggetto (K6 T15, aspetto)"]
 fn la_ricetta_riscritta_su_una_maschera_si_riapre_con_la_maschera() {
     let (mut disegno, aperto) = apri_tutte(MASCHERA);
     let svuotato = disegno
@@ -85,11 +83,26 @@ fn la_ricetta_riscritta_su_una_maschera_si_riapre_con_la_maschera() {
         ))
         .expect("Svuota");
     let testo = scritto(MASCHERA, &svuotato.ops);
-    let (_, riapre) = apri_tutte(&testo);
+    let (mut riaperto, riapre) = apri_tutte(&testo);
     assert!(
         riapre.losses.is_empty(),
         "perdite alla riapertura: {:?}",
         riapre.losses
+    );
+    let letta = riaperto
+        .comando(comando(
+            "disegno.transparency.opacityMaskInfo",
+            &["oa1a1a1a1"],
+            json!({}),
+            riapre.revision,
+        ))
+        .expect("la lettura della maschera")
+        .reading
+        .expect("la lettura c'è");
+    assert_eq!(
+        letta.as_array().map(Vec::len),
+        Some(1),
+        "la maschera resta: {letta}"
     );
 }
 

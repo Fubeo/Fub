@@ -321,8 +321,8 @@ fn piu_alto(copia: &Copia, nodi: &[NodeId]) -> Option<NodeId> {
 }
 
 /// Perché Riduci ad aspetto di base non vale sulle scelte (K6 T15, aspetto): niente scelto, un oggetto
-/// bloccato, e un oggetto con una maschera di opacità: il motore lo riscrive con una ricetta che la
-/// riapertura non riconosce più (la perdita c'è, ma l'oggetto non è più una maschera).
+/// bloccato, un tratto dell'Inchiostro, un oggetto nascosto o un testo. Un oggetto con una maschera di
+/// opacità si riduce: la ricetta riscritta si riapre con la maschera (`tests/ricette_riapertura.rs`).
 fn spento_riduci(copia: &Copia, selezione: &[String]) -> Option<DrawingDisabledReason> {
     if selezione.is_empty() {
         return Some(DrawingDisabledReason::NoSelection);
@@ -335,20 +335,9 @@ fn spento_riduci(copia: &Copia, selezione: &[String]) -> Option<DrawingDisabledR
         Err(DrawingRefusal::Locked) => return Some(DrawingDisabledReason::ReadOnly),
         Err(_) => return Some(DrawingDisabledReason::Unmapped),
     };
-    let con_maschera = |n: &NodeId| {
-        copia
-            .documento
-            .node(*n)
-            .is_some_and(|nodo| nodo.extras().mask.is_some())
-    };
     // Un tratto dell'Inchiostro di Fub è un riempimento del file, non un oggetto che il motore riduce.
     if sceglie_inchiostro(copia, selezione) {
         return Some(DrawingDisabledReason::FubInk);
-    }
-    if scelti.iter().any(con_maschera) {
-        return Some(DrawingDisabledReason::Other {
-            text: "Con una maschera di opacità non si fa ancora: il file non riapre l'oggetto com'era.".into(),
-        });
     }
     // Un oggetto nascosto: il motore lo lascia com'è, e Riduci non dice nulla. Si dice perché.
     let nascosto = |n: &NodeId| copia.documento.node(*n).is_some_and(|nodo| !nodo.visible);

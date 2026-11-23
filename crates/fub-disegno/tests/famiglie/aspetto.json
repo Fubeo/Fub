@@ -967,7 +967,7 @@
       "disegno": "maschera-dopo.svg",
       "selezione": ["oa1a1a1a1"],
       "argomenti": {},
-      "atteso": { "rifiuto": "unsupported" }
+      "atteso": { "rifiuto": "empty" }
     },
     {
       "id": "appearance.reduceToBasic",
