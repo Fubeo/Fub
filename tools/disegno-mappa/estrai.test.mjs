@@ -159,7 +159,9 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // «da fare» (il formato non ha gruppi di colori).
   // T13 porta a «fatto» `object.makePixelPerfect` («Rendi perfetto al pixel»): la famiglia `trasforma`
   // lo lascia correre sugli oggetti scelti (casi in `tests/famiglie/trasforma.json`, disegno `pixel.svg`).
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1074, fub: 114, escluso: 12, fatto: 351 });
+  // T14 guida colori: tre righe fatte (il pannello Guida colori, Opzioni guida colori e Limita guida
+  // colori alla libreria), con i loro casi in colore.json e i test della sezione.
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1071, fub: 114, escluso: 12, fatto: 354 });
 });
 
 // --- un motore finto ---------------------------------------------------------------

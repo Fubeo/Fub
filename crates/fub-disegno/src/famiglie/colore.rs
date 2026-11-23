@@ -121,6 +121,25 @@ fn argomenti_delle_letture(id: &str, argomenti: &Value) -> Option<&'static str> 
                 _ => Some("«colors» è una lista di colori #rrggbb."),
             }
         }
+        // La guida (K6 T14, guida): il motore stringe i passi e l'ampiezza fuori dai limiti, senza dirlo.
+        // Qui un valore fuori si rifiuta, con la regola in italiano.
+        "color.harmony" => {
+            let passi = argomenti.get("steps");
+            let ampiezza = argomenti.get("amount");
+            let variazione = argomenti.get("variation");
+            if !assente(passi) && !passi.and_then(Value::as_u64).is_some_and(|n| (1..=20).contains(&n)) {
+                return Some("«steps» è un numero intero da 1 a 20.");
+            }
+            if !assente(ampiezza) && !ampiezza.and_then(Value::as_f64).is_some_and(|n| (0.0..=100.0).contains(&n)) {
+                return Some("«amount» è un numero da 0 a 100.");
+            }
+            if !assente(variazione)
+                && !matches!(variazione.and_then(Value::as_str), Some("tintsShades" | "warmCool" | "vividMuted"))
+            {
+                return Some("«variation» è tintsShades, warmCool o vividMuted.");
+            }
+            None
+        }
         _ => None,
     }
 }
@@ -129,6 +148,11 @@ fn argomenti_delle_letture(id: &str, argomenti: &Value) -> Option<&'static str> 
 /// (K6 T14 giro 9): il motore lo direbbe in inglese, e la frase è questa.
 pub(crate) const TESTO_SENZA_CAMPIONI: &str =
     "Il disegno non ha campioni: aggiungine uno in Risorse › Campioni, o scegli «Aggiungi i colori usati», prima di cercare il campione più vicino.";
+
+/// La guida limitata ai campioni del documento, senza campioni a colore pieno (K6 T14, guida): la
+/// frase è questa, perché il motore lo direbbe in inglese.
+pub(crate) const TESTO_GUIDA_SENZA_CAMPIONI: &str =
+    "Il disegno non ha campioni: aggiungine uno in Risorse › Campioni, o scegli «Aggiungi i colori usati», prima di limitare la guida ai campioni.";
 
 /// Il documento non ha nessun campione con un colore pieno, come lo conta il motore
 /// (`library_colors`): i campioni riservati di sistema (Nessuno, Registro) non valgono,
@@ -421,6 +445,13 @@ impl StatoFamiglia for Stato {
                 if valore.get("to").is_some_and(|to| !to.is_null() && to.as_u64().is_none()) {
                     return Err(PluginError::BadArgs("La posizione è un numero intero, dal primo campione: 0.".into()));
                 }
+            }
+            // La guida limitata ai campioni del documento vuole campioni a colore pieno: senza, il motore
+            // lo direbbe in inglese, e la frase è questa.
+            "color.harmony"
+                if valore.get("limitTo").and_then(Value::as_str) == Some("document") && senza_campioni(copia) =>
+            {
+                return Err(PluginError::BadArgs(TESTO_GUIDA_SENZA_CAMPIONI.into()));
             }
             _ => {}
         }

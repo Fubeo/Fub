@@ -20035,6 +20035,54 @@ button.draw-isolation-crumb:hover {
   color: var(--muted);
 }
 
+/* Guida colori (K6 T14, guida): la sezione del Design e le sue finestre. Una riga per armonia-colore,
+   il colore di partenza al centro con il suo bordo. Con Senza scelta i campioni sono spenti. */
+.draw-guide-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+.draw-guide-rule-name {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.draw-guide-note {
+  margin: 0;
+  color: var(--muted);
+}
+.draw-guide-grid {
+  display: grid;
+  gap: 2px;
+  overflow-x: auto;
+}
+.draw-guide-row {
+  display: flex;
+  gap: 2px;
+}
+.draw-guide-swatch {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+}
+.draw-guide-swatch[data-base] {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.draw-guide-swatch:disabled {
+  opacity: 0.5;
+}
+.draw-guide-field {
+  display: grid;
+  gap: var(--space-1);
+}
+.draw-guide-rule {
+  min-width: 0;
+}
+
 /* ── skin/media.css ─────────────────────────────────────────────────────── */
 
 /* Immagini, zoom, lightbox, SVG. */
