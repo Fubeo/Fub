@@ -610,13 +610,13 @@ motore	text.touchType	Touch Type		testo	F2	T16	da fare	ispettore/design	famiglia
 motore	text.getRange	Get Text Range		testo	F2	T16	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Ottieni intervallo di testo
 motore	text.createInPath	Area / Path Type		testo	F2	T16	da fare	ispettore/design	famiglia		Testo in area / su tracciato
 motore	type.fitHeadline	Fit Headline	Type	testo	F2	T16	da fare	menu/testo	famiglia		Adatta titolo
-motore	type.step	Step Type		testo	F2	T16	da fare	ispettore/design	famiglia		Dimensione testo a incrementi
-motore	type.size.increase	Increase Font Size		testo	F2	T16	da fare	ispettore/design	famiglia		Aumenta dimensione font
-motore	type.size.decrease	Decrease Font Size		testo	F2	T16	da fare	ispettore/design	famiglia		Riduci dimensione font
-motore	type.size.increaseByFive	Increase Font Size by Five Steps		testo	F2	T16	da fare	ispettore/design	famiglia		Aumenta dimensione font di cinque incrementi
-motore	type.size.decreaseByFive	Decrease Font Size by Five Steps		testo	F2	T16	da fare	ispettore/design	famiglia		Riduci dimensione font di cinque incrementi
-motore	type.resetTracking	Reset Tracking and Kerning		testo	F2	T16	da fare	ispettore/design	famiglia		Reimposta spaziatura caratteri e crenatura
-motore	type.resetHorizontalScale	Reset Horizontal Scale		testo	F2	T16	da fare	ispettore/design	famiglia		Reimposta scala orizzontale
+motore	type.step	Step Type		testo	F2	T16	fatto	ispettore/design	famiglia	passi di Preferenze › Testo: corpo e interlinea 2 pt, spaziatura 20/1000 em; lo spostamento della linea di base è rifiutato (il file non lo scrive)	Dimensione testo a incrementi
+motore	type.size.increase	Increase Font Size		testo	F2	T16	fatto	ispettore/design	famiglia	Ctrl+Maiusc+. (tasto fisico del punto): +2 pt	Aumenta dimensione font
+motore	type.size.decrease	Decrease Font Size		testo	F2	T16	fatto	ispettore/design	famiglia	Ctrl+Maiusc+, (tasto fisico della virgola): −2 pt	Riduci dimensione font
+motore	type.size.increaseByFive	Increase Font Size by Five Steps		testo	F2	T16	fatto	ispettore/design	famiglia	Ctrl+Alt+Maiusc+.: +10 pt	Aumenta dimensione font di cinque incrementi
+motore	type.size.decreaseByFive	Decrease Font Size by Five Steps		testo	F2	T16	fatto	ispettore/design	famiglia	Ctrl+Alt+Maiusc+,: −10 pt	Riduci dimensione font di cinque incrementi
+motore	type.resetTracking	Reset Tracking and Kerning		testo	F2	T16	fatto	ispettore/design	famiglia	Ctrl+Alt+Q: toglie la spaziatura	Reimposta spaziatura caratteri e crenatura
+motore	type.resetHorizontalScale	Reset Horizontal Scale		testo	F2	T16	fatto	ispettore/design	famiglia	il file non scrive la scala orizzontale: non c'è mai niente da reimpostare (rifiuto «vuoto»)	Reimposta scala orizzontale
 motore	text.discardEmpty	Discard Empty Type		testo	F2	T16	da fare	ispettore/design	famiglia		Scarta testo vuoto
 motore	object.textWrap.make	Make	Object › Text Wrap	testo	F2	T16	da fare	menu/oggetto	famiglia		Crea
 motore	object.textWrap.release	Release	Object › Text Wrap	testo	F2	T16	da fare	menu/oggetto	famiglia		Rilascia

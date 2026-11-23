@@ -4595,6 +4595,118 @@
     },
     {
       "fonte": "motore",
+      "id": "type.resetHorizontalScale",
+      "chiamata": {
+        "comando": "disegno.type.resetHorizontalScale"
+      },
+      "etichetta": {
+        "it": "Reimposta scala orizzontale",
+        "en": "Reset Horizontal Scale"
+      },
+      "posto": "ispettore/design",
+      "famiglia": "testo",
+      "tasto": "Cmd+Shift+X",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "type.resetTracking",
+      "chiamata": {
+        "comando": "disegno.type.resetTracking"
+      },
+      "etichetta": {
+        "it": "Reimposta spaziatura caratteri e crenatura",
+        "en": "Reset Tracking and Kerning"
+      },
+      "posto": "ispettore/design",
+      "famiglia": "testo",
+      "tasto": "Cmd+Alt+Q",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "type.size.decrease",
+      "chiamata": {
+        "comando": "disegno.type.size.decrease"
+      },
+      "etichetta": {
+        "it": "Riduci dimensione font",
+        "en": "Decrease Font Size"
+      },
+      "posto": "ispettore/design",
+      "famiglia": "testo",
+      "tasto": "Cmd+Shift+,",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "type.size.decreaseByFive",
+      "chiamata": {
+        "comando": "disegno.type.size.decreaseByFive"
+      },
+      "etichetta": {
+        "it": "Riduci dimensione font di cinque incrementi",
+        "en": "Decrease Font Size by Five Steps"
+      },
+      "posto": "ispettore/design",
+      "famiglia": "testo",
+      "tasto": "Cmd+Alt+Shift+,",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "type.size.increase",
+      "chiamata": {
+        "comando": "disegno.type.size.increase"
+      },
+      "etichetta": {
+        "it": "Aumenta dimensione font",
+        "en": "Increase Font Size"
+      },
+      "posto": "ispettore/design",
+      "famiglia": "testo",
+      "tasto": "Cmd+Shift+.",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "type.size.increaseByFive",
+      "chiamata": {
+        "comando": "disegno.type.size.increaseByFive"
+      },
+      "etichetta": {
+        "it": "Aumenta dimensione font di cinque incrementi",
+        "en": "Increase Font Size by Five Steps"
+      },
+      "posto": "ispettore/design",
+      "famiglia": "testo",
+      "tasto": "Cmd+Alt+Shift+.",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "type.step",
+      "chiamata": {
+        "comando": "disegno.type.step"
+      },
+      "etichetta": {
+        "it": "Dimensione testo a incrementi",
+        "en": "Step Type"
+      },
+      "posto": "ispettore/design",
+      "famiglia": "testo",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "view.drawMode",
       "chiamata": {
         "comando": "disegno.view.drawMode"

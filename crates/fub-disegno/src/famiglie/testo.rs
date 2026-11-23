@@ -33,6 +33,13 @@ const SUI_TESTI: &[&str] = &[
     "type.createOutlines",
     "type.convertToAreaType",
     "type.convertToPointType",
+    "type.step",
+    "type.size.increase",
+    "type.size.decrease",
+    "type.size.increaseByFive",
+    "type.size.decreaseByFive",
+    "type.resetTracking",
+    "type.resetHorizontalScale",
 ];
 
 /// Cambia le parole di un testo (`text.editRange`).

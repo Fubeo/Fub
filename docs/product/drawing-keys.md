@@ -52,8 +52,11 @@ Un tasto **non parte** mentre si scrive: in un campo di testo, mentre un IME
 compone, e con una lettera, una cifra o un segno quando lo strumento vuole il
 testo. Un tasto con `Ctrl`, `⌘` o `Alt` parte anche allora.
 
-Un tasto con `Maiusc` su un segno o una cifra non si assegna, perché su
-un'altra tastiera è un altro tasto. Su macOS `Ctrl` e `⌘` restano quelli di
+Un tasto con `Maiusc` su un segno o una cifra si riconosce dalla sua
+posizione, come la tastiera americana su cui VectorCraft lo scrive:
+`Ctrl+Maiusc+.` (Ingrandisci il testo) è il tasto del punto anche se con
+Maiusc dà `:`, e `Ctrl+Maiusc+]` (Porta in primo piano) è, sulla tastiera
+italiana, il tasto `+`. Il menu scrive ancora il segno americano. Su macOS `Ctrl` e `⌘` restano quelli di
 sempre: `⌘` è il tasto di Fub, `Ctrl` è Control.
 
 Il menu ≡ e la ricerca dei comandi mostrano il tasto che fa partire il comando, cioè lo

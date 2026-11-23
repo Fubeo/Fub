@@ -55,12 +55,11 @@ describe("tastoFub", () => {
     expect(tastoFub("Cmd+K Cmd+D")).toBeNull(); // una sequenza non è un accordo solo
   });
 
-  it("non dà un simbolo con Maiusc, che su un'altra tastiera è un altro tasto", () => {
-    expect(tastoFub("Shift+9")).toBeNull();
-    expect(tastoFub("Shift+~")).toBeNull();
-    expect(tastoFub("Cmd+Shift+8")).toBeNull();
-    expect(tastoFub("Cmd+Shift+]")).toBeNull();
-    expect(tastoFub("Shift+M")).toBe("Shift-M"); // una lettera con Maiusc sì
+  it("scrive un simbolo con Maiusc com'è, senza Maiusc (il tasto fisico)", () => {
+    expect(tastoFub("Cmd+Shift+8")).toBe("Mod-Shift-8");
+    expect(tastoFub("Cmd+Shift+]")).toBe("Mod-Shift-]");
+    expect(tastoFub("Cmd+Shift+.")).toBe("Mod-Shift-.");
+    expect(tastoFub("Shift+M")).toBe("Shift-M");
   });
 });
 
@@ -267,6 +266,23 @@ describe("TASTI_DELLA_FINESTRA", () => {
 });
 
 describe("decidiTasto", () => {
+  it("con Maiusc su un segno riconosce il tasto fisico, su ogni tastiera", () => {
+    const r = risolviTasti(
+      [{ id: "type.size.increase", tasto: "Cmd+Shift+." }, { id: "object.arrange.bringToFront", tasto: "Cmd+Shift+]" }, { id: "object.lock.unselected", tasto: "Cmd+Alt+Shift+2" }],
+      {}, "other", TASTI_DELLA_FINESTRA,
+    );
+    const premuto = (key: string, code: string, alt = false): KeyChord => ({ ...tasto(key, { ctrlKey: true, shiftKey: true, altKey: alt }), code });
+    // La tastiera americana: Maiusc+. è `>`, Maiusc+] è `}`.
+    expect(decidiTasto(premuto(">", "Period"), r, NESSUNO, "other")).toEqual({ tipo: "esegue", comando: "type.size.increase" });
+    expect(decidiTasto(premuto("}", "BracketRight"), r, NESSUNO, "other")).toEqual({ tipo: "esegue", comando: "object.arrange.bringToFront" });
+    // La tastiera italiana: Maiusc+. è `:`, Maiusc+2 è `"`.
+    expect(decidiTasto(premuto(":", "Period"), r, NESSUNO, "other")).toEqual({ tipo: "esegue", comando: "type.size.increase" });
+    expect(decidiTasto(premuto('"', "Digit2", true), r, NESSUNO, "other")).toEqual({ tipo: "esegue", comando: "object.lock.unselected" });
+    // Senza Maiusc, o su un altro tasto fisico, niente.
+    expect(decidiTasto({ ...tasto(".", { ctrlKey: true }), code: "Period" }, r, NESSUNO, "other")).toEqual({ tipo: "passa" });
+    expect(decidiTasto(premuto(":", "Comma"), r, NESSUNO, "other")).toEqual({ tipo: "passa" });
+  });
+
   // Un comando del motore sul Cmd+Alt+L (Mod-Alt-L), e uno sulla lettera.
   const regola: RegolaTasti = risolviTasti([{ id: "shape.round", tasto: "Cmd+Alt+L" }], {}, "other");
 

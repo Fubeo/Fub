@@ -78,8 +78,9 @@ const MODIFICATORI_DEL_MOTORE: Readonly<Record<string, string>> = {
 
 /// Un tasto del motore (`Cmd+Shift+]`) nella forma di Fub (`Mod-Shift-]`), o
 /// `null` se la shell non lo sa premere. Con Maiusc su un simbolo o una cifra
-/// il motore scrive il carattere che la sua tastiera dà: su un'altra tastiera
-/// è un altro tasto, e non lo si mostra né lo si ascolta.
+/// il motore scrive il tasto senza Maiusc, come VectorCraft lo legge (il tasto
+/// `]` tenuto con Maiusc): su un'altra tastiera Maiusc ne dà un altro segno, e
+/// [`decidiTasto`] lo riconosce dal tasto fisico (`segnoFisico`).
 export function tastoFub(tastoMotore: string | null | undefined): string | null {
   const testo = (tastoMotore ?? "").trim();
   if (testo === "" || /\s/.test(testo)) return null;
@@ -93,7 +94,6 @@ export function tastoFub(tastoMotore: string | null | undefined): string | null 
     resto = resto.slice(m[0].length);
   }
   if (resto === "") return null;
-  if (mods.includes("Shift") && resto.length === 1 && !/[A-Za-z]/.test(resto)) return null;
   const fub = [...mods, resto].join("-");
   return normaTasto(fub);
 }
@@ -261,10 +261,31 @@ export function decidiTasto(
 ): DecisioneTasto {
   if (stato.inCampo || stato.componendo) return { tipo: "passa" };
   if (stato.vuoleTesto && scrive(evento)) return { tipo: "passa" };
+  const fisico = segnoFisico(evento);
   for (const [comando, tasto] of regola.tasti) {
     if (matchesBinding(evento, tasto, piattaforma)) return { tipo: "esegue", comando };
+    if (fisico !== null && matchesBinding(fisico, tasto, piattaforma)) return { tipo: "esegue", comando };
   }
   return { tipo: "passa" };
+}
+
+/// Il segno di ogni tasto fisico (`KeyboardEvent.code`) sulla tastiera
+/// americana, quella su cui VectorCraft scrive i suoi tasti.
+const SEGNI_DEI_TASTI: Readonly<Record<string, string>> = {
+  Digit0: "0", Digit1: "1", Digit2: "2", Digit3: "3", Digit4: "4",
+  Digit5: "5", Digit6: "6", Digit7: "7", Digit8: "8", Digit9: "9",
+  Minus: "-", Equal: "=", BracketLeft: "[", BracketRight: "]", Backslash: "\\",
+  Semicolon: ";", Quote: "'", Backquote: "`", Comma: ",", Period: ".", Slash: "/",
+};
+
+/// Il tasto premuto con Maiusc come lo scrive il motore: il segno del tasto
+/// fisico senza Maiusc (Ctrl+Maiusc+. dà `>` sulla tastiera americana e `:` su
+/// quella italiana, ma è sempre il tasto del punto). `null` senza Maiusc, o su
+/// un tasto che non è un segno: lì vale il carattere, come per la shell.
+function segnoFisico(evento: KeyChord): KeyChord | null {
+  if (!evento.shiftKey || evento.code === undefined) return null;
+  const segno = SEGNI_DEI_TASTI[evento.code];
+  return segno === undefined || segno === evento.key ? null : { ...evento, key: segno };
 }
 
 /// Il tasto di uno strumento del motore nella forma dei tasti degli strumenti di

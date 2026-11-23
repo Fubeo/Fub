@@ -95,8 +95,8 @@ describe("i file d'insieme del motore", () => {
     expect(importaInsieme('{"format":"vectorcraft-shortcuts","version":9,"overrides":{}}', noti)).toEqual({
       errore: { tipo: "versione", versione: 9 },
     });
-    expect(importaInsieme('{"format":"vectorcraft-shortcuts","version":1,"overrides":{"edit.undo":"Cmd+Shift+1"}}', noti)).toEqual({
-      errore: { tipo: "tasto", comando: "edit.undo", tasto: "Cmd+Shift+1" },
+    expect(importaInsieme('{"format":"vectorcraft-shortcuts","version":1,"overrides":{"edit.undo":"Cmd+K Cmd+D"}}', noti)).toEqual({
+      errore: { tipo: "tasto", comando: "edit.undo", tasto: "Cmd+K Cmd+D" },
     });
     expect(importaInsieme(" ".repeat(1024 * 1024 + 1), noti)).toEqual({ errore: { tipo: "grande" } });
   });

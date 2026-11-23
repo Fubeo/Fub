@@ -388,6 +388,209 @@
       "prova": "apps/client/src/editors/spatial/completo/famiglie/testo/testo.test.ts"
     },
     {
+      "id": "type.size.increase",
+      "selezione": [
+        "ot1t1t1t1"
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "ot1t1t1t1",
+            "attrs": {
+              "font-size": "34"
+            }
+          }
+        ]
+      },
+      "disegno": "base.svg",
+      "dopo": "type-size-increase.svg"
+    },
+    {
+      "id": "type.size.decrease",
+      "selezione": [
+        "ot1t1t1t1"
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "ot1t1t1t1",
+            "attrs": {
+              "font-size": "30"
+            }
+          }
+        ]
+      },
+      "disegno": "base.svg",
+      "dopo": "type-size-decrease.svg"
+    },
+    {
+      "id": "type.size.increaseByFive",
+      "selezione": [
+        "ot1t1t1t1"
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "ot1t1t1t1",
+            "attrs": {
+              "font-size": "42"
+            }
+          }
+        ]
+      },
+      "disegno": "base.svg",
+      "dopo": "type-size-increaseByFive.svg"
+    },
+    {
+      "id": "type.size.decreaseByFive",
+      "selezione": [
+        "ot1t1t1t1"
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "ot1t1t1t1",
+            "attrs": {
+              "font-size": "22"
+            }
+          }
+        ]
+      },
+      "disegno": "base.svg",
+      "dopo": "type-size-decreaseByFive.svg"
+    },
+    {
+      "id": "type.step",
+      "selezione": [
+        "ot1t1t1t1"
+      ],
+      "argomenti": {
+        "attribute": "tracking",
+        "by": 2
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "ot1t1t1t1",
+            "attrs": {
+              "letter-spacing": "1.28"
+            }
+          }
+        ]
+      },
+      "disegno": "base.svg",
+      "dopo": "type-step-tracking.svg"
+    },
+    {
+      "id": "type.step",
+      "selezione": [
+        "ot1t1t1t1"
+      ],
+      "argomenti": {
+        "attribute": "leading",
+        "by": 1
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "ot1t1t1t1"
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "first": true
+                },
+                "elem": {
+                  "tag": "text",
+                  "attrs": {
+                    "id": "ot1t1t1t1",
+                    "x": "40",
+                    "y": "80",
+                    "fill": "#000000",
+                    "font-family": "Inter, sans-serif",
+                    "font-size": "32"
+                  },
+                  "children": [
+                    {
+                      "tag": "tspan",
+                      "attrs": {
+                        "x": "40",
+                        "dy": "0"
+                      },
+                      "text": "Pioggia"
+                    },
+                    {
+                      "tag": "tspan",
+                      "attrs": {
+                        "x": "40",
+                        "dy": "42"
+                      },
+                      "text": "sul mare"
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "disegno": "base.svg",
+      "dopo": "type-step-leading.svg"
+    },
+    {
+      "id": "type.step",
+      "selezione": [
+        "ot1t1t1t1"
+      ],
+      "argomenti": {
+        "attribute": "baselineShift",
+        "by": 1
+      },
+      "atteso": {
+        "rifiuto": "unsupported"
+      },
+      "disegno": "base.svg"
+    },
+    {
+      "id": "type.resetTracking",
+      "selezione": [
+        "ot2t2t2t2"
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "ot2t2t2t2",
+            "attrs": {
+              "letter-spacing": null
+            }
+          }
+        ]
+      },
+      "disegno": "text-setRangeStyle-tracking.svg",
+      "dopo": "type-resetTracking.svg"
+    },
+    {
+      "id": "type.resetHorizontalScale",
+      "selezione": [
+        "ot1t1t1t1"
+      ],
+      "atteso": {
+        "rifiuto": "empty"
+      },
+      "disegno": "base.svg"
+    },
+    {
       "id": "type.changeCase",
       "selezione": [
         "ot1t1t1t1"
