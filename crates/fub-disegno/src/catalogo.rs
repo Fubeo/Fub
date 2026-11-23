@@ -688,6 +688,14 @@ pub const FINESTRE_SCRITTE: &[FinestraScritta] = &[
         predefiniti: &[("radius", "10")],
         limiti: &[("radius", Some(0.0), Some(1000000.0))],
     },
+    // Aggiungi punti ai segmenti (K6 T12): quanti punti per segmento, da 1 a 100 (il motore lo
+    // dice con `count`). Una distanza il motore non la conosce: la finestra non la chiede.
+    FinestraScritta {
+        id: "addon.pathtools.addPoints",
+        schema: "{count}",
+        predefiniti: &[("count", "1")],
+        limiti: &[("count", Some(1.0), Some(100.0))],
+    },
     FinestraScritta {
         id: "addon.pathtools.divideDashes",
         schema: "{dash, gap, fit, removeGaps}",

@@ -4,6 +4,20 @@
   "finestre": [
     {
       "fonte": "motore",
+      "id": "addon.pathtools.addPoints",
+      "campi": [
+        {
+          "nome": "count",
+          "tipo": "numero",
+          "facoltativo": false,
+          "minimo": 1.0,
+          "massimo": 100.0,
+          "predefinito": 1.0
+        }
+      ]
+    },
+    {
+      "fonte": "motore",
       "id": "addon.pathtools.cornerSet",
       "campi": [
         {

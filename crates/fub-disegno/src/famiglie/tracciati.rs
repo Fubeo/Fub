@@ -103,7 +103,8 @@ const SOLO_COI_PUNTI: [&str; 5] = [
 ];
 
 /// I comandi di Oggetto › Tracciato senza finestra, sui tracciati scelti.
-const SUGLI_OGGETTI: [&str; 19] = [
+const SUGLI_OGGETTI: [&str; 20] = [
+    "addon.pathtools.addPoints",
     "path.reverse",
     "object.path.outlineStroke",
     "object.path.addAnchorPoints",
@@ -231,6 +232,36 @@ const FORMA_NON_SI_SEMPLIFICA: &str = "Una forma non si semplifica: prima trasfo
 /// ciascun elemento della mappa, prima di legarlo al motore. `None` se c'è almeno un altro elemento
 /// (un tracciato, un'immagine…), o se la scelta è vuota.
 fn solo_testo_o_forme(copia: &Copia, selezione: &[String]) -> Option<&'static str> {
+    frase_di_testo_o_forme(copia, selezione, TESTO_NON_SI_SEMPLIFICA, FORMA_NON_SI_SEMPLIFICA)
+}
+
+/// Aggiungi punti (K6 T12): sul testo e sulle forme primitive il motore non ha un segmento da
+/// dividere, e il perché dice cosa fare.
+const AGGIUNGI_PUNTI: &str = "addon.pathtools.addPoints";
+const TESTO_SENZA_PUNTI: &str = "Il testo non ha segmenti: prima crea i profili.";
+const FORMA_SENZA_PUNTI: &str = "Una forma non ha segmenti: prima trasformala in tracciato.";
+
+/// Il perché di Aggiungi punti quando la scelta è solo testo o forme primitive (vedi
+/// `solo_testo_o_forme`).
+fn solo_testo_o_forme_senza_punti(copia: &Copia, selezione: &[String]) -> Option<&'static str> {
+    frase_di_testo_o_forme(copia, selezione, TESTO_SENZA_PUNTI, FORMA_SENZA_PUNTI)
+}
+
+/// Gli argomenti di Aggiungi punti prima del motore: `count` è un numero intero da 1 a 100 (di serie 1),
+/// e un valore fuori dice cosa scrivere, in italiano (il motore lo direbbe in inglese).
+fn argomenti_aggiungi_punti(valore: Value) -> Result<Value, fub_abi::PluginError> {
+    match valore.get("count").filter(|v| !v.is_null()) {
+        None => Ok(valore),
+        Some(v) => match v.as_f64() {
+            Some(n) if n.is_finite() && n.fract() == 0.0 && (1.0..=100.0).contains(&n) => Ok(valore),
+            Some(_) => Err(fub_abi::PluginError::BadArgs("Quanti punti: un numero intero da 1 a 100.".into())),
+            None => Err(fub_abi::PluginError::BadArgs("Quanti punti è un numero, non un testo.".into())),
+        },
+    }
+}
+
+/// La frase per una scelta di soli testi e forme primitive, con le due frasi del comando.
+fn frase_di_testo_o_forme(copia: &Copia, selezione: &[String], testo: &'static str, forma: &'static str) -> Option<&'static str> {
     if selezione.is_empty() {
         return None;
     }
@@ -246,7 +277,7 @@ fn solo_testo_o_forme(copia: &Copia, selezione: &[String]) -> Option<&'static st
             _ => return None,
         }
     }
-    Some(if c_e_testo { TESTO_NON_SI_SEMPLIFICA } else { FORMA_NON_SI_SEMPLIFICA })
+    Some(if c_e_testo { testo } else { forma })
 }
 
 /// I due estremi che Media e unisci unirebbe, come li cerca il motore
@@ -365,6 +396,11 @@ impl StatoFamiglia for Stato {
                 return Some(DrawingDisabledReason::Other { text: frase.into() });
             }
         }
+        if id == AGGIUNGI_PUNTI {
+            if let Some(frase) = solo_testo_o_forme_senza_punti(copia, selezione) {
+                return Some(DrawingDisabledReason::Other { text: frase.into() });
+            }
+        }
         let nodi = match nodi_scelti(copia, selezione) {
             Ok(nodi) => nodi,
             Err(DrawingRefusal::Locked) => return Some(DrawingDisabledReason::ReadOnly),
@@ -448,6 +484,9 @@ impl StatoFamiglia for Stato {
         if strumenti::STRUMENTI.contains(&id) {
             return strumenti::argomenti(id, copia, valore);
         }
+        if id == AGGIUNGI_PUNTI {
+            return argomenti_aggiungi_punti(valore);
+        }
         argomenti_del_punto(id, copia, valore)
     }
 
@@ -463,6 +502,9 @@ impl StatoFamiglia for Stato {
     /// Semplifica e Smussa su solo testo o forme primitive: `unsupported`, prima dei nodi della scelta
     /// (che per un `rect` darebbero `unmapped`), con la stessa frase della voce spenta (K6 T12).
     fn rifiuto_prima_dei_nodi(id: &str, copia: &Copia, selezione: &[String]) -> Option<DrawingRefusal> {
+        if id == AGGIUNGI_PUNTI {
+            return solo_testo_o_forme_senza_punti(copia, selezione).map(|_| DrawingRefusal::Unsupported);
+        }
         if !SEMPLIFICA_E_SMUSSA.contains(&id) {
             return None;
         }
