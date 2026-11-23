@@ -149,7 +149,9 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // `addon.pathtools.cornerRemove` («Rimuovi angoli»): la ricetta riscritta si applica nella scena del client.
   // T13 porta a «fatto» `object.makePixelPerfect` («Rendi perfetto al pixel»): la famiglia `trasforma`
   // lo lascia correre sugli oggetti scelti (casi in `tests/famiglie/trasforma.json`, disegno `pixel.svg`).
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1082, fub: 114, escluso: 12, fatto: 343 });
+  // T12 tagli porta a «fatto» tre righe dei tracciati: `path.lineCut` (Taglio con linea), `path.rectCut`
+  // (Taglio con rettangolo) e `path.mirrorCut` (Specchia e taglia). Casi in `tests/famiglie/tracciati.json`.
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1079, fub: 114, escluso: 12, fatto: 346 });
 });
 
 // --- un motore finto ---------------------------------------------------------------

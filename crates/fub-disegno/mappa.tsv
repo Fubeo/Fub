@@ -128,9 +128,9 @@ motore	text.create	Create Text		testo	F2	T16	da fare	ispettore/design	famiglia		
 motore	css.selection	CSS Properties		web	F3	T22	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Proprietà CSS
 motore	css.generate	Generate CSS		web	F3	T22	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Genera CSS
 motore	css.export	Export CSS		web	F3	T22	da fare	ispettore/design/documento	famiglia		Esporta CSS
-motore	path.mirrorCut	Mirror & Cut		tracciati	F1	T12	da fare	ispettore/design	famiglia		Specchia e taglia
-motore	path.lineCut	Line Cut		tracciati	F1	T12	da fare	ispettore/design	famiglia		Taglio linea
-motore	path.rectCut	Rectangle Cut		tracciati	F1	T12	da fare	ispettore/design	famiglia		Taglio rettangolare
+motore	path.mirrorCut	Mirror & Cut		tracciati	F1	T12	fatto	ispettore/design	famiglia		Specchia e taglia
+motore	path.lineCut	Line Cut		tracciati	F1	T12	fatto	ispettore/design	famiglia		Taglio linea
+motore	path.rectCut	Rectangle Cut		tracciati	F1	T12	fatto	ispettore/design	famiglia		Taglio rettangolare
 motore	dimension.create	Create Dimension		tavole	F2	T19	da fare	ispettore/design/documento	famiglia		Crea quota
 motore	dimension.update	Update Dimensions		tavole	F2	T19	da fare	ispettore/design/documento	famiglia		Aggiorna quote
 motore	dimension.applyToAll	Apply to All		tavole	F2	T19	da fare	ispettore/design/documento	famiglia		Applica a tutti

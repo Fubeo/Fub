@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:fub="https://fubeo.github.io/ns/scene/1" fub:version="1" viewBox="0 0 400 300" width="400" height="300">
+  <rect id="fub-paper" fub:role="paper" x="0" y="0" width="400" height="300" fill="#ffffff"/>
+  <metadata><vectorcraft:recipe xmlns:vectorcraft="urn:vectorcraft:editing" for="oa1a1a1a1" hash="46571d405c468ce1" v="1">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjo1LCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MS4wLCJnIjowLjAsImIiOjAuMH19fSx7ImtpbmQiOiJmaWxsIiwicGFpbnQiOnsidHlwZSI6InNvbGlkIiwiY29sb3IiOnsibW9kZWwiOiJyZ2IiLCJyIjoxLjAsImciOjAuMCwiYiI6MC4wfX19XX0sImtpbmQiOnsidHlwZSI6InBhdGgiLCJwYXRoIjp7InN1YnBhdGhzIjpbeyJhbmNob3JzIjpbeyJwIjpbMTAwLjAsMTUwLjBdfSx7InAiOlsxMDAuMCwxMDAuMF19LHsicCI6WzE1MC4wLDEwMC4wXX0seyJwIjpbMTUwLjAsMTUwLjBdfV0sImNsb3NlZCI6dHJ1ZX1dfX19fQ==</vectorcraft:recipe><vectorcraft:recipe xmlns:vectorcraft="urn:vectorcraft:editing" for="oalf5co82" hash="321d5499e076d8ce" v="1">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjo5LCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MS4wLCJnIjowLjAsImIiOjAuMH19fSx7ImtpbmQiOiJmaWxsIiwicGFpbnQiOnsidHlwZSI6InNvbGlkIiwiY29sb3IiOnsibW9kZWwiOiJyZ2IiLCJyIjoxLjAsImciOjAuMCwiYiI6MC4wfX19XX0sImtpbmQiOnsidHlwZSI6InBhdGgiLCJwYXRoIjp7InN1YnBhdGhzIjpbeyJhbmNob3JzIjpbeyJwIjpbMTUwLjAsMTUwLjBdfSx7InAiOlsxNTAuMCwxMDAuMF19LHsicCI6WzIwMC4wLDEwMC4wXX0seyJwIjpbMjAwLjAsMTUwLjBdfV0sImNsb3NlZCI6dHJ1ZX1dfX19fQ==</vectorcraft:recipe></metadata>
+  <g id="l1a2b3c4d" fub:layer="Livello 1">
+    <g id="oa1a1a1a1"><rect id="ogj8zpwz8" x="100" y="100" width="50" height="50" fill="#ff0000"/><rect id="ogrlfg7hu" x="100" y="100" width="50" height="50" fill="#ff0000"/></g>
+    <g id="oalf5co82"><rect id="o504ansg9" x="150" y="100" width="50" height="50" fill="#ff0000"/><rect id="oq1cs99kq" x="150" y="100" width="50" height="50" fill="#ff0000"/></g>
+    
+    <ellipse id="oe1e1e1e1" cx="250" cy="150" rx="40" ry="30" fill="#0000ff"/>
+  </g>
+</svg>

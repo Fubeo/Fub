@@ -71,6 +71,9 @@ mod curva;
 #[path = "tracciati_angoli.rs"]
 mod angoli;
 
+#[path = "tracciati_tagli.rs"]
+mod tagli;
+
 /// I comandi che lavorano sui punti di ancoraggio scelti.
 pub(crate) const SUI_PUNTI: [&str; 9] = [
     "path.moveAnchors",
@@ -94,7 +97,7 @@ const SOLO_COI_PUNTI: [&str; 4] = [
 ];
 
 /// I comandi di Oggetto › Tracciato senza finestra, sui tracciati scelti.
-const SUGLI_OGGETTI: [&str; 15] = [
+const SUGLI_OGGETTI: [&str; 18] = [
     "path.reverse",
     "object.path.outlineStroke",
     "object.path.addAnchorPoints",
@@ -110,6 +113,9 @@ const SUGLI_OGGETTI: [&str; 15] = [
     "addon.pen.closeJoin",
     "addon.pathtools.cornerSet",
     "addon.pathtools.cornerRemove",
+    "path.lineCut",
+    "path.rectCut",
+    "path.mirrorCut",
 ];
 
 /// I comandi di Oggetto › Tracciato con una finestra (T12, giro 3), sui
@@ -391,6 +397,9 @@ impl StatoFamiglia for Stato {
         if angoli::ANGOLI.contains(&id) {
             return angoli::argomenti(id, valore);
         }
+        if tagli::TAGLI.contains(&id) {
+            return tagli::argomenti(id, &valore);
+        }
         argomenti_del_punto(id, copia, valore)
     }
 
@@ -406,6 +415,12 @@ impl StatoFamiglia for Stato {
     fn rifiuto(id: &str, copia: &Copia, selezione: &[String]) -> Option<DrawingRefusal> {
         if mano::MANO.contains(&id) {
             return mano::rifiuto(id, copia, selezione);
+        }
+        if tagli::TAGLI.contains(&id) && sceglie_inchiostro(copia, selezione) {
+            return Some(DrawingRefusal::Unmapped);
+        }
+        if tagli::TAGLI.contains(&id) {
+            return tagli::rifiuto(copia, selezione);
         }
         if (sugli_oggetti(id) || RITAGLI.contains(&id)) && sceglie_inchiostro(copia, selezione) {
             return Some(DrawingRefusal::Unmapped);
