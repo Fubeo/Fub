@@ -8130,6 +8130,348 @@
       "atteso": {
         "errore": "bad_args"
       }
+    },
+    {
+      "id": "object.path.splitIntoGrid",
+      "disegno": "base.svg",
+      "selezione": [
+        "oe3e3e3e3"
+      ],
+      "argomenti": {
+        "rows": 2,
+        "columns": 3,
+        "gutter": 0
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "oe3e3e3e3"
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "after": "od2d2d2d2"
+                },
+                "elem": {
+                  "tag": "path",
+                  "attrs": {
+                    "d": "M220 20 L241.33 20 L241.33 50 L220 50 Z",
+                    "fill": "#88aaff",
+                    "id": "og1d00001"
+                  }
+                }
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "after": "og1d00001"
+                },
+                "elem": {
+                  "tag": "path",
+                  "attrs": {
+                    "d": "M241.33 20 L262.67 20 L262.67 50 L241.33 50 Z",
+                    "fill": "#88aaff",
+                    "id": "og1d00002"
+                  }
+                }
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "after": "og1d00002"
+                },
+                "elem": {
+                  "tag": "path",
+                  "attrs": {
+                    "d": "M262.67 20 L284 20 L284 50 L262.67 50 Z",
+                    "fill": "#88aaff",
+                    "id": "og1d00003"
+                  }
+                }
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "after": "og1d00003"
+                },
+                "elem": {
+                  "tag": "path",
+                  "attrs": {
+                    "d": "M220 50 L241.33 50 L241.33 80 L220 80 Z",
+                    "fill": "#88aaff",
+                    "id": "og1d00004"
+                  }
+                }
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "after": "og1d00004"
+                },
+                "elem": {
+                  "tag": "path",
+                  "attrs": {
+                    "d": "M241.33 50 L262.67 50 L262.67 80 L241.33 80 Z",
+                    "fill": "#88aaff",
+                    "id": "og1d00005"
+                  }
+                }
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "after": "og1d00005"
+                },
+                "elem": {
+                  "tag": "path",
+                  "attrs": {
+                    "d": "M262.67 50 L284 50 L284 80 L262.67 80 Z",
+                    "fill": "#88aaff",
+                    "id": "og1d00006"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "dividi-griglia-2x3.svg"
+    },
+    {
+      "id": "object.path.splitIntoGrid",
+      "disegno": "base.svg",
+      "selezione": [
+        "oe3e3e3e3",
+        "of4f4f4f4"
+      ],
+      "argomenti": {
+        "rows": 2,
+        "columns": 2,
+        "gutter": 12
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "of4f4f4f4"
+              },
+              {
+                "op": "remove",
+                "target": "oe3e3e3e3"
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "after": "od2d2d2d2"
+                },
+                "elem": {
+                  "tag": "path",
+                  "attrs": {
+                    "d": "M220 20 L274 20 L274 44 L220 44 Z",
+                    "fill": "#ffaa88",
+                    "id": "og1d00001"
+                  }
+                }
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "after": "og1d00001"
+                },
+                "elem": {
+                  "tag": "path",
+                  "attrs": {
+                    "d": "M286 20 L340 20 L340 44 L286 44 Z",
+                    "fill": "#ffaa88",
+                    "id": "og1d00002"
+                  }
+                }
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "after": "og1d00002"
+                },
+                "elem": {
+                  "tag": "path",
+                  "attrs": {
+                    "d": "M220 56 L274 56 L274 80 L220 80 Z",
+                    "fill": "#ffaa88",
+                    "id": "og1d00003"
+                  }
+                }
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "after": "og1d00003"
+                },
+                "elem": {
+                  "tag": "path",
+                  "attrs": {
+                    "d": "M286 56 L340 56 L340 80 L286 80 Z",
+                    "fill": "#ffaa88",
+                    "id": "og1d00004"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "dividi-griglia-due.svg"
+    },
+    {
+      "id": "object.path.splitIntoGrid",
+      "disegno": "campioni.svg",
+      "selezione": [
+        "od4d4d4d4"
+      ],
+      "argomenti": {
+        "rows": 2,
+        "columns": 2,
+        "gutter": 12
+      },
+      "atteso": {
+        "rifiuto": "unsupported"
+      }
+    },
+    {
+      "id": "object.path.splitIntoGrid",
+      "disegno": "forma-viva.svg",
+      "selezione": [
+        "oeopq71hl"
+      ],
+      "argomenti": {
+        "rows": 2,
+        "columns": 2,
+        "gutter": 12
+      },
+      "atteso": {
+        "rifiuto": "unsupported"
+      }
+    },
+    {
+      "id": "object.path.splitIntoGrid",
+      "disegno": "base.svg",
+      "selezione": [
+        "oe3e3e3e3"
+      ],
+      "argomenti": {
+        "rows": 0,
+        "columns": 2,
+        "gutter": 12
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "object.path.splitIntoGrid",
+      "disegno": "base.svg",
+      "selezione": [
+        "oe3e3e3e3"
+      ],
+      "argomenti": {
+        "rows": 2,
+        "columns": 2.5,
+        "gutter": 12
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "object.path.splitIntoGrid",
+      "disegno": "base.svg",
+      "selezione": [
+        "oe3e3e3e3"
+      ],
+      "argomenti": {
+        "rows": 2,
+        "columns": 2,
+        "gutter": -4
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "object.path.splitIntoGrid",
+      "disegno": "base.svg",
+      "selezione": [
+        "oe3e3e3e3"
+      ],
+      "argomenti": {
+        "rows": 2,
+        "columns": 2,
+        "gutter": 12,
+        "addGuides": true
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "object.path.splitIntoGrid",
+      "disegno": "base.svg",
+      "selezione": [
+        "oe3e3e3e3"
+      ],
+      "argomenti": {
+        "rows": 2,
+        "columns": 2,
+        "gutter": 500
+      },
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "object.path.splitIntoGrid",
+      "disegno": "unisci-bloccato.svg",
+      "selezione": [
+        "oc1c1c1c1",
+        "od2d2d2d2"
+      ],
+      "argomenti": {
+        "rows": 2,
+        "columns": 2,
+        "gutter": 12
+      },
+      "atteso": {
+        "rifiuto": "locked"
+      }
+    },
+    {
+      "id": "object.path.splitIntoGrid",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "rows": 2,
+        "columns": 2,
+        "gutter": 12
+      },
+      "atteso": {
+        "rifiuto": "empty"
+      }
     }
   ]
 }

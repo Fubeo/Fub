@@ -77,6 +77,9 @@ mod tagli;
 #[path = "tracciati_strumenti.rs"]
 mod strumenti;
 
+#[path = "tracciati_griglia.rs"]
+mod griglia;
+
 /// I comandi che lavorano sui punti di ancoraggio scelti.
 pub(crate) const SUI_PUNTI: [&str; 10] = [
     "path.moveAnchors",
@@ -127,11 +130,12 @@ const SUGLI_OGGETTI: [&str; 19] = [
 
 /// I comandi di Oggetto › Tracciato con una finestra (T12, giro 3), sui
 /// tracciati scelti: i campi sono in `catalogo::FINESTRE_SCRITTE`.
-const CON_FINESTRA: [&str; 4] = [
+const CON_FINESTRA: [&str; 5] = [
     "object.path.simplify",
     "object.path.smooth",
     "object.path.offsetPath",
     "addon.pathtools.divideDashes",
+    griglia::DIVIDI_IN_GRIGLIA,
 ];
 
 /// Espandi, con la sua finestra: vale su ogni oggetto scelto (un testo, una
@@ -365,6 +369,11 @@ impl StatoFamiglia for Stato {
                 return Some(DrawingDisabledReason::Other { text: frase.into() });
             }
         }
+        if id == griglia::DIVIDI_IN_GRIGLIA {
+            if let Some(motivo) = griglia::spento(copia, selezione) {
+                return Some(motivo);
+            }
+        }
         let nodi = match nodi_scelti(copia, selezione) {
             Ok(nodi) => nodi,
             Err(DrawingRefusal::Locked) => return Some(DrawingDisabledReason::ReadOnly),
@@ -445,6 +454,9 @@ impl StatoFamiglia for Stato {
         if tagli::TAGLI.contains(&id) {
             return tagli::argomenti(id, &valore);
         }
+        if id == griglia::DIVIDI_IN_GRIGLIA {
+            return griglia::argomenti(valore);
+        }
         if strumenti::STRUMENTI.contains(&id) {
             return strumenti::argomenti(id, copia, valore);
         }
@@ -463,6 +475,9 @@ impl StatoFamiglia for Stato {
     /// Semplifica e Smussa su solo testo o forme primitive: `unsupported`, prima dei nodi della scelta
     /// (che per un `rect` darebbero `unmapped`), con la stessa frase della voce spenta (K6 T12).
     fn rifiuto_prima_dei_nodi(id: &str, copia: &Copia, selezione: &[String]) -> Option<DrawingRefusal> {
+        if id == griglia::DIVIDI_IN_GRIGLIA {
+            return griglia::rifiuto_prima(copia, selezione);
+        }
         if !SEMPLIFICA_E_SMUSSA.contains(&id) {
             return None;
         }
@@ -503,6 +518,9 @@ impl StatoFamiglia for Stato {
 
     /// Un'operazione di Elaborazione tracciati che non lascia niente: `empty`.
     fn rifiuto_del_motore(id: &str, errore: &EngineError) -> Option<DrawingRefusal> {
+        if id == griglia::DIVIDI_IN_GRIGLIA {
+            return griglia::rifiuto_del_motore(errore);
+        }
         let vuoto = matches!(errore, EngineError::Other(m) if m.ends_with(RISULTATO_VUOTO));
         (ELABORAZIONE.contains(&id) && vuoto).then_some(DrawingRefusal::Empty)
     }

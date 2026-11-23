@@ -84,6 +84,17 @@ export const TESTI: Readonly<Record<string, { readonly it: string; readonly en: 
   "campo:fit": { it: "Adatta alla lunghezza del tracciato", en: "Fit to the path length" },
   "campo:removeGaps": { it: "Togli i pezzi fra i trattini", en: "Remove the pieces between dashes" },
 
+  // Dividi in griglia (K6 T12): righe, colonne e spaziatura; le guide non si chiedono.
+  "descrizione:object.path.splitIntoGrid": {
+    it: "Divide l'oggetto scelto in una griglia di rettangoli: righe, colonne e spaziatura.",
+    en: "Divides the chosen object into a grid of rectangles: rows, columns and gutter.",
+  },
+  "azione:object.path.splitIntoGrid": { it: "Dividi", en: "Divide" },
+  "campo:rows": { it: "Righe", en: "Rows" },
+  "campo:columns": { it: "Colonne", en: "Columns" },
+  "campo:gutter": { it: "Spaziatura", en: "Gutter" },
+  "unita:gutter": { it: "pt", en: "pt" },
+
   // Media e Media e unisci (giro 6): l'asse e il punto che l'unione lascia.
   "descrizione:path.average": {
     it: "Porta i punti scelti nel loro punto medio, su un asse o su tutti e due. Senza punti scelti vale per tutti i punti dei tracciati scelti.",
