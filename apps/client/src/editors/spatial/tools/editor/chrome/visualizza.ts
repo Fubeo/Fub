@@ -18,6 +18,7 @@ export const COMANDI_VISUALIZZA = [
   "view.rulers",
   "view.edges",
   "view.boundingBox",
+  "view.preciseCursors",
   "view.rotateReset",
 ] as const;
 export type ComandoVisualizza = (typeof COMANDI_VISUALIZZA)[number];
@@ -30,6 +31,7 @@ export const FILE_VISUALIZZA: readonly (readonly ComandoVisualizza[])[] = [
   ["view.grid", "view.snapToGrid"],
   ["view.transparencyGrid", "view.outline", "view.rulers"],
   ["view.edges", "view.boundingBox"],
+  ["view.preciseCursors"],
   ["view.rotateReset"],
 ];
 
@@ -63,6 +65,8 @@ export function statoVisualizza(ctx: EditorContext, id: string): boolean | undef
       return ctx.grid.hideEdges === true;
     case "view.boundingBox":
       return ctx.grid.hideBoundingBox === true;
+    case "view.preciseCursors":
+      return ctx.preciseCursors;
     default:
       return undefined;
   }
@@ -92,6 +96,9 @@ export function comandoVisualizza(ctx: EditorContext, id: ComandoVisualizza): vo
       return;
     case "view.boundingBox":
       ctx.changeGrid({ ...ctx.grid, hideBoundingBox: ctx.grid.hideBoundingBox !== true });
+      return;
+    case "view.preciseCursors":
+      ctx.setPreciseCursors(!ctx.preciseCursors);
       return;
     case "view.rotateReset":
       ctx.turnView(0);

@@ -3664,6 +3664,7 @@ export const EN: Record<Key, string> = { "app.skip_to_editor": "Skip to the edit
   "vector.foreign.editable": "Make editable…",
   "vector.foreign.editable.hint": "“Make editable…” also rewrites its parts in Fub’s drawing format, wherever that doesn’t change what you see.",
   "vector.grid.save_failed": "Cannot remember the grid for the next drawings: {reason}",
+  "vector.cursors.save_failed": "The precise cursors stay as before: cannot save them. {reason}",
   "vector.pens.save_failed": "Cannot remember the saved pens: {reason}",
   "vector.workspace.save_failed": "Cannot save the drawing workspace: {reason}",
   "vector.suggestions.save_failed": "Cannot change the drawing tips: {reason}",

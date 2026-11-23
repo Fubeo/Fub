@@ -68,6 +68,11 @@ export interface ViewContext {
   /// I righelli di bordo del foglio sono accesi (K6 T11, giro E: ≡ › Visualizza del Completo).
   edgeRulers: boolean;
   setEdgeRulers: (on: boolean) => void;
+  /// «Usa cursori di precisione» (K6 T11, cursori): la croce al posto del cursore degli strumenti che disegnano.
+  preciseCursors: boolean;
+  setPreciseCursors: (on: boolean) => void;
+  /// Rimette il cursore della superficie per lo strumento del motore scelto (`motore/gesti.ts`).
+  applyToolCursor: () => void;
 }
 
 /// Monta gli annunci, la camera, l'unità e i righelli.
