@@ -6398,6 +6398,66 @@
       "id": "color_guide",
       "fonte": "pannello",
       "prova": "apps/client/src/editors/spatial/completo/guida-colori.test.ts"
+    },
+    {
+      "id": "paint.setFill",
+      "disegno": "ricolora-scena.svg",
+      "selezione": [
+        "og1g1g1g1"
+      ],
+      "argomenti": {
+        "color": "#3366cc"
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "set",
+                "id": "oc1c1c1c1",
+                "attrs": {
+                  "fill": "#3366cc"
+                }
+              },
+              {
+                "op": "set",
+                "id": "oc2c2c2c2",
+                "attrs": {
+                  "fill": "#3366cc"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "guida-setfill-gruppo.svg"
+    },
+    {
+      "id": "paint.setFill",
+      "disegno": "ricolora-scena.svg",
+      "selezione": [
+        "oj2j2j2j2"
+      ],
+      "argomenti": {
+        "color": "#3366cc"
+      },
+      "atteso": {
+        "rifiuto": "unmapped"
+      }
+    },
+    {
+      "id": "paint.setFill",
+      "disegno": "guida-setfill-pieno.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {
+        "color": "#3366cc"
+      },
+      "atteso": {
+        "rifiuto": "empty"
+      }
     }
   ]
 }
