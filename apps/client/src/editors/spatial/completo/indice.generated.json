@@ -5239,6 +5239,22 @@
     },
     {
       "fonte": "strumento",
+      "id": "blobBrush",
+      "chiamata": {
+        "strumento": "blobBrush"
+      },
+      "etichetta": {
+        "it": "Strumento Pennello tondo",
+        "en": "Blob Brush Tool"
+      },
+      "posto": "colonna/disegna",
+      "famiglia": "pennelli",
+      "tasto": "Shift+B",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "strumento",
       "id": "cornerTool",
       "chiamata": {
         "strumento": "cornerTool"

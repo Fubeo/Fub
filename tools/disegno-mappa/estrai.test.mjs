@@ -185,7 +185,7 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // prova in vista.json; `view.rotateToSelection` resta «da fare»: il motore non ha la rotazione condivisa.
   // K6 T12 giro 2 porta a «fatto» il Pennello tondo (`path.blob`): un colpo col colore, fuso col tracciato
   // pieno dello stesso colore. Lo strumento in barra è `blobBrush` (T17), con la sua riga.
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1047, fub: 114, escluso: 12, fatto: 378 });
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1046, fub: 114, escluso: 12, fatto: 379 });
 });
 
 // --- un motore finto ---------------------------------------------------------------

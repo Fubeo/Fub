@@ -1307,7 +1307,7 @@ strumento	polygon	Polygon Tool		forme	F1	T13	fatto	colonna/forme	famiglia	riquad
 strumento	star	Star Tool		forme	F1	T13	fatto	colonna/forme	famiglia	riquadro «rectangle»	Strumento Stella
 strumento	flare	Flare Tool		forme	F1	T13	da fare	colonna/forme	famiglia	aspetta T27 (l'alone è un g senza id che la scena del client non applica)	Strumento Riflesso
 strumento	paintbrush	Paintbrush Tool		pennelli	F2	T17	da fare	colonna/disegna	famiglia	riquadro «paintbrush»	Strumento Pennello
-strumento	blobBrush	Blob Brush Tool		pennelli	F2	T17	da fare	colonna/disegna	famiglia	riquadro «paintbrush»	Strumento Pennello tondo
+strumento	blobBrush	Blob Brush Tool		pennelli	F2	T17	fatto	colonna/disegna	famiglia	colonna «Matita», Maiusc+B; un colpo a rilascio col colore di adesso (path.blob); test in completo/pennello-strumento.test.ts e motore/pennello-tondo*.test.ts	Strumento Pennello tondo
 strumento	shaper	Shaper Tool		forme	F1	T13	da fare	colonna/forme	famiglia	riquadro «shaper»	Strumento Sagomatore
 strumento	pencil	Pencil Tool		tracciati	F1	T12	fatto	colonna/disegna	famiglia	riquadro «shaper»	Strumento Matita
 strumento	smooth	Smooth Tool		tracciati	F1	T12	fatto	colonna/disegna	famiglia	riquadro «shaper»	Strumento Smussa
