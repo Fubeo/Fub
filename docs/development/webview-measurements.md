@@ -124,10 +124,12 @@ e il disegno senza motore (`tiles.mjs`). Il tempo del motore per un fotogramma
 sta nelle prove di `tools/motori-prova`. Le chiamate passano da
 `__TAURI_INTERNALS__`, come fa `@tauri-apps/api`.
 
-I1 controlla che l'indicizzazione non fermi il vault (`indexing.mjs`): ogni
-avvio sul vault del banco indicizza le diecimila note, e i comandi che passano
-dal workspace non devono aspettare la fine di una fetta. Lo scenario fallisce
-se l'indice era già pronto all'avvio, perché allora non ha misurato niente.
+I1 controlla che l'indicizzazione non fermi il vault (`indexing.mjs`): prima
+del suo avvio il banco toglie il dato derivato del vault (`.fub/data`), perché
+una riapertura che ritrova l'anagrafe non rilegge le note ferme, e l'app
+indicizza le diecimila note da capo; i comandi che passano dal workspace non
+devono aspettare la fine di una fetta. Lo scenario fallisce se l'indice era
+già pronto all'avvio, perché allora non ha misurato niente.
 
 C1 controlla che il codice dei componenti spegnibili non arrivi nella WebView
 prima che serva. Il build scrive in `dist/switchable-chunks.json` i chunk che

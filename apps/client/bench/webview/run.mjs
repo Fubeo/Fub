@@ -2054,8 +2054,8 @@ async function main() {
     await startDriver();
     // Il primo avvio sul vault nuovo legge dal disco diecimila note: lo fa una
     // sessione che non misura, e aspetta che la ricerca per nome risponda. Gli
-    // avvii dopo indicizzano di nuovo da capo, e ogni scenario aspetta che
-    // l'indice sia pronto (`indexed`).
+    // avvii dopo ritrovano l'anagrafe, e ogni scenario aspetta comunque che
+    // l'indice sia pronto (`indexed`); I1 riparte da un indice vuoto.
     const warm = await launch("riscaldamento");
     try {
       await ready(warm);
@@ -2102,6 +2102,12 @@ async function main() {
       }
       // Un'app che non parte è un risultato dello scenario, non la fine del
       // banco: gli altri scenari e il referto vanno avanti.
+      // I1 misura l'indicizzazione di un avvio che non conosce il vault. Da
+      // quando una riapertura si fida dell'anagrafe e non rilegge le note che
+      // non sono cambiate, l'avvio dopo un altro trova l'indice pronto: il
+      // dato derivato del vault (`.fub/data`) si toglie, e l'indice riparte
+      // da capo come al primo avvio.
+      if (id === "I1") rmSync(join(benchVault, ".fub", "data"), { recursive: true, force: true });
       let session;
       try {
         session = await launch(id);

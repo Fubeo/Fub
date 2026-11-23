@@ -1,5 +1,6 @@
-// I1: il vault resta usabile mentre l'app lo indicizza. Ogni avvio sul vault
-// del banco indicizza le diecimila note da capo; finché `vault_status` dice
+// I1: il vault resta usabile mentre l'app lo indicizza. Prima di questo
+// avvio il banco toglie il dato derivato del vault, e l'app indicizza le
+// diecimila note da capo; finché `vault_status` dice
 // `running`, lo script apre una nota (`read_document`, un comando che passa
 // dal workspace) e legge una tessera di 256 × 256 RGBA dalla IPC
 // (`resource_read_chunk`, a pezzi di 64 KiB), una dopo l'altra.
