@@ -72,6 +72,47 @@ function contestoFinto(completo: CompletoMotore | null) {
   return { ctx, life, setItems, syncPenOptions, scegli, registra, ascoltiStati, ascoltiStrumento };
 }
 
+describe("la riga col motore di VectorCraft", () => {
+  const gruppi: OptionItem[] = ["draw.colors", "draw.edit", "draw.view"].map((id) => ({ id, element: document.createElement("div"), priority: 1 }));
+  const ids = (chiamata: unknown[]): string[] => (chiamata[0] as OptionItem[]).map((voce) => voce.id);
+
+  it("ha solo la fila dello strumento, senza i gruppi di Fub", () => {
+    const completo: CompletoMotore = {
+      preparaStrumento: () => Promise.resolve(true),
+      conMotore: () => true,
+      fila: (_strumento, opzioni, cambia, vita) => costruisciFila(ETICHETTE, opzioni, cambia, vita),
+    };
+    const { ctx, setItems, scegli, registra } = contestoFinto(completo);
+    ctx.toolbarGroups.push(...gruppi);
+    registra("pen", stato({ attivo: true }));
+    scegli("pen");
+    expect(ids(setItems.mock.lastCall!)).toEqual(["motore-pen"]);
+    // Uno strumento senza fila lascia la riga vuota, non quella di Fub.
+    scegli("hand");
+    expect(ids(setItems.mock.lastCall!)).toEqual([]);
+  });
+
+  it("senza motore la fila sta fra i gruppi di Fub, e il cambio di modo rilegge la riga una volta", () => {
+    let conMotore = false;
+    const completo: CompletoMotore = {
+      preparaStrumento: () => Promise.resolve(true),
+      conMotore: () => conMotore,
+      fila: (_strumento, opzioni, cambia, vita) => costruisciFila(ETICHETTE, opzioni, cambia, vita),
+    };
+    const { ctx, setItems, scegli, registra } = contestoFinto(completo);
+    ctx.toolbarGroups.push(...gruppi);
+    registra("pen", stato({ attivo: true }));
+    scegli("pen");
+    expect(ids(setItems.mock.lastCall!)).toEqual(["draw.colors", "motore-pen", "draw.edit", "draw.view"]);
+    conMotore = true;
+    const prima = setItems.mock.calls.length;
+    (ctx as unknown as EditorContext).sincronizzaFila();
+    (ctx as unknown as EditorContext).sincronizzaFila();
+    expect(setItems.mock.calls.length).toBe(prima + 1);
+    expect(ids(setItems.mock.lastCall!)).toEqual(["motore-pen"]);
+  });
+});
+
 describe("la fila dello strumento del motore nella testata", () => {
   it("non c'è finché la famiglia non è pronta, poi si monta con i controlli del kit", () => {
     let pronta = false;

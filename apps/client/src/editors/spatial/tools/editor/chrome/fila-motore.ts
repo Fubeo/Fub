@@ -43,6 +43,9 @@ export interface FilaMotoreContext {
   /// Il Completo aperto e acceso; `null` se non c'è (il Semplice, un Completo
   /// spento). Senza, la testata non ha fila.
   completoMotore?: () => CompletoMotore | null;
+  /// Rilegge la riga delle opzioni: col motore del Completo solo la fila del suo
+  /// strumento, senza i gruppi di Fub. La chiama chi cambia spazio o vede arrivare il motore.
+  sincronizzaFila: () => void;
 }
 
 /// La riga con la fila del motore: dopo il colore e gli spessori (e le
@@ -73,6 +76,20 @@ interface Montata {
 /// la testata (usa `optionsBar`).
 export function installFilaMotore(ctx: EditorContext): void {
   let montata: Montata | null = null;
+  /// Col motore del Completo la riga è quella di VectorCraft: la fila dello strumento e
+  /// basta, senza il colore, gli spessori, la modifica, i livelli e la vista di Fub.
+  const soloMotore = (): boolean => ctx.completoMotore?.()?.conMotore?.() === true;
+  const righe = (voci: readonly OptionItem[]): OptionItem[] => (soloMotore() ? [...voci] : conLaFila(ctx.toolbarGroups, voci));
+  /// La riga senza fila messa per ultima: col motore (`true`) o di sempre (`false`);
+  /// `null` dopo una fila, che va tolta. All'inizio la testata ha messo quella di sempre.
+  let vuotaCol: boolean | null = false;
+  /// Il modo della riga con la fila montata: col motore (`true`) o di sempre.
+  let modoFila = false;
+  const senzaFila = (): void => {
+    if (ctx.disposed || vuotaCol === soloMotore()) return;
+    vuotaCol = soloMotore();
+    ctx.optionsBar.setItems(righe([]));
+  };
 
   /// Toglie la fila montata, se c'è: il suo ascolto si spegne e la riga torna
   /// quella di sempre.
@@ -83,7 +100,8 @@ export function installFilaMotore(ctx: EditorContext): void {
     vecchia.spegniStati();
     vecchia.vita.close();
     // Chiudendo l'editor la riga non si tocca più: lo fa la sua vita.
-    if (!ctx.disposed) ctx.optionsBar.setItems(ctx.toolbarGroups);
+    vuotaCol = null;
+    senzaFila();
   };
 
   /// Rimonta, aggiorna o toglie la fila secondo lo strumento scelto e il suo stato.
@@ -99,6 +117,7 @@ export function installFilaMotore(ctx: EditorContext): void {
     const completo = ctx.completoMotore?.() ?? null;
     if (id === null || completo === null) {
       smonta();
+      senzaFila();
       return;
     }
     const stato = ctx.statoStrumento(id);
@@ -115,6 +134,7 @@ export function installFilaMotore(ctx: EditorContext): void {
     const fila = completo.fila(id, opzioni, (chiave, valore) => ctx.opzioneMotore(id, chiave, valore), vita, ambiente);
     if (fila === null) {
       vita.close();
+      senzaFila();
       return;
     }
     // Una voce per pezzo, ognuna con la sua priorità; senza pezzi, la fila
@@ -131,7 +151,22 @@ export function installFilaMotore(ctx: EditorContext): void {
       if (montata !== null && montata.id === altro) sincronizza();
     });
     montata = { id, fila, voci, vita, spegniStati };
-    ctx.optionsBar.setItems(conLaFila(ctx.toolbarGroups, voci));
+    vuotaCol = null;
+    modoFila = soloMotore();
+    ctx.optionsBar.setItems(righe(voci));
+  };
+  ctx.sincronizzaFila = () => {
+    if (ctx.disposed) return;
+    // Lo spazio o il motore cambiano la riga anche con la stessa fila montata: la si
+    // rimette solo quando cambia il modo, per non togliere il fuoco ai suoi campi.
+    if (montata !== null && ctx.completoMotore?.() !== null) {
+      if (modoFila !== soloMotore()) {
+        modoFila = soloMotore();
+        ctx.optionsBar.setItems(righe(montata.voci));
+      }
+      return;
+    }
+    sincronizza();
   };
 
   // Lo strumento scelto e la sua preparazione: a ogni avviso si sincronizza.

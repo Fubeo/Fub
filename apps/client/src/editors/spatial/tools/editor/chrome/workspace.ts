@@ -281,6 +281,7 @@ export function installWorkspace(ctx: EditorContext): void {
             if (ctx.disposed) return;
             ctx.syncRail(ctx.editable());
             ctx.syncInsert();
+            ctx.sincronizzaFila();
           };
           ctx.life.add(aperto.ascoltaColonna(risincronizza));
           ctx.life.add(ctx.ascoltaStrumentoMotore(risincronizza));
@@ -323,6 +324,7 @@ export function installWorkspace(ctx: EditorContext): void {
     ctx.rail.element.dataset.size = sizeOf(ctx.workspace);
     full.hidden = fullHidden(ctx.workspace);
     if (!vuoleCompleto()) ctx.pannelliTab(null);
+    ctx.sincronizzaFila();
     ctx.offer(ctx.featuresOf(ctx.workspace));
     ctx.syncRail(ctx.editable());
     ctx.syncPenOptions();
