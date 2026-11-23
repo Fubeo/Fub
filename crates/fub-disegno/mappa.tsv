@@ -1289,7 +1289,7 @@ strumento	deleteAnchor	Delete Anchor Point Tool		tracciati	F1	T12	fatto	colonna/
 strumento	anchorPoint	Anchor Point Tool		tracciati	F1	T12	fatto	colonna/disegna	famiglia	riquadro «pen»	Strumento Punto di ancoraggio
 strumento	curvature	Curvature Tool		tracciati	F1	T12	fatto	colonna/disegna	famiglia	riquadro «curvature»	Strumento Curvatura
 strumento	type	Type Tool		testo	F2	T16	fatto	colonna/testo	famiglia	riquadro «type»	Strumento Testo
-strumento	areaType	Area Type Tool		testo	F2	T16	da fare	colonna/testo	famiglia	riquadro «type»	Strumento Testo in area
+strumento	areaType	Area Type Tool		testo	F2	T16	fatto	colonna/testo	famiglia	riquadro «type»; trascinato fa il riquadro; sul contorno di un rettangolo dritto lo prende come cornice, un altro tracciato è rifiutato (il file scrive solo la larghezza)	Strumento Testo in area
 strumento	typeOnPath	Type on a Path Tool		testo	F2	T16	da fare	colonna/testo	famiglia	riquadro «type»	Strumento Testo su tracciato
 strumento	verticalType	Vertical Type Tool		testo	F2	T16	da fare	colonna/testo	famiglia	riquadro «type»	Strumento Testo verticale
 strumento	verticalAreaType	Vertical Area Type Tool		testo	F2	T16	da fare	colonna/testo	famiglia	riquadro «type»	Strumento Testo in area verticale

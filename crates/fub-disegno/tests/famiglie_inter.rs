@@ -221,19 +221,29 @@ fn testo_in_area_del_file_si_converte() {
 
 #[test]
 fn lo_strumento_trascinato_crea_un_testo_in_area() {
+    // Il Testo trascinato e il Testo in area, come in VectorCraft, fanno lo stesso riquadro.
+    for strumento in ["type", "areaType"] {
+        trascinato_in_area(strumento);
+    }
+}
+
+fn trascinato_in_area(strumento: &str) {
     let disegni = common::disegni_con_inter();
     disegni.filtra(fub_disegno::famiglie::Filtro::Tutte);
     let casi = leggi_cartella(&cartella_famiglie()).expect("i casi si leggono");
     let caso = casi
         .iter()
-        .find(|c| c.id == "type" && c.gesto.iter().any(|p| p.to_string().contains("\"drag\"")))
+        .find(|c| c.id == strumento && c.gesto.iter().any(|p| p.to_string().contains("\"drag\"")))
         .expect("il caso dello strumento trascinato");
     let (mut disegno, _) =
         fub_disegno::motore::Disegno::apri_con(&disegni, &caso.disegno).expect("si apre");
     let esito = casi::esegui_sul_disegno(&mut disegno, caso)
         .expect("si esegue")
         .expect("senza errore");
-    assert_eq!(esito.refused, None, "con Inter il testo si dispone");
+    assert_eq!(
+        esito.refused, None,
+        "{strumento}: con Inter il testo si dispone"
+    );
     let ops: serde_json::Value =
         serde_json::from_str(&esito.ops.expect("le operazioni")).expect("json");
     let elem = &ops[0]["elem"];
@@ -249,6 +259,62 @@ fn lo_strumento_trascinato_crea_un_testo_in_area() {
     assert_eq!(righe[1]["attrs"]["fub:join"], "space", "{ops}");
     let parole: Vec<&str> = righe.iter().map(|r| r["text"].as_str().unwrap()).collect();
     assert_eq!(parole.join(" "), "Onde del mare che tornano", "{ops}");
+}
+
+/// Il Testo in area sul contorno di un tracciato chiuso, come in VectorCraft (`text.createInPath`): il
+/// rettangolo diventa la cornice del testo, che il file scrive in area largo quanto lui; il
+/// triangolo no, perché il testo in area di Fub è un riquadro solo, e Fub rifiuta invece di perderlo.
+#[test]
+fn il_testo_in_area_sul_contorno_di_un_tracciato() {
+    let disegni = common::disegni_con_inter();
+    disegni.filtra(fub_disegno::famiglie::Filtro::Tutte);
+    let casi = leggi_cartella(&cartella_famiglie()).expect("i casi si leggono");
+    let clic: Vec<_> = casi
+        .iter()
+        .filter(|c| {
+            c.id == "areaType" && !c.gesto.iter().any(|p| p.to_string().contains("\"drag\""))
+        })
+        .collect();
+    assert_eq!(
+        clic.len(),
+        2,
+        "il clic sul rettangolo e quello sul triangolo"
+    );
+    let esegui = |caso: &casi::Caso| {
+        let (mut disegno, _) =
+            fub_disegno::motore::Disegno::apri_con(&disegni, &caso.disegno).expect("si apre");
+        casi::esegui_sul_disegno(&mut disegno, caso)
+            .expect("si esegue")
+            .expect("senza errore")
+    };
+    let esito = esegui(clic[0]);
+    assert_eq!(esito.refused, None, "il rettangolo diventa la cornice");
+    let ops: serde_json::Value =
+        serde_json::from_str(&esito.ops.expect("le operazioni")).expect("json");
+    let passi = ops[0]["ops"]
+        .as_array()
+        .expect("un passo solo, col rettangolo che se ne va");
+    assert_eq!(
+        passi[0],
+        json!({"op": "remove", "target": "oa1a1a1a1"}),
+        "{ops}"
+    );
+    let elem = &passi[1]["elem"];
+    assert_eq!(elem["attrs"]["fub:wrap"], "100", "{ops}");
+    assert_eq!(elem["attrs"]["x"], "250", "{ops}");
+    let parole: Vec<&str> = elem["children"]
+        .as_array()
+        .expect("le righe")
+        .iter()
+        .map(|r| r["text"].as_str().unwrap())
+        .collect();
+    assert_eq!(parole, ["Onde", "del", "mare"], "{ops}");
+    let esito = esegui(clic[1]);
+    assert_eq!(
+        esito.refused,
+        Some(fub_abi::DrawingRefusal::Unsupported),
+        "il triangolo: {esito:?}"
+    );
 }
 
 /// La marionetta sul testo di punto con Inter (K6 T13, giro «marionetta»): i caratteri veri danno la

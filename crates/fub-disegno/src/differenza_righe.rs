@@ -20,6 +20,35 @@ pub(crate) const RIQUADRO_FUORI: &str =
 pub(crate) const GIUSTIFICATO_IN_AREA: &str =
     "il file non scrive il giustificato: il testo in area si allinea a sinistra, al centro o a destra";
 
+/// Vero se la cornice è il suo riquadro: punti d'angolo senza maniglie, tutti sugli angoli del
+/// riquadro, e i quattro angoli ci sono. Un'altra cornice (un triangolo, un'ellisse, un rettangolo
+/// girato) il file non la scrive: `fub:wrap` dà solo la larghezza, e il testo andrebbe a capo
+/// altrove.
+fn rettangolo_dritto(cornice: &vectorcraft_geom::SubPath, fb: Rect) -> bool {
+    let tolleranza = 1e-6 * fb.width().max(fb.height()).max(1.0);
+    let vicini = |a: f64, b: f64| (a - b).abs() <= tolleranza;
+    let mut angoli = [false; 4];
+    for a in &cornice.anchors {
+        if a.h_in.distance(a.p) > tolleranza || a.h_out.distance(a.p) > tolleranza {
+            return false;
+        }
+        let i = match (
+            vicini(a.p.x, fb.x0),
+            vicini(a.p.x, fb.x1),
+            vicini(a.p.y, fb.y0),
+            vicini(a.p.y, fb.y1),
+        ) {
+            (true, _, true, _) => 0,
+            (_, true, true, _) => 1,
+            (_, true, _, true) => 2,
+            (true, _, _, true) => 3,
+            _ => return false,
+        };
+        angoli[i] = true;
+    }
+    angoli.iter().all(|a| *a)
+}
+
 /// La posizione e le righe di un testo, come attributi e figli del `<text>`.
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct RigheScritte {
@@ -98,7 +127,10 @@ pub(crate) fn righe_scritte(
                 return Err(RIQUADRO_FUORI);
             }
             let fb = frame.bounds().ok_or(RIQUADRO_FUORI)?;
-            if fb.width() <= 1e-6 || !fb.width().is_finite() {
+            if fb.width() <= 1e-6
+                || !fb.width().is_finite()
+                || !rettangolo_dritto(&frame.subpaths[0], fb)
+            {
                 return Err(RIQUADRO_FUORI);
             }
             let ancora = match t.para_at(0).justify {

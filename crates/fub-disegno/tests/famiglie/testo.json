@@ -697,6 +697,198 @@
       },
       "disegno": "base.svg",
       "selezione": []
+    },
+    {
+      "id": "areaType",
+      "fonte": "strumento",
+      "gesto": [
+        {
+          "phase": "preview",
+          "events": [
+            {
+              "kind": "down",
+              "x": 200,
+              "y": 220,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 280,
+              "y": 250,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 360,
+              "y": 280,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "up",
+              "x": 360,
+              "y": 280,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ],
+          "inputs": []
+        },
+        {
+          "phase": "preview",
+          "events": [],
+          "inputs": [
+            {
+              "kind": "text",
+              "text": "Onde del mare che tornano"
+            }
+          ]
+        },
+        {
+          "phase": "commit",
+          "events": [],
+          "inputs": [
+            {
+              "kind": "key",
+              "key": "Escape",
+              "code": "Escape",
+              "pressed": true
+            }
+          ]
+        }
+      ],
+      "atteso": {
+        "rifiuto": "unsupported"
+      },
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {}
+    },
+    {
+      "id": "areaType",
+      "fonte": "strumento",
+      "gesto": [
+        {
+          "phase": "preview",
+          "events": [
+            {
+              "kind": "down",
+              "x": 300,
+              "y": 100.5,
+              "pressure": 1,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "up",
+              "x": 300,
+              "y": 100.5,
+              "pressure": 0,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ],
+          "inputs": []
+        },
+        {
+          "phase": "preview",
+          "events": [],
+          "inputs": [
+            {
+              "kind": "text",
+              "text": "Onde del mare"
+            }
+          ]
+        },
+        {
+          "phase": "commit",
+          "events": [],
+          "inputs": [
+            {
+              "kind": "key",
+              "key": "Escape",
+              "code": "Escape",
+              "pressed": true
+            }
+          ]
+        }
+      ],
+      "atteso": {
+        "rifiuto": "unsupported"
+      },
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {}
+    },
+    {
+      "id": "areaType",
+      "fonte": "strumento",
+      "gesto": [
+        {
+          "phase": "preview",
+          "events": [
+            {
+              "kind": "down",
+              "x": 330,
+              "y": 200.5,
+              "pressure": 1,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "up",
+              "x": 330,
+              "y": 200.5,
+              "pressure": 0,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ],
+          "inputs": []
+        },
+        {
+          "phase": "preview",
+          "events": [],
+          "inputs": [
+            {
+              "kind": "text",
+              "text": "Onde del mare"
+            }
+          ]
+        },
+        {
+          "phase": "commit",
+          "events": [],
+          "inputs": [
+            {
+              "kind": "key",
+              "key": "Escape",
+              "code": "Escape",
+              "pressed": true
+            }
+          ]
+        }
+      ],
+      "atteso": {
+        "rifiuto": "unsupported"
+      },
+      "disegno": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 400 300\" width=\"400\" height=\"300\"><rect id=\"fub-paper\" fub:role=\"paper\" x=\"0\" y=\"0\" width=\"400\" height=\"300\" fill=\"#ffffff\"/><g id=\"l1a2b3c4d\" fub:layer=\"Livello 1\"><path id=\"op7a7a7a7\" d=\"M300 200 L360 200 L330 260 Z\" fill=\"#cccccc\"/></g></svg>",
+      "selezione": [],
+      "argomenti": {}
     }
   ]
 }

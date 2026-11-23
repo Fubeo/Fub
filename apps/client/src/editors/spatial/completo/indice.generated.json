@@ -5559,6 +5559,22 @@
     },
     {
       "fonte": "strumento",
+      "id": "areaType",
+      "chiamata": {
+        "strumento": "areaType"
+      },
+      "etichetta": {
+        "it": "Strumento Testo in area",
+        "en": "Area Type Tool"
+      },
+      "posto": "colonna/testo",
+      "famiglia": "testo",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "strumento",
       "id": "bloat",
       "chiamata": {
         "strumento": "bloat"

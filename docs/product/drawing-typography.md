@@ -103,6 +103,13 @@ Col Completo il testo si fa e si cambia anche così:
 - **Trascinare** col Testo (Completo) disegna un riquadro: il testo che vi si
   scrive è **in area** e va a capo nella sua larghezza. Un clic senza
   trascinare fa un testo da punto.
+- **Testo in area**, nella stessa casella, come in VectorCraft: trascinato fa
+  lo stesso riquadro. Un clic sul contorno di un rettangolo dritto, entro 4
+  pixel, lo prende come cornice: il rettangolo se ne va e il testo va a capo
+  nella sua larghezza, in un passo solo di Annulla. Un altro tracciato chiuso
+  (un triangolo, un'ellisse, un rettangolo girato) è rifiutato, perché il
+  file scrive di un testo in area solo la larghezza. Un clic lontano dai
+  contorni fa un testo da punto.
 - **Testo › Converti in testo in area** mette un testo da punto in un
   riquadro largo quanto la sua riga più lunga; **Converti in testo per
   punti** lo toglie, e le righe restano quelle che si vedevano. Lo stesso
