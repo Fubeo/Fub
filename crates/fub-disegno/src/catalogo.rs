@@ -505,6 +505,7 @@ pub const NOMI: &[(&str, Tipo)] = &[
     ("sy", Tipo::Numero),
     ("dy", Tipo::Numero),
     ("height", Tipo::Numero),
+    ("gutter", Tipo::Numero),
     ("id", Tipo::Testo),
     ("ids", Tipo::Json),
     ("index", Tipo::Numero),
@@ -855,6 +856,18 @@ pub const FINESTRE_SCRITTE: &[FinestraScritta] = &[
     },
     // Trova e sostituisci (T16): in tutti i testi del disegno. La finestra non
     // chiede gli oggetti (`ids`), che la persona non vede per nome.
+    // Dividi in griglia (K6 T12): righe e colonne intere da 1 a 500, la spaziatura in punti. Le guide
+    // (`addGuides` del motore) non si chiedono: il formato non le scrive più.
+    FinestraScritta {
+        id: "object.path.splitIntoGrid",
+        schema: "{rows, columns, gutter}",
+        predefiniti: &[("rows", "2"), ("columns", "2"), ("gutter", "12")],
+        limiti: &[
+            ("rows", Some(1.0), Some(500.0)),
+            ("columns", Some(1.0), Some(500.0)),
+            ("gutter", Some(0.0), Some(1_000_000.0)),
+        ],
+    },
     FinestraScritta {
         id: "edit.findReplace",
         schema: "{find, replace, matchCase, wholeWord}",

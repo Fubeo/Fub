@@ -189,7 +189,8 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // T11: «Zoom sulla selezione» è fatta (con la strada del Completo in chrome/status.ts).
   // T14: «Selettore colore…» (`ui.colorPicker`) è fatto, in Modifica › Colori.
   // T12: «Aggiungi punti…» (addon.pathtools.addPoints) è fatta, con il solo numero dei punti.
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1040, fub: 114, escluso: 12, fatto: 385 });
+  // T12: «Dividi in griglia…» (object.path.splitIntoGrid) è fatta: una griglia sul riquadro di tutti i tracciati scelti, come il motore.
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1039, fub: 114, escluso: 12, fatto: 386 });
 });
 
 // --- un motore finto ---------------------------------------------------------------

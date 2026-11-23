@@ -2115,6 +2115,22 @@
     },
     {
       "fonte": "motore",
+      "id": "object.path.splitIntoGrid",
+      "chiamata": {
+        "comando": "disegno.object.path.splitIntoGrid"
+      },
+      "etichetta": {
+        "it": "Dividi in griglia…",
+        "en": "Split Into Grid…"
+      },
+      "posto": "menu/oggetto/tracciato",
+      "famiglia": "tracciati",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "motore",
       "id": "object.pathfinder.crop",
       "chiamata": {
         "comando": "disegno.object.pathfinder.crop"

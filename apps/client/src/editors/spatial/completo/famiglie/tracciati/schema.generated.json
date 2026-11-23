@@ -166,6 +166,36 @@
     },
     {
       "fonte": "motore",
+      "id": "object.path.splitIntoGrid",
+      "campi": [
+        {
+          "nome": "rows",
+          "tipo": "numero",
+          "facoltativo": false,
+          "minimo": 1.0,
+          "massimo": 500.0,
+          "predefinito": 2.0
+        },
+        {
+          "nome": "columns",
+          "tipo": "numero",
+          "facoltativo": false,
+          "minimo": 1.0,
+          "massimo": 500.0,
+          "predefinito": 2.0
+        },
+        {
+          "nome": "gutter",
+          "tipo": "numero",
+          "facoltativo": false,
+          "minimo": 0.0,
+          "massimo": 1000000.0,
+          "predefinito": 12.0
+        }
+      ]
+    },
+    {
+      "fonte": "motore",
       "id": "path.average",
       "campi": [
         {
