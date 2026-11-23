@@ -3130,3 +3130,15 @@ La più recente in cima: data · piano · decisione · perché.
   La Trasformazione libera (`E`) è nella colonna: scala, sposta e deforma un
   tracciato; deformare con Ctrl un `<rect>` è rifiutato finché la differenza non
   sa cambiarlo in `<path>` con lo stesso id. La sua fila (modo e Vincola) manca.
+- 2026-11-23 · K6 le forme diventano tracciati · Deciso dall'orchestratore, su
+  richiesta dell'utente («la stessa tecnica che viene usata da Vectorcraft per
+  disegnare i tracciati delle figure»): come in VectorCraft rettangoli, ellissi,
+  cerchi e poligoni si comportano da tracciati per tutti gli strumenti. Nel file
+  cambia solo l'oggetto deformato: la differenza manda un `set` con `tag: "path"`,
+  che lo riscrive `<path>` al suo posto con id, attributi e figli; l'inversa col
+  `tag` di prima lo rimette com'era, byte per byte. Una forma solo spostata,
+  scalata o ruotata resta quella che era, con una `transform`. Le linee restano
+  rifiutate (un tracciato aperto senza riempimento le cambierebbe nel Semplice);
+  un documento con `<style>` o una freccia (`marker-*`) rifiuta il cambio, perché
+  il tracciato sarebbe estraneo. Contratto: `docs/reference/scene-operations.md`
+  §2, vettore 94. Supera «deformare con Ctrl un `<rect>` è rifiutato» sopra.

@@ -96,8 +96,15 @@ Nella riga delle opzioni in alto, come nel riquadro di VectorCraft, ci sono
 a 45°) e i tre modi: Trasformazione libera, Distorsione prospettica (gli angoli
 si muovono a coppie lungo il loro lato) e Distorsione libera (ogni angolo per
 conto suo). Vincola vale solo nel primo modo, e negli altri è spenta. `Ctrl` su
-un angolo deforma anche nel modo libero, come nell'Illustrator classico. La deformazione vale per i tracciati:
-su un rettangolo o un'ellisse è rifiutata.
+un angolo deforma anche nel modo libero, come nell'Illustrator classico.
+
+Come in VectorCraft, rettangoli, ellissi, cerchi e poligoni si comportano da
+tracciati: con la Selezione diretta se ne spostano i punti, e la
+Trasformazione libera li distorce. Una forma deformata diventa un tracciato al
+suo posto nel file, con lo stesso id, gli stessi colori, il titolo e gli altri
+attributi; annulla la riporta com'era, byte per byte. Una forma solo spostata,
+scalata o ruotata resta quella che era. Una linea, un tracciato in un file con
+uno stile CSS o una forma con una freccia non si deformano, e lo si dice.
 
 La sezione Trasforma, nella scheda Design, dà posizione, misura, rotazione e
 inclinazione, e Reimposta riquadro. I campi mostrano i valori della selezione,

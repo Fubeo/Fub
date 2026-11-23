@@ -1,7 +1,7 @@
 //! Un applicatore piccolo delle operazioni della scena sul testo, solo per
 //! le forme che la differenza scrive nelle prove (`batch`, `remove` per id o
-//! del blocco delle ricette, `add` di `raw` o `elem` coi figli, `move`, `set`,
-//! `ident`): il motore delle operazioni vero è quello del client
+//! del blocco delle ricette, `add` di `raw` o `elem` coi figli, `move`, `set`
+//! anche con `tag`, `ident`): il motore delle operazioni vero è quello del client
 //! (`apps/client/src/editors/spatial/completo/casi.test.ts` lo prova sugli
 //! stessi casi, byte per byte).
 //!
@@ -158,14 +158,40 @@ fn applica_op(testo: &mut String, op: &Value) -> Result<(), String> {
                     .map_err(|e| format!("una parte che non si legge: {e}"))?,
                 _ => Vec::new(),
             };
+            // Con `tag` l'elemento a metà (un rettangolo con il `d`) non si
+            // rilegge: il suo inizio si prende una volta, e le modifiche
+            // stanno tutte dopo.
+            let tag = op.get("tag").and_then(Value::as_str);
+            let [fermo, fine] = span_dell_id(testo, id)?;
+            let prima = testo.len();
             for (k, v) in op["attrs"].as_object().ok_or("un set senza attrs")? {
-                let da = inizio_della_parte(testo, span_dell_id(testo, id)?[0], &parte)?;
+                let inizio = if tag.is_some() {
+                    fermo
+                } else {
+                    span_dell_id(testo, id)?[0]
+                };
+                let da = inizio_della_parte(testo, inizio, &parte)?;
                 if v.is_null() {
                     // Come il client: `null` toglie l'attributo.
                     togli(testo, da, k)?;
                 } else {
                     imposta(testo, da, k, testo_di(v, k)?)?;
                 }
+            }
+            // Con `tag` la forma cambia tipo al suo posto: il nome
+            // nell'apertura e, se c'è, nella chiusura.
+            if let Some(tag) = tag {
+                let da = fermo;
+                let a = fine + testo.len() - prima;
+                let vecchio: String = testo[da + 1..]
+                    .chars()
+                    .take_while(|c| c.is_ascii_alphanumeric())
+                    .collect();
+                let chiusura = format!("</{vecchio}>");
+                if testo[da..a].ends_with(&chiusura) {
+                    testo.replace_range(a - chiusura.len()..a, &format!("</{tag}>"));
+                }
+                testo.replace_range(da + 1..da + 1 + vecchio.len(), tag);
             }
         }
         "ident" => {

@@ -862,3 +862,94 @@ fn il_clic_dopo_il_passaggio_vede_i_punti_di_adesso() {
         "{due:?}"
     );
 }
+
+/// Un rettangolo, un'ellisse spostata con `transform`, un cerchio e un
+/// poligono: un punto spostato li deforma, e come in VectorCraft diventano
+/// tracciati, al loro posto e con i loro attributi (K6, «Il tipo di una
+/// forma»).
+const FORME: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" xmlns:fub="https://fubeo.github.io/ns/scene/1" fub:version="1" viewBox="0 0 400 300" width="400" height="300">
+  <rect id="fub-paper" fub:role="paper" x="0" y="0" width="400" height="300" fill="#ffffff"/>
+  <g id="l1a1a1a1a" fub:layer="Livello 1">
+    <rect id="or1r1r1r1" x="20" y="20" width="100" height="60" fill="#e69f00" stroke="#000000" stroke-width="2" opacity="0.5"><title>Tetto</title></rect>
+    <ellipse id="oe1e1e1e1" transform="translate(10 0)" cx="250" cy="60" rx="50" ry="30" fill="#0072b2"/>
+    <circle id="oo1o1o1o1" cx="80" cy="200" r="40" fill="#009e73"/>
+    <polygon id="og1g1g1g1" points="200,150 300,150 250,250" fill="#cc79a7"/>
+  </g>
+</svg>
+"##;
+
+#[test]
+fn una_forma_deformata_diventa_un_tracciato_al_suo_posto() {
+    for (id, tag, geometria) in [
+        (
+            "or1r1r1r1",
+            "rect",
+            &[" x=", " y=", " width=", " height="][..],
+        ),
+        (
+            "oe1e1e1e1",
+            "ellipse",
+            &[" cx=", " cy=", " rx=", " ry="][..],
+        ),
+        ("oo1o1o1o1", "circle", &[" cx=", " cy=", " r="][..]),
+        ("og1g1g1g1", "polygon", &[" points="][..]),
+    ] {
+        let (mut d, _) = apri(FORME);
+        let valore = json!({ "element": id, "anchor": 0, "x": 5, "y": 5 });
+        let esito = comando(&mut d, "path.moveAnchor", &[id], valore).expect("vale");
+        let ops = riuscito(&esito);
+        let set = common::applica::piatte(&ops)
+            .into_iter()
+            .find(|o| o["op"] == "set" && o["id"] == id)
+            .unwrap_or_else(|| panic!("{tag}: nessun set: {ops}"));
+        assert_eq!(set["tag"], "path", "{tag}: {set}");
+        let salvato = common::applica::applica(FORME, &ops).expect("si applica");
+        let posto = salvato.find(&format!("id=\"{id}\"")).expect("c'è");
+        let inizio = salvato[..posto].rfind('<').expect("il tag comincia");
+        let elemento = &salvato[inizio..inizio + salvato[inizio..].find('>').expect("finisce")];
+        assert!(elemento.starts_with("<path "), "{tag}: {elemento}");
+        for g in geometria {
+            assert!(!elemento.contains(g), "{tag}: resta {g} in {elemento}");
+        }
+        assert!(elemento.contains("fill=\""), "{tag}: {elemento}");
+        // Il punto spostato sta nel `d`, nello spazio dell'elemento.
+        let atteso = if tag == "ellipse" { "M-5 5" } else { "M5 5" };
+        assert!(
+            elemento.contains(&format!("d=\"{atteso}")),
+            "{tag}: {elemento}"
+        );
+        // Gli altri attributi restano, anche il titolo.
+        if tag == "rect" {
+            assert!(
+                elemento.contains("opacity=\"0.5\"") && elemento.contains("stroke-width=\"2\""),
+                "{elemento}"
+            );
+            assert!(salvato.contains("<title>Tetto</title></path>"), "{salvato}");
+        }
+    }
+}
+
+/// Una forma con tutti i punti spostati insieme è solo spostata: resta
+/// quella che era, con una `transform`.
+#[test]
+fn una_forma_spostata_resta_una_forma() {
+    let (mut d, _) = apri(FORME);
+    let tutti: Vec<Value> = [[20.0, 20.0], [120.0, 20.0], [120.0, 80.0], [20.0, 80.0]]
+        .iter()
+        .enumerate()
+        .map(|(i, at)| punto("or1r1r1r1", 0, i as u32, *at, false))
+        .collect();
+    let valore = json!({ "dx": 10, "dy": 0, "anchors": tutti });
+    let esito = comando(&mut d, "path.moveAnchors", &["or1r1r1r1"], valore).expect("vale");
+    let ops = riuscito(&esito);
+    let testo = ops.to_string();
+    assert!(
+        !testo.contains("\"tag\"") && !testo.contains("\"d\""),
+        "{testo}"
+    );
+    let salvato = common::applica::applica(FORME, &ops).expect("si applica");
+    assert!(
+        salvato.contains("<rect transform=\"matrix(1 0 0 1 10 0)\" id=\"or1r1r1r1\""),
+        "{salvato}"
+    );
+}

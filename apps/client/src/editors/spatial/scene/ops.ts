@@ -107,7 +107,28 @@ export interface SetOp {
   /// stessa.
   readonly part?: readonly number[];
   readonly attrs: Readonly<Record<string, string | null>>;
+  /// Il tipo nuovo di una forma, come un rettangolo deformato che diventa
+  /// tracciato (§2, «Il tipo di una forma»): solo fra i tag di
+  /// [`SHAPE_TAGS`], e gli attributi della geometria di prima vanno tolti in
+  /// `attrs`.
+  readonly tag?: ShapeTag;
 }
+
+/// Le forme che `set` con `tag` fa passare l'una nell'altra: tutte si
+/// riempiono e si contornano allo stesso modo, e nessuna ha figli che non
+/// siano titolo e descrizione. `line` resta fuori, perché non si riempie mai.
+export const SHAPE_TAGS = ["path", "rect", "circle", "ellipse", "polygon", "polyline"] as const;
+export type ShapeTag = (typeof SHAPE_TAGS)[number];
+
+/// Gli attributi che dicono la geometria di ciascuna forma.
+export const SHAPE_GEOMETRY: Readonly<Record<ShapeTag, readonly string[]>> = {
+  path: ["d"],
+  rect: ["x", "y", "width", "height", "rx", "ry"],
+  circle: ["cx", "cy", "r"],
+  ellipse: ["cx", "cy", "rx", "ry"],
+  polygon: ["points"],
+  polyline: ["points"],
+};
 
 /// Una riga di un'operazione `text`: tutta testo, o il testo coi pezzi.
 export type TextLine = string | readonly Run[];

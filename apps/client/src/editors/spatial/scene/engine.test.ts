@@ -414,6 +414,16 @@ describe("la fusione di due undo", () => {
     expect(applied(engine.undo(undone.undo)).text).toBe(lf(ROOT, TITLE, PAPER, L1, E1_BLACK, R2, R3, END_G, END));
   });
 
+  it("due set che cambiano il tipo in due modi diversi non si fondono", () => {
+    // Le stesse chiavi, ma il rettangolo diventa un tracciato e poi torna
+    // rettangolo: l'inversa della prima non annullerebbe la seconda.
+    const engine = SceneEngine.open(BASE);
+    const geometry = { x: null, y: null, width: null, height: null };
+    const first = apply(engine, { op: "set", id: "o2b3c4d5e", tag: "path", attrs: { ...geometry, d: "M500 100 L700 100 L700 220 Z" } });
+    const second = apply(engine, { op: "set", id: "o2b3c4d5e", tag: "rect", attrs: { x: "500", y: "100", width: "200", height: "120", d: null } });
+    expect(mergeUndo(first.undo, second.undo)).toBeNull();
+  });
+
   it("vale per due batch con gli stessi set nello stesso ordine", () => {
     const engine = SceneEngine.open(BASE);
     const both = (value: string): Op => ({ op: "batch", ops: [fill("o1a2b3c4d", value), fill("o3c4d5e6f", value)] });

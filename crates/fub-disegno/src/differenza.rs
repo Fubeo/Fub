@@ -1363,7 +1363,13 @@ impl Lavoro<'_> {
         attrs.extend(self.foglia_scritta(&e, &b, a)?);
         if !attrs.is_empty() || righe.is_some() {
             let id = self.bersaglio(a.id)?;
-            if !attrs.is_empty() {
+            // Un `d` su una forma che non è un tracciato vuol dire che la
+            // forma è stata deformata e diventa un tracciato ([`Lavoro::foglia`]).
+            let diventa = e.tag != "path" && attrs.contains_key("d");
+            if diventa {
+                self.set
+                    .push(json!({ "op": "set", "id": id, "tag": "path", "attrs": attrs }));
+            } else if !attrs.is_empty() {
                 self.set
                     .push(json!({ "op": "set", "id": id, "attrs": attrs }));
             }
@@ -1555,6 +1561,37 @@ impl Lavoro<'_> {
             c.bbox_angle = a.bbox_angle;
             if !geometrie_vicine(&c, a) {
                 return Err(no("il tracciato cambia anche in altro"));
+            }
+            c
+        } else if let (
+            NodeKind::Path { rule: rb, .. },
+            NodeKind::Path {
+                path: pa, rule: ra, ..
+            },
+            Some(geometria),
+        ) = (&b.kind, &a.kind, geometria_della_forma(e))
+        {
+            // Una forma semplice deformata (Trasformazione libera con Ctrl,
+            // Selezione diretta): come in VectorCraft diventa un tracciato.
+            // Il `set` con `tag` la riscrive al suo posto, con gli stessi
+            // attributi meno la geometria di prima (scene-operations, «Il
+            // tipo di una forma»).
+            if rb != ra {
+                return Err(no(REGOLA_FUORI));
+            }
+            let locale = (g * t).inverse();
+            if !locale.is_finite() {
+                return Err(no("l'elemento ha una transform che non si inverte"));
+            }
+            for chiave in geometria {
+                attrs.insert((*chiave).into(), Value::Null);
+            }
+            attrs.insert("d".into(), json!(scrivi_d(&trasformato(pa, locale))));
+            let mut c = b.clone();
+            c.kind = a.kind.clone();
+            c.bbox_angle = a.bbox_angle;
+            if !geometrie_vicine(&c, a) {
+                return Err(no("la forma cambia anche in altro"));
             }
             c
         } else {
@@ -2492,6 +2529,21 @@ fn ellisse(p: &vectorcraft_geom::PathData) -> Option<[f64; 4]> {
             || ((vicini(a.p.y, y0) || vicini(a.p.y, y1)) && vicini(a.p.x, cx))
     });
     sugli_estremi.then_some([cx, cy, (x1 - x0) / 2.0, (y1 - y0) / 2.0])
+}
+
+/// Gli attributi della geometria di una forma semplice che, deformata,
+/// diventa un tracciato: rettangolo, cerchio, ellisse, poligono e
+/// polilinea, come le scrive Fub (il ruolo è il tag: niente stelle o poligoni
+/// di Fub). `None` per tutto il resto, anche per `line`, che non si riempie.
+fn geometria_della_forma(e: &Elemento) -> Option<&'static [&'static str]> {
+    use fub_scene::Role;
+    Some(match (e.tag, e.ruolo) {
+        ("rect", Role::Rect) => &["x", "y", "width", "height", "rx", "ry"],
+        ("circle", Role::Circle) => &["cx", "cy", "r"],
+        ("ellipse", Role::Ellipse) => &["cx", "cy", "rx", "ry"],
+        ("polygon", Role::Polygon) | ("polyline", Role::Polyline) => &["points"],
+        _ => return None,
+    })
 }
 
 #[cfg(test)]

@@ -22,7 +22,7 @@ import {
   type Part,
   type Sequence,
 } from "../model";
-import { MAX_NESTING, ROOT, type MetaOp, type Op, type AnchorPrevious, type PagePrevious, type TextLine } from "../ops";
+import { MAX_NESTING, ROOT, SHAPE_GEOMETRY, SHAPE_TAGS, type ShapeTag, type MetaOp, type Op, type AnchorPrevious, type PagePrevious, type TextLine } from "../ops";
 import { parseGuides, parseUnits } from "../rulers";
 import {
   attributeName,
@@ -385,9 +385,13 @@ export abstract class SceneOps extends SceneEngineBase {
     }
     const node = this.target(op.id);
     this.guard(node, true, true);
-    if (op.part !== undefined) return this.setPart(node, op.id, op.part, op.attrs);
+    if (op.part !== undefined) {
+      if (op.tag !== undefined) reject("invalid-elem", "tag non vale con part");
+      return this.setPart(node, op.id, op.part, op.attrs);
+    }
     this.sheet(node);
     const read = this.reread(node);
+    if (op.tag !== undefined) return this.retag(node, op.id, op.tag, op.attrs, read);
     const { previous, edit, paper } = this.planSet(node, op.attrs, read);
 
     if (node.kind === "container") {
@@ -410,6 +414,53 @@ export abstract class SceneOps extends SceneEngineBase {
     // Un gruppo cambia anche come si vedono i suoi figli.
     this.touch(node);
     return { op: "set", id: op.id, attrs: previous };
+  }
+
+  /// `set` con `tag`: la forma `node` diventa un'altra forma, al suo posto,
+  /// con gli stessi attributi tranne quelli che `attrs` cambia (§2, «Il tipo
+  /// di una forma»). La forma di prima e quella dopo sono di [`SHAPE_TAGS`],
+  /// semplici (il ruolo è il tag: niente stelle, poligoni di Fub, tratti o
+  /// carte), e dopo non resta un attributo della geometria di prima che la
+  /// forma nuova non usi. Verso un tracciato, un documento con un foglio di
+  /// stile o con le frecce dei `marker` è rifiutato: un selettore sul tag, o
+  /// una freccia che un rettangolo non mostra e un tracciato sì, cambierebbero
+  /// l'aspetto. L'inversa è un `set` con il tag di prima.
+  private retag(node: ElementPart, id: string, tag: unknown, attrs: Record<string, unknown>, read: Reread): Op {
+    const from = read.element.local;
+    const shape = (t: unknown): t is ShapeTag => typeof t === "string" && (SHAPE_TAGS as readonly string[]).includes(t);
+    if (!shape(tag)) reject("invalid-elem", `tag non valido: ${JSON.stringify(tag)}`);
+    if (node.kind !== "leaf" || !isSvg(read.element, from) || !shape(from) || roleOf(node) !== from) {
+      reject("invalid-elem", `${id} non è una forma semplice: il suo tipo non cambia`);
+    }
+    if (tag === from) reject("invalid-elem", `${id} è già un <${tag}>`);
+    if (tag === "path" && /<(?:[\w.-]+:)?style[\s>/]/.test(this.raw)) {
+      reject("invalid-elem", "il documento ha un foglio di stile: la forma non diventa un tracciato");
+    }
+    if (tag === "path") {
+      // Le frecce passano dai gruppi alle forme che le mostrano.
+      const marks = (element: ElementNode): boolean =>
+        element.attrs.some((a) => a.local.startsWith("marker") || (a.local === "style" && a.value.includes("marker")));
+      let up: ContainerNode | null = node.parent;
+      let arrows = marks(read.element);
+      while (!arrows && up !== null) {
+        arrows = marks(this.reread(up).element);
+        up = up.parent;
+      }
+      if (arrows) reject("invalid-elem", "la forma o un suo gruppo hanno delle frecce: la forma non diventa un tracciato");
+    }
+    const { previous, edit } = this.planSet(node, attrs, read);
+    const built = this.rewriteLeaf(node, (out, again) => ({
+      ...out,
+      name: again.scope.svgName(tag)!,
+      attrs: canonicalOrder(edit(attributesOf(again.fragment.doc, again.element))),
+    }), read);
+    this.checkRewritten(built, false);
+    if (roleOf(built) !== tag) reject("invalid-elem", `<${tag}> scritto non si legge come una forma semplice`);
+    const after = this.reread(built).element;
+    const left = SHAPE_GEOMETRY[from].find((key) => !SHAPE_GEOMETRY[tag].includes(key) && valueOf(after, NS_NONE, key) !== undefined);
+    if (left !== undefined) reject("invalid-elem", `resta ${left}, che dice la geometria del <${from}> di prima`);
+    this.touch(node);
+    return { op: "set", id, tag: from, attrs: previous };
   }
 
   /// Ciò che un `set` su `node` chiede e dà, controllato: i valori di prima

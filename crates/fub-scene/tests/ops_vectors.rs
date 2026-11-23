@@ -50,9 +50,9 @@ fn errors(scene: &Scene) -> Vec<Code> {
 }
 
 #[test]
-fn ci_sono_i_93_vettori() {
+fn ci_sono_i_94_vettori() {
     let names: Vec<String> = read_vectors().into_iter().map(|(name, _)| name).collect();
-    assert_eq!(names.len(), 93, "{names:?}");
+    assert_eq!(names.len(), 94, "{names:?}");
     for (i, name) in names.iter().enumerate() {
         assert!(name.starts_with(&format!("{:02}-", i + 1)), "{name}");
     }
@@ -84,7 +84,7 @@ fn ogni_testo_dei_vettori_si_legge_senza_errori() {
             checked += 1;
         }
     }
-    // 93 testi di partenza, 65 attesi (ventotto vettori sono rifiuti) e
-    // due inverse che non tornano al testo di partenza.
-    assert_eq!(checked, 93 + 65 + 2);
+    // 94 testi di partenza, 66 attesi (ventotto vettori sono rifiuti) e
+    // tre inverse che non tornano al testo di partenza.
+    assert_eq!(checked, 94 + 66 + 3);
 }

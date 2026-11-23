@@ -86,7 +86,7 @@ altrimenti l'operazione è rifiutata con `missing-target`.
 |---|---|---|---|
 | `add` | `parent`, `pos`, `elem` oppure `raw` | inserisce l'elemento | `remove` con lo stesso `id`, o col percorso |
 | `remove` | `target` | elimina l'elemento con i suoi figli | `add` con l'elemento tolto e il suo posto |
-| `set` | `id`, oppure `#root`; `attrs` (una stringa, oppure `null` per togliere); `part` facoltativo, su una risorsa | cambia attributi; con `part`, quelli di una parte della risorsa | `set` con i valori precedenti, e lo stesso `part` |
+| `set` | `id`, oppure `#root`; `attrs` (una stringa, oppure `null` per togliere); `part` facoltativo, su una risorsa; `tag` facoltativo, su una forma | cambia attributi; con `part`, quelli di una parte della risorsa; con `tag`, anche il tipo della forma | `set` con i valori precedenti, lo stesso `part` e il `tag` di prima |
 | `text` | `id`, `lines` (una riga è una stringa, o la lista del suo testo e dei suoi [pezzi](scene-format-text.md)), `joins` facoltativo | sostituisce le righe di un `text` | `text` con le righe precedenti, pezzi compresi, e i `joins` di prima se l'operazione ne aveva o una riga aveva un `fub:join` |
 | `move` | `target`, `parent`, `pos` | sposta l'elemento: ordine o livello | `move` alla posizione precedente |
 | `ident` | `path`, `tag`, `id` (oppure `null` per togliere) | dà un id a un elemento modificabile che non ne ha, o gli toglie quello che ha | `ident` con l'id di prima, o con `id: null` |
@@ -166,6 +166,19 @@ Altri dettagli:
   una parte non cambia. Su ciò che non è una risorsa, o con un `part` che non
   è una lista di indici, è `invalid-elem`; una parte che non c'è, anche
   dentro il testo di un titolo, è `missing-target`.
+- **`set` con `tag`: il tipo di una forma.** Come in VectorCraft, una forma
+  deformata (un punto spostato, una distorsione) diventa un tracciato al suo
+  posto: `tag` è il tipo nuovo, uno di `path`, `rect`, `circle`, `ellipse`,
+  `polygon` e `polyline`, e `attrs` toglie con `null` la geometria del tipo di
+  prima e scrive quella del tipo nuovo (`d` per un `path`). L'elemento tiene
+  id, attributi e figli, e si riscrive in forma canonica (§6); l'inversa è un
+  `set` col `tag` di prima e la sua geometria. Cambia tipo solo una foglia
+  disegnata come forma: un gruppo, un livello, una linea, un testo o un tipo
+  uguale a quello che c'è sono `invalid-elem`, come una geometria del tipo di
+  prima che resterebbe scritta, `tag` insieme a `part`, e un tracciato in un
+  documento con uno `<style>` o sotto una freccia (`marker-*`, sull'elemento o
+  su chi lo contiene), che lo renderebbero estraneo. Una forma solo spostata,
+  scalata o ruotata non cambia tipo: prende una `transform`.
 - **Tavole:** una tavola cambia insieme alla sua carta, in un `batch`. Alla
   fine di ogni operazione le tavole e le carte che ha toccato vanno insieme,
   altrimenti è `invalid-elem`; un `add` oltre 1 000 tavole è `limit`:
@@ -374,7 +387,7 @@ così com'è.
   solo `set` di `transform` alla fine del gesto. Gli stati intermedi non si
   registrano.
 - **Fusione:** due voci consecutive con lo stesso nome, fatte di `set` sulle
-  stesse chiavi degli stessi elementi, e delle stesse parti, o di due `batch`
+  stesse chiavi degli stessi elementi, e delle stesse parti e con lo stesso `tag`, o di due `batch`
   di quei `set` nello stesso ordine, a meno di 500 ms l'una dall'altra e
   senza altri cambiamenti in mezzo, diventano una voce sola: resta la prima
   inversa e l'ultima operazione in avanti, e l'undo resta esatto. Così una
@@ -532,6 +545,7 @@ devono verificare renderebbe il test circolare.
 | 91 | `unset-repeat-in-use` | togliere `fub:repeat` a un gruppo che ha copie: rifiuto `in-use` |
 | 92 | `set-repeat-rewrites-copies` | un `batch` cambia la ripetizione da griglia a radiale e riscrive le trasformazioni delle copie, che restano copie |
 | 93 | `repeat-over-foreign-use` | `fub:repeat` su un gruppo con un `use` estraneo verso un fratello: rifiuto `duplicate-id` |
+| 94 | `set-tag-rect-to-path` | un rettangolo con un titolo diventa un tracciato al suo posto: stesso id e attributi, la sua geometria tolta, riscritto in forma canonica; l'inversa lo riporta rettangolo |
 
 Oltre ai campi dell'esempio, ogni vettore ha `description`. `expect` può avere
 `reason` e `index` per un rifiuto; `duplicate`, `inverse` ed `edits`, cioè le
