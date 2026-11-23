@@ -8,10 +8,22 @@
 Col Completo aperto, ogni comando del motore che ha un tasto lo fa partire con
 quel tasto. Vale questo ordine:
 
-- **Vincono i tasti di Fub**: quelli della shell (come `Ctrl+P`, `Ctrl+K`,
-  `Ctrl+W`, `Ctrl+Tab`) e quelli dell'editor (`Ctrl+Z`, `Ctrl+C`, `Ctrl+D`,
-  `Ctrl+G` e gli altri che si leggono in «?»). Il comando del motore che ne
-  avrebbe uno resta senza tasto.
+- **Di Fub restano solo i tasti della finestra**: salva (`Ctrl+S`), chiudi
+  (`Ctrl+W`, `Ctrl+Maiusc+W`), le schede (`Ctrl+Tab`, `Ctrl+Pag Su/Giù`), la
+  tavolozza (`Ctrl+P`, `Ctrl+Maiusc+P`, `Ctrl+K`), apri (`Ctrl+O`), nuova nota
+  (`Ctrl+N`), le impostazioni (`Ctrl+,`) e le zone (`F6`). Restano all'editor,
+  come in VectorCraft, annulla e ripeti (`Ctrl+Z`, `Ctrl+Maiusc+Z`), copia,
+  taglia e incolla (`Ctrl+C`, `Ctrl+X`, `Ctrl+V`, `Ctrl+Maiusc+V` incolla sul
+  posto: il browser li manda agli appunti del Completo) e la vista: `Ctrl+Y`
+  contorni, `Ctrl+'` griglia, `Ctrl+Maiusc+'` aggancio alla griglia, `Ctrl+0` e
+  `Ctrl+Alt+0` adatta, `Ctrl+1` 100%, `Ctrl+=` e `Ctrl+-` zoom,
+  `Ctrl+Maiusc+/` cerca i comandi. Ogni altro tasto con `Ctrl` o `Alt` è del
+  motore, anche dove lo Standard o la shell ne fanno altro: per esempio `Ctrl+G`
+  raggruppa, `Ctrl+2` blocca, `Ctrl+3` nasconde, `Ctrl+D` ripete la
+  trasformazione, `Ctrl+F` incolla davanti, `Ctrl+B` incolla dietro, `Ctrl+/`
+  aggiunge un riempimento. I tasti dell'editor di Fub senza un pari in
+  VectorCraft (immagine, collegamento, isola, allinea con `Alt`) non valgono.
+  Senza motore (non ancora caricato) i tasti sono quelli dello Standard.
 - **Due comandi del motore con lo stesso tasto**: vince l'ultimo assegnato, e
   l'altro resta senza tasto.
 - **Un comando con parametri** apre la sua finestra; **gli altri girano
@@ -44,7 +56,7 @@ Un tasto con `Maiusc` su un segno o una cifra non si assegna, perché su
 un'altra tastiera è un altro tasto. Su macOS `Ctrl` e `⌘` restano quelli di
 sempre: `⌘` è il tasto di Fub, `Ctrl` è Control.
 
-Il menu ≡ e «Ctrl+/» mostrano il tasto che fa partire il comando, cioè lo
+Il menu ≡ e la ricerca dei comandi mostrano il tasto che fa partire il comando, cioè lo
 stesso di questa regola: un comando il cui tasto è di Fub, o che ha perso un
 conflitto, non ne mostra nessuno. Finché l'indice dei comandi non è arrivato,
 nessun tasto è mostrato.

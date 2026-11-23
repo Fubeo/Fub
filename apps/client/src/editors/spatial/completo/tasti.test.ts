@@ -10,6 +10,7 @@ import {
   risolviTasti,
   strumentoDelTasto,
   TASTI_DI_FUB,
+  TASTI_DELLA_FINESTRA,
   tastoDelComando,
   tastoFub,
   tastoStrumento,
@@ -227,6 +228,41 @@ describe("TASTI_DI_FUB", () => {
     const coperti = new Set(TASTI_DI_FUB.map((t) => chiaveTasto(t, "other")));
     const mancanti = [...scritti].filter((t) => !coperti.has(chiaveTasto(t, "other")));
     expect(mancanti).toEqual([]);
+  });
+});
+
+describe("TASTI_DELLA_FINESTRA", () => {
+  // I comandi del motore coi tasti di VectorCraft che lo Standard dà a Fub.
+  const voci = [
+    { id: "object.group", tasto: "Cmd+G" },
+    { id: "select.all", tasto: "Cmd+A" },
+    { id: "object.lock", tasto: "Cmd+2" },
+    { id: "edit.pasteInFront", tasto: "Cmd+F" },
+    { id: "object.transformAgain", tasto: "Cmd+D" },
+    { id: "appearance.addFill", tasto: "Cmd+/" },
+    { id: "type.createOutlines", tasto: "Cmd+Shift+O" },
+    { id: "edit.copy", tasto: "Cmd+C" },
+    { id: "edit.undo", tasto: "Cmd+Z" },
+  ];
+
+  it("col motore i tasti dell'editor e della shell cedono ai comandi di VectorCraft", () => {
+    const regola = risolviTasti(voci, {}, "other", TASTI_DELLA_FINESTRA);
+    for (const id of ["object.group", "select.all", "object.lock", "edit.pasteInFront", "object.transformAgain", "appearance.addFill", "type.createOutlines"]) {
+      expect(tastoDelComando(regola, id)).not.toBeNull();
+    }
+    // Gli appunti e annulla restano all'editor (il browser e la cronologia del disegno).
+    expect(regola.coperti.map((c) => c.comando).sort()).toEqual(["edit.copy", "edit.undo"]);
+  });
+
+  it("senza il motore (la regola di sempre) quei tasti restano di Fub", () => {
+    const regola = risolviTasti(voci, {}, "other");
+    expect(tastoDelComando(regola, "object.group")).toBeNull();
+    expect(tastoDelComando(regola, "object.lock")).toBeNull();
+  });
+
+  it("tiene i tasti della finestra anche contro una modifica dell'utente", () => {
+    const regola = risolviTasti(voci, { "object.group": "Mod-s" }, "other", TASTI_DELLA_FINESTRA);
+    expect(tastoDelComando(regola, "object.group")).toBeNull();
   });
 });
 

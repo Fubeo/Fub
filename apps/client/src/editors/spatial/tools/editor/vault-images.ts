@@ -118,6 +118,53 @@ export function installVaultImages(ctx: EditorContext): void {
   life.listen(surface, "dragover", onDragOver);
   life.listen(surface, "drop", onDrop);
 
+  /// Un tasto con Ctrl o ⌘ che col Completo e il motore resta all'editor, come in
+  /// VectorCraft: annulla (`Ctrl+Z`) e ripeti (`Ctrl+Maiusc+Z`) sulla cronologia del
+  /// disegno, la vista (`Ctrl+Y` contorni, `Ctrl+'` griglia, `Ctrl+Maiusc+'` aggancio,
+  /// `Ctrl+0` e `Ctrl+Alt+0` adatta, `Ctrl+1` 100%, `Ctrl+=` e `Ctrl+-` zoom) e la
+  /// ricerca dei comandi (`Ctrl+Maiusc+/`). `true` se l'ha preso. Copia, taglia e
+  /// incolla restano al browser, che manda gli appunti al Completo.
+  function vistaComeVectorCraft(event: KeyboardEvent): boolean {
+    const key = event.key.toLowerCase();
+    const alt = event.altKey;
+    if (key === "v" && !alt) ctx.inPlaceUntil = event.shiftKey ? event.timeStamp + IN_PLACE_MS : -Infinity;
+    if (key === "z" && !alt) {
+      if (event.shiftKey) redo();
+      else undo();
+      return true;
+    }
+    if (key === "y" && !alt && !event.shiftKey) {
+      ctx.setOutline(!ctx.outline);
+      return true;
+    }
+    if (event.code === "Quote" && !alt && has("grid")) {
+      if (event.shiftKey) changeGrid({ ...ctx.grid, snap: !ctx.grid.snap });
+      else changeGrid({ ...ctx.grid, shown: !ctx.grid.shown });
+      return true;
+    }
+    if (event.code === "Digit0" && !event.shiftKey) {
+      ctx.fit();
+      return true;
+    }
+    if (event.code === "Digit1" && !alt && !event.shiftKey) {
+      zoomBy(1 / ctx.camera.scale);
+      return true;
+    }
+    if ((event.code === "Equal" || event.key === "+" || event.key === "=") && !alt) {
+      zoomBy(ZOOM_STEP);
+      return true;
+    }
+    if ((event.code === "Minus" || event.key === "-") && !alt && !event.shiftKey) {
+      zoomBy(1 / ZOOM_STEP);
+      return true;
+    }
+    if (event.code === "Slash" && event.shiftKey && !alt) {
+      ctx.searchCommands();
+      return true;
+    }
+    return false;
+  }
+
   /// Maiusc, Ctrl o ⌘, o Alt premuti o lasciati a metà gesto: la forma, lo
   /// spostamento e la cornice si ridisegnano subito.
   const onModifiers = (event: KeyboardEvent): void => {
@@ -168,21 +215,31 @@ export function installVaultImages(ctx: EditorContext): void {
     // «#» e «%» valgono come si scrivono, anche con AltGr, che su Windows
     // arriva come Ctrl e Alt insieme.
     const altGraph = typeof event.getModifierState === "function" && event.getModifierState("AltGraph");
+    // Col Completo aperto e il motore presente i tasti sono quelli di VectorCraft
+    // (`completo/tasti.ts`): con Ctrl o Alt l'editor tiene solo annulla e ripeti, gli
+    // appunti (che il browser manda al Completo) e i tasti della vista di VectorCraft;
+    // gli altri vanno ai comandi del motore (`completo/montaggio-tasti.ts`).
+    const completo = ctx.completoMotore?.() ?? null;
+    const comeVectorCraft = completo?.conMotore?.() === true;
+    if (comeVectorCraft && (mod || event.altKey)) {
+      if (mod && vistaComeVectorCraft(event)) event.preventDefault();
+      return;
+    }
     // `[` e `]` ruotano la selezione, `{` e `}` di un angolo retto: come si
     // scrivono, anche con AltGr; con Ctrl o ⌘ cambiano l'ordine.
     // Con la Penna e l'Evidenziatore `[` e `]` cambiano la punta (P4).
-    if ((event.key === "[" || event.key === "]") && onSurface && (altGraph || !mod) && ctx.stepNib(event.key === "[" ? -1 : 1)) {
+    if (!comeVectorCraft && (event.key === "[" || event.key === "]") && onSurface && (altGraph || !mod) && ctx.stepNib(event.key === "[" ? -1 : 1)) {
       event.preventDefault();
       return;
     }
     const turn = { "[": -ROTATE_STEP, "]": ROTATE_STEP, "{": -ROTATE_STEP_SHIFT, "}": ROTATE_STEP_SHIFT }[event.key];
-    if (turn !== undefined && onSurface && (altGraph || !mod)) {
+    if (!comeVectorCraft && turn !== undefined && onSurface && (altGraph || !mod)) {
       if (ctx.current !== null || ctx.pressed !== null || ctx.selection.length === 0 || !editable()) return;
       rotateSelection(turn);
       event.preventDefault();
       return;
     }
-    if ((event.key === "#" || event.key === "%") && (altGraph || !mod) && has("grid")) {
+    if (!comeVectorCraft && (event.key === "#" || event.key === "%") && (altGraph || !mod) && has("grid")) {
       if (event.key === "#") changeGrid({ ...ctx.grid, shown: !ctx.grid.shown });
       else changeGrid({ ...ctx.grid, snap: !ctx.grid.snap });
       event.preventDefault();
@@ -306,8 +363,6 @@ export function installVaultImages(ctx: EditorContext): void {
     }
     // Col Completo aperto e il motore presente i tasti di una lettera sono quelli di
     // VectorCraft: le lettere, le cifre e i riflessi degli strumenti di Fub non valgono.
-    const completo = ctx.completoMotore?.() ?? null;
-    const comeVectorCraft = completo?.conMotore?.() === true;
     const strumentoDelMotore = completo?.strumentoDelTasto?.(`${event.shiftKey ? "Shift-" : ""}${event.key.toLowerCase()}`) ?? null;
     if (onSurface && event.key === "Tab") {
       if (!walk(event.shiftKey ? -1 : 1)) return;

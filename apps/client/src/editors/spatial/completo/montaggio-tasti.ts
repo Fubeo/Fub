@@ -5,13 +5,14 @@
 //
 // Il root dell'editor ha già i suoi tasti (`tools/editor/vault-images.ts`), che
 // si montano prima: un tasto che quelli prendono (`defaultPrevented`) non arriva
-// qui. Un tasto di Fub non è mai un tasto del motore: lo dice la regola.
+// qui. Un tasto di Fub non è mai un tasto del motore: lo dice la regola, che col
+// motore lascia a Fub solo i tasti della finestra (`TASTI_DELLA_FINESTRA`).
 
 import { composingKey } from "../../../kit/ime";
 import { isWritingField } from "../../../ui/field-history";
 import type { Lifetime } from "../../../ui/lifetime";
 import type { Indice, VoceIndice } from "./indice";
-import { decidiTasto, risolviTasti, type ModificheTasti, type Piattaforma, type RegolaTasti } from "./tasti";
+import { decidiTasto, risolviTasti, TASTI_DELLA_FINESTRA, type ModificheTasti, type Piattaforma, type RegolaTasti } from "./tasti";
 
 export interface OpzioniMontaggioTasti {
   /// La radice dell'editor: i tasti si ascoltano lì. `null` senza editor: la
@@ -67,6 +68,8 @@ export function montaTasti(opzioni: OpzioniMontaggioTasti): MontaggioTasti {
       [...comandi.values()].map((voce) => ({ id: voce.id, tasto: voce.tasto })),
       opzioni.modifiche(),
       opzioni.piattaforma,
+      // Il Completo coi comandi del motore: di Fub restano solo i tasti della finestra.
+      TASTI_DELLA_FINESTRA,
     );
   };
 

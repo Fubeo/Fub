@@ -151,6 +151,20 @@ export const TASTI_DI_FUB: readonly string[] = [
   "Mod-p", "Mod-k", "Mod-w", "Ctrl-Tab",
 ];
 
+/// I tasti di Fub che vincono sul motore quando il Completo ha il motore (la
+/// richiesta dell'utente del 23/11: niente del vecchio editor). Restano di Fub
+/// solo i tasti della finestra (salvare, chiudere, cambiare scheda, la
+/// tavolozza, le impostazioni, le zone) e quelli che l'editor tiene come
+/// VectorCraft (`vault-images.ts`, `vistaComeVectorCraft`): annulla e ripeti
+/// sulla cronologia del disegno, gli appunti che il browser manda al Completo,
+/// la vista. Gli altri tasti della shell e dell'editor cedono al motore.
+export const TASTI_DELLA_FINESTRA: readonly string[] = [
+  "Mod-s", "Mod-w", "Mod-Shift-w", "Mod-p", "Mod-Shift-p", "Mod-k", "Mod-o", "Mod-n", "Mod-,",
+  "Ctrl-Tab", "Ctrl-Shift-Tab", "Mod-PageUp", "Mod-PageDown", "F6", "Shift-F6",
+  "Mod-z", "Mod-Shift-z", "Mod-y", "Mod-c", "Mod-x", "Mod-v", "Mod-Shift-v",
+  "Mod-'", "Mod-0", "Mod-Alt-0", "Mod-1", "Mod-=", "Mod--",
+];
+
 /// Applica la regola a un elenco di comandi del motore e alle modifiche
 /// dell'utente, su `piattaforma`. Pura: stessi argomenti, stesso risultato.
 ///

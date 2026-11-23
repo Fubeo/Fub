@@ -52,7 +52,7 @@ describe("la colonna del Disegno completo", () => {
   it("col motore presente ci sono solo i suoi strumenti pronti, nessuno di Fub", () => {
     const layout = layoutCompleto(VECTOR, new Set(["selection", "pen"]), true);
     expect(tutti(layout).sort()).toEqual(["motore:pen", "motore:selection"]);
-    const extra = { ...VECTOR[0]!, id: "fuori" } as (typeof VECTOR)[number];
+    const extra: ToolSpec = { ...VECTOR[0]!, id: "note" as ToolSpec["id"] };
     expect(tutti(layoutCompleto([...VECTOR, extra], new Set(), true))).toEqual([]);
   });
 
