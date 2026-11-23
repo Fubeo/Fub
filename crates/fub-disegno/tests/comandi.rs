@@ -308,6 +308,9 @@ fn una_selezione_con_un_elemento_non_mappato_non_cambia_niente() {
         "disegno.text.editRange",
         // Seleziona per tipo di colore (K6 T14 giro 9) sceglie fra tutti gli oggetti, non guarda la scelta.
         "disegno.addon.color.select",
+        // La Guida colori e la conversione (K6 T14, letture) prendono il colore dal valore, non dalla scelta.
+        "disegno.color.harmony",
+        "disegno.color.convert",
     ];
     let comandi = d.comandi(&["oa1a1a1a1".into(), "onessuno1".into()]);
     let accesi: Vec<&str> = comandi

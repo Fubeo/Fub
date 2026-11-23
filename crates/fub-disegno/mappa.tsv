@@ -89,14 +89,14 @@ motore	edit.colors.adjustBalance	Adjust Color Balance…	Edit › Edit Colors	co
 motore	edit.colors.blendFrontToBack	Blend Front to Back	Edit › Edit Colors	colore	F1	T14	fatto	menu/modifica/colori	famiglia		Fusione da davanti a dietro
 motore	edit.colors.blendHorizontally	Blend Horizontally	Edit › Edit Colors	colore	F1	T14	fatto	menu/modifica/colori	famiglia		Fusione orizzontale
 motore	edit.colors.blendVertically	Blend Vertically	Edit › Edit Colors	colore	F1	T14	fatto	menu/modifica/colori	famiglia		Fusione verticale
-motore	color.harmony	Color Guide		colore	F1	T14	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Guida colori
+motore	color.harmony	Color Guide		colore	F1	T14	fatto	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Guida colori
 motore	edit.colorSettings	Color Settings…	Edit	stampa	F4	T25	da fare	menu/modifica	famiglia	finestra	Impostazioni colore…
 motore	color.loadProfile	Load Color Profile…		colore	F1	T14	da fare	ispettore/design	famiglia	finestra	Carica profilo colore…
 motore	color.removeProfile	Remove Color Profile…		colore	F1	T14	da fare	ispettore/design	famiglia	finestra	Rimuovi profilo colore…
 motore	edit.assignProfile	Assign Profile…	Edit	stampa	F4	T25	da fare	menu/modifica	famiglia	finestra	Assegna profilo…
 motore	object.convertDocumentColorMode	Convert Document Color Mode		stampa	F4	T25	da fare	menu/file	famiglia		Converti metodo colore documento
-motore	color.convert	Convert Color		colore	F1	T14	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Converti colore
-motore	color.gamutCheck	Gamut Warning		colore	F1	T14	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Avviso gamut
+motore	color.convert	Convert Color		colore	F1	T14	fatto	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Converti colore
+motore	color.gamutCheck	Gamut Warning		colore	F1	T14	fatto	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Avviso gamut
 motore	view.proofSetup	Proof Setup	View › Proof Setup	stampa	F4	T25	da fare	menu/visualizza	famiglia		Impostazione prova
 motore	view.proofColors	Proof Colors	View	stampa	F4	T25	da fare	menu/visualizza	famiglia		Colori di prova
 motore	view.overprintPreview	Overprint Preview	View	stampa	F4	T25	da fare	menu/visualizza	famiglia		Anteprima sovrastampa

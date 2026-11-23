@@ -136,7 +136,9 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // T14 colori aggiunti (giro 9, punto 1): Seleziona per tipo di colore (con la sua finestra),
   // Trova e Applica il campione più vicino: tre in più. Le letture del colore e le tinte piatte
   // restano «da fare» in questo giro; stampa e filtro restano «da fare» con la causa.
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1098, fub: 114, escluso: 12, fatto: 327 });
+  // T14 letture colore: `color.harmony`, `color.convert` e `color.gamutCheck` sono «fatto»
+  // (letture senza finestra, casi in colore.json): tre in più.
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1095, fub: 114, escluso: 12, fatto: 330 });
 });
 
 // --- un motore finto ---------------------------------------------------------------

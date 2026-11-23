@@ -547,6 +547,54 @@
     },
     {
       "fonte": "motore",
+      "id": "color.convert",
+      "chiamata": {
+        "comando": "disegno.color.convert"
+      },
+      "etichetta": {
+        "it": "Converti colore",
+        "en": "Convert Color"
+      },
+      "posto": "interno",
+      "famiglia": "colore",
+      "tasto": null,
+      "effetto": "legge",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "color.gamutCheck",
+      "chiamata": {
+        "comando": "disegno.color.gamutCheck"
+      },
+      "etichetta": {
+        "it": "Avviso gamut",
+        "en": "Gamut Warning"
+      },
+      "posto": "interno",
+      "famiglia": "colore",
+      "tasto": null,
+      "effetto": "legge",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "color.harmony",
+      "chiamata": {
+        "comando": "disegno.color.harmony"
+      },
+      "etichetta": {
+        "it": "Guida colori",
+        "en": "Color Guide"
+      },
+      "posto": "interno",
+      "famiglia": "colore",
+      "tasto": null,
+      "effetto": "legge",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "document.find",
       "chiamata": {
         "comando": "disegno.document.find"
