@@ -3451,6 +3451,245 @@
           ]
         }
       }
+    },
+    {
+      "id": "object.rotate",
+      "disegno": "t13-gruppo-testo.svg",
+      "selezione": [
+        "gt5t5t5t5"
+      ],
+      "argomenti": {
+        "angle": 90
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "gt5t5t5t5",
+            "attrs": {
+              "transform": "matrix(0 -1 1 0 -30 430)"
+            }
+          }
+        ]
+      },
+      "dopo": "gruppo-testo-ruota.svg"
+    },
+    {
+      "id": "object.scale",
+      "disegno": "t13-gruppo-testo.svg",
+      "selezione": [
+        "gt5t5t5t5"
+      ],
+      "argomenti": {
+        "sx": 50
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "gt5t5t5t5",
+            "attrs": {
+              "transform": "matrix(0.5 0 0 0.5 100 115)"
+            }
+          }
+        ]
+      },
+      "dopo": "gruppo-testo-scala.svg"
+    },
+    {
+      "id": "object.shear",
+      "disegno": "t13-gruppo-testo.svg",
+      "selezione": [
+        "gt5t5t5t5"
+      ],
+      "argomenti": {
+        "angle": 15,
+        "axis": "horizontal"
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "gt5t5t5t5",
+            "attrs": {
+              "transform": "matrix(1 0 -0.2679 1 61.6283 0)"
+            }
+          }
+        ]
+      },
+      "dopo": "gruppo-testo-inclina.svg"
+    },
+    {
+      "id": "object.reflect",
+      "disegno": "t13-gruppo-testo.svg",
+      "selezione": [
+        "gt5t5t5t5"
+      ],
+      "argomenti": {
+        "axis": "vertical"
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "gt5t5t5t5",
+            "attrs": {
+              "transform": "matrix(-1 0 0 1 400 0)"
+            }
+          }
+        ]
+      },
+      "dopo": "gruppo-testo-rifletti.svg"
+    },
+    {
+      "id": "object.nudge",
+      "disegno": "t13-gruppo-testo.svg",
+      "selezione": [
+        "gt5t5t5t5"
+      ],
+      "argomenti": {
+        "dx": 1
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "gt5t5t5t5",
+            "attrs": {
+              "transform": "matrix(1 0 0 1 1 0)"
+            }
+          }
+        ]
+      },
+      "dopo": "gruppo-testo-sposta.svg"
+    },
+    {
+      "id": "object.distort",
+      "disegno": "t13-gruppo-testo.svg",
+      "selezione": [
+        "gt5t5t5t5"
+      ],
+      "argomenti": {
+        "corners": [
+          [
+            40,
+            40
+          ],
+          [
+            200,
+            40
+          ],
+          [
+            200,
+            120
+          ],
+          [
+            40,
+            120
+          ]
+        ]
+      },
+      "atteso": {
+        "rifiuto": "unsupported"
+      }
+    },
+    {
+      "id": "object.puppetWarp",
+      "disegno": "t13-gruppo-testo.svg",
+      "selezione": [
+        "gt5t5t5t5"
+      ],
+      "argomenti": {
+        "pins": [
+          [
+            330,
+            260
+          ]
+        ],
+        "moved": [
+          [
+            330,
+            280
+          ]
+        ]
+      },
+      "atteso": {
+        "rifiuto": "unsupported"
+      }
+    },
+    {
+      "id": "object.rotate",
+      "disegno": "t13-gruppo-testo.svg",
+      "selezione": [
+        "ot1t1t1t1"
+      ],
+      "argomenti": {
+        "angle": 90
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "ot1t1t1t1",
+            "attrs": {
+              "transform": "matrix(0 -1 1 0 -204 284)"
+            }
+          }
+        ]
+      },
+      "dopo": "testo-in-gruppo-ruota.svg"
+    },
+    {
+      "id": "object.scale",
+      "disegno": "t13-gruppo-testo.svg",
+      "selezione": [
+        "ot1t1t1t1"
+      ],
+      "argomenti": {
+        "sx": 50
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "ot1t1t1t1",
+            "attrs": {
+              "transform": "matrix(0.5 0 0 0.5 20 122)"
+            }
+          }
+        ]
+      },
+      "dopo": "testo-in-gruppo-scala.svg"
+    },
+    {
+      "id": "object.distort",
+      "disegno": "t13-gruppo-testo.svg",
+      "selezione": [
+        "ot1t1t1t1"
+      ],
+      "argomenti": {
+        "corners": [
+          [
+            40,
+            40
+          ],
+          [
+            200,
+            40
+          ],
+          [
+            200,
+            120
+          ],
+          [
+            40,
+            120
+          ]
+        ]
+      },
+      "atteso": {
+        "rifiuto": "unsupported"
+      }
     }
   ]
 }
