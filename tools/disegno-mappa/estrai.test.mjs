@@ -145,7 +145,10 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // il pannello Aspetto e il resto dell'aspetto restano «da fare».
   // T15 livelli altri: `layer.showAll` e `layer.unlockAll` diventano «fatto» (la visita dell'albero, con
   // i loro casi in livelli.json); `layer.hideOthers` e `layer.lockOthers` restano «da fare», con la causa.
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1085, fub: 114, escluso: 12, fatto: 340 });
+  // T13 sposta e distorci: `object.nudge` (Sposta leggermente) e `object.distort` (Distorsione libera)
+  // diventano «fatto», con i loro casi in trasforma.json. `object.shape.convertToShape` e lo zoom sulla
+  // selezione restano «da fare», con la causa nella nota (la forma viva non c'è nel formato; lo zoom è della vista).
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1083, fub: 114, escluso: 12, fatto: 342 });
 });
 
 // --- un motore finto ---------------------------------------------------------------
