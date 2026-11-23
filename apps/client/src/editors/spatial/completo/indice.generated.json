@@ -2931,6 +2931,54 @@
     },
     {
       "fonte": "motore",
+      "id": "transparency.info",
+      "chiamata": {
+        "comando": "disegno.transparency.info"
+      },
+      "etichetta": {
+        "it": "Informazioni trasparenza",
+        "en": "Transparency Info"
+      },
+      "posto": "interno",
+      "famiglia": "aspetto",
+      "tasto": null,
+      "effetto": "legge",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "transparency.makeOpacityMask",
+      "chiamata": {
+        "comando": "disegno.transparency.makeOpacityMask"
+      },
+      "etichetta": {
+        "it": "Crea maschera di opacità",
+        "en": "Make Opacity Mask"
+      },
+      "posto": "ispettore/design",
+      "famiglia": "aspetto",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "transparency.opacityMaskInfo",
+      "chiamata": {
+        "comando": "disegno.transparency.opacityMaskInfo"
+      },
+      "etichetta": {
+        "it": "Informazioni maschera di opacità",
+        "en": "Opacity Mask Info"
+      },
+      "posto": "interno",
+      "famiglia": "aspetto",
+      "tasto": null,
+      "effetto": "legge",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "transparency.set",
       "chiamata": {
         "comando": "disegno.transparency.set"

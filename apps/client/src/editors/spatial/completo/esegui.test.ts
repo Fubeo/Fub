@@ -426,3 +426,18 @@ describe("eseguiVoce, coi comandi che Fub fa da sé (K6 T11, oggetti)", () => {
     expect(sessione.comando).toHaveBeenCalledOnce();
   });
 });
+
+describe("eseguiVoce, Crea maschera di opacità (K6 T15, giro maschere)", () => {
+  it("manda al motore disegno.transparency.makeOpacityMask con clip e invert, e la maschera va alla cronologia", async () => {
+    const { d, sessione, azioni } = dipendenze();
+    eseguiVoce(voce({ id: "transparency.makeOpacityMask", famiglia: "aspetto", chiamata: { comando: "disegno.transparency.makeOpacityMask", valore: { clip: true, invert: false } } }), d);
+    await tick();
+    expect(sessione.comando).toHaveBeenCalledWith({
+      id: "disegno.transparency.makeOpacityMask",
+      selection: ["n1", "n2"],
+      value: { clip: true, invert: false },
+      preview: false,
+    });
+    expect(azioni.commit).toHaveBeenCalledOnce();
+  });
+});
