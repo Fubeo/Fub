@@ -9,6 +9,7 @@
 
 import { t } from "../../../strings";
 import type { EditorContext } from "../context";
+import { chiediAngoloVista } from "./vista-ruota";
 
 export const COMANDI_VISUALIZZA = [
   "view.grid",
@@ -18,6 +19,7 @@ export const COMANDI_VISUALIZZA = [
   "view.rulers",
   "view.edges",
   "view.boundingBox",
+  "view.rotate",
   "view.rotateReset",
 ] as const;
 export type ComandoVisualizza = (typeof COMANDI_VISUALIZZA)[number];
@@ -30,7 +32,7 @@ export const FILE_VISUALIZZA: readonly (readonly ComandoVisualizza[])[] = [
   ["view.grid", "view.snapToGrid"],
   ["view.transparencyGrid", "view.outline", "view.rulers"],
   ["view.edges", "view.boundingBox"],
-  ["view.rotateReset"],
+  ["view.rotate", "view.rotateReset"],
 ];
 
 export function isComandoVisualizza(id: string): id is ComandoVisualizza {
@@ -92,6 +94,11 @@ export function comandoVisualizza(ctx: EditorContext, id: ComandoVisualizza): vo
       return;
     case "view.boundingBox":
       ctx.changeGrid({ ...ctx.grid, hideBoundingBox: ctx.grid.hideBoundingBox !== true });
+      return;
+    case "view.rotate":
+      void chiediAngoloVista(ctx.camera.angle).then((gradi) => {
+        if (gradi !== null) ctx.turnView(gradi);
+      });
       return;
     case "view.rotateReset":
       ctx.turnView(0);
