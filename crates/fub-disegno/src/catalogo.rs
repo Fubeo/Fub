@@ -562,6 +562,10 @@ pub const NOMI: &[(&str, Tipo)] = &[
     ("gap", Tipo::Numero),
     ("fit", Tipo::SiNo),
     ("removeGaps", Tipo::SiNo),
+    // Pulisci (T12): i tre interruttori del motore, tutti veri di serie.
+    ("strayPoints", Tipo::SiNo),
+    ("unpaintedObjects", Tipo::SiNo),
+    ("emptyTextPaths", Tipo::SiNo),
     // Le finestre di Modifica colori (T14, giro 1): Satura e Regola
     // bilanciamento colore.
     ("intensity", Tipo::Numero),
@@ -678,6 +682,18 @@ pub const FINESTRE_SCRITTE: &[FinestraScritta] = &[
         id: "object.expand",
         schema: "{object, fill, stroke}",
         predefiniti: &[("object", "true"), ("fill", "true"), ("stroke", "true")],
+        limiti: &[],
+    },
+    // Pulisci (K6 T12): i tre interruttori del motore, tutti veri di serie. Il comando vale su
+    // tutto il disegno, non sulla selezione: il motore non legge la selezione (`clean_up`).
+    FinestraScritta {
+        id: "object.path.cleanUp",
+        schema: "{strayPoints, unpaintedObjects, emptyTextPaths}",
+        predefiniti: &[
+            ("strayPoints", "true"),
+            ("unpaintedObjects", "true"),
+            ("emptyTextPaths", "true"),
+        ],
         limiti: &[],
     },
     // Imposta angoli (K6 T12, giro angoli) chiede il raggio, da 0 a 1000000 punti: il motore lo

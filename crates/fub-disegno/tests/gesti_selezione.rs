@@ -1087,13 +1087,10 @@ fn spostare_con_l_aggancio_al_pixel_cade_su_interi() {
         Some(1.0),
     );
     assert_eq!(spostamento(&acceso, "oa1a1a1a1"), (4.0, 0.0));
-    let spento = tira_con_passo(
-        &testo,
-        &["oa1a1a1a1"],
-        (120.0, 120.0),
-        (123.6, 120.0),
-        None,
-    );
+    let spento = tira_con_passo(&testo, &["oa1a1a1a1"], (120.0, 120.0), (123.6, 120.0), None);
     let (dx, dy) = spostamento(&spento, "oa1a1a1a1");
-    assert!((dx - 3.6).abs() < 1e-9 && dy.abs() < 1e-9, "spento: {dx}, {dy}");
+    assert!(
+        (dx - 3.6).abs() < 1e-9 && dy.abs() < 1e-9,
+        "spento: {dx}, {dy}"
+    );
 }

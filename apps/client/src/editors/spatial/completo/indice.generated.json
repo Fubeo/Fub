@@ -2019,6 +2019,22 @@
     },
     {
       "fonte": "motore",
+      "id": "object.path.cleanUp",
+      "chiamata": {
+        "comando": "disegno.object.path.cleanUp"
+      },
+      "etichetta": {
+        "it": "Pulisci…",
+        "en": "Clean Up…"
+      },
+      "posto": "menu/oggetto/tracciato",
+      "famiglia": "tracciati",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "motore",
       "id": "object.path.divideObjectsBelow",
       "chiamata": {
         "comando": "disegno.object.path.divideObjectsBelow"

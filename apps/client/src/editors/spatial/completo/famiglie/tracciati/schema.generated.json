@@ -76,6 +76,30 @@
     },
     {
       "fonte": "motore",
+      "id": "object.path.cleanUp",
+      "campi": [
+        {
+          "nome": "strayPoints",
+          "tipo": "sino",
+          "facoltativo": false,
+          "predefinito": true
+        },
+        {
+          "nome": "unpaintedObjects",
+          "tipo": "sino",
+          "facoltativo": false,
+          "predefinito": true
+        },
+        {
+          "nome": "emptyTextPaths",
+          "tipo": "sino",
+          "facoltativo": false,
+          "predefinito": true
+        }
+      ]
+    },
+    {
+      "fonte": "motore",
       "id": "object.path.offsetPath",
       "campi": [
         {

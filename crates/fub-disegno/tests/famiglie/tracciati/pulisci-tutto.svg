@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:fub="https://fubeo.github.io/ns/scene/1" fub:version="1" viewBox="0 0 400 300" width="400" height="300">
+  <rect id="fub-paper" fub:role="paper" x="0" y="0" width="400" height="300" fill="#ffffff"/>
+  <g id="l1a2b3c4d" fub:layer="Livello 1">
+    <path id="oc1c1c1c1" d="M40 60 L100 60 L160 60 L160 120" fill="none" stroke="#000000" stroke-width="2"/>
+    <rect id="or1r1r1r1" x="300" y="200" width="60" height="40" fill="#88aaff"/>
+  </g>
+</svg>

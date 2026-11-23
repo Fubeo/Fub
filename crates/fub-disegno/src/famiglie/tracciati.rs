@@ -17,6 +17,9 @@
 //!   (Dividi gli oggetti sotto taglia anche quelli sotto), è rifiutato con
 //!   `unmapped`; un risultato che non divide niente è `empty`, e niente cambia
 //!   ([`StatoFamiglia::rifiuto_dopo`]).
+//! - **Pulisci** (`tracciati_pulisci.rs`, T12): il comando di Oggetto ›
+//!   Tracciato che vale su tutto il disegno, non sulla selezione, con i tre
+//!   interruttori del motore; se non cambia niente è `empty`.
 //! - **Elaborazione tracciati** (`ELABORAZIONE`, T12 giro 5): i quattro metodi
 //!   forma e le sei operazioni di `object.pathfinder.*`, senza finestra. Il
 //!   motore sostituisce gli oggetti scelti col risultato, nel posto del più
@@ -57,6 +60,9 @@ use crate::apertura::Copia;
 #[path = "tracciati_ritagli.rs"]
 mod ritagli;
 use ritagli::{ritaglio_rifiutato, ritaglio_spento, RITAGLI};
+
+#[path = "tracciati_pulisci.rs"]
+mod pulisci;
 
 #[path = "tracciati_punti.rs"]
 mod su_un_punto;
@@ -350,6 +356,10 @@ impl StatoFamiglia for Stato {
         if SU_UN_PUNTO.contains(&id) {
             return (!copia.modificabile).then_some(DrawingDisabledReason::ReadOnly);
         }
+        // Pulisci vale su tutto il disegno: con o senza selezione, si dice solo se il disegno si cambia.
+        if id == pulisci::PULISCI {
+            return (!copia.modificabile).then_some(DrawingDisabledReason::ReadOnly);
+        }
         if !SUI_PUNTI.contains(&id) && !sugli_oggetti(id) && !RITAGLI.contains(&id) {
             return None;
         }
@@ -448,6 +458,9 @@ impl StatoFamiglia for Stato {
         if strumenti::STRUMENTI.contains(&id) {
             return strumenti::argomenti(id, copia, valore);
         }
+        if id == pulisci::PULISCI {
+            return pulisci::argomenti(valore);
+        }
         argomenti_del_punto(id, copia, valore)
     }
 
@@ -518,6 +531,9 @@ impl StatoFamiglia for Stato {
     ) -> Option<DrawingRefusal> {
         if inchiostro_toccato(copia, dopo) {
             return Some(DrawingRefusal::Unmapped);
+        }
+        if id == pulisci::PULISCI && pulisci::non_cambia(copia, dopo) {
+            return Some(DrawingRefusal::Empty);
         }
         if id == "path.average" && media_schiaccia(copia, dopo) {
             return Some(DrawingRefusal::Empty);
