@@ -143,6 +143,8 @@ export const MOTORE_PRONTO: ReadonlySet<string> = new Set([
   "measure",
   // La Tavola: crea, sposta (coi disegni dentro) e ridimensiona le tavole.
   "artboard",
+  // La Forma parametrica: una forma viva, coi suoi numeri nella ricetta del file.
+  "parametricShape",
 ]);
 
 /// L'icona di uno strumento del motore nella colonna e nel cassetto: quella
@@ -163,6 +165,7 @@ export const ICONE_MOTORE: Readonly<Record<string, string>> = {
   eyedropper: "draw-eyedropper",
   measure: "draw-measure",
   artboard: "draw-artboard",
+  parametricShape: "draw-parametric",
   rotate: "draw-rotate",
   reflect: "draw-flip-h",
   scale: "draw-scale",

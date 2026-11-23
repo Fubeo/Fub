@@ -457,6 +457,16 @@ pub fn costrutti(n: &Node) -> Vec<Costrutto> {
         (!symbol_overrides.is_empty(), SostituzioniDelSimbolo),
     ];
     out.extend(segni.into_iter().filter(|(si, _)| *si).map(|(_, c)| c));
+    // I dati `vc-` dell'oggetto sono del motore: l'SVG non li scrive
+    // (`vectorcraft_svg`, `export/output.rs`), quindi solo la ricetta li porta.
+    // Oggi è la Forma parametrica (`vc-pathtools-shape`), una forma viva:
+    // senza, si riaprirebbe come un tracciato qualunque.
+    let dati_del_motore = attrs
+        .as_deref()
+        .is_some_and(|a| a.data.iter().any(|(k, _)| k.starts_with("vc-")));
+    if dati_del_motore && !out.contains(&FormaViva) {
+        out.push(FormaViva);
+    }
     out
 }
 

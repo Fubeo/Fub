@@ -47,6 +47,14 @@ radiali), le inclinazioni in per cento e la cornice esterna. Le forme dal vivo,
 cioè con angoli e lati che si cambiano dopo, aspettano ancora la ricetta del
 disegno (T27).
 
+La Forma parametrica (`parametricShape`, un'aggiunta di VectorCraft) sta nello
+stesso gruppo ed è una forma viva: un trascinamento dal centro la disegna,
+grande e girata quanto il trascinamento, e ↑↓ e ←→ ne cambiano i numeri (i lati,
+le punte, i raggi) mentre si trascina. I numeri restano nella ricetta del disegno, accanto al
+tracciato: riaperto il file, un clic sul suo contorno con lo strumento la
+riprende con le sue maniglie, che la ridimensionano, la girano e ne cambiano i
+numeri. Un altro programma la legge come un tracciato qualunque.
+
 Il Generatore forme (`shapeBuilder`, T13 giro 7) unisce le forme scelte: il
 trascinamento sulle regioni che toccano le unisce in un solo tracciato, e con
 Alt toglie le regioni toccate. Servono due o più oggetti, tracciati, forme

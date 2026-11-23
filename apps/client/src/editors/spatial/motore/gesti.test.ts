@@ -1250,6 +1250,31 @@ describe("la Misura del motore: la misura resta sul foglio", () => {
   });
 });
 
+describe("le frecce durante il trascinamento di uno strumento del motore", () => {
+  it("vanno allo strumento nell'anteprima del gesto, che non finisce; senza gesto non partono", async () => {
+    const fake = createFakeHost({ drawing: misuraFinta() });
+    const editor = await montaConPreparazione(EMPTY, fake);
+    editor.setEngineTool("parametricShape");
+    dispatch(editor, point("down", 150, 190));
+    await settle();
+    dispatch(editor, point("drag", 170, 160));
+    await settle();
+    await tasto("ArrowUp");
+    const conTasto = gestures(fake).filter((each) => (each.inputs ?? []).length > 0);
+    expect(conTasto).toHaveLength(1);
+    expect(conTasto[0]!.phase).toBe("preview");
+    expect(conTasto[0]!.inputs).toEqual([expect.objectContaining({ kind: "key", key: "ArrowUp", pressed: true })]);
+    expect(gestures(fake).map((each) => each.phase)).not.toContain("commit");
+    dispatch(editor, point("up", 170, 160));
+    await settle(16, 8);
+    expect(gestures(fake).filter((each) => each.phase === "commit")).toHaveLength(1);
+    // A gesto finito la freccia non va allo strumento.
+    const prima = gestures(fake).length;
+    await tasto("ArrowUp");
+    expect(gestures(fake).slice(prima).some((each) => (each.inputs ?? []).length > 0)).toBe(false);
+  });
+});
+
 describe("la penna del motore: il tracciato aperto (K6 T12)", () => {
   it("i clic lasciano il tracciato aperto, coi suoi punti sul foglio; Invio lo chiude come il motore, in un passo", async () => {
     const fake = createFakeHost({ drawing: pennaFinta() });

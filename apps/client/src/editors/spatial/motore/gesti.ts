@@ -495,6 +495,11 @@ export interface GestiMotoreContext {
   /// tracciato aperto, Esc con uno strumento dei tracciati torna alla
   /// Selezione. `true` se il tasto è servito.
   motoreTasto: (tasto: "Enter" | "Escape") => boolean;
+  /// Una freccia durante il trascinamento di uno strumento del motore: va
+  /// allo strumento, nell'anteprima del gesto, come in VectorCraft (la Forma
+  /// parametrica e le forme ne cambiano i numeri mentre si trascina; uno
+  /// strumento che non la prende la ignora). `true` se il gesto c'è.
+  motoreFreccia: (tasto: DrawingInput) => boolean;
   /// La Gomma dei punti (K6 T12, giro 2): a rilascio, il tratto del trascinamento
   /// va al motore in un solo comando (`gomma-punti.ts`).
   gommaPuntiEnd: (punti: readonly Point[]) => void;
@@ -1309,6 +1314,21 @@ export function installGestiMotore(ctx: EditorContext): void {
     lasciaScrittura();
     const done = send(a.ultimo, "commit", [], tutti).then((esito) => chiusoCon(a, esito));
     ultimo = done;
+    return true;
+  };
+
+  ctx.motoreFreccia = (tasto) => {
+    const g = ctx.current;
+    if (g?.kind !== "motore" || g.ended || typeof g.tool !== "object" || g.last === null || ctx.disposed) return false;
+    if (g.frame !== null) cancelAnimationFrame(g.frame);
+    g.frame = null;
+    // I punti non ancora mandati vanno prima del tasto, nella stessa richiesta.
+    const events = g.pending.splice(0, MAX_GESTURE_EVENTS);
+    void send(g, "preview", events, [tasto]).then((outcome) => {
+      if (g.ended || ctx.disposed || ctx.current !== g) return;
+      if (outcome !== null) showPreview(g, outcome);
+      if (g.pending.length > 0) schedule(g);
+    });
     return true;
   };
 

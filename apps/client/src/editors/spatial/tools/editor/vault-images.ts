@@ -214,7 +214,14 @@ export function installVaultImages(ctx: EditorContext): void {
     const scriveTesto = comeVectorCraft && ctx.motoreTool !== null && ctx.statoStrumento(ctx.motoreTool)?.wants_text === true;
     // Nel Completo col motore le frecce spostano come VectorCraft (`nudge_and_clear`):
     // `object.nudge` del motore, Maiusc per il passo grande, Alt per spostare una copia.
+    // Durante il trascinamento di uno strumento del motore vanno a lui, come in
+    // VectorCraft (la Forma parametrica ne cambia i numeri).
     const freccia = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[event.key];
+    if (freccia !== undefined && ctx.current?.kind === "motore" && !scriveTesto && !isWritingField(event.target)) {
+      event.preventDefault();
+      ctx.motoreFreccia?.({ kind: "key", key: event.key, code: event.code, mods: { shift: event.shiftKey, alt: event.altKey, cmd: event.ctrlKey || event.metaKey }, pressed: true });
+      return;
+    }
     if (comeVectorCraft && !scriveTesto && freccia !== undefined && !isWritingField(event.target)) {
       event.preventDefault();
       if (ctx.current === null && ctx.selection.length > 0 && editable()) {

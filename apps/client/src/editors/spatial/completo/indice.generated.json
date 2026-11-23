@@ -6071,6 +6071,22 @@
     },
     {
       "fonte": "strumento",
+      "id": "parametricShape",
+      "chiamata": {
+        "strumento": "parametricShape"
+      },
+      "etichetta": {
+        "it": "Strumento Forma parametrica",
+        "en": "Parametric Shape Tool"
+      },
+      "posto": "colonna/forme",
+      "famiglia": "forme",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "strumento",
       "id": "pathEraser",
       "chiamata": {
         "strumento": "pathEraser"

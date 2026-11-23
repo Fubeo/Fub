@@ -1194,6 +1194,7 @@ export const COLONNA_IT = {
   "draw.engine.name.eyedropper": "Contagocce",
   "draw.engine.name.artboard": "Tavola",
   "draw.engine.name.measure": "Misura",
+  "draw.engine.name.parametricShape": "Forma parametrica",
   // La fila delle opzioni del Contagocce (T14 giro 7): le preferenze del motore.
   "draw.contagocce.campione": "Campione",
   "draw.contagocce.copia": "Copia",
@@ -1310,6 +1311,7 @@ export const COLONNA_EN: Record<keyof typeof COLONNA_IT, string> = {
   "draw.engine.name.eyedropper": "Eyedropper",
   "draw.engine.name.measure": "Measure",
   "draw.engine.name.artboard": "Artboard",
+  "draw.engine.name.parametricShape": "Parametric Shape",
   "draw.contagocce.campione": "Sample",
   "draw.contagocce.copia": "Copy",
   "draw.contagocce.punti.1": "1 point",
