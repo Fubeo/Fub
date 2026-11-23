@@ -1031,3 +1031,69 @@ fn un_livello_di_inkscape_con_un_figlio_solo() {
     come_il_client(&esito, spostato_di_venti("le"));
     assert_eq!(esito.selection, ["le"]);
 }
+
+/// Un trascinamento come `tira`, col passo della griglia del gesto (`None`: spenta).
+fn tira_con_passo(
+    testo: &str,
+    selezione: &[&str],
+    da: (f64, f64),
+    a: (f64, f64),
+    passo: Option<f64>,
+) -> DrawingOutcome {
+    let (mut d, _) = apri(testo);
+    let mut g = richiesta(
+        "commit",
+        selezione,
+        vec![
+            evento("down", da.0, da.1),
+            evento("drag", (da.0 + a.0) / 2.0, (da.1 + a.1) / 2.0),
+            evento("drag", a.0, a.1),
+            evento("up", a.0, a.1),
+        ],
+    );
+    g.snap.grid = passo;
+    d.gesto(g).expect("il gesto")
+}
+
+/// Lo spostamento (dx, dy) che la `transform` scritta su `id` porta.
+fn spostamento(esito: &DrawingOutcome, id: &str) -> (f64, f64) {
+    let ops = ops_di(esito);
+    let op = ops
+        .as_array()
+        .and_then(|lista| lista.iter().find(|op| op["id"] == id))
+        .unwrap_or_else(|| panic!("nessuna operazione su {id}: {ops}"));
+    let testo = op["attrs"]["transform"]
+        .as_str()
+        .expect("un transform scritto");
+    let cifre: Vec<f64> = testo
+        .trim_start_matches("matrix(")
+        .trim_end_matches(')')
+        .split_whitespace()
+        .map(|cifra| cifra.parse().expect("una cifra"))
+        .collect();
+    (cifre[4], cifre[5])
+}
+
+#[test]
+fn spostare_con_l_aggancio_al_pixel_cade_su_interi() {
+    // L'angolo dell'oggetto più vicino al punto preso (100, 100) va su 103,6:
+    // col passo di un pixel su 104, cioè lo spostamento è 4; spento resta 3,6.
+    let testo = disegno(A);
+    let acceso = tira_con_passo(
+        &testo,
+        &["oa1a1a1a1"],
+        (120.0, 120.0),
+        (123.6, 120.0),
+        Some(1.0),
+    );
+    assert_eq!(spostamento(&acceso, "oa1a1a1a1"), (4.0, 0.0));
+    let spento = tira_con_passo(
+        &testo,
+        &["oa1a1a1a1"],
+        (120.0, 120.0),
+        (123.6, 120.0),
+        None,
+    );
+    let (dx, dy) = spostamento(&spento, "oa1a1a1a1");
+    assert!((dx - 3.6).abs() < 1e-9 && dy.abs() < 1e-9, "spento: {dx}, {dy}");
+}
