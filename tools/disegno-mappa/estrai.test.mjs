@@ -113,8 +113,8 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // T12 curvatura porta a «fatto» undici righe: `path.curvature`, `.curvatureEdit`, `.reshape`,
   // `.reshapeSegment`, `.setAnchors` e le sei `addon.pen.*` (append, close, segment, removePoint,
   // togglePoint, reshape), come comandi su un punto con `element` (la Curvatura crea o sostituisce).
-  // T15 pannello contorno: `stroke.set` resta «fatto» con i campi che il formato scrive (nessuna
-  // riga cambia stato); i profili di spessore restano da fare, in T27.
+  // T15 pannello contorno: il pannello `stroke` è «fatto» con i campi che il formato scrive;
+  // i campi che il formato non scrive restano spenti col perché, i profili di spessore in T27.
   // T14 sfumatura libera: le letture `paint.recent` e `paint.proxies` diventano «fatto»; le sette
   // righe della sfumatura libera (`paint.freeform.*`) restano «da fare», perché il formato della
   // scena non ha punti né linee per una sfumatura (la causa è nella nota della mappa).
@@ -126,7 +126,7 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // T16 testo base le sette del testo: `type.changeCase`, `type.createOutlines`,
   // `type.convertToAreaType`, `type.convertToPointType`, `edit.findReplace`, `edit.findNext`
   // e `text.editRange`.
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1105, fub: 114, escluso: 12, fatto: 320 });
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1104, fub: 114, escluso: 12, fatto: 321 });
 });
 
 // --- un motore finto ---------------------------------------------------------------

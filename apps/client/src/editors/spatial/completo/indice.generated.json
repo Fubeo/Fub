@@ -5153,6 +5153,22 @@
     },
     {
       "fonte": "pannello",
+      "id": "stroke",
+      "chiamata": {
+        "client": "stroke"
+      },
+      "etichetta": {
+        "it": "Tratto",
+        "en": "Stroke"
+      },
+      "posto": "ispettore/design/contorno",
+      "famiglia": "aspetto",
+      "tasto": null,
+      "effetto": "mostra",
+      "finestra": false
+    },
+    {
+      "fonte": "pannello",
       "id": "swatches",
       "chiamata": {
         "client": "swatches"

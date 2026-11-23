@@ -1542,7 +1542,7 @@ pannello	pathfinder	Pathfinder	Window	forme	F1	T13	fatto	ispettore/design/pathfi
 pannello	pattern_options	Pattern Options	Window	trame	F2	T21	da fare	ispettore/design	famiglia		Opzioni motivo
 pannello	properties	Properties	Window	fub	—	T11	fub	fub	—	l'ispettore del disegno di Fub (scheda Design)	Proprietà
 pannello	separations	Separations	Window	stampa	F4	T25	da fare	ispettore/design/documento	famiglia		Separations
-pannello	stroke	Stroke	Window	aspetto	F1	T15	da fare	ispettore/design	famiglia		Traccia
+pannello	stroke	Stroke	Window	aspetto	F1	T15	fatto	ispettore/design/contorno	famiglia	la sezione Contorno ha i campi che il formato scrive (spessore, estremi, angoli, tratteggio); limite dell'angolo, allineamento e spostamento del tratteggio restano spenti col perché, le punte stanno nella sezione Punte, i profili di spessore aspettano T27	Traccia
 pannello	svg_interactivity	Svg Interactivity	Window	web	F3	T22	da fare	ispettore/design/documento	famiglia		Svg Interactivity
 pannello	swatches	Swatches	Window	colore	F1	T14	fatto	ispettore/risorse	famiglia		Campioni
 pannello	symbols	Symbols	Window	simboli	F3	T22	da fare	ispettore/risorse	famiglia		Simboli
