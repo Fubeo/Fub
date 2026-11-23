@@ -27,6 +27,7 @@ import { registraElaborazione } from "./elaborazione";
 import { registraTrasforma } from "./trasforma-sezione";
 import { registraColore, type LatoAttivo } from "./colore-sezione";
 import { registraCampioni } from "./campioni-sezione";
+import { apriModoDisegno, type ModoDisegno, type PortaModoDisegno } from "./modo-disegno";
 import { apriRicolora, motivoRicolora, VOCE_RICOLORA } from "./ricolora";
 import { registraGuidaColori } from "./guida-colori-sezione";
 import { registraContorno } from "./contorno-sezione";
@@ -375,12 +376,24 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila" | "e
     void eseguiPerId("path.deleteAnchors", {}, { senzaFinestra: true });
     return true;
   };
+  /// Il modo di disegno che il motore ha accettato per ultimo (K6 T11): il segno della scelta. Ogni
+  /// apertura del Completo parte da Normale, come la sessione del motore.
+  let modoDiDisegno: ModoDisegno = "normal";
+  const portaModoDisegno: PortaModoDisegno = {
+    leggi: () => modoDiDisegno,
+    imposta: (modo) => eseguiPerId("view.drawMode", { mode: modo }, { senzaFinestra: true }).then(() => modoDiDisegno === modo),
+  };
   /// Il percorso unico dei comandi (`eseguiVoce`), che ricorda l'ultima elaborazione andata.
   // I comandi in volo, per voce, valori e selezione: un secondo clic identico mentre il primo è in
   // volo (il doppio clic) non manda un altro comando al motore, che lo riceverebbe con la stessa copia.
   // Un comando diverso (altri valori, altra selezione) parte lo stesso.
   const inVolo = new Set<string>();
   const lancia = async (voce: VoceIndice): Promise<void> => {
+    // «Modalità di disegno» (K6 T11): la voce senza modo apre la scelta; il comando parte col modo scelto.
+    if (voce.id === "view.drawMode" && (voce.chiamata as { readonly valore?: unknown }).valore === undefined) {
+      if (!chiuso) await apriModoDisegno(portaModoDisegno);
+      return;
+    }
     const chiave = JSON.stringify([voce.id, voce.chiamata, dipendenze.selezione()]);
     if (inVolo.has(chiave)) return;
     inVolo.add(chiave);
@@ -390,6 +403,9 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila" | "e
       const coiPunti = (dipendenze.punti?.() ?? []).length > 0;
       const andata = await eseguiVoce(voce, dipendenze);
       if (andata && ripetibili.has(voce.id)) ultimaElaborazione = voce.id;
+      // Il segno del modo è quello che il motore ha accettato: un rifiuto non lo cambia (K6 T11).
+      const modo = (voce.chiamata as { readonly valore?: { readonly mode?: unknown } }).valore?.mode;
+      if (andata && voce.id === "view.drawMode" && (modo === "normal" || modo === "behind")) modoDiDisegno = modo;
       // I punti scelti possono essere cambiati: lo stato dello strumento si rilegge.
       if (andata && coiPunti && !chiuso) opzioni.tasti?.rileggiStato?.();
     } finally {
