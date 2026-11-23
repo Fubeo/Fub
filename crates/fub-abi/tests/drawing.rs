@@ -768,15 +768,29 @@ fn the_tool_state_and_the_disabled_reason_have_their_shape() {
         cursor: "pen_close".into(),
         options: json!({"rubber_band": true}),
         anchors: Vec::new(),
+        switch_tool: None,
     });
     o.reading = Some(json!({"w": 1}));
     o.validate().unwrap();
     let v = serde_json::to_value(&o).unwrap();
     assert_eq!(v["state"]["cursor"], "pen_close");
-    // Senza punti scelti `anchors` non si scrive, e se manca vale vuoto.
+    // Senza punti scelti `anchors` non si scrive, e se manca vale vuoto; così
+    // `switch_tool` senza uno strumento a cui passare.
     assert!(v["state"].get("anchors").is_none());
+    assert!(v["state"].get("switch_tool").is_none());
     let letto: DrawingToolState = serde_json::from_value(v["state"].clone()).unwrap();
     assert!(letto.anchors.is_empty());
+    assert_eq!(letto.switch_tool, None);
+    // Lo strumento a cui passare va e torna, e non può essere vuoto né lungo.
+    let mut passa = o.clone();
+    passa.state.as_mut().unwrap().switch_tool = Some("type".into());
+    passa.validate().unwrap();
+    let v = serde_json::to_value(&passa).unwrap();
+    assert_eq!(v["state"]["switch_tool"], "type");
+    for cattivo in [String::new(), "x".repeat(MAX_DRAWING_TOOL_ID_BYTES + 1)] {
+        passa.state.as_mut().unwrap().switch_tool = Some(cattivo);
+        assert!(passa.validate().is_err());
+    }
     let punto = DrawingAnchor {
         element: "p1".into(),
         subpath: 0,

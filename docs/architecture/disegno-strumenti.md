@@ -66,6 +66,13 @@ ponte tiene il tracciato nella sua copia finché il gesto continua (stesso
 strumento, stessa revisione); Invio, Esc o lo strumento cambiato mandano il
 `commit` con il tasto (o senza) e l'esito è un passo solo. Con la
 Selezione diretta lo stato porta i punti scelti (`DrawingToolState.anchors`).
+Il doppio clic segue VectorCraft: giù, su, giù, su e poi un evento
+`double_click` a parte. `gesti.ts` lo riconosce al secondo rilascio di uno
+strumento del motore (stesso strumento e puntatore, entro `DOUBLE_TAP_MS` e
+`DOUBLE_TAP_PX` in pixel dello schermo) e lo manda dopo il clic: in un gesto
+suo (la penna sul tracciato aperto, gli altri col `commit`), o nell'anteprima
+del testo che si sta scrivendo, che resta aperto. Lo strumento che il motore
+chiede (`DrawingToolState.switch_tool`) si sceglie come dalla colonna.
 Il motore disegna i segni dei punti solo nell'anteprima di un gesto: a gesto
 fermo `tools/editor/marks.ts` mette sul foglio i punti dei tracciati scelti e
 di quelli dei punti scelti (`motore/punti-diretti.ts`, dal `d`, dai `points`

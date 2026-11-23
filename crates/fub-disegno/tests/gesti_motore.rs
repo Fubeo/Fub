@@ -904,3 +904,45 @@ fn l_aggancio_al_punto_viene_dal_gesto() {
     assert_eq!(sposta(Some(true)), "matrix(1 0 0 1 120 0)");
     assert_eq!(sposta(Some(false)), "matrix(1 0 0 1 119 1)", "spento");
 }
+
+/// Il doppio clic della Selezione su un testo passa al Testo, come in VectorCraft
+/// (`SelectionTool::double_click`, `Action::SwitchTool("type")`): lo stato lo dice al client.
+/// Sul vuoto non chiede niente.
+#[test]
+fn il_doppio_clic_della_selezione_su_un_testo_chiede_il_testo() {
+    // I colpi sui testi vogliono le lettere disposte.
+    let (mut d, _) =
+        Disegno::apri_con(&common::disegni_con_inter(), CON_IL_TESTO).expect("si apre");
+    let sul_testo = gesto(
+        &mut d,
+        "selection",
+        "commit",
+        vec![evento("double_click", 60.0, 70.0)],
+        vec![],
+    );
+    // Il documento non cambia: niente operazioni, solo lo strumento a cui passare.
+    assert_eq!(sul_testo.ops, None, "{sul_testo:?}");
+    assert_eq!(
+        sul_testo
+            .state
+            .as_ref()
+            .and_then(|s| s.switch_tool.as_deref()),
+        Some("type"),
+        "{sul_testo:?}"
+    );
+    let sul_vuoto = gesto(
+        &mut d,
+        "selection",
+        "commit",
+        vec![evento("double_click", 300.0, 250.0)],
+        vec![],
+    );
+    assert_eq!(
+        sul_vuoto
+            .state
+            .as_ref()
+            .and_then(|s| s.switch_tool.as_deref()),
+        None,
+        "{sul_vuoto:?}"
+    );
+}

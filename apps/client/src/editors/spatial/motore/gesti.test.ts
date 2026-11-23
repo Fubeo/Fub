@@ -962,6 +962,44 @@ const esitoConStato = (cursor: string, options: unknown): DrawingOutcome => ({
 const statoDiSerie = (): DrawingOutcome => esitoConStato("arrow", null);
 
 describe("lo strumento del motore nei gesti (K6 T8)", () => {
+  it("due clic vicini mandano il doppio clic a parte, come VectorCraft; il cambio che il motore chiede sceglie lo strumento", async () => {
+    const fake = createFakeHost({
+      drawing: {
+        comando: statoDiSerie,
+        gesto: (gesture) => {
+          const doppio = gesture.events.some((e) => e.kind === "double_click");
+          const stato = { busy: false, transforming: false, wants_text: false, composing: false, cursor: "arrow", options: null, ...(doppio ? { switch_tool: "type" } : {}) };
+          return { revision: gesture.revision, preview: null, ops: null, selection: [], losses: [], refused: gesture.phase === "commit" ? "empty" : null, frame: null, state: stato, reading: null };
+        },
+      } as DrawingFake,
+    });
+    const preparati: string[] = [];
+    const editor = await montaConPreparazione(EMPTY, fake, (id) => {
+      preparati.push(id);
+      return Promise.resolve(true);
+    });
+    editor.setEngineTool("selection");
+    await settle();
+    // Lontani: due clic, niente doppio clic.
+    await drag(editor, [[100, 100]]);
+    await drag(editor, [[300, 200]]);
+    expect(gestures(fake).flatMap((g) => g.events).some((e) => e.kind === "double_click")).toBe(false);
+    // Vicini: il doppio clic arriva dopo il secondo rilascio, in un gesto suo.
+    await drag(editor, [[300, 200]]);
+    await settle(16, 8);
+    const tutti = gestures(fake);
+    const doppi = tutti.filter((g) => g.events.some((e) => e.kind === "double_click"));
+    expect(doppi.map((g) => g.events.map((e) => e.kind))).toEqual([["double_click"]]);
+    expect(doppi[0]!.events[0]).toEqual(expect.objectContaining({ x: 300, y: 200, pressure: 1 }));
+    expect(JSON.stringify(doppi[0]!.tool)).toBe(JSON.stringify({ engine: { id: "selection" } }));
+    // Il motore chiede il Testo: lo si sceglie.
+    expect(preparati).toEqual(["selection", "type"]);
+    // Il terzo clic ricomincia: niente altro doppio clic.
+    await drag(editor, [[300, 200]]);
+    await settle(16, 8);
+    expect(gestures(fake).filter((g) => g.events.some((e) => e.kind === "double_click"))).toHaveLength(1);
+  });
+
   it("uno strumento del motore manda `DrawingTool::Engine` col suo id, e il cursore del foglio segue il suo stato", async () => {
     const fake = createFakeHost({ drawing: { comando: statoDiSerie } as DrawingFake });
     const editor = await montaConPreparazione(EMPTY, fake);

@@ -71,6 +71,10 @@ pub(crate) struct Ponte {
     /// ([`chiave`]): un passaggio del mouse o una pressione con una selezione,
     /// dei punti, uno zoom o uno stile diversi la preparano di nuovo.
     chiave: Option<DrawingGesture>,
+    /// Lo strumento a cui l'ultimo pezzo del gesto chiede di passare
+    /// (`UiRequest::SwitchTool`, come il doppio clic su un testo), per lo
+    /// stato ([`DrawingToolState::switch_tool`]).
+    cambia: Option<String>,
 }
 
 /// Ciò che decide come la sessione si prepara per il gesto `gesto`: tutto
@@ -199,6 +203,7 @@ pub(crate) fn gesto(
     }
     banco.in_corso = Some(qui);
     let (sessione, ponte) = (&mut banco.sessione, &mut banco.ponte);
+    ponte.cambia = None;
     let fatto = vectorcraft_engine::guard::catch_panic(|| {
         for e in &gesto.events {
             let e = sulla_griglia(*e, &cx);
@@ -206,7 +211,11 @@ pub(crate) fn gesto(
             ev.mods.space = ponte.mods.space;
             ponte.mods = ev.mods;
             ponte.punto = Some(ev.pos);
-            sessione.pointer(&ev, cx.vista)?;
+            for richiesta in sessione.pointer(&ev, cx.vista)? {
+                if let vectorcraft_engine::UiRequest::SwitchTool(t) = richiesta {
+                    ponte.cambia = Some(t);
+                }
+            }
             col_carattere_di_fub(sessione, ponte, copia)?;
         }
         for i in &gesto.inputs {
@@ -996,6 +1005,10 @@ fn stato(
         cursor: cursore(sessione.cursor(punto, ponte.mods, vista)),
         options: sessione.tool_options(),
         anchors,
+        switch_tool: ponte
+            .cambia
+            .clone()
+            .filter(|t| !t.is_empty() && t.len() <= fub_abi::MAX_DRAWING_TOOL_ID_BYTES),
     }
 }
 

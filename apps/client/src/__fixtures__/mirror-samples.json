@@ -3933,7 +3933,8 @@
             ],
             "end": true
           }
-        ]
+        ],
+        "switch_tool": "type"
       },
       "reading": {
         "bounds": [
@@ -4298,7 +4299,8 @@
           ],
           "end": true
         }
-      ]
+      ],
+      "switch_tool": "type"
     }
   ],
   "DrawingCommandRequest": [

@@ -126,3 +126,44 @@ fn si_riapre_come_forma_viva_con_le_sue_maniglie() {
         "un poligono qualunque non ha maniglie: {segni:?}"
     );
 }
+
+/// Il doppio clic, come lo manda VectorCraft: giù e su due volte, poi il doppio clic, un gesto a sé.
+/// Sul vuoto mette una forma coi numeri dell'ultima (`addon.pathtools.shape.create`).
+#[test]
+fn il_doppio_clic_sul_vuoto_ne_mette_una_coi_numeri_di_adesso() {
+    let mut d = apri(BASE);
+    for _ in 0..2 {
+        gesto(&mut d, "preview", vec![evento("down", 60.0, 60.0)], vec![]);
+        let clic = d
+            .gesto(
+                serde_json::from_value(json!({
+                    "phase": "commit",
+                    "tool": { "engine": { "id": STRUMENTO } },
+                    "layer": null, "selection": [], "zoom": 1,
+                    "snap": { "grid": null, "free": false },
+                    "style": { "stroke": "#000000", "width": 2, "fill": null },
+                    "events": [evento("up", 60.0, 60.0)], "inputs": [],
+                }))
+                .expect("il gesto si legge"),
+            )
+            .expect("il gesto");
+        assert_eq!(
+            clic.ops, None,
+            "un clic senza trascinare non disegna niente"
+        );
+    }
+    let esito = gesto(
+        &mut d,
+        "commit",
+        vec![evento("double_click", 60.0, 60.0)],
+        vec![],
+    );
+    let ops: Value =
+        serde_json::from_str(esito.ops.as_deref().expect("le operazioni")).expect("JSON");
+    let dopo = common::applica::applica(BASE, &ops).expect("le operazioni si applicano");
+    assert!(dopo.contains("<polygon"), "una forma nuova:\n{dopo}");
+    assert!(
+        dopo.contains("vectorcraft:recipe"),
+        "viva nel file:\n{dopo}"
+    );
+}

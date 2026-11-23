@@ -1191,8 +1191,11 @@ export function installGestiMotore(ctx: EditorContext): void {
     // Gli eventi oltre il tetto di una richiesta partono prima, come
     // anteprime che non si disegnano.
     for (const pezzo of pezzi.slice(0, -1)) void send(g, "preview", pezzo);
+    // Il secondo clic vicino al primo: dopo il suo rilascio, il doppio clic.
+    const doppio = doppioClicDi(g);
     if (typeof g.tool === "object" && (A_PIU_CLIC.has(g.tool.engine.id) || STRUMENTI_CHE_SCRIVONO.has(g.tool.engine.id))) {
       tieniAperto(g, pezzi[pezzi.length - 1] ?? []);
+      if (doppio !== null) mandaDoppioClic(g, doppio);
       return;
     }
     if (typeof g.tool === "object" && g.tool.engine.id === "measure") {
@@ -1213,10 +1216,71 @@ export function installGestiMotore(ctx: EditorContext): void {
       }
       applyOutcome(g, esito, tap);
       if (clic !== null) ctx.clicStrumento(clic.strumento, clic.punto);
+      seguiCambio(esito);
     });
     ultimo = done;
+    if (doppio !== null) mandaDoppioClic(g, doppio);
   };
   ctx.motoreEnd = motoreEnd;
+
+  /// Il clic di prima di uno strumento del motore, per riconoscere il doppio
+  /// clic: lo strumento, il punto di scena, quando, con che puntatore.
+  let clicPrima: { readonly strumento: string; readonly x: number; readonly y: number; readonly tempo: number; readonly pointer: MotoreGesture["pointer"] } | null = null;
+
+  /// Il punto del doppio clic se `g` è il secondo clic di uno strumento del
+  /// motore vicino al primo (`DOUBLE_TAP_MS`, `DOUBLE_TAP_PX` in pixel dello
+  /// schermo, lo stesso strumento e puntatore), come i clic di VectorCraft:
+  /// giù, su, giù, su e poi il doppio clic a parte. Un doppio clic consuma i
+  /// due clic: il terzo ricomincia.
+  const doppioClicDi = (g: MotoreGesture): { readonly x: number; readonly y: number } | null => {
+    const clic = typeof g.tool === "object" ? clicDi(g) : null;
+    const prima = clicPrima;
+    clicPrima = null;
+    if (clic === null) return null;
+    const tempo = performance.now();
+    const { x, y } = clic.punto;
+    const vicino =
+      prima !== null &&
+      prima.strumento === clic.strumento &&
+      prima.pointer === g.pointer &&
+      tempo - prima.tempo <= DOUBLE_TAP_MS &&
+      Math.hypot(x - prima.x, y - prima.y) * ctx.camera.scale <= DOUBLE_TAP_PX[g.pointer];
+    if (vicino) return { x, y };
+    clicPrima = { strumento: clic.strumento, x, y, tempo, pointer: g.pointer };
+    return null;
+  };
+
+  /// Manda il doppio clic al motore dopo il secondo clic `g`. Il testo che si
+  /// scrive lo prende nello stesso tracciato aperto (la parola sotto il
+  /// cursore), senza chiuderlo; ogni altro strumento lo riceve come un gesto
+  /// suo, in coda a quello del clic: la penna sul tracciato aperto, la
+  /// Selezione col commit (il testo che passa al Testo, il gruppo isolato).
+  const mandaDoppioClic = (g: MotoreGesture, punto: { readonly x: number; readonly y: number }): void => {
+    const doppio = evento("double_click", { x: punto.x, y: punto.y });
+    const a = aperto;
+    if (a !== null && a.ultimo === g && scrive(g)) {
+      const esito = send(g, "preview", [doppio]);
+      ultimo = esito.then((e) => {
+        if (ctx.disposed || aperto !== a || e === null || e.refused !== null) return;
+        if (e.state?.busy === true) showPreview(g, e);
+        seguiCambio(e);
+      });
+      return;
+    }
+    const g2 = motoreBegin({ stroke: g.stroke, pointer: g.pointer, page: null });
+    if (g2 === null) return;
+    g2.pending.push(doppio);
+    motoreEnd(g2);
+  };
+
+  /// Lo strumento a cui il motore chiede di passare dopo un gesto (il doppio
+  /// clic della Selezione su un testo passa al Testo): lo si sceglie come dalla
+  /// colonna, solo se si lavora con uno strumento del motore.
+  const seguiCambio = (esito: DrawingOutcome): void => {
+    const verso = esito.state?.switch_tool;
+    if (verso === undefined || ctx.motoreTool === null || verso === ctx.motoreTool || ctx.disposed) return;
+    sceltaMotore(verso);
+  };
 
   /// Il rilascio di uno strumento a più clic: gli ultimi eventi come
   /// anteprima. Se il motore lavora ancora (`busy`), il tracciato resta
@@ -1249,6 +1313,7 @@ export function installGestiMotore(ctx: EditorContext): void {
         return;
       }
       chiudiAperto([]);
+      seguiCambio(esito);
     });
     ultimo = done;
   };

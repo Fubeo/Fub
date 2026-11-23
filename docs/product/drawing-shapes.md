@@ -53,7 +53,11 @@ grande e girata quanto il trascinamento, e ↑↓ e ←→ ne cambiano i numeri 
 le punte, i raggi) mentre si trascina. I numeri restano nella ricetta del disegno, accanto al
 tracciato: riaperto il file, un clic sul suo contorno con lo strumento la
 riprende con le sue maniglie, che la ridimensionano, la girano e ne cambiano i
-numeri. Un altro programma la legge come un tracciato qualunque.
+numeri. Un doppio clic sul vuoto ne mette una con gli ultimi numeri usati. Un
+altro programma la legge come un tracciato qualunque.
+
+Il doppio clic funziona come in VectorCraft con ogni strumento del motore: con
+la Selezione su un testo passa allo strumento Testo.
 
 Il Generatore forme (`shapeBuilder`, T13 giro 7) unisce le forme scelte: il
 trascinamento sulle regioni che toccano le unisce in un solo tracciato, e con

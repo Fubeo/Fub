@@ -1007,6 +1007,11 @@ pub struct DrawingToolState {
     /// Al più [`MAX_DRAWING_ANCHORS`]. Può mancare (vale vuoto).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub anchors: Vec<DrawingAnchor>,
+    /// Lo strumento a cui il gesto chiede di passare, come lo chiede lo
+    /// strumento del motore (`UiRequest::SwitchTool`: il doppio clic su un
+    /// testo passa al Testo). Il client lo sceglie se lo conosce. Può mancare.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub switch_tool: Option<String>,
 }
 
 /// Un punto di ancoraggio scelto: l'elemento del disegno, il suo sottotracciato
@@ -1026,6 +1031,15 @@ pub struct DrawingAnchor {
 impl DrawingToolState {
     /// Il controllo di chi scrive lo stato, prima di mandarlo.
     pub fn validate(&self) -> Result<(), PluginError> {
+        if self
+            .switch_tool
+            .as_deref()
+            .is_some_and(|t| t.is_empty() || t.len() > MAX_DRAWING_TOOL_ID_BYTES)
+        {
+            return Err(bad(format!(
+                "`state.switch_tool` is empty or longer than {MAX_DRAWING_TOOL_ID_BYTES} bytes"
+            )));
+        }
         anchors("state.anchors", &self.anchors)
     }
 }

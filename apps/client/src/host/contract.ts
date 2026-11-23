@@ -1977,6 +1977,9 @@ export interface DrawingToolState {
   options: unknown;
   /** I punti di ancoraggio scelti dal gesto; manca se nessuno. */
   anchors?: DrawingAnchor[];
+  /** Lo strumento a cui il gesto chiede di passare (il doppio clic su un testo
+   *  passa al Testo); manca se nessuno. */
+  switch_tool?: string;
 }
 
 /** Un punto di ancoraggio scelto, in coordinate di scena: torna nel `value`

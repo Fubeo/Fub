@@ -224,6 +224,10 @@ leggono come prima.
   punti (`path.convertAnchors`, `path.cutAtAnchors`, `path.join`,
   `path.removeAnchors`) li riprendono nel `value` (`anchors`): il motore li
   prende solo se ogni punto sta ancora in `at`, e se no risponde `stale`.
+  `switch_tool` (può mancare: nessuno) è l'id dello strumento a cui il motore
+  chiede di passare dopo il gesto (`UiRequest::SwitchTool` di VectorCraft: il
+  doppio clic della Selezione su un testo chiede `type`), non vuoto e al più
+  `MAX_DRAWING_TOOL_ID_BYTES` byte; il client lo sceglie come dalla colonna.
 - **La lettura** (`DrawingOutcome.reading`) è il JSON di un comando che legge
   e non cambia niente, per i pannelli; `null` per gli altri.
 - **Perché un comando è spento** (`DrawingCommandInfo.disabled_reason`,

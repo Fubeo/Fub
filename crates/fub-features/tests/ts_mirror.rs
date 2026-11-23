@@ -1907,6 +1907,7 @@ fn drawing_samples() -> Value {
             at: [12.5, -3.0],
             end: true,
         }],
+        switch_tool: Some("type".into()),
     };
     let reasons: Vec<Value> = [
         DrawingDisabledReason::NoSelection,

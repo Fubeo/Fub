@@ -828,6 +828,7 @@ const RECORD_KEYS: Record<string, string[]> = {
     cursor: true,
     options: true,
     anchors: true,
+    switch_tool: true,
   }),
   DrawingCommandInfo: keysOf<DrawingCommandInfo>({ id: true, enabled: true, disabled_reason: true }),
   DrawingCommandRequest: keysOf<DrawingCommandRequest>({ revision: true, id: true, selection: true, value: true, preview: true }),
