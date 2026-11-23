@@ -468,15 +468,23 @@ fn un_gruppo_vuoto_si_rifiuta_col_suo_perche() {
 fn il_nome_di_serie_e_quello_senza_spazi() {
     let ds = motore();
     let svg = banco("campioni.svg");
-    let lungo = "Caldi e freddi della stagione lunga da tenere sul tavolo di lavoro per il progetto";
+    let lungo =
+        "Caldi e freddi della stagione lunga da tenere sul tavolo di lavoro per il progetto";
     for (valore, atteso) in [
         (json!({ "swatches": ["Blu"] }), "Gruppo colori"),
-        (json!({ "name": "   ", "swatches": ["Blu"] }), "Gruppo colori"),
+        (
+            json!({ "name": "   ", "swatches": ["Blu"] }),
+            "Gruppo colori",
+        ),
         (json!({ "name": "  Caldi  ", "swatches": ["Blu"] }), "Caldi"),
         (json!({ "name": lungo, "swatches": ["Blu"] }), lungo),
     ] {
         let (dopo, _) = esegue(&ds, &svg, "swatch.newGroup", valore.clone());
-        assert_eq!(gruppi(&ds, &dopo), coppie(&[(atteso, &["Blu"][..])]), "{valore}");
+        assert_eq!(
+            gruppi(&ds, &dopo),
+            coppie(&[(atteso, &["Blu"][..])]),
+            "{valore}"
+        );
     }
 }
 
