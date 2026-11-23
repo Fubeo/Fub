@@ -5991,6 +5991,22 @@
     },
     {
       "fonte": "strumento",
+      "id": "reshape",
+      "chiamata": {
+        "strumento": "reshape"
+      },
+      "etichetta": {
+        "it": "Strumento Rimodella",
+        "en": "Reshape Tool"
+      },
+      "posto": "colonna/trasforma",
+      "famiglia": "trasforma",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "strumento",
       "id": "rotate",
       "chiamata": {
         "strumento": "rotate"

@@ -98,6 +98,13 @@ si muovono a coppie lungo il loro lato) e Distorsione libera (ogni angolo per
 conto suo). Vincola vale solo nel primo modo, e negli altri è spenta. `Ctrl` su
 un angolo deforma anche nel modo libero, come nell'Illustrator classico.
 
+Nella stessa casella c'è **Rimodella**: si prende il contorno di un oggetto
+scelto in un punto qualsiasi, entro 4 pixel, e lo si tira. Lì nasce un punto
+nuovo che segue il puntatore, e i punti vicini lo seguono un poco, come in
+VectorCraft; `Maiusc` tiene la direzione a multipli di 45°, `Esc` lascia tutto
+com'era. Un tiro lontano dal contorno non cambia niente, e un tratto della
+penna di Fub non si rimodella: lo si dice.
+
 Come in VectorCraft, rettangoli, ellissi, cerchi e poligoni si comportano da
 tracciati: con la Selezione diretta se ne spostano i punti, e la
 Trasformazione libera li distorce. Una forma deformata diventa un tracciato al

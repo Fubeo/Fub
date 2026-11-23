@@ -219,6 +219,7 @@ const COLUMN: Readonly<Record<string, readonly string[]>> = {
   "draw-point-smooth": ["M4 18c1.5-6 4.5-9 8-9s6.5 3 8 9", "M10.5 7.5h3v3h-3z", "M6 9h12"],
   "draw-polygon": ["M12 3l8.5 6.2-3.2 10H6.7L3.5 9.2z"],
   "draw-rounded-rect": ["M7 6h10a3 3 0 0 1 3 3v6a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3V9a3 3 0 0 1 3-3z"],
+  "draw-reshape": ["M4 18c4 0 5-11 8-11s4 11 8 11", "M10.5 3.5h3v3h-3z"],
   "draw-scale": ["M4 20V10h10v10z", "M10 7V4h10v10h-3", "M14 10l6-6", "M16 4h4v4"],
   "draw-scissors": ["M3.5 6a2.5 2.5 0 1 0 5 0a2.5 2.5 0 1 0-5 0", "M3.5 18a2.5 2.5 0 1 0 5 0a2.5 2.5 0 1 0-5 0", "M8 7.5L20 18", "M8 16.5L20 6"],
   "draw-shape-builder": ["M3 9a6 6 0 1 0 12 0a6 6 0 1 0-12 0", "M9 15a6 6 0 1 0 12 0a6 6 0 1 0-12 0", "M19 3v4", "M17 5h4"],

@@ -1,5 +1,5 @@
 // Gli strumenti di trasformazione nella colonna del Completo (piano K6, T13, giro 5):
-// Ruota, Rifletti, Scala, Inclina e Trasformazione libera stanno nella casella «modificare» (`rotate`, nel gruppo
+// Ruota, Rifletti, Scala, Inclina, Rimodella e Trasformazione libera stanno nella casella «modificare» (`rotate`, nel gruppo
 // `modify`), con il nome corto nelle due lingue, un'icona del catalogo e il clic che apre la
 // finestra del loro comando sulla selezione. Ogni strumento «fatto» dell'indice generato è
 // qui, e ogni clic punta a una finestra della famiglia `trasforma`.
@@ -19,7 +19,7 @@ interface VoceGenerata {
 }
 
 const VOCI = (indiceGenerato as { readonly voci: readonly VoceGenerata[] }).voci;
-const STRUMENTI_TRASFORMA = ["rotate", "reflect", "scale", "shear", "freeTransform"];
+const STRUMENTI_TRASFORMA = ["rotate", "reflect", "scale", "shear", "reshape", "freeTransform"];
 const CLIC_TRASFORMA: readonly [string, string][] = [
   ["rotate", "object.rotate"],
   ["reflect", "object.reflect"],
@@ -28,7 +28,7 @@ const CLIC_TRASFORMA: readonly [string, string][] = [
 ];
 
 describe("gli strumenti di trasformazione nella colonna", () => {
-  it("sono fatti nell'indice generato: Ruota, Rifletti, Scala, Inclina e Trasformazione libera, della famiglia trasforma", () => {
+  it("sono fatti nell'indice generato: Ruota, Rifletti, Scala, Inclina, Rimodella e Trasformazione libera, della famiglia trasforma", () => {
     const fatti = VOCI.filter((voce) => voce.famiglia === "trasforma" && voce.chiamata.strumento !== undefined).map((voce) => voce.chiamata.strumento);
     expect(fatti.sort()).toEqual([...STRUMENTI_TRASFORMA].sort());
     for (const id of STRUMENTI_TRASFORMA) expect(MOTORE_PRONTO.has(id), id).toBe(true);
@@ -47,6 +47,12 @@ describe("gli strumenti di trasformazione nella colonna", () => {
     expect(COLONNA_IT["draw.engine.name.shear"]).toBe("Inclina");
   });
 
+  it("Rimodella ha la sua curva tirata, non l'icona di «Tutti gli strumenti»", () => {
+    expect(iconaMotore("reshape")).toBe("draw-reshape");
+    expect(COLONNA_IT["draw.engine.name.reshape"]).toBe("Rimodella");
+    expect(DRAW_ICONS["draw-reshape"]).not.toEqual(DRAW_ICONS["draw-all-tools"]);
+  });
+
   it("Inclina ha il suo parallelogramma, non l'icona di «Tutti gli strumenti»", () => {
     expect(iconaMotore("shear")).toBe("draw-shear");
     expect(iconaMotore("shear")).not.toBe("draw-all-tools");
@@ -54,15 +60,14 @@ describe("gli strumenti di trasformazione nella colonna", () => {
     expect(DRAW_ICONS[iconaMotore("shear")]).not.toEqual(DRAW_ICONS["draw-all-tools"]);
   });
 
-  it("stanno nel gruppo «modificare», nella casella della Ruota, senza gli altri (Rimodella e le altre aspettano)", () => {
+  it("stanno nel gruppo «modificare», nella casella della Ruota, senza la Deformazione, che aspetta", () => {
     const gruppo = layoutCompleto(toolsFor("full", "vector"), MOTORE_PRONTO).find((g) => g.id === "modify");
     const casella = gruppo?.caselle.find((c) => c.includes("motore:rotate")) ?? [];
-    expect(casella).toEqual(["motore:rotate", "motore:reflect", "motore:scale", "motore:shear", "motore:freeTransform"]);
+    expect(casella).toEqual(["motore:rotate", "motore:reflect", "motore:scale", "motore:shear", "motore:reshape", "motore:freeTransform"]);
   });
 
-  it("senza ancora i pezzi non fatti (Rimodella, Deformazione)", () => {
+  it("senza ancora la Deformazione, che non è fatta", () => {
     const tutti = layoutCompleto([], MOTORE_PRONTO).flatMap((g) => g.caselle.flat());
-    expect(tutti).not.toContain("motore:reshape");
     expect(tutti).not.toContain("motore:puppetWarp");
   });
 });

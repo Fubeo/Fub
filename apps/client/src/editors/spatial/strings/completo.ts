@@ -1208,6 +1208,7 @@ export const COLONNA_IT = {
   "draw.engine.name.reflect": "Rifletti",
   "draw.engine.name.scale": "Scala",
   "draw.engine.name.shear": "Inclina",
+  "draw.engine.name.reshape": "Rimodella",
   "draw.engine.name.freeTransform": "Trasformazione libera",
   // Il Testo del motore (K6 T16) sta nella casella del Testo di Fub.
   "draw.engine.name.type": "Testo (Completo)",
@@ -1308,6 +1309,7 @@ export const COLONNA_EN: Record<keyof typeof COLONNA_IT, string> = {
   "draw.engine.name.reflect": "Reflect",
   "draw.engine.name.scale": "Scale",
   "draw.engine.name.shear": "Shear",
+  "draw.engine.name.reshape": "Reshape",
   "draw.engine.name.freeTransform": "Free Transform",
   "draw.engine.name.type": "Type (Full)",
   "draw.engine.type.box": "Text you are typing: Esc to leave",

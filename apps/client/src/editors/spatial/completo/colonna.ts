@@ -115,7 +115,8 @@ export const MOTORE_PRONTO: ReadonlySet<string> = new Set([
   "reflect",
   "scale",
   "shear",
-  // La Trasformazione libera (E), nella stessa casella.
+  // Rimodella e la Trasformazione libera (E), nella stessa casella.
+  "reshape",
   "freeTransform",
   // T16 giro 1: il Testo di punto.
   "type",
@@ -145,6 +146,7 @@ export const ICONE_MOTORE: Readonly<Record<string, string>> = {
   reflect: "draw-flip-h",
   scale: "draw-scale",
   shear: "draw-shear",
+  reshape: "draw-reshape",
   freeTransform: "draw-free-transform",
   lineSegment: "draw-line",
   arc: "draw-arc",

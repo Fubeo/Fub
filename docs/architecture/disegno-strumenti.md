@@ -83,8 +83,8 @@ sposta;
 la famiglia `tracciati` registra la sua fila (`ContestoCompleto.registraFila`,
 `completo/famiglie/tracciati/opzioni-punto.ts`), che manda i comandi sui
 punti con `anchors` nel `value` e dopo l'esito rilegge lo stato. Gli
-strumenti e i comandi dei tracciati rifiutano l'inchiostro di Fub
-(`unmapped`) e la carta. I comandi su un punto solo (`path.moveAnchor`,
+strumenti e i comandi dei tracciati, e Rimodella che ne sposta i punti
+(`gesti/strumento.rs`), rifiutano l'inchiostro di Fub (`unmapped`) e la carta. I comandi su un punto solo (`path.moveAnchor`,
 `setHandle`, `insertAnchor`, `removeAnchor`, `convertAnchor`, `close`,
 `appendAnchor`, `split`) nominano il tracciato con `element` e i numeri del
 punto, in coordinate della scena: `famiglie/tracciati_punti.rs` controlla i
