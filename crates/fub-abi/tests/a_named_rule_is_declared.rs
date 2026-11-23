@@ -1120,6 +1120,17 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
+            "crates/fub-disegno/src/famiglie/colore.rs::argomenti_delle_librerie",
+            (
+                Family::AsciiCase,
+                "riconosce il formato di una libreria senza badare alle maiuscole e togliendo il punto \
+                 iniziale (`.GPL` → `gpl`), come `PaletteFormat::parse` del motore \
+                 (`vendor/vectorcraft/crates/color/src/palette_io.rs`), prima di mandare la richiesta al \
+                 motore: i nomi dei formati sono ASCII e chiusi. Non è il nome di una nota, di un tag, di \
+                 un path o di un campione dell'utente.",
+            ),
+        ),
+        (
             "crates/fub-disegno/src/catalogo.rs::sostituisci",
             (
                 Family::PerCharacterCase,

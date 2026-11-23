@@ -1034,6 +1034,10 @@ fn si_legge_in_sola_lettura(id: &str) -> bool {
             // anche in sola lettura (K6 T14, temi).
             | "colorTheme.save"
             | "colorTheme.delete"
+            // Le librerie di campioni: salvarne una e caricarne una dai dati non scrivono il disegno
+            // (K6 T14, librerie).
+            | "swatch.library.save"
+            | "swatch.library.load"
             | "clipboard.flavours"
             | "clipboard.exportSvg"
             | "clipboard.exportPng"
