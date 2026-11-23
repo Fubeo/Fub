@@ -178,9 +178,9 @@ con **Testo su tracciato**, come VectorCraft: un clic su un tracciato o sul
 contorno di una forma ci mette il testo, che comincia nel punto toccato; il
 tracciato diventa del testo soltanto (non si vede più da solo), in un passo
 solo di Annulla. Un clic lontano dai contorni fa un testo da punto, e Alt
-tenuto passa a Testo in area. Mentre si scrive il testo non scorre ancora
-sul tracciato: lo fa appena il gesto finisce. Fub non toglie un testo da
-un tracciato.
+tenuto passa a Testo in area. Mentre si scrive il testo scorre già sul
+tracciato, che resta segnato da una linea sottile come guida. Fub non toglie
+un testo da un tracciato.
 
 **Dove comincia il testo.** Una forma si segue come la disegna SVG: un
 tracciato, una linea o una spezzata dal primo punto, un rettangolo

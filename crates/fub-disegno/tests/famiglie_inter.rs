@@ -357,3 +357,47 @@ fn la_marionetta_sul_testo_di_punto_con_inter() {
     );
     assert!(ops.contains("ot1t1t1t1"), "il testo è il bersaglio: {ops}");
 }
+
+/// Mentre si scrive un Testo su tracciato, l'anteprima mostra il testo sul
+/// tracciato, come VectorCraft: un `<g>` con l'id del tracciato del file, che
+/// il motore ha tolto e il client nasconde, la risorsa della sola anteprima
+/// col tracciato da seguire e il `<text>` col suo `textPath`. Prima
+/// l'anteprima non c'era, e il testo si vedeva solo col rilascio.
+#[test]
+fn il_testo_su_tracciato_si_vede_mentre_si_scrive() {
+    let disegni = common::disegni_con_inter();
+    disegni.filtra(fub_disegno::famiglie::Filtro::Tutte);
+    let casi = leggi_cartella(&cartella_famiglie()).expect("i casi si leggono");
+    let mut caso = casi
+        .iter()
+        .find(|c| c.id == "typeOnPath")
+        .expect("il caso del Testo su tracciato")
+        .clone();
+    // Il clic e le lettere, senza il commit.
+    caso.gesto.truncate(2);
+    let (mut disegno, _) =
+        fub_disegno::motore::Disegno::apri_con(&disegni, &caso.disegno).expect("si apre");
+    let esito = casi::esegui_sul_disegno(&mut disegno, &caso)
+        .expect("si esegue")
+        .expect("senza errore");
+    assert_eq!(esito.refused, None);
+    let forma = esito
+        .preview
+        .and_then(|p| p.shape)
+        .expect("la forma del testo nell'anteprima");
+    assert_eq!(forma["tag"], "g", "{forma}");
+    assert_eq!(forma["attrs"]["id"], "op7a7a7a7", "{forma}");
+    let risorsa = &forma["children"][0]["children"][0];
+    assert_eq!(risorsa["attrs"]["id"], "fub-anteprima-tracciato", "{forma}");
+    assert_eq!(
+        risorsa["attrs"]["d"], "M50 200 C150 100 250 100 350 200",
+        "{forma}"
+    );
+    let testo = &forma["children"][1];
+    assert_eq!(testo["tag"], "text", "{forma}");
+    assert_eq!(testo["attrs"]["font-size"], "32", "{forma}");
+    let sul = &testo["children"][0];
+    assert_eq!(sul["tag"], "textPath", "{forma}");
+    assert_eq!(sul["attrs"]["href"], "#fub-anteprima-tracciato", "{forma}");
+    assert_eq!(sul["text"], "Onde del mare", "{forma}");
+}

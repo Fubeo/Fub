@@ -469,11 +469,16 @@ fn righe_del_testo(t: &vectorcraft_doc::text::TextObject, x: &str, m: Affine) ->
         .collect()
 }
 
+/// L'id del tracciato che il testo su tracciato segue nell'anteprima: una
+/// risorsa della sola anteprima, che non arriva al file.
+const ID_TRACCIATO_IN_ANTEPRIMA: &str = "fub-anteprima-tracciato";
+
 /// L'anteprima del testo che lo strumento sta scrivendo: il `<text>` nuovo
 /// o cambiato nella sessione, in coordinate di scena, con le sue righe; per
 /// un testo che c'era già, l'`id` di Fub, perché il client nasconda quello
-/// del file mentre si scrive. `None` se nessun testo è cambiato o se il
-/// testo non è di punto orizzontale.
+/// del file mentre si scrive. Un testo su tracciato è un `<g>` con la sua
+/// risorsa e il `<text>`, che ha l'id del tracciato che sostituisce. `None`
+/// se nessun testo è cambiato o se il testo è verticale.
 fn testo_in_scrittura(sessione: &Session, copia: &Copia) -> Option<Value> {
     let stato = sessione.doc().ok()?;
     let dopo = stato.doc.clone();
@@ -495,19 +500,56 @@ fn testo_in_scrittura(sessione: &Session, copia: &Copia) -> Option<Value> {
     let NodeKind::Text(t) = &nodo.kind else {
         return None;
     };
-    // Un testo su tracciato non ha righe da mostrare: il suo tracciato è una
-    // risorsa che nasce solo col rilascio.
-    if matches!(t.kind, TextKind::OnPath { .. }) {
-        return None;
-    }
     let indietro = copia.radice.inverse();
+    let id_di = |n: NodeId| {
+        copia
+            .mappa
+            .del_nodo(n)
+            .and_then(|i| copia.mappa.elemento(i))
+            .and_then(|e| e.id_del_file().map(str::to_string))
+    };
     let (tag, mut attrs) = scrivi_testo(nodo, indietro)?;
-    if let Some(id) = copia
-        .mappa
-        .del_nodo(nodo.id)
-        .and_then(|i| copia.mappa.elemento(i))
-        .and_then(|e| e.id_del_file().map(str::to_string))
-    {
+    if let TextKind::OnPath { path, start, .. } = &t.kind {
+        // Il testo su tracciato (`text.createInPath`) prende il posto del
+        // tracciato, che il motore toglie: il client nasconde quello del file,
+        // come VectorCraft, che mentre si scrive ne disegna solo la linea blu
+        // (i segni). Il tracciato da seguire è una risorsa della sola
+        // anteprima, nella forma stessa; il file la avrà col rilascio
+        // (`con_le_righe`).
+        let sotto = id_di(nodo.id).or_else(|| {
+            prima
+                .nodi
+                .values()
+                .filter(|p| {
+                    matches!(p.nodo.kind, NodeKind::Path { .. })
+                        && !ora.nodi.contains_key(&p.nodo.id)
+                })
+                .find_map(|p| id_di(p.nodo.id))
+        });
+        let in_scena = vectorcraft_doc::text::TextObject {
+            xf: indietro * t.xf,
+            ..(**t).clone()
+        };
+        let (figlio, mut tracciato) =
+            sul_tracciato(&in_scena, path, *start, ID_TRACCIATO_IN_ANTEPRIMA);
+        // Nell'anteprima l'id del tracciato è quello della sola anteprima.
+        if let Some(a) = tracciato["attrs"].as_object_mut() {
+            a.remove("fub:role");
+        }
+        let mut g = Map::new();
+        if let Some(id) = sotto {
+            g.insert("id".into(), json!(id));
+        }
+        let testo = json!({ "tag": tag, "attrs": attrs, "children": [figlio] });
+        let forma = json!({
+            "tag": "g",
+            "attrs": g,
+            "children": [{ "tag": "defs", "attrs": {}, "children": [tracciato] }, testo],
+        });
+        return (serde_json::to_string(&forma).ok()?.len() <= fub_abi::MAX_DRAWING_OPS_BYTES)
+            .then_some(forma);
+    }
+    if let Some(id) = id_di(nodo.id) {
         attrs.insert("id".into(), json!(id));
     }
     let x = attrs["x"].as_str().unwrap_or("0").to_string();
