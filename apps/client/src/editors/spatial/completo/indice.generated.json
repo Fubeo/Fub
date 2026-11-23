@@ -4689,6 +4689,22 @@
     },
     {
       "fonte": "interfaccia",
+      "id": "ui.expandDialog",
+      "chiamata": {
+        "client": "ui.expandDialog"
+      },
+      "etichetta": {
+        "it": "Espandi…",
+        "en": "Expand…"
+      },
+      "posto": "finestra",
+      "famiglia": "tracciati",
+      "tasto": null,
+      "effetto": "mostra",
+      "finestra": true
+    },
+    {
+      "fonte": "interfaccia",
       "id": "ui.newSwatch",
       "chiamata": {
         "client": "ui.newSwatch"
@@ -4734,6 +4750,44 @@
       "tasto": null,
       "effetto": "mostra",
       "finestra": true
+    },
+    {
+      "fonte": "interfaccia",
+      "id": "ui.simplifyAuto",
+      "chiamata": {
+        "comando": "disegno.object.path.simplify",
+        "valore": {
+          "auto": true
+        }
+      },
+      "etichetta": {
+        "it": "Semplifica automaticamente",
+        "en": "Auto-Simplify"
+      },
+      "posto": "menu/oggetto/tracciato",
+      "famiglia": "tracciati",
+      "tasto": null,
+      "effetto": "mostra",
+      "finestra": false
+    },
+    {
+      "fonte": "interfaccia",
+      "id": "ui.smoothAuto",
+      "chiamata": {
+        "comando": "disegno.object.path.smooth",
+        "valore": {
+          "auto": true
+        }
+      },
+      "etichetta": {
+        "it": "Smussa automaticamente",
+        "en": "Auto-Smooth"
+      },
+      "posto": "menu/oggetto/tracciato",
+      "famiglia": "tracciati",
+      "tasto": null,
+      "effetto": "mostra",
+      "finestra": false
     },
     {
       "fonte": "interfaccia",

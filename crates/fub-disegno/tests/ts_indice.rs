@@ -78,6 +78,10 @@ fn chiamata(voce: &Voce) -> Value {
 /// «Allinea» aggiunge `to`). Le altre voci dell'interfaccia restano del client.
 fn alias_allinea(id: &str) -> Option<(&'static str, Value)> {
     Some(match id {
+        // Semplifica automatica e Smussa automatico (K6 T12, giro finestre): senza finestra, il
+        // comando del motore con `auto: true` (il livello lo sceglie il motore, e il passo si annulla).
+        "ui.simplifyAuto" => ("object.path.simplify", json!({ "auto": true })),
+        "ui.smoothAuto" => ("object.path.smooth", json!({ "auto": true })),
         "align.horizontalLeft" => ("object.align", json!({ "horizontal": "left" })),
         "align.horizontalCenter" => ("object.align", json!({ "horizontal": "center" })),
         "align.horizontalRight" => ("object.align", json!({ "horizontal": "right" })),

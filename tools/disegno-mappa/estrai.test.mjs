@@ -172,7 +172,11 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // T12 strumenti dei punti porta a «fatto» tre righe dei tracciati: Allunga tracciato (`extend`), Imposta
   // punto di ancoraggio (`setAnchor`) e Fai scorrere il punto (`slideAnchor`). La Gomma dei punti
   // (`addon.pathtools.erase`) resta «da fare»: manca il gesto nel client. Casi in `tests/famiglie/tracciati.json`.
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1060, fub: 114, escluso: 12, fatto: 365 });
+  // T12 finestre (Semplifica e Smussa): `ui.expandDialog` è «fatto», la stessa finestra di
+  // `object.expand` (la finestra di Espandi, con il suo test). Altre opzioni resta «da fare».
+  // T12 finestre, giro senza finestra: `ui.simplifyAuto` e `ui.smoothAuto` (Semplifica e Smussa
+  // automaticamente) sono «fatto» come voci dirette del comando con `{auto: true}`: due in più.
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1057, fub: 114, escluso: 12, fatto: 368 });
 });
 
 // --- un motore finto ---------------------------------------------------------------

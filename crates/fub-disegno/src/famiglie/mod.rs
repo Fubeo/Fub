@@ -197,6 +197,20 @@ pub(crate) trait StatoFamiglia: Send + Sync + 'static {
         None
     }
 
+    /// Il rifiuto del comando `id` che la famiglia sa prima di legare la scelta ai nodi del motore: un
+    /// elemento senza nodo (un rettangolo di Fub) darebbe `unmapped`, e il perché sarebbe sbagliato
+    /// (K6 T12, finestre). Di serie nessuno.
+    fn rifiuto_prima_dei_nodi(
+        _id: &str,
+        _copia: &Copia,
+        _selezione: &[String],
+    ) -> Option<DrawingRefusal>
+    where
+        Self: Sized,
+    {
+        None
+    }
+
     /// La frase in italiano per un argomento che il motore rifiuta (`BadParams`, con il
     /// messaggio del motore): quando la famiglia sa dire il perché (K6 T14, temi). Di serie
     /// `None`, e `esegui` rende il messaggio del motore com'è.
@@ -354,6 +368,15 @@ macro_rules! famiglie {
                 match self {
                     $(Famiglia::$variante => {
                         <$modulo::Stato as StatoFamiglia>::rifiuto_del_motore(id, errore)
+                    })*
+                }
+            }
+
+            /// Il rifiuto della famiglia prima dei nodi della scelta, se ce n'è uno.
+            fn rifiuto_prima_dei_nodi(self, id: &str, copia: &Copia, selezione: &[String]) -> Option<DrawingRefusal> {
+                match self {
+                    $(Famiglia::$variante => {
+                        <$modulo::Stato as StatoFamiglia>::rifiuto_prima_dei_nodi(id, copia, selezione)
                     })*
                 }
             }
@@ -1045,6 +1068,9 @@ pub(crate) fn esegui(
     // Completo copia da qui), ma non si taglia, non si incolla e non si importa.
     if !copia.modificabile && !si_legge_in_sola_lettura(&riga.id) {
         return Ok(rifiuta(DrawingRefusal::Unsupported));
+    }
+    if let Some(motivo) = famiglia.rifiuto_prima_dei_nodi(&riga.id, copia, &richiesta.selection) {
+        return Ok(rifiuta(motivo));
     }
     let scelti = match nodi_scelti(copia, &richiesta.selection) {
         Ok(scelti) => scelti,
