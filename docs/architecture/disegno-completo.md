@@ -78,13 +78,22 @@ questi pezzi:
 Un comando di sola lettura (un pannello che mostra dati) rende una lettura
 invece delle operazioni (arriva con T4). Una famiglia che non trova memoria
 nel `Budget` rifiuta il comando con `NoMemory` (arriva con T4), e il disegno
-resta com'era. Un comando con argomenti che il motore non prende (`BadArgs`)
-non tocca la copia né la revisione e non rende operazioni: la sessione resta
-aperta, la frase del motore si annuncia, o nella finestra del comando si
-mostra sotto i campi senza «Riprova», e la finestra resta aperta
-([Quando il motore manca](disegno.md#quando-il-motore-manca)). Le finestre
-che controllano da sé i valori (per esempio «Nuovo gruppo colori…») lo fanno
-prima di mandare il comando.
+resta com'era.
+
+### Argomenti rifiutati
+
+Un gesto o un comando con argomenti che il motore non prende (`bad_args`)
+non è un motore che manca: il motore rifiuta prima di toccare la copia, la
+revisione e la cronologia (`crates/fub-disegno/tests/argomenti_rifiutati.rs`),
+la sessione resta aperta, la fila va avanti e chi ha chiesto riceve la
+risposta tipizzata `{ kind: "argomenti", message }` con la frase del motore.
+La frase si annuncia, o nella finestra del comando si mostra sotto i campi
+senza «Riprova», e la finestra resta aperta. Le finestre che controllano da sé
+i valori (per esempio «Nuovo gruppo colori…») lo fanno prima di mandare il
+comando. Restano un guasto
+([Quando il motore manca](disegno.md#quando-il-motore-manca)) il `bad_args`
+di un `sync` o della chiusura di un tracciato aperto, che la sessione chiede
+da sé, e `permission_denied`, che riguarda tutta la sessione.
 
 ## Il percorso di uno strumento del motore
 

@@ -189,39 +189,30 @@ i suoi strumenti TypeScript ([ADR 0231](../decisions/0231-la-chiusura-di-fubdraw
 §3), e la lavagna non usa il motore.
 
 Senza motore la sessione è `MotoreAssente`, e il disegno usa gli strumenti
-semplici, quelli TypeScript del client: Selezione, forme e Testo funzionano
-lo stesso, nello stesso ordine. Il chip (`motore/standing.ts`) lo dice:
-**spento** (riga spenta o `unserved`), segno vuoto, con «Accendi…» che apre
-la riga del motore nella pagina Componenti (`showComponent`); **fermo** (un
-errore), segno rosso, con «Riprova» che chiama `riapri()`, mai da sé; nella
-**build senza motore** (riga assente dalla mappa) senza azioni. Mentre una
-sessione nuova si apre resta il chip di prima; in Lettura e in sola lettura
-parla l'avviso. Mano, Lente, Penna, Evidenziatore e Gomma non passano mai dal
-motore. I vettori dei gesti sono l'oracolo delle due strade
-(`motore/due-strade.test.ts`: stesso file, annulla e selezione).
+semplici, quelli TypeScript del client: Selezione, forme e Testo funzionano lo
+stesso, nello stesso ordine. Il chip (`motore/standing.ts`) lo dice: **spento**
+(riga spenta o `unserved`), segno vuoto, con «Accendi…» che apre la riga del
+motore nella pagina Componenti (`showComponent`); **fermo** (un errore), segno
+rosso, con «Riprova» che chiama `riapri()`, mai da sé; nella **build senza
+motore** (riga assente dalla mappa) senza azioni. Mentre una sessione nuova si
+apre resta il chip di prima; in Lettura e in sola lettura parla l'avviso. Mano,
+Lente, Penna, Evidenziatore e Gomma non passano mai dal motore. I vettori dei
+gesti sono l'oracolo delle due strade (`motore/due-strade.test.ts`: stesso file,
+annulla e selezione).
 
 ### Quando il motore manca
 
 `motoreDa` (`motore/gesti.ts`) sa perché il motore manca: **spento** (la riga
-spenta, che la superficie sente da `onComponents` e chiude subito la sessione,
-o un `unserved` a metà sessione: spento in un vault, l'host chiude le sue
-istanze e libera il motore se non ne resta nessuna) o **fermo** (ogni altro
-errore, o 10 s senza risposta).
-
-Un gesto o un comando con argomenti che il motore non prende (`bad_args`) non
-è un motore che manca: la sessione resta aperta, la fila va avanti e chi ha
-chiesto riceve la risposta tipizzata `{ kind: "argomenti", message }` con la
-frase del motore, che si annuncia o si mostra nella finestra del comando; la
-copia del motore e la cronologia non cambiano
-(`crates/fub-disegno/tests/argomenti_rifiutati.rs`). Restano un guasto
-(**fermo**) il `bad_args` di un `sync` o della chiusura di un tracciato
-aperto, che la sessione chiede da sé, e `permission_denied`, che riguarda
-tutta la sessione e non la richiesta. **Riacceso**, o con «Riprova» del chip,
-`riapri()` apre un'istanza nuova col testo di quel momento, senza rimontare
-l'editor e una alla volta. Un gesto a metà quando il motore manca si annulla
-senza scrivere e lo si annuncia; il gesto dopo usa gli strumenti semplici. La
-sessione finisce col riquadro e con la `DocumentSession` (file cancellato,
-vault chiuso o cambiato); col file rinominato resta.
+spenta, che la superficie sente da `onComponents` e chiude subito la sessione, o
+un `unserved` a metà sessione: spento in un vault, l'host chiude le sue istanze
+e libera il motore se non ne resta nessuna) o **fermo** (ogni altro errore, o 10
+s senza risposta; un `bad_args` no: [la sessione resta
+aperta](disegno-completo.md#argomenti-rifiutati)). **Riacceso**, o con «Riprova»
+del chip, `riapri()` apre un'istanza nuova col testo di quel momento, senza
+rimontare l'editor e una alla volta. Un gesto a metà quando il motore manca si
+annulla senza scrivere e lo si annuncia; il gesto dopo usa gli strumenti
+semplici. La sessione finisce col riquadro e con la `DocumentSession` (file
+cancellato, vault chiuso o cambiato); col file rinominato resta.
 
 ## I comandi IPC
 
@@ -296,8 +287,7 @@ Ciò che la scena non sa dire (un effetto dal vivo, un aspetto impilato, una for
 
 ## Il disegno completo
 
-Lo spazio Completo con tutte le funzioni del motore: [Il disegno completo](disegno-completo.md).
-Il motore non tocca il disco: [il disco](disegno-completo.md#il-disco).
+Lo spazio Completo con tutte le funzioni del motore, e il disco che il motore non tocca: [Il disegno completo](disegno-completo.md), [il disco](disegno-completo.md#il-disco).
 
 ## Dove sta il codice
 
