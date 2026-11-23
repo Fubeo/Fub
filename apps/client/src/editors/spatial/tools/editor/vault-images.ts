@@ -304,6 +304,7 @@ export function installVaultImages(ctx: EditorContext): void {
       showContextMenu(at, menu.items, { labelledBy: selectionButton.id, clipboard: menu.clipboard, searchable: menu.searchable });
       return;
     }
+    const strumentoDelMotore = ctx.completoMotore?.()?.strumentoDelTasto?.(`${event.shiftKey ? "Shift-" : ""}${event.key.toLowerCase()}`) ?? null;
     if (onSurface && event.key === "Tab") {
       if (!walk(event.shiftKey ? -1 : 1)) return;
     } else if (onSurface && (event.key === "PageUp" || event.key === "PageDown") && !event.shiftKey && folio !== undefined) {
@@ -374,6 +375,12 @@ export function installVaultImages(ctx: EditorContext): void {
     } else if (event.shiftKey && event.code === "Digit2") {
       // Maiusc+2 inquadra la selezione.
       ctx.fitSelection();
+    } else if (strumentoDelMotore !== null) {
+      // Nel Completo il tasto di uno strumento di VectorCraft (V, A, P, M, R…) sceglie
+      // quello strumento, come la sua casella: vince sullo strumento di Fub con la
+      // stessa lettera, e anche su + e - (aggiungi e togli punto).
+      if (!editable()) return;
+      ctx.sceltaMotore(strumentoDelMotore);
     } else if (event.key === "+" || event.key === "=") {
       zoomBy(ZOOM_STEP);
     } else if (event.key === "-") {

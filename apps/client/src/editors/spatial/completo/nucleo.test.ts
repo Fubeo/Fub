@@ -79,12 +79,12 @@ describe("gli strumenti del nucleo nella colonna", () => {
     }
   });
 
-  it("i sette strumenti stanno nelle caselle del prototipo, dopo quelli di Fub della stessa casella", () => {
+  it("i sette strumenti stanno nelle caselle del prototipo, prima di quelli di Fub della stessa casella (come VectorCraft)", () => {
     const layout = layoutCompleto(toolsFor("full", "vector"), NUCLEO_PRONTO);
     const pick = layout.find((gruppo) => gruppo.id === "pick")!;
-    expect(pick.caselle).toEqual([["select", "motore:selection"], ["motore:directSelection", "motore:groupSelection"], ["motore:lasso"]]);
+    expect(pick.caselle).toEqual([["motore:selection", "select"], ["motore:directSelection", "motore:groupSelection"], ["motore:lasso"]]);
     const view = layout.find((gruppo) => gruppo.id === "view")!;
-    expect(view.caselle).toEqual([["hand", "zoom", "motore:hand", "motore:zoom", "motore:rotateView"]]);
+    expect(view.caselle).toEqual([["motore:hand", "motore:zoom", "motore:rotateView", "hand", "zoom"]]);
     const delMotore = layout.flatMap((gruppo) => gruppo.caselle.flat()).filter((id) => id.startsWith(PREFISSO_MOTORE) && STRUMENTI_NUCLEO.includes(id.slice(PREFISSO_MOTORE.length)));
     expect(delMotore).toHaveLength(7);
   });

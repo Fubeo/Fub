@@ -24,6 +24,8 @@ export interface CompletoMotore {
   preparaStrumento(strumento: string): Promise<boolean>;
   /// Canc coi punti scelti: li toglie, e dice `true`; senza punti `false`.
   cancellaPunti?(): boolean;
+  /// Lo strumento di VectorCraft che un tasto di strumento sceglie (`v`, `Shift-b`); `null` se nessuno.
+  strumentoDelTasto?(premuto: string): string | null;
   fila(
     strumento: string,
     opzioni: unknown,

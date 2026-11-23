@@ -252,3 +252,41 @@ export function decidiTasto(
   }
   return { tipo: "passa" };
 }
+
+/// Il tasto di uno strumento del motore nella forma dei tasti degli strumenti di
+/// Fub (`toolForKey`): una lettera o un segno, con o senza Maiusc (`v`, `Shift-b`,
+/// `+`, `\`). Il catalogo di VectorCraft scrive `V`, `Shift+B`. Un tasto con Ctrl,
+/// Cmd o Alt non è un tasto di strumento: `null`. Con Maiusc vale solo una
+/// lettera (Maiusc+~ dipende dalla tastiera), come in `tastoFub`.
+export function tastoStrumento(tastoMotore: string | null | undefined): string | null {
+  const testo = (tastoMotore ?? "").trim();
+  if (testo === "" || /\s/.test(testo)) return null;
+  const maiuscolo = /^Shift\+(?=.)/.test(testo);
+  const resto = maiuscolo ? testo.slice("Shift+".length) : testo;
+  if ([...resto].length !== 1) return null;
+  if (maiuscolo && !/[A-Za-z]/.test(resto)) return null;
+  return `${maiuscolo ? "Shift-" : ""}${resto.toLowerCase()}`;
+}
+
+/// Uno strumento del motore come lo dà l'indice: il suo id e il tasto del catalogo.
+export interface StrumentoConTasto {
+  readonly strumento: string;
+  readonly tasto: string | null;
+}
+
+/// Lo strumento del motore che il tasto `premuto` sceglie nel Completo, nella forma
+/// di `toolForKey` (`v`, `Shift-b`). Come in VectorCraft, ogni strumento del
+/// catalogo risponde al suo tasto, e nel Completo vince sullo strumento di Fub con
+/// la stessa lettera; uno strumento che non è `pronto` non lo prende, e il tasto
+/// resta a Fub. Due strumenti sullo stesso tasto (la tendina di una casella):
+/// vince il primo del catalogo, come la casella che VectorCraft mostra.
+export function strumentoDelTasto(
+  strumenti: readonly StrumentoConTasto[],
+  premuto: string,
+  pronto: (strumento: string) => boolean,
+): string | null {
+  for (const voce of strumenti) {
+    if (tastoStrumento(voce.tasto) === premuto && pronto(voce.strumento)) return voce.strumento;
+  }
+  return null;
+}

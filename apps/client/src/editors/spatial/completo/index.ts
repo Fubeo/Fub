@@ -62,7 +62,7 @@ export type { EsitoLivello, PortaLivelli, RichiestaLivello } from "./livelli-por
 import { registraAppuntiCompleto } from "../tools/clipboard";
 import { montaTasti } from "./montaggio-tasti";
 import { seguiTastiUtente } from "./segui-tasti";
-import type { ModificheTasti, Piattaforma } from "./tasti";
+import { strumentoDelTasto, type ModificheTasti, type Piattaforma } from "./tasti";
 export type { GruppoLayout } from "./colonna";
 
 export type { Caricatore, ContestoCompleto, StatoFamiglia, PercheErrore, ModuloFamiglia } from "./carica";
@@ -121,6 +121,11 @@ export interface Completo {
   /// punti (`path.deleteAnchors`), non l'oggetto. `true` se c'erano punti scelti e il
   /// comando è partito; `false` senza punti, e Canc resta quello dell'editor.
   cancellaPunti(): boolean;
+  /// Lo strumento del motore che un tasto di strumento sceglie (`v`, `Shift-b`, la
+  /// forma di `toolForKey`), come in VectorCraft: nel Completo vince sullo strumento
+  /// di Fub con la stessa lettera. `null` se nessuno strumento pronto ha quel tasto,
+  /// o finché l'indice non arriva: il tasto resta a Fub (`tasti.ts`, `strumentoDelTasto`).
+  strumentoDelTasto(premuto: string): string | null;
   /// Le parole `testo` per il testo in area `elemento`, dal campo «Testo»
   /// dell'ispettore: passano da `text.editRange`, che rifà gli a capo nel
   /// riquadro, con un passo d'annulla solo e i rifiuti detti come per ogni
@@ -784,6 +789,11 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila" | "e
       const nome = corto !== undefined ? (inglese ? corto.en : corto.it) : (nomeCortoColonna(strumento) ?? (inglese ? voce.etichetta.en : voce.etichetta.it));
       const stato = carica.stato(voce.famiglia).kind;
       return { nome, icona: iconaMotore(strumento), famiglia: stato };
+    },
+    strumentoDelTasto(premuto) {
+      if (ctx.motore === null || indiceArrivato === null) return null;
+      const strumenti = indiceArrivato.voci.flatMap((voce) => ("strumento" in voce.chiamata ? [{ strumento: voce.chiamata.strumento, tasto: voce.tasto }] : []));
+      return strumentoDelTasto(strumenti, premuto, (id) => MOTORE_PRONTO.has(id));
     },
     ascoltaColonna(ascolto) {
       ascoltiColonna.add(ascolto);

@@ -18,6 +18,22 @@ quel tasto. Vale questo ordine:
   subito**. Se la parte del disegno che li fa non è ancora arrivata, il comando
   aspetta e lo dice, e parte appena è pronta.
 
+## Gli strumenti del motore
+
+Gli strumenti del motore pronti nel Completo prendono la lettera di VectorCraft,
+anche dove nello Standard la stessa lettera sceglie uno strumento di Fub:
+Selezione (`V`), Selezione diretta (`A`), Lazo (`Q`), Penna (`P`), Aggiungi e
+Togli punto (`+` e `-`), Punto di ancoraggio (`Maiusc+C`), Testo (`T`), Segmento
+(`\`), Rettangolo (`M`), Ellisse (`L`), Pennello a macchia (`Maiusc+B`), Matita
+(`N`), Gomma (`Maiusc+E`), Forbici (`C`), Ruota (`R`), Rifletti (`O`), Scala
+(`S`), Costruzione forme (`Maiusc+M`), Sfumatura (`G`), Contagocce (`I`), Mano
+(`H`), Ruota vista (`Maiusc+H` senza selezione) e Zoom (`Z`). Uno strumento non
+ancora pronto lascia la lettera a Fub (per esempio `E`, Trasformazione libera,
+resta la gomma di Fub). La lettera da sola e quella con `Maiusc` sono due tasti.
+Il Completo si apre sulla Selezione di VectorCraft, e ci torna dopo `Esc` su un
+tracciato e all'uscita dal testo, come VectorCraft; nella colonna gli strumenti
+del motore stanno prima di quelli di Fub della stessa casella.
+
 Un tasto **non parte** mentre si scrive: in un campo di testo, mentre un IME
 compone, e con una lettera, una cifra o un segno quando lo strumento vuole il
 testo. Un tasto con `Ctrl`, `⌘` o `Alt` parte anche allora.

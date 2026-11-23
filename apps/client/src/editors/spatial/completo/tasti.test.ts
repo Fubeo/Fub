@@ -8,9 +8,11 @@ import {
   decidiTasto,
   normaTasto,
   risolviTasti,
+  strumentoDelTasto,
   TASTI_DI_FUB,
   tastoDelComando,
   tastoFub,
+  tastoStrumento,
   type RegolaTasti,
   type StatoTastiera,
   type VoceTasto,
@@ -293,5 +295,58 @@ describe("il tasto che il menu mostra è quello che parte", () => {
       expect(decidiTasto(evento, regola, NESSUNO, "other")).toEqual({ tipo: "esegue", comando: id });
     }
     expect(tastoDelComando(regola, "edit.undo")).toBeNull();
+  });
+});
+
+describe("i tasti degli strumenti di VectorCraft nel Completo", () => {
+  it("il tasto del catalogo diventa quello degli strumenti di Fub: lettera, Maiusc+lettera, segno", () => {
+    expect(tastoStrumento("V")).toBe("v");
+    expect(tastoStrumento("Shift+B")).toBe("Shift-b");
+    expect(tastoStrumento("+")).toBe("+");
+    expect(tastoStrumento("\\")).toBe("\\");
+    // Maiusc con un segno dipende dalla tastiera; con Ctrl o Alt è un comando, non uno strumento.
+    expect(tastoStrumento("Shift+~")).toBeNull();
+    expect(tastoStrumento("Cmd+K")).toBeNull();
+    expect(tastoStrumento("Alt+V")).toBeNull();
+    expect(tastoStrumento(null)).toBeNull();
+    expect(tastoStrumento("")).toBeNull();
+  });
+
+  const CATALOGO = [
+    { strumento: "selection", tasto: "V" },
+    { strumento: "directSelection", tasto: "A" },
+    { strumento: "pen", tasto: "P" },
+    { strumento: "rectangle", tasto: "M" },
+    { strumento: "ellipse", tasto: "L" },
+    { strumento: "freeTransform", tasto: "E" },
+    { strumento: "blobBrush", tasto: "Shift+B" },
+    { strumento: "puppetWarp", tasto: null },
+  ];
+  const pronti = new Set(["selection", "directSelection", "pen", "rectangle", "ellipse", "blobBrush"]);
+
+  it("ogni strumento pronto risponde al suo tasto, anche dove Fub ha uno strumento con la stessa lettera", () => {
+    const scelto = (premuto: string) => strumentoDelTasto(CATALOGO, premuto, (id) => pronti.has(id));
+    expect(scelto("v")).toBe("selection");
+    expect(scelto("p")).toBe("pen");
+    expect(scelto("m")).toBe("rectangle");
+    expect(scelto("l")).toBe("ellipse");
+    expect(scelto("Shift-b")).toBe("blobBrush");
+  });
+
+  it("uno strumento non pronto non prende il tasto, che resta a Fub; un tasto senza strumento è null", () => {
+    const scelto = (premuto: string) => strumentoDelTasto(CATALOGO, premuto, (id) => pronti.has(id));
+    expect(scelto("e")).toBeNull();
+    expect(scelto("x")).toBeNull();
+    // Maiusc+V non è V: la lettera nuda e quella con Maiusc sono due tasti.
+    expect(scelto("Shift-v")).toBeNull();
+  });
+
+  it("due strumenti sullo stesso tasto: vince il primo del catalogo che è pronto", () => {
+    const doppi = [
+      { strumento: "a", tasto: "K" },
+      { strumento: "b", tasto: "K" },
+    ];
+    expect(strumentoDelTasto(doppi, "k", () => true)).toBe("a");
+    expect(strumentoDelTasto(doppi, "k", (id) => id === "b")).toBe("b");
   });
 });

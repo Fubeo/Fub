@@ -34,20 +34,20 @@ export interface Casella {
 /// posto `colonna/<gruppo>` della mappa; i nomi di Fub (`pen`, `rect`…) sono
 /// gli strumenti che Fub ha già, e stanno nella casella del loro gruppo.
 export const CASELLE: readonly Casella[] = [
-  { id: "selection", gruppo: "pick", strumenti: ["select", "motore:selection"] },
+  { id: "selection", gruppo: "pick", strumenti: ["motore:selection", "select"] },
   { id: "directSelection", gruppo: "pick", strumenti: ["motore:directSelection", "motore:groupSelection"] },
   { id: "lasso", gruppo: "pick", strumenti: ["motore:lasso", "motore:magicWand"] },
   { id: "pen", gruppo: "draw", strumenti: ["motore:pen", "motore:smartPen", "motore:curvature", "motore:addAnchor", "motore:deleteAnchor", "motore:anchorPoint", "motore:cornerTool", "motore:slideAnchor", "motore:extendPath"] },
   { id: "pencil", gruppo: "draw", strumenti: ["motore:pencil", "pen", "highlighter", "motore:paintbrush", "motore:blobBrush", "motore:smooth", "motore:join", "motore:sharedEdge"] },
   { id: "eraser", gruppo: "draw", strumenti: ["motore:eraser", "eraser", "motore:pathEraser", "motore:anchorEraserBrush", "motore:scissors", "motore:knife", "motore:mirrorCut", "motore:lineCut", "motore:rectCut"] },
-  { id: "rectangle", gruppo: "shape", strumenti: ["rect", "ellipse", "line", "arrow", "motore:rectangle", "motore:roundedRectangle", "motore:ellipse", "motore:polygon", "motore:star", "motore:flare", "motore:lineSegment", "motore:arc", "motore:spiral", "motore:rectangularGrid", "motore:polarGrid", "motore:parametricShape", "motore:shaper"] },
-  { id: "type", gruppo: "shape", strumenti: ["text", "motore:type", "motore:areaType", "motore:typeOnPath", "motore:verticalType", "motore:verticalAreaType", "motore:verticalTypeOnPath", "motore:touchType"] },
+  { id: "rectangle", gruppo: "shape", strumenti: ["motore:rectangle", "motore:roundedRectangle", "motore:ellipse", "motore:polygon", "motore:star", "motore:flare", "motore:lineSegment", "motore:arc", "motore:spiral", "motore:rectangularGrid", "motore:polarGrid", "motore:parametricShape", "motore:shaper", "rect", "ellipse", "line", "arrow"] },
+  { id: "type", gruppo: "shape", strumenti: ["motore:type", "motore:areaType", "motore:typeOnPath", "motore:verticalType", "motore:verticalAreaType", "motore:verticalTypeOnPath", "motore:touchType", "text"] },
   { id: "rotate", gruppo: "modify", strumenti: ["motore:rotate", "motore:reflect", "motore:scale", "motore:shear", "motore:reshape", "motore:freeTransform", "motore:puppetWarp"] },
   { id: "width", gruppo: "modify", strumenti: ["motore:width", "motore:warp", "motore:twirl", "motore:pucker", "motore:bloat", "motore:scallop", "motore:crystallize", "motore:wrinkle"] },
   { id: "shapeBuilder", gruppo: "modify", strumenti: ["motore:shapeBuilder", "motore:livePaintBucket", "motore:livePaintSelection", "motore:blend"] },
   { id: "gradient", gruppo: "color", strumenti: ["motore:gradient", "motore:mesh"] },
   { id: "eyedropper", gruppo: "color", strumenti: ["motore:eyedropper", "motore:measure"] },
-  { id: "hand", gruppo: "view", strumenti: ["hand", "zoom", "motore:hand", "motore:zoom", "motore:rotateView", "motore:printTiling"] },
+  { id: "hand", gruppo: "view", strumenti: ["motore:hand", "motore:zoom", "motore:rotateView", "motore:printTiling", "hand", "zoom"] },
 ];
 
 /// Il gruppo dove va uno strumento di Fub che il prototipo non nomina (la

@@ -461,6 +461,9 @@ export interface GestiMotoreContext {
   /// famiglia si prepara con `prepara`; se non arriva, lo strumento di prima
   /// resta e lo si dice.
   sceltaMotore: (id: string | null) => void;
+  /// Torna alla Selezione: col Completo aperto quella di VectorCraft (`selection`),
+  /// come fa lui dopo Esc su un tracciato o all'uscita dal testo; senza, quella di Fub.
+  tornaAllaSelezione: () => void;
   /// Lo stato dello strumento del motore `id`, dall'ultimo esito che l'ha
   /// portato; `null` se non ne ha ancora.
   statoStrumento: (id: string) => DrawingToolState | null;
@@ -562,7 +565,7 @@ export function installGestiMotore(ctx: EditorContext): void {
     },
     esci: () => {
       chiudiAperto([{ kind: "key", key: "Escape", code: "Escape", pressed: true }]);
-      ctx.pickTool("select");
+      ctx.tornaAllaSelezione();
       ctx.surface.focus({ preventScroll: true });
     },
     chiudi: () => {
@@ -643,6 +646,10 @@ export function installGestiMotore(ctx: EditorContext): void {
     });
   };
   ctx.sceltaMotore = sceltaMotore;
+  ctx.tornaAllaSelezione = (): void => {
+    if ((ctx.completoMotore?.() ?? null) !== null) sceltaMotore("selection");
+    else ctx.pickTool("select");
+  };
 
   /// Legge lo stato dello strumento `id` (`disegno.strumento.stato`), in fila
   /// con i gesti come un'opzione, e lo registra. Senza motore, o con un esito
@@ -1264,7 +1271,7 @@ export function installGestiMotore(ctx: EditorContext): void {
   ctx.motoreTasto = (tasto) => {
     if (aperto !== null) return chiudiAperto([{ kind: "key", key: tasto, code: tasto, pressed: true }]);
     if (tasto === "Escape" && ctx.motoreTool !== null && STRUMENTI_DEI_TRACCIATI.has(ctx.motoreTool)) {
-      ctx.pickTool("select");
+      ctx.tornaAllaSelezione();
       return true;
     }
     return false;

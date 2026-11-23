@@ -43,7 +43,7 @@ describe("la colonna del Disegno completo", () => {
   it("uno strumento del motore entra solo con la sua riga pronta, nella sua casella", () => {
     const layout = layoutCompleto(VECTOR, new Set(["selection", "pen"]));
     const pick = layout.find((gruppo) => gruppo.id === "pick")!;
-    expect(pick.caselle[0]).toEqual(["select", "motore:selection"]);
+    expect(pick.caselle[0]).toEqual(["motore:selection", "select"]);
     const draw = layout.find((gruppo) => gruppo.id === "draw")!;
     expect(draw.caselle[0]).toContain("motore:pen");
     expect(tutti(layout)).not.toContain("motore:lasso");
