@@ -3379,6 +3379,22 @@
     },
     {
       "fonte": "motore",
+      "id": "swatch.library.add",
+      "chiamata": {
+        "comando": "disegno.swatch.library.add"
+      },
+      "etichetta": {
+        "it": "Aggiungi ai campioni",
+        "en": "Add to Swatches"
+      },
+      "posto": "ispettore/risorse",
+      "famiglia": "colore",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "swatch.library.get",
       "chiamata": {
         "comando": "disegno.swatch.library.get"

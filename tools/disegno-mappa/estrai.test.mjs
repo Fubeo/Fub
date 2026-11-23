@@ -126,7 +126,10 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // T16 testo base le sette del testo: `type.changeCase`, `type.createOutlines`,
   // `type.convertToAreaType`, `type.convertToPointType`, `edit.findReplace`, `edit.findNext`
   // e `text.editRange`.
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1104, fub: 114, escluso: 12, fatto: 321 });
+  // T14 librerie 2 porta a «fatto» `swatch.library.add`: copia una libreria di base nel disegno, con i
+  // campioni globali e senza gruppo (casi in `tests/famiglie/colore.json`). Restano «da fare» le finestre
+  // delle librerie e le librerie dell'utente (la cartella del desktop non c'è nel Completo).
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1103, fub: 114, escluso: 12, fatto: 322 });
 });
 
 // --- un motore finto ---------------------------------------------------------------
