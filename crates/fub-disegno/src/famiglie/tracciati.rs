@@ -210,6 +210,38 @@ const MEDIA_E_UNISCI: &str = "path.averageJoin";
 /// Il perché di Media e unisci spento.
 const DUE_ESTREMI: &str = "Scegli due tracciati aperti, o un tracciato aperto da chiudere.";
 
+/// Semplifica e Smussa (con il livello, o `auto`): sul testo e sulle forme vive non c'è un tracciato da
+/// cambiare, e il motore risponderebbe in modo generico. Con una scelta che ha almeno un tracciato, il
+/// motore salta il resto, come dice la sua descrizione (K6 T12, finestre).
+const SEMPLIFICA_E_SMUSSA: [&str; 2] = ["object.path.simplify", "object.path.smooth"];
+
+/// Il perché, in italiano, per un testo o una forma viva scelti da sola (o con altri che non sono tracciati).
+const TESTO_NON_SI_SEMPLIFICA: &str = "Il testo non si semplifica: prima crea i profili.";
+const FORMA_NON_SI_SEMPLIFICA: &str = "Una forma non si semplifica: prima trasformala in tracciato.";
+
+/// Il perché di Semplifica e Smussa quando la scelta non ha nessun tracciato, ma solo testo o forme
+/// primitive (un `rect` o un `ellipse` di Fub, che il motore non ha come nodo). Si guarda il tag di
+/// ciascun elemento della mappa, prima di legarlo al motore. `None` se c'è almeno un altro elemento
+/// (un tracciato, un'immagine…), o se la scelta è vuota.
+fn solo_testo_o_forme(copia: &Copia, selezione: &[String]) -> Option<&'static str> {
+    if selezione.is_empty() {
+        return None;
+    }
+    let mut c_e_testo = false;
+    for id in selezione {
+        let elemento = copia.mappa.elemento(copia.mappa.dell_id(id)?)?;
+        match elemento.tag {
+            "text" => c_e_testo = true,
+            "rect" | "ellipse" => {}
+            // Una forma viva di Fub (un rettangolo arrotondato, un'ellisse con la sua ricetta) ha un nodo
+            // con la sua forma: vale come una forma primitiva.
+            _ if elemento.nodo.and_then(|n| copia.documento.node(n)).is_some_and(|n| n.live_shape().is_some()) => {}
+            _ => return None,
+        }
+    }
+    Some(if c_e_testo { TESTO_NON_SI_SEMPLIFICA } else { FORMA_NON_SI_SEMPLIFICA })
+}
+
 /// I due estremi che Media e unisci unirebbe, come li cerca il motore
 /// (`average_join_ends` in `engine/src/cmd/path.rs`), o `None`: i due punti
 /// scelti `scelti`, se sono estremi di sottotracciati aperti; senza punti,
@@ -320,6 +352,12 @@ impl StatoFamiglia for Stato {
         if !copia.modificabile {
             return Some(DrawingDisabledReason::ReadOnly);
         }
+        // Semplifica e Smussa: il testo e le forme primitive hanno la loro frase, prima dei nodi.
+        if SEMPLIFICA_E_SMUSSA.contains(&id) {
+            if let Some(frase) = solo_testo_o_forme(copia, selezione) {
+                return Some(DrawingDisabledReason::Other { text: frase.into() });
+            }
+        }
         let nodi = match nodi_scelti(copia, selezione) {
             Ok(nodi) => nodi,
             Err(DrawingRefusal::Locked) => return Some(DrawingDisabledReason::ReadOnly),
@@ -410,6 +448,15 @@ impl StatoFamiglia for Stato {
     /// usarlo, `unmapped`.
     fn livello(id: &str, copia: &Copia) -> Result<Option<NodeId>, DrawingRefusal> {
         mano::livello(id, copia)
+    }
+
+    /// Semplifica e Smussa su solo testo o forme primitive: `unsupported`, prima dei nodi della scelta
+    /// (che per un `rect` darebbero `unmapped`), con la stessa frase della voce spenta (K6 T12).
+    fn rifiuto_prima_dei_nodi(id: &str, copia: &Copia, selezione: &[String]) -> Option<DrawingRefusal> {
+        if !SEMPLIFICA_E_SMUSSA.contains(&id) {
+            return None;
+        }
+        solo_testo_o_forme(copia, selezione).map(|_| DrawingRefusal::Unsupported)
     }
 
     fn rifiuto(id: &str, copia: &Copia, selezione: &[String]) -> Option<DrawingRefusal> {

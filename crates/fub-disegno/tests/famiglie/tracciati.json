@@ -7067,6 +7067,120 @@
       "id": "ui.smoothAuto",
       "fonte": "interfaccia",
       "prova": "apps/client/src/editors/spatial/completo/comandi-automatici.test.ts"
+    },
+    {
+      "id": "object.path.simplify",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {
+        "level": 50
+      },
+      "atteso": {
+        "rifiuto": "unmapped"
+      }
+    },
+    {
+      "id": "object.path.smooth",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {
+        "auto": true
+      },
+      "atteso": {
+        "rifiuto": "unmapped"
+      }
+    },
+    {
+      "id": "object.path.smooth",
+      "disegno": "campioni.svg",
+      "selezione": [
+        "od4d4d4d4"
+      ],
+      "argomenti": {
+        "auto": true
+      },
+      "atteso": {
+        "rifiuto": "unsupported"
+      }
+    },
+    {
+      "id": "object.path.smooth",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {
+        "level": 50
+      },
+      "atteso": {
+        "rifiuto": "unmapped"
+      }
+    },
+    {
+      "id": "object.path.smooth",
+      "disegno": "zigzag.svg",
+      "selezione": [
+        "oz1z1z1z1",
+        "oa1a1a1a1"
+      ],
+      "argomenti": {
+        "auto": true
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oz1z1z1z1",
+            "attrs": {
+              "d": "M20 150 C106.44 154.49 228.8 154.91 315 149.91"
+            }
+          }
+        ]
+      },
+      "dopo": "tracciati-auto-smussa-misto.svg"
+    },
+    {
+      "id": "object.path.simplify",
+      "disegno": "forma-viva.svg",
+      "selezione": [
+        "oeopq71hl"
+      ],
+      "argomenti": {
+        "auto": true
+      },
+      "atteso": {
+        "rifiuto": "unsupported"
+      }
+    },
+    {
+      "id": "object.path.simplify",
+      "disegno": "forma-viva.svg",
+      "selezione": [
+        "oeopq71hl"
+      ],
+      "argomenti": {
+        "level": 50
+      },
+      "atteso": {
+        "rifiuto": "unsupported"
+      }
+    },
+    {
+      "id": "object.path.smooth",
+      "disegno": "forma-viva.svg",
+      "selezione": [
+        "oeopq71hl"
+      ],
+      "argomenti": {
+        "auto": true
+      },
+      "atteso": {
+        "rifiuto": "unsupported"
+      }
     }
   ]
 }

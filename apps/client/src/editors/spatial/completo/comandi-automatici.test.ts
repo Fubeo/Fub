@@ -118,6 +118,53 @@ describe("Semplifica automaticamente (riga ui.simplifyAuto)", () => {
   });
 });
 
+describe("Semplifica e Smussa su testo e forme (le voci dicono perché)", () => {
+  /// Un motore che dice `spento` con questa frase per Semplifica e Smussa (il motivo `other` del contratto).
+  function motoreConFrase(testo: string | null) {
+    const comandi = vi.fn(() =>
+      Promise.resolve(
+        ["disegno.object.path.simplify", "disegno.object.path.smooth"].map((id) =>
+          testo === null ? { id, enabled: true, disabled_reason: null } : { id, enabled: false, disabled_reason: { other: { text: testo } } },
+        ),
+      ),
+    );
+    const comando = vi.fn();
+    const sessione = { comandi, comando } as unknown as SessioneMotore;
+    const motore = { adesso: () => sessione, pronta: () => Promise.resolve(sessione), assente: () => null } as unknown as MotoreDelDisegno;
+    return { motore, comando };
+  }
+
+  it("un testo scelto: la voce è spenta e mostra la frase del testo", async () => {
+    const { motore, comando } = motoreConFrase("Il testo non si semplifica: prima crea i profili.");
+    const { c } = completo(motore, () => ["od4"]);
+    const trovata = await voce(c, () => ["od4"], "Semplifica automaticamente");
+    expect(trovata.disabled).toBe(true);
+    expect(trovata.description).toBe("Il testo non si semplifica: prima crea i profili.");
+    trovata.run();
+    await Promise.resolve();
+    expect(comando).not.toHaveBeenCalled();
+    c.chiudi();
+  });
+
+  it("una forma primitiva scelta: la voce di Smussa è spenta e mostra la frase della forma", async () => {
+    const { motore } = motoreConFrase("Una forma non si semplifica: prima trasformala in tracciato.");
+    const { c } = completo(motore, () => ["k1"]);
+    const trovata = await voce(c, () => ["k1"], "Smussa automaticamente");
+    expect(trovata.disabled).toBe(true);
+    expect(trovata.description).toBe("Una forma non si semplifica: prima trasformala in tracciato.");
+    c.chiudi();
+  });
+
+  it("una scelta mista (un tracciato e un rettangolo) resta accesa: non compare nessuna frase", async () => {
+    const { motore } = motoreConFrase(null);
+    const { c } = completo(motore, () => ["k1", "k2"]);
+    const trovata = await voce(c, () => ["k1", "k2"], "Semplifica automaticamente");
+    expect(trovata.disabled).toBe(false);
+    expect(trovata.description).toBeUndefined();
+    c.chiudi();
+  });
+});
+
 describe("Smussa automaticamente (riga ui.smoothAuto)", () => {
   it("un tracciato: il comando di Smussa parte con {auto: true}, una volta sola, senza finestra", async () => {
     vi.mocked(apriFinestra).mockClear();
