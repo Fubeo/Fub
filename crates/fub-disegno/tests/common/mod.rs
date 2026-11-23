@@ -405,8 +405,20 @@ fn uguali(a: &Value, o: &Value, dove: &str) -> Result<(), String> {
             }
             Ok(())
         }
+        // La distanza di colore (`deltaE`) passa per radici cubiche in `f32`:
+        // la libreria matematica di Windows la dà diversa di qualche millesimo
+        // (13.8976 contro 13.9010, 2026-11-23), e un deltaE conta al centesimo.
         (Value::Number(x), Value::Number(y)) => match (x.as_f64(), y.as_f64()) {
-            (Some(p), Some(q)) if (p - q).abs() <= 1e-3 => Ok(()),
+            (Some(p), Some(q))
+                if (p - q).abs()
+                    <= if dove.ends_with(".deltaE") {
+                        1e-2
+                    } else {
+                        1e-3
+                    } =>
+            {
+                Ok(())
+            }
             _ => Err(format!("{dove}: {x} ≠ {y}")),
         },
         _ if a == o => Ok(()),
@@ -446,6 +458,23 @@ mod prove {
         assert!(matches!(
             confronta_ops(&attese, &diverse, Some("prova")),
             Confronto::Ammessa(_)
+        ));
+    }
+
+    #[test]
+    fn il_delta_e_conta_al_centesimo_gli_altri_numeri_al_millesimo() {
+        let letta = json!({ "outOfGamut": [{ "deltaE": 13.897602, "count": 1 }], "x": 1.0 });
+        let windows = json!({ "outOfGamut": [{ "deltaE": 13.900992, "count": 1 }], "x": 1.0 });
+        assert_eq!(confronta_ops(&letta, &windows, None), Confronto::Uguali);
+        let lontano = json!({ "outOfGamut": [{ "deltaE": 13.92, "count": 1 }], "x": 1.0 });
+        assert!(matches!(
+            confronta_ops(&letta, &lontano, None),
+            Confronto::Diverse(_)
+        ));
+        let altro = json!({ "outOfGamut": [{ "deltaE": 13.897602, "count": 1 }], "x": 1.0034 });
+        assert!(matches!(
+            confronta_ops(&letta, &altro, None),
+            Confronto::Diverse(_)
         ));
     }
 }
