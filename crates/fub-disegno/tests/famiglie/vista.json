@@ -75,6 +75,11 @@
       "id": "navigator",
       "fonte": "pannello",
       "prova": "apps/client/src/editors/spatial/tools/editor/chrome/navigator.test.ts"
+    },
+    {
+      "id": "view.preciseCursors",
+      "fonte": "interfaccia",
+      "prova": "apps/client/src/editors/spatial/tools/editor/chrome/visualizza.test.ts"
     }
   ]
 }

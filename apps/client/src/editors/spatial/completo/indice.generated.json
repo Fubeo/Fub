@@ -5031,6 +5031,22 @@
     },
     {
       "fonte": "interfaccia",
+      "id": "view.preciseCursors",
+      "chiamata": {
+        "client": "view.preciseCursors"
+      },
+      "etichetta": {
+        "it": "Usa cursori di precisione",
+        "en": "Use Precise Cursors"
+      },
+      "posto": "menu/visualizza",
+      "famiglia": "vista",
+      "tasto": null,
+      "effetto": "mostra",
+      "finestra": false
+    },
+    {
+      "fonte": "interfaccia",
       "id": "view.rotateReset",
       "chiamata": {
         "client": "view.rotateReset"
