@@ -124,7 +124,9 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // T14 librerie 2 porta a «fatto» `swatch.library.add`: copia una libreria di base nel disegno, con i
   // campioni globali e senza gruppo (casi in `tests/famiglie/colore.json`). Restano «da fare» le finestre
   // delle librerie e le librerie dell'utente (la cartella del desktop non c'è nel Completo).
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1111, fub: 114, escluso: 12, fatto: 314 });
+  // T14 librerie finestra porta a «fatto» `window.swatchLibrary`: la finestra elenca le librerie, mostra
+  // i campioni e aggiunge (prova: `librerie-finestra.test.ts`). Resta «da fare» Altra libreria… (un file).
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1110, fub: 114, escluso: 12, fatto: 315 });
 });
 
 // --- un motore finto ---------------------------------------------------------------

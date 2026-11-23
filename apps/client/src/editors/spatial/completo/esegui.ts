@@ -127,7 +127,7 @@ function attesaFamiglia(stato: StatoFamiglia): Promise<void> {
 }
 
 /// Manda il comando al motore. `null` se il motore non c'è o non risponde.
-async function chiama(
+export async function chiama(
   dipendenze: DipendenzeComando,
   id: string,
   valore: unknown,

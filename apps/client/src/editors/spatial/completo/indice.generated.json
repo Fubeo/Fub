@@ -4208,6 +4208,22 @@
       "finestra": false
     },
     {
+      "fonte": "interfaccia",
+      "id": "window.swatchLibrary",
+      "chiamata": {
+        "client": "window.swatchLibrary"
+      },
+      "etichetta": {
+        "it": "Libreria campioni",
+        "en": "Swatch Library"
+      },
+      "posto": "ispettore/design",
+      "famiglia": "colore",
+      "tasto": null,
+      "effetto": "mostra",
+      "finestra": false
+    },
+    {
       "fonte": "strumento",
       "id": "addAnchor",
       "chiamata": {

@@ -813,6 +813,21 @@ export const RISORSE_IT = {
   "draw.resources.swatches.annulla": "Annulla",
   "draw.resources.swatches.crea": "Crea",
   "draw.resources.swatches.ok": "OK",
+  "draw.libraries.title": "Librerie di campioni",
+  "draw.libraries.library": "Libreria",
+  "draw.libraries.choose": "Scegli una libreria",
+  "draw.libraries.swatches": "Campioni della libreria",
+  "draw.libraries.loading": "Caricamento…",
+  "draw.libraries.none": "Questa libreria non ha campioni.",
+  "draw.libraries.list_failed": "Non riesco a leggere le librerie.",
+  "draw.libraries.get_failed": "Non riesco a leggere questa libreria.",
+  "draw.libraries.gradients": "Questa libreria ha sfumature: il formato del disegno ha solo colori pieni, e non le aggiunge.",
+  "draw.libraries.add_all": "Aggiungi tutti",
+  "draw.libraries.add_selected": "Aggiungi quelli scelti",
+  "draw.libraries.add_nothing": "Scegli almeno un campione.",
+  "draw.libraries.add_failed": "Il disegno non ha aggiunto i campioni.",
+  "draw.libraries.copia": "I campioni entrano globali e senza gruppo, nell'ordine della libreria.",
+  "draw.libraries.undo": "Aggiungi campioni di libreria",
 } as const;
 
 /// L'inglese della scheda Risorse.
@@ -852,6 +867,21 @@ export const RISORSE_EN: Record<keyof typeof RISORSE_IT, string> = {
   "draw.resources.swatches.annulla": "Cancel",
   "draw.resources.swatches.crea": "Create",
   "draw.resources.swatches.ok": "OK",
+  "draw.libraries.title": "Swatch Libraries",
+  "draw.libraries.library": "Library",
+  "draw.libraries.choose": "Choose a library",
+  "draw.libraries.swatches": "Swatches of the library",
+  "draw.libraries.loading": "Loading…",
+  "draw.libraries.none": "This library has no swatches.",
+  "draw.libraries.list_failed": "Can't read the libraries.",
+  "draw.libraries.get_failed": "Can't read this library.",
+  "draw.libraries.gradients": "This library has gradients: the drawing format only holds solid colours, and does not add them.",
+  "draw.libraries.add_all": "Add All",
+  "draw.libraries.add_selected": "Add Selected",
+  "draw.libraries.add_nothing": "Choose at least one swatch.",
+  "draw.libraries.add_failed": "The drawing did not add the swatches.",
+  "draw.libraries.copia": "The swatches come in global and without a group, in the library's order.",
+  "draw.libraries.undo": "Add library swatches",
 };
 
 /// La colonna e il cassetto del Disegno completo (K6 T8): la casella «Tutti
