@@ -2787,6 +2787,38 @@
     },
     {
       "fonte": "motore",
+      "id": "path.lineCut",
+      "chiamata": {
+        "comando": "disegno.path.lineCut"
+      },
+      "etichetta": {
+        "it": "Taglio linea",
+        "en": "Line Cut"
+      },
+      "posto": "ispettore/design",
+      "famiglia": "tracciati",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "path.mirrorCut",
+      "chiamata": {
+        "comando": "disegno.path.mirrorCut"
+      },
+      "etichetta": {
+        "it": "Specchia e taglia",
+        "en": "Mirror & Cut"
+      },
+      "posto": "ispettore/design",
+      "famiglia": "tracciati",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "path.moveAnchor",
       "chiamata": {
         "comando": "disegno.path.moveAnchor"
@@ -2810,6 +2842,22 @@
       "etichetta": {
         "it": "Sposta ancoraggi",
         "en": "Move Anchors"
+      },
+      "posto": "ispettore/design",
+      "famiglia": "tracciati",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "path.rectCut",
+      "chiamata": {
+        "comando": "disegno.path.rectCut"
+      },
+      "etichetta": {
+        "it": "Taglio rettangolare",
+        "en": "Rectangle Cut"
       },
       "posto": "ispettore/design",
       "famiglia": "tracciati",

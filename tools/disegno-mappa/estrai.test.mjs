@@ -163,7 +163,9 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // colori alla libreria), con i loro casi in colore.json e i test della sezione.
   // T14 temi, pannello: il pannello `color_themes` (Risorse, Temi di colore) è «fatto»: uno in più.
   // Il pannello parla con i comandi già fatti (`colorTheme.list`, `save`, `delete`).
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1070, fub: 114, escluso: 12, fatto: 355 });
+  // T12 tagli porta a «fatto» tre righe dei tracciati: `path.lineCut` (Taglio con linea), `path.rectCut`
+  // (Taglio con rettangolo) e `path.mirrorCut` (Specchia e taglia). Casi in `tests/famiglie/tracciati.json`.
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1067, fub: 114, escluso: 12, fatto: 358 });
 });
 
 // --- un motore finto ---------------------------------------------------------------

@@ -1,5 +1,5 @@
 {
-  "$nota": "I casi della famiglia «tracciati» (piano K6, T12): la penna di Bézier (Esc, Invio e lo strumento cambiato, cioè il commit senza tasti, lasciano il tracciato aperto, in un passo; un Esc senza tracciato non fa niente), gli strumenti di «disegnare», l'inchiostro di Fub che gli strumenti e i comandi dei tracciati non toccano (`unmapped`), i comandi sui punti scelti con i loro `anchors`, e i comandi di Oggetto › Tracciato senza finestra. Un tracciato composto (un `<path>` di più sottotracciati, il buco fatto col verso) va e torna uguale: Inverti su `composto.svg` dà `composto-rovescio.svg`, e Inverti su quello ridà `composto.svg`; la regola `evenodd` non è un attributo della scena, e chi la tocca o la porta (`composto-pari.svg`) non cambia niente. Un risultato vuoto è `empty`. Le finestre (Semplifica, Smussa, Sposta tracciato, Espandi, Dividi in trattini) hanno i loro argomenti; Smussa vuole un tracciato seghettato (`seghettato.svg`), e su un tratto della penna di Fub anche Espandi è `unmapped`. Il disegno di partenza è di solito `tracciati/base.svg`. L'Elaborazione tracciati (giro 5) va su `elabora.svg`: due quadrati che si sovrappongono (oa1a1a1a1 sotto, blu; ob2b2b2b2 sopra, rosso con il bordo), un quadrato lontano, un testo, un oggetto bloccato, un gruppo, un'immagine e un tratto della penna. I due oggetti di prima spariscono e il risultato, con un id nuovo, prende il posto del più alto; fra due tracciati i metodi forma tengono lo stile di quello davanti (Meno davanti quello dietro), le operazioni lasciano un gruppo di pezzi. Con un oggetto solo, o un'intersezione che non lascia niente, è `empty` e niente sparisce; un oggetto bloccato è `locked`; un'immagine o l'inchiostro di Fub sono `unmapped`; un gruppo si espande. Un testo entra col contorno delle sue lettere: qui il motore non ha caratteri, il testo non ne ha, e sparirebbe senza entrare nel risultato, quindi è `unmapped`; con Inter entra (la prova `l_elaborazione_usa_le_lettere_di_un_testo` in famiglie.rs). Giro 6 (K6 T12): le maschere di ritaglio (tracciati/ritaglio*.svg: una fatta da Fub, una scritta da Inkscape con il clipPath in <defs>, una col clip-path sul tracciato come la scrive Illustrator) e Media, Media e unisci (tracciati/media.svg). T12 punti: i comandi su un punto nominato con `element` e il suo numero (sposta un punto o una maniglia, aggiungi, elimina, converti, chiudi, continua, dividi), con un elemento bloccato (`locked`), l'inchiostro (`unmapped`), un numero che il tracciato non ha o un `id` del motore nel valore (`bad_args`); Sposta ancoraggi ed Elimina punti di ancoraggio sui punti scelti (`anchors`). Giro angoli (K6 T12): Imposta angoli e Rimuovi angoli tagliano e tolgono gli angoli vivi di un tracciato, con la ricetta nel file. Un raggio fuori limiti, uno smusso che non c'è o un punto che il tracciato non ha è un errore degli argomenti in italiano, o `empty` quando non c'è nessun angolo da cambiare; Rimuovi angoli riporta la forma viva: un tracciato tagliato torna con gli stessi punti, come `polygon` con la ricetta a raggi zero (non il byte di partenza); senza angoli tagliati non c'è niente da togliere (`empty`).",
+  "$nota": "I casi della famiglia «tracciati» (piano K6, T12): la penna di Bézier (Esc, Invio e lo strumento cambiato, cioè il commit senza tasti, lasciano il tracciato aperto, in un passo; un Esc senza tracciato non fa niente), gli strumenti di «disegnare», l'inchiostro di Fub che gli strumenti e i comandi dei tracciati non toccano (`unmapped`), i comandi sui punti scelti con i loro `anchors`, e i comandi di Oggetto › Tracciato senza finestra. Un tracciato composto (un `<path>` di più sottotracciati, il buco fatto col verso) va e torna uguale: Inverti su `composto.svg` dà `composto-rovescio.svg`, e Inverti su quello ridà `composto.svg`; la regola `evenodd` non è un attributo della scena, e chi la tocca o la porta (`composto-pari.svg`) non cambia niente. Un risultato vuoto è `empty`. Le finestre (Semplifica, Smussa, Sposta tracciato, Espandi, Dividi in trattini) hanno i loro argomenti; Smussa vuole un tracciato seghettato (`seghettato.svg`), e su un tratto della penna di Fub anche Espandi è `unmapped`. Il disegno di partenza è di solito `tracciati/base.svg`. L'Elaborazione tracciati (giro 5) va su `elabora.svg`: due quadrati che si sovrappongono (oa1a1a1a1 sotto, blu; ob2b2b2b2 sopra, rosso con il bordo), un quadrato lontano, un testo, un oggetto bloccato, un gruppo, un'immagine e un tratto della penna. I due oggetti di prima spariscono e il risultato, con un id nuovo, prende il posto del più alto; fra due tracciati i metodi forma tengono lo stile di quello davanti (Meno davanti quello dietro), le operazioni lasciano un gruppo di pezzi. Con un oggetto solo, o un'intersezione che non lascia niente, è `empty` e niente sparisce; un oggetto bloccato è `locked`; un'immagine o l'inchiostro di Fub sono `unmapped`; un gruppo si espande. Un testo entra col contorno delle sue lettere: qui il motore non ha caratteri, il testo non ne ha, e sparirebbe senza entrare nel risultato, quindi è `unmapped`; con Inter entra (la prova `l_elaborazione_usa_le_lettere_di_un_testo` in famiglie.rs). Giro 6 (K6 T12): le maschere di ritaglio (tracciati/ritaglio*.svg: una fatta da Fub, una scritta da Inkscape con il clipPath in <defs>, una col clip-path sul tracciato come la scrive Illustrator) e Media, Media e unisci (tracciati/media.svg). T12 punti: i comandi su un punto nominato con `element` e il suo numero (sposta un punto o una maniglia, aggiungi, elimina, converti, chiudi, continua, dividi), con un elemento bloccato (`locked`), l'inchiostro (`unmapped`), un numero che il tracciato non ha o un `id` del motore nel valore (`bad_args`); Sposta ancoraggi ed Elimina punti di ancoraggio sui punti scelti (`anchors`). Giro angoli (K6 T12): Imposta angoli e Rimuovi angoli tagliano e tolgono gli angoli vivi di un tracciato, con la ricetta nel file. Un raggio fuori limiti, uno smusso che non c'è o un punto che il tracciato non ha è un errore degli argomenti in italiano, o `empty` quando non c'è nessun angolo da cambiare; Rimuovi angoli riporta la forma viva: un tracciato tagliato torna con gli stessi punti, come `polygon` con la ricetta a raggi zero (non il byte di partenza); senza angoli tagliati non c'è niente da togliere (`empty`). Giro tagli (K6 T12): Taglio con linea, Taglio con rettangolo e Specchia e taglia tagliano i tracciati scelti. Una linea o un rettangolo che non tocca niente non danno passo; un testo e un rettangolo primitivo non si tagliano (`unsupported`); un oggetto nascosto non si tocca (`empty`). Il taglio con linea di un'ellisse con contorno e tratteggio tiene il contorno e il tratteggio nei pezzi.",
   "casi": [
     {
       "id": "pen",
@@ -6117,6 +6117,823 @@
       "argomenti": {},
       "atteso": {
         "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "path.lineCut",
+      "disegno": "base.svg",
+      "selezione": [
+        "oe3e3e3e3"
+      ],
+      "argomenti": {
+        "from": [
+          250,
+          0
+        ],
+        "to": [
+          250,
+          100
+        ]
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "after": "oe3e3e3e3"
+                },
+                "elem": {
+                  "tag": "path",
+                  "attrs": {
+                    "d": "M250 80 L250 20 L280 20 L284 50 L280 80 Z",
+                    "fill": "#88aaff",
+                    "id": "orhlh0vlz"
+                  }
+                }
+              },
+              {
+                "op": "set",
+                "id": "oe3e3e3e3",
+                "attrs": {
+                  "d": "M220 80 L220 20 L250 20 L250 80 Z"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "taglio-linea-chiuso.svg"
+    },
+    {
+      "id": "path.lineCut",
+      "disegno": "base.svg",
+      "selezione": [
+        "oc1c1c1c1"
+      ],
+      "argomenti": {
+        "from": [
+          130,
+          0
+        ],
+        "to": [
+          130,
+          100
+        ]
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "after": "oc1c1c1c1"
+                },
+                "elem": {
+                  "tag": "path",
+                  "attrs": {
+                    "d": "M130 60 L160 60 L160 120",
+                    "fill": "none",
+                    "stroke": "#000000",
+                    "stroke-width": "2",
+                    "id": "obu18xqu4"
+                  }
+                }
+              },
+              {
+                "op": "set",
+                "id": "oc1c1c1c1",
+                "attrs": {
+                  "d": "M40 60 L100 60 L130 60"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "taglio-linea-aperto.svg"
+    },
+    {
+      "id": "path.lineCut",
+      "disegno": "base.svg",
+      "selezione": [
+        "oe3e3e3e3",
+        "of4f4f4f4"
+      ],
+      "argomenti": {
+        "from": [
+          250,
+          0
+        ],
+        "to": [
+          250,
+          100
+        ]
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "after": "oe3e3e3e3"
+                },
+                "elem": {
+                  "tag": "path",
+                  "attrs": {
+                    "d": "M250 80 L250 20 L280 20 L284 50 L280 80 Z",
+                    "fill": "#88aaff",
+                    "id": "o0pvt2u3c"
+                  }
+                }
+              },
+              {
+                "op": "set",
+                "id": "oe3e3e3e3",
+                "attrs": {
+                  "d": "M220 80 L220 20 L250 20 L250 80 Z"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "taglio-linea-due.svg"
+    },
+    {
+      "id": "path.lineCut",
+      "disegno": "base.svg",
+      "selezione": [
+        "oe3e3e3e3"
+      ],
+      "argomenti": {
+        "from": [
+          500,
+          0
+        ],
+        "to": [
+          500,
+          100
+        ]
+      },
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "path.lineCut",
+      "disegno": "base.svg",
+      "selezione": [
+        "oe3e3e3e3"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "path.lineCut",
+      "disegno": "base.svg",
+      "selezione": [
+        "oe3e3e3e3"
+      ],
+      "argomenti": {
+        "from": [
+          250,
+          0
+        ],
+        "to": [
+          250,
+          0
+        ]
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "path.lineCut",
+      "disegno": "base.svg",
+      "selezione": [
+        "oi8b8b8b8"
+      ],
+      "argomenti": {
+        "from": [
+          250,
+          0
+        ],
+        "to": [
+          250,
+          100
+        ]
+      },
+      "atteso": {
+        "rifiuto": "unmapped"
+      }
+    },
+    {
+      "id": "path.lineCut",
+      "disegno": "base.svg",
+      "selezione": [
+        "nonce"
+      ],
+      "argomenti": {
+        "from": [
+          250,
+          0
+        ],
+        "to": [
+          250,
+          100
+        ]
+      },
+      "atteso": {
+        "rifiuto": "unmapped"
+      }
+    },
+    {
+      "id": "path.lineCut",
+      "disegno": "elabora.svg",
+      "selezione": [
+        "od4d4d4d4"
+      ],
+      "argomenti": {
+        "from": [
+          250,
+          0
+        ],
+        "to": [
+          250,
+          100
+        ]
+      },
+      "atteso": {
+        "rifiuto": "unsupported"
+      }
+    },
+    {
+      "id": "path.lineCut",
+      "disegno": "elabora.svg",
+      "selezione": [
+        "oe5e5e5e5"
+      ],
+      "argomenti": {
+        "from": [
+          250,
+          0
+        ],
+        "to": [
+          250,
+          100
+        ]
+      },
+      "atteso": {
+        "rifiuto": "locked"
+      }
+    },
+    {
+      "id": "path.lineCut",
+      "disegno": "taglio-pixel.svg",
+      "selezione": [
+        "om0m0m0m0"
+      ],
+      "argomenti": {
+        "from": [
+          300,
+          0
+        ],
+        "to": [
+          300,
+          400
+        ]
+      },
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "path.lineCut",
+      "disegno": "angoli-livello-bloccato.svg",
+      "selezione": [
+        "op7a7a7a7"
+      ],
+      "argomenti": {
+        "from": [
+          320,
+          0
+        ],
+        "to": [
+          320,
+          400
+        ]
+      },
+      "atteso": {
+        "rifiuto": "locked"
+      }
+    },
+    {
+      "id": "path.lineCut",
+      "disegno": "taglio-contorno.svg",
+      "selezione": [
+        "oe1e1e1e1"
+      ],
+      "argomenti": {
+        "from": [
+          250,
+          0
+        ],
+        "to": [
+          250,
+          400
+        ]
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "oe1e1e1e1"
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "after": "oa1a1a1a1"
+                },
+                "raw": "<path id=\"oe1e1e1e1\" d=\"M250 120 C250.002 120 250.002 120 250 120 L250 180 C227.909 180 210 166.569 210 150 C210 133.431 227.909 120 250 120 Z\" fill=\"#0000ff\" stroke=\"#000000\" stroke-width=\"4\" stroke-linecap=\"round\" stroke-dasharray=\"8 4\"/>"
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "after": "oe1e1e1e1"
+                },
+                "raw": "<path id=\"oiv142ika\" d=\"M250 180 L250 120 C272.091 120 290 133.431 290 150 C290 166.569 272.091 180 250 180 Z\" fill=\"#0000ff\" stroke=\"#000000\" stroke-width=\"4\" stroke-linecap=\"round\" stroke-dasharray=\"8 4\"/>"
+              },
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<metadata><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"oe1e1e1e1\" hash=\"fe5db9b49e0d5a2e\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjo0LCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MC4wLCJnIjowLjAsImIiOjEuMH19fSx7ImtpbmQiOiJzdHJva2UiLCJwYWludCI6eyJ0eXBlIjoic29saWQiLCJjb2xvciI6eyJtb2RlbCI6InJnYiIsInIiOjAuMCwiZyI6MC4wLCJiIjowLjB9fSwid2lkdGgiOjQuMCwiY2FwIjoiUm91bmQiLCJtaXRlcl9saW1pdCI6NC4wLCJkYXNoIjp7InBhdHRlcm4iOls4LjAsNC4wXSwib2Zmc2V0IjowLjAsImFsaWduX2Nvcm5lcnMiOmZhbHNlfX1dfSwia2luZCI6eyJ0eXBlIjoicGF0aCIsInBhdGgiOnsic3VicGF0aHMiOlt7ImFuY2hvcnMiOlt7InAiOlsyNTAuMCwxMjAuMF0sImluIjpbMjI3LjkwODYxMDAwNjc2ODI0LDEyMC4wXSwib3V0IjpbMjUwLjAwMjQ2MDg4OTAwMzQzLDEyMC4wXSwia2luZCI6IlNtb290aCJ9LHsicCI6WzI1MC4wMDAwMDEsMTIwLjAwMDAwMDVdLCJpbiI6WzI1MC4wMDI0NjExNTIwNjE3MywxMjAuMDAwMDAwMTY2NjcxNDNdfSx7InAiOlsyNTAuMCwxODAuMF0sIm91dCI6WzIyNy45MDg2MTAwMDY3NjgyNCwxODAuMF19LHsicCI6WzIxMC4wLDE1MC4wXSwiaW4iOlsyMTAuMCwxNjYuNTY4NTQyNDk0OTIzOF0sIm91dCI6WzIxMC4wLDEzMy40MzE0NTc1MDUwNzYyXSwia2luZCI6IlNtb290aCJ9XSwiY2xvc2VkIjp0cnVlfV19fX19</vectorcraft:recipe><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"oiv142ika\" hash=\"bad4f92a198a33ca\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjo4LCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MC4wLCJnIjowLjAsImIiOjEuMH19fSx7ImtpbmQiOiJzdHJva2UiLCJwYWludCI6eyJ0eXBlIjoic29saWQiLCJjb2xvciI6eyJtb2RlbCI6InJnYiIsInIiOjAuMCwiZyI6MC4wLCJiIjowLjB9fSwid2lkdGgiOjQuMCwiY2FwIjoiUm91bmQiLCJtaXRlcl9saW1pdCI6NC4wLCJkYXNoIjp7InBhdHRlcm4iOls4LjAsNC4wXSwib2Zmc2V0IjowLjAsImFsaWduX2Nvcm5lcnMiOmZhbHNlfX1dfSwia2luZCI6eyJ0eXBlIjoicGF0aCIsInBhdGgiOnsic3VicGF0aHMiOlt7ImFuY2hvcnMiOlt7InAiOlsyNTAuMCwxODAuMF0sImluIjpbMjcyLjA5MTM4OTk5MzIzMTc2LDE4MC4wXX0seyJwIjpbMjUwLjAwMDAwMSwxMjAuMDAwMDAwNV0sIm91dCI6WzI3Mi4wOTEzOTA1MzM2NzE4LDEyMC4wMDAwMDA0MDUzMzAwN119LHsicCI6WzI5MC4wLDE1MC4wXSwiaW4iOlsyOTAuMCwxMzMuNDMxNDU3NzU1MDc2Ml0sIm91dCI6WzI5MC4wLDE2Ni41Njg1NDI0OTQ5MjM4XSwia2luZCI6IlNtb290aCJ9XSwiY2xvc2VkIjp0cnVlfV19fX19</vectorcraft:recipe></metadata>"
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "taglio-ellisse.svg"
+    },
+    {
+      "id": "path.lineCut",
+      "disegno": "taglio-contorno.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {
+        "from": [
+          150,
+          0
+        ],
+        "to": [
+          150,
+          400
+        ]
+      },
+      "atteso": {
+        "rifiuto": "unsupported"
+      }
+    },
+    {
+      "id": "path.lineCut",
+      "disegno": "taglio-due-riempimenti.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {
+        "from": [
+          150,
+          0
+        ],
+        "to": [
+          150,
+          400
+        ]
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "oa1a1a1a1"
+              },
+              {
+                "op": "remove",
+                "target": {
+                  "path": [
+                    0
+                  ],
+                  "tag": "metadata"
+                }
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<g id=\"oa1a1a1a1\"><rect id=\"ogj8zpwz8\" x=\"100\" y=\"100\" width=\"50\" height=\"50\" fill=\"#ff0000\"/><rect id=\"ogrlfg7hu\" x=\"100\" y=\"100\" width=\"50\" height=\"50\" fill=\"#ff0000\"/></g>"
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "after": "oa1a1a1a1"
+                },
+                "raw": "<g id=\"oalf5co82\"><rect id=\"o504ansg9\" x=\"150\" y=\"100\" width=\"50\" height=\"50\" fill=\"#ff0000\"/><rect id=\"oq1cs99kq\" x=\"150\" y=\"100\" width=\"50\" height=\"50\" fill=\"#ff0000\"/></g>"
+              },
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<metadata><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"oa1a1a1a1\" hash=\"46571d405c468ce1\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjo1LCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MS4wLCJnIjowLjAsImIiOjAuMH19fSx7ImtpbmQiOiJmaWxsIiwicGFpbnQiOnsidHlwZSI6InNvbGlkIiwiY29sb3IiOnsibW9kZWwiOiJyZ2IiLCJyIjoxLjAsImciOjAuMCwiYiI6MC4wfX19XX0sImtpbmQiOnsidHlwZSI6InBhdGgiLCJwYXRoIjp7InN1YnBhdGhzIjpbeyJhbmNob3JzIjpbeyJwIjpbMTAwLjAsMTUwLjBdfSx7InAiOlsxMDAuMCwxMDAuMF19LHsicCI6WzE1MC4wLDEwMC4wXX0seyJwIjpbMTUwLjAsMTUwLjBdfV0sImNsb3NlZCI6dHJ1ZX1dfX19fQ==</vectorcraft:recipe><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"oalf5co82\" hash=\"321d5499e076d8ce\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjo5LCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MS4wLCJnIjowLjAsImIiOjAuMH19fSx7ImtpbmQiOiJmaWxsIiwicGFpbnQiOnsidHlwZSI6InNvbGlkIiwiY29sb3IiOnsibW9kZWwiOiJyZ2IiLCJyIjoxLjAsImciOjAuMCwiYiI6MC4wfX19XX0sImtpbmQiOnsidHlwZSI6InBhdGgiLCJwYXRoIjp7InN1YnBhdGhzIjpbeyJhbmNob3JzIjpbeyJwIjpbMTUwLjAsMTUwLjBdfSx7InAiOlsxNTAuMCwxMDAuMF19LHsicCI6WzIwMC4wLDEwMC4wXX0seyJwIjpbMjAwLjAsMTUwLjBdfV0sImNsb3NlZCI6dHJ1ZX1dfX19fQ==</vectorcraft:recipe></metadata>"
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "taglio-due-riempimenti-dopo.svg"
+    },
+    {
+      "id": "path.lineCut",
+      "disegno": "taglio-linea-chiuso.svg",
+      "selezione": [
+        "oe3e3e3e3"
+      ],
+      "argomenti": {
+        "from": [
+          250,
+          0
+        ],
+        "to": [
+          250,
+          100
+        ]
+      },
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "path.rectCut",
+      "disegno": "base.svg",
+      "selezione": [
+        "oe3e3e3e3"
+      ],
+      "argomenti": {
+        "rect": [
+          230,
+          0,
+          30,
+          100
+        ]
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oe3e3e3e3",
+            "attrs": {
+              "d": "M230 80 L230 20 L260 20 L260 80 Z"
+            }
+          }
+        ]
+      },
+      "dopo": "taglio-rettangolo-oe3.svg"
+    },
+    {
+      "id": "path.rectCut",
+      "disegno": "base.svg",
+      "selezione": [
+        "oe3e3e3e3"
+      ],
+      "argomenti": {
+        "rect": [
+          0,
+          0,
+          1000,
+          1000
+        ]
+      },
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "path.rectCut",
+      "disegno": "base.svg",
+      "selezione": [
+        "oe3e3e3e3"
+      ],
+      "argomenti": {
+        "rect": [
+          500,
+          500,
+          10,
+          10
+        ]
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "remove",
+            "target": "oe3e3e3e3"
+          }
+        ]
+      },
+      "dopo": "taglio-rettangolo-fuori.svg"
+    },
+    {
+      "id": "path.rectCut",
+      "disegno": "base.svg",
+      "selezione": [
+        "oe3e3e3e3"
+      ],
+      "argomenti": {
+        "rect": [
+          0,
+          0,
+          0,
+          10
+        ]
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "path.rectCut",
+      "disegno": "base.svg",
+      "selezione": [
+        "oe3e3e3e3"
+      ],
+      "argomenti": {
+        "rect": [
+          1,
+          2,
+          3
+        ]
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "path.rectCut",
+      "disegno": "base.svg",
+      "selezione": [
+        "oe3e3e3e3"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "path.rectCut",
+      "disegno": "taglio-contorno.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {
+        "rect": [
+          0,
+          0,
+          150,
+          300
+        ]
+      },
+      "atteso": {
+        "rifiuto": "unsupported"
+      }
+    },
+    {
+      "id": "path.rectCut",
+      "disegno": "elabora.svg",
+      "selezione": [
+        "od4d4d4d4"
+      ],
+      "argomenti": {
+        "rect": [
+          0,
+          0,
+          150,
+          300
+        ]
+      },
+      "atteso": {
+        "rifiuto": "unsupported"
+      }
+    },
+    {
+      "id": "path.rectCut",
+      "disegno": "base.svg",
+      "selezione": [
+        "oi8b8b8b8"
+      ],
+      "argomenti": {
+        "rect": [
+          0,
+          0,
+          150,
+          300
+        ]
+      },
+      "atteso": {
+        "rifiuto": "unmapped"
+      }
+    },
+    {
+      "id": "path.rectCut",
+      "disegno": "taglio-pixel.svg",
+      "selezione": [
+        "om0m0m0m0"
+      ],
+      "argomenti": {
+        "rect": [
+          0,
+          0,
+          400,
+          300
+        ]
+      },
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "path.mirrorCut",
+      "disegno": "base.svg",
+      "selezione": [
+        "oe3e3e3e3"
+      ],
+      "argomenti": {
+        "axis": "vertical",
+        "from": [
+          250,
+          0
+        ]
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oe3e3e3e3",
+            "attrs": {
+              "d": "M220 80 L220 20 L250 20 L280 20 L280 80 L250 80 Z"
+            }
+          }
+        ]
+      },
+      "dopo": "taglio-specchio.svg"
+    },
+    {
+      "id": "path.mirrorCut",
+      "disegno": "base.svg",
+      "selezione": [
+        "oe3e3e3e3"
+      ],
+      "argomenti": {
+        "axis": "vertical",
+        "from": [
+          1000,
+          0
+        ]
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oe3e3e3e3",
+            "attrs": {
+              "d": "M220 80 L220 20 L280 20 L284 50 L280 80 Z M1716 50 L1720 20 L1780 20 L1780 80 L1720 80 Z"
+            }
+          }
+        ]
+      },
+      "dopo": "taglio-specchio-lontano.svg"
+    },
+    {
+      "id": "path.mirrorCut",
+      "disegno": "base.svg",
+      "selezione": [
+        "oe3e3e3e3"
+      ],
+      "argomenti": {
+        "axis": "nope"
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "path.mirrorCut",
+      "disegno": "base.svg",
+      "selezione": [
+        "oe3e3e3e3"
+      ],
+      "argomenti": {
+        "axis": "free",
+        "from": [
+          250,
+          0
+        ]
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "path.mirrorCut",
+      "disegno": "elabora.svg",
+      "selezione": [
+        "od4d4d4d4"
+      ],
+      "argomenti": {
+        "axis": "vertical",
+        "from": [
+          250,
+          0
+        ]
+      },
+      "atteso": {
+        "rifiuto": "unsupported"
+      }
+    },
+    {
+      "id": "path.mirrorCut",
+      "disegno": "base.svg",
+      "selezione": [
+        "oi8b8b8b8"
+      ],
+      "argomenti": {
+        "axis": "vertical",
+        "from": [
+          250,
+          0
+        ]
+      },
+      "atteso": {
+        "rifiuto": "unmapped"
+      }
+    },
+    {
+      "id": "path.mirrorCut",
+      "disegno": "taglio-pixel.svg",
+      "selezione": [
+        "om0m0m0m0"
+      ],
+      "argomenti": {
+        "axis": "vertical",
+        "from": [
+          250,
+          0
+        ]
+      },
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "path.mirrorCut",
+      "disegno": "elabora.svg",
+      "selezione": [
+        "oe5e5e5e5"
+      ],
+      "argomenti": {
+        "axis": "vertical",
+        "from": [
+          250,
+          0
+        ]
+      },
+      "atteso": {
+        "rifiuto": "locked"
       }
     }
   ]

@@ -175,7 +175,7 @@ impl StatoFamiglia for Stato {
 const RENDI_PERFETTO: &str = "object.makePixelPerfect";
 
 /// Vero se uno degli oggetti scelti è nascosto, da sé o perché sta in un livello o un gruppo nascosto.
-fn scelto_nascosto(copia: &Copia, selezione: &[String]) -> bool {
+pub(crate) fn scelto_nascosto(copia: &Copia, selezione: &[String]) -> bool {
     selezione.iter().any(|id| {
         let mut i = copia.mappa.dell_id(id);
         while let Some(indice) = i {
