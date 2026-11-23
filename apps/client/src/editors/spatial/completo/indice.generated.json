@@ -115,6 +115,54 @@
     },
     {
       "fonte": "motore",
+      "id": "addon.color.applyNearestSwatch",
+      "chiamata": {
+        "comando": "disegno.addon.color.applyNearestSwatch"
+      },
+      "etichetta": {
+        "it": "Applica campione più vicino",
+        "en": "Apply Nearest Swatch"
+      },
+      "posto": "menu/oggetto",
+      "famiglia": "colore",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "addon.color.nearestSwatch",
+      "chiamata": {
+        "comando": "disegno.addon.color.nearestSwatch"
+      },
+      "etichetta": {
+        "it": "Trova campione più vicino",
+        "en": "Find Nearest Swatch"
+      },
+      "posto": "interno",
+      "famiglia": "colore",
+      "tasto": null,
+      "effetto": "legge",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "addon.color.select",
+      "chiamata": {
+        "comando": "disegno.addon.color.select"
+      },
+      "etichetta": {
+        "it": "Seleziona per tipo di colore",
+        "en": "Select by Color Kind"
+      },
+      "posto": "menu/oggetto",
+      "famiglia": "colore",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "motore",
       "id": "addon.pathtools.close",
       "chiamata": {
         "comando": "disegno.addon.pathtools.close"

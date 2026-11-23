@@ -133,7 +133,10 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // prova in colore.json); `ui.colorPicker` e `ui.colorPanel` restano «da fare», con la causa nella nota.
   // T15 aspetto: Riduci ad aspetto di base («fatto», con la riapertura dei due riempimenti); Svuota
   // resta «da fare», perché il file riaperto perde l'oggetto (la causa è nella nota).
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1101, fub: 114, escluso: 12, fatto: 324 });
+  // T14 colori aggiunti (giro 9, punto 1): Seleziona per tipo di colore (con la sua finestra),
+  // Trova e Applica il campione più vicino: tre in più. Le letture del colore e le tinte piatte
+  // restano «da fare» in questo giro; stampa e filtro restano «da fare» con la causa.
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1098, fub: 114, escluso: 12, fatto: 327 });
 });
 
 // --- un motore finto ---------------------------------------------------------------

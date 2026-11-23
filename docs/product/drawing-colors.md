@@ -168,6 +168,16 @@ finestra.
 - Le fusioni vogliono almeno tre oggetti con un riempimento; Converti in RGB e
   Sovrastampa nero non cambiano un SVG, che ha già i colori in RGB e non ha la
   sovrastampa. Quando non c'è niente da cambiare il file resta com'è.
+- **Campione più vicino (T14 giro 9).** Oggetto › Plug-ins › Colore: «Applica
+  campione più vicino» dà a ogni colore pieno del riempimento e del tratto il
+  campione più vicino del documento, per differenza di colore (ΔE); il colore
+  diventa il campione globale, collegato. «Seleziona per tipo di colore» sceglie
+  gli oggetti con tinte piatte, effetti di colore o immagini di un tipo (RGB,
+  CMYK, scala di grigi), con una finestra per il tipo. Sono «da fare» la stampa
+  con correzione degli inchiostri (serve un documento CMYK, che Fub non ha ancora)
+  e il filtro di colore: «Inverti» funziona, ma Luminosità e contrasto il motore
+  le lascia com'erano, e gli altri effetti vanno verificati uno per uno (T18).
+  Le tinte piatte non ci sono: il formato del campione non le ha.
 
 La sezione è in `apps/client/src/editors/spatial/completo/colore-sezione.ts`,
 Campioni in `completo/campioni-sezione.ts`;
