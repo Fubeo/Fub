@@ -179,7 +179,7 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // automaticamente) sono «fatto» come voci dirette del comando con `{auto: true}`: due in più.
   // T14 campioni (ordine per specie): `swatch.sortByKind` è «fatto»: nel formato tutti i campioni sono
   // colori pieni globali, e il comando dà `empty` (casi in colore.json, campioni_ordine.rs). Una riga in più.
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1055, fub: 114, escluso: 12, fatto: 370 });
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1049, fub: 114, escluso: 12, fatto: 376 });
 });
 
 // --- un motore finto ---------------------------------------------------------------

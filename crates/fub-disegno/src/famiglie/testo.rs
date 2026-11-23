@@ -203,7 +203,7 @@ impl StatoFamiglia for Stato {
     /// il pezzo che cambia, in byte del testo del motore, che il motore
     /// sostituisce in un passo. Così il client manda il testo una volta, alla
     /// conferma, e non conta byte di un testo che non vede.
-    fn argomenti_della_copia(id: &str, copia: &Copia, valore: Value) -> Result<Value, PluginError> {
+    fn argomenti_della_copia(id: &str, copia: &Copia, _selezione: &[String], valore: Value) -> Result<Value, PluginError> {
         if id != CAMBIA_LE_PAROLE {
             return Ok(valore);
         }

@@ -245,7 +245,9 @@ fn bersagli(
     for id in selezione {
         let i = mappa.dell_id(id).ok_or(DrawingRefusal::Unmapped)?;
         let e = mappa.elemento(i).ok_or(DrawingRefusal::Unmapped)?;
-        if e.nodo.is_none() {
+        // La carta non ha un tratto o un riempimento da pannello, nel
+        // motore o fuori: più giù non è un bersaglio.
+        if e.nodo.is_none() && e.ruolo != Role::Paper {
             return Err(DrawingRefusal::Unmapped);
         }
         if bloccato(copia, i) {

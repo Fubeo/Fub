@@ -183,7 +183,7 @@ impl StatoFamiglia for Stato {
         marionetta::rifiuto_valore(copia, selezione, valore)
     }
 
-    fn argomenti_della_copia(id: &str, copia: &Copia, valore: Value) -> Result<Value, PluginError> {
+    fn argomenti_della_copia(id: &str, copia: &Copia, _selezione: &[String], valore: Value) -> Result<Value, PluginError> {
         if id == MARIONETTA || id == MARIONETTA_PINS {
             return marionetta::argomenti(id, copia, valore);
         }

@@ -18,7 +18,7 @@ use serde_json::{json, Value};
 /// testo (`od4d4d4d4`) nel disegno della campionatura.
 const CAMPIONI: &str = include_str!("famiglie/colore/campioni.svg");
 const ZIGZAG: &str = include_str!("famiglie/tracciati/zigzag.svg");
-/// Una forma viva di Fub: un rettangolo arrotondato (`oeopq71hl`) con la sua ricetta.
+/// Una forma viva di Fub: un rettangolo arrotondato (`o5qgdpjl6`) con la sua ricetta.
 const FORMA_VIVA: &str = include_str!("famiglie/forme/roundedrectangle-4.svg");
 
 const TESTO: &str = "Il testo non si semplifica: prima crea i profili.";
@@ -74,7 +74,7 @@ fn il_testo_e_la_forma_primitiva_spengono_semplifica_e_smussa_con_la_frase() {
     }
     let forma = apri(&ds, FORMA_VIVA);
     for id in ["object.path.simplify", "object.path.smooth"] {
-        match spenta(&forma, id, &["oeopq71hl"]) {
+        match spenta(&forma, id, &["o5qgdpjl6"]) {
             Some(DrawingDisabledReason::Other { text }) => assert_eq!(text, FORMA, "{id}"),
             altro => panic!("{id} sulla forma doveva dire perché: {altro:?}"),
         }
@@ -101,7 +101,7 @@ fn il_rifiuto_dice_unsupported_prima_del_motore_sul_testo_e_sulla_forma() {
     let esito = comando(
         &mut forma,
         "object.path.smooth",
-        &["oeopq71hl"],
+        &["o5qgdpjl6"],
         json!({ "level": 50 }),
     );
     assert_eq!(

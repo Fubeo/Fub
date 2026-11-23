@@ -147,11 +147,16 @@ pub(crate) trait StatoFamiglia: Send + Sync + 'static {
         None
     }
 
-    /// Gli argomenti del comando `id` completati con ciò che solo la copia sa, prima che il motore li
-    /// veda: il nome di serie di un livello nuovo, che dipende dai livelli del file. Un argomento che
-    /// il formato non tiene (il nome di un livello troppo lungo) è `BadArgs`, col perché, e niente
-    /// cambia. Di serie restano come sono.
-    fn argomenti_della_copia(_id: &str, _copia: &Copia, valore: Value) -> Result<Value, PluginError>
+    /// Gli argomenti del comando `id` completati con ciò che solo la copia e la selezione sanno, prima
+    /// che il motore li veda: il nome di serie di un livello nuovo, che dipende dai livelli del file, o
+    /// i livelli della selezione. Un argomento che il formato non tiene (il nome di un livello troppo
+    /// lungo) è `BadArgs`, col perché, e niente cambia. Di serie restano come sono.
+    fn argomenti_della_copia(
+        _id: &str,
+        _copia: &Copia,
+        _selezione: &[String],
+        valore: Value,
+    ) -> Result<Value, PluginError>
     where
         Self: Sized,
     {
@@ -288,11 +293,12 @@ macro_rules! famiglie {
                 self,
                 id: &str,
                 copia: &Copia,
+                selezione: &[String],
                 valore: Value,
             ) -> Result<Value, PluginError> {
                 match self {
                     $(Famiglia::$variante => {
-                        <$modulo::Stato as StatoFamiglia>::argomenti_della_copia(id, copia, valore)
+                        <$modulo::Stato as StatoFamiglia>::argomenti_della_copia(id, copia, selezione, valore)
                     })*
                 }
             }
@@ -1090,7 +1096,12 @@ pub(crate) fn esegui(
     };
     // I punti scelti di un comando sui punti (T12): tolti dal valore, vanno
     // nella selezione del motore.
-    let mut valore = famiglia.argomenti_della_copia(&riga.id, copia, richiesta.value.clone())?;
+    let mut valore = famiglia.argomenti_della_copia(
+        &riga.id,
+        copia,
+        &richiesta.selection,
+        richiesta.value.clone(),
+    )?;
     let punti = if famiglia == Famiglia::Tracciati
         && tracciati::SUI_PUNTI.contains(&riga.id.as_str())
     {
@@ -1304,7 +1315,8 @@ pub(crate) fn selezione_spenta(
 
 /// Gli oggetti del motore della selezione di Fub: un id che la mappa non ha,
 /// o che il motore non sa modificare, è `unmapped`; uno bloccato (lui o un
-/// antenato) `locked`.
+/// antenato) `locked`, e così la carta, che non si cambia (nel motore o
+/// fuori, vedi `apertura::CARTA_FUORI`).
 pub(crate) fn nodi_scelti(
     copia: &Copia,
     selezione: &[String],
@@ -1314,6 +1326,12 @@ pub(crate) fn nodi_scelti(
         .iter()
         .map(|id| {
             let i = mappa.dell_id(id).ok_or(DrawingRefusal::Unmapped)?;
+            if mappa
+                .elemento(i)
+                .is_some_and(|e| e.ruolo == fub_scene::Role::Paper)
+            {
+                return Err(DrawingRefusal::Locked);
+            }
             let nodo = mappa
                 .elemento(i)
                 .and_then(|e| e.nodo)

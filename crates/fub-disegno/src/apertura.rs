@@ -35,6 +35,10 @@ use crate::ricetta;
 /// Il prefisso degli id sintetici della copia per l'import.
 pub const PREFISSO_SINTETICO: &str = "fubtmp-";
 
+/// Il motivo della carta che la copia per l'import lascia fuori dal motore
+/// (vedi `carta_da_togliere`): non è una perdita, la carta non si modifica.
+pub const CARTA_FUORI: &str = "la carta resta fuori dal motore: i livelli di Fub sono la cima";
+
 /// La copia del disegno nel motore a una revisione del testo.
 pub(crate) struct Copia {
     /// La revisione del testo da cui viene.
@@ -126,6 +130,7 @@ pub(crate) fn importa(testo: &str, revisione: u64) -> Result<Copia, ErroreApertu
     let mut elementi = elementi(testo, &scena.items, base);
     let (campioni_del_file, usi) = campioni::leggi(testo, &scena.items);
     let (copia_testo, _) = copia_per_l_import(testo, &mut elementi, &scena.items);
+    let senza_carta = elementi.iter().any(|e| e.motivo == Some(CARTA_FUORI));
 
     let documento = if elementi.is_empty() && scena.items.len() <= 1 {
         // Niente da importare: una scena troncata o vuota.
@@ -152,6 +157,9 @@ pub(crate) fn importa(testo: &str, revisione: u64) -> Result<Copia, ErroreApertu
     let mut documento = documento;
     gruppi_di_fub(&elementi, &mut documento);
     livelli_vuoti(&elementi, &mut documento);
+    if senza_carta {
+        cima_vuota_via(&elementi, &mut documento);
+    }
     // Le ricette dopo l'import, prima della mappa: gli elementi dentro un
     // oggetto rifatto restano fuori dalla mappa.
     let (ricette, sola_lettura) = ricetta::leggi(
@@ -341,6 +349,23 @@ fn livelli_vuoti(elementi: &[Elemento], doc: &mut Document) {
             None => doc.layers.push(livello),
         }
         nomi.insert(e.nome.clone());
+    }
+}
+
+/// Senza la carta, un disegno di soli livelli vuoti (un disegno nuovo) non
+/// ha niente da importare, e l'import fa un livello vuoto suo che starebbe
+/// per la radice accanto ai livelli di Fub di [`livelli_vuoti`]: si toglie,
+/// così il primo oggetto disegnato va nel livello di Fub e la cima del
+/// motore è quella del file. Si toglie solo un livello vuoto che non viene
+/// da un elemento di Fub, e solo se resta almeno un livello.
+fn cima_vuota_via(elementi: &[Elemento], doc: &mut Document) {
+    let di_fub: HashSet<&str> = elementi.iter().map(|e| e.nome.as_str()).collect();
+    let estraneo = |l: &Arc<Node>| {
+        l.children().is_some_and(|c| c.is_empty())
+            && !l.name.as_deref().is_some_and(|n| di_fub.contains(n))
+    };
+    if doc.layers.iter().any(|l| !estraneo(l)) {
+        doc.layers.retain(|l| !estraneo(l));
     }
 }
 
@@ -660,12 +685,25 @@ fn copia_per_l_import(
     }
     // Gli span di ogni elemento, per percorso.
     let mut span = std::collections::HashMap::new();
+    let mut fine = std::collections::HashMap::new();
     for item in items {
         if let Item::Element(e) = item {
             span.insert(e.path.clone(), e.span.bytes[0]);
+            fine.insert(e.path.clone(), e.span.bytes[1]);
         }
     }
     let mut modifiche: Vec<(usize, usize, String)> = Vec::new();
+    // La carta fuori dal motore quando la radice ha solo lei e livelli di
+    // Fub: il motore fa allora dei livelli di Fub i suoi livelli in cima,
+    // senza un livello che stia per la radice. Si toglie l'elemento intero;
+    // resta nella mappa senza oggetto e senza perdita.
+    if let Some(carta) = carta_da_togliere(elementi) {
+        let e = &mut elementi[carta];
+        if let (Some(&da), Some(&a)) = (span.get(&e.percorso), fine.get(&e.percorso)) {
+            modifiche.push((da, a, String::new()));
+            e.motivo = Some(CARTA_FUORI);
+        }
+    }
     let mut n = 0usize;
     let mut sintetici = Vec::new();
     for e in elementi.iter_mut() {
@@ -714,6 +752,28 @@ fn copia_per_l_import(
     }
     out.push_str(&testo[at..]);
     (out, sintetici)
+}
+
+/// La carta da lasciare fuori dalla copia per l'import: se fra i figli
+/// della radice che il motore disegna ci sono solo la carta e livelli di
+/// Fub, almeno uno. Le `defs` e le tavole non si disegnano e non contano.
+/// Con un oggetto o un gruppo fuori dai livelli la carta resta: il motore
+/// li mette tutti in un livello che sta per la radice, carta compresa.
+fn carta_da_togliere(elementi: &[Elemento]) -> Option<usize> {
+    let mut carta = None;
+    let mut livelli = 0;
+    for (i, e) in elementi.iter().enumerate() {
+        if e.genitore.is_some() {
+            continue;
+        }
+        match e.ruolo {
+            Role::Defs | Role::Board => {}
+            Role::Paper if carta.is_none() && e.motivo.is_none() => carta = Some(i),
+            Role::Layer if e.motivo.is_none() => livelli += 1,
+            _ => return None,
+        }
+    }
+    carta.filter(|_| livelli > 0)
 }
 
 /// Le etichette che il motore userebbe come nome al posto dell'id.

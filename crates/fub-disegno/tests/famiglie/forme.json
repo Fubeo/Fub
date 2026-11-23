@@ -344,7 +344,7 @@
                 "pos": {
                   "last": true
                 },
-                "raw": "<g id=\"oeopq71hl\"><path id=\"oz0000001\" d=\"M272 70 L328 70 C334.627 70 340 75.373 340 82 L340 98 C340 104.627 334.627 110 328 110 L272 110 C265.373 110 260 104.627 260 98 L260 82 C260 75.373 265.373 70 272 70 Z\" fill=\"none\" stroke=\"#000000\" stroke-width=\"2\" stroke-miterlimit=\"10\"/></g>"
+                "raw": "<g id=\"o5qgdpjl6\"><path id=\"o8d7zz0r6\" d=\"M272 70 L328 70 C334.627 70 340 75.373 340 82 L340 98 C340 104.627 334.627 110 328 110 L272 110 C265.373 110 260 104.627 260 98 L260 82 C260 75.373 265.373 70 272 70 Z\" fill=\"none\" stroke=\"#000000\" stroke-width=\"2\" stroke-miterlimit=\"10\"/></g>"
               },
               {
                 "op": "add",
@@ -352,7 +352,7 @@
                 "pos": {
                   "first": true
                 },
-                "raw": "<metadata><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"oeopq71hl\" hash=\"c3c90ce4be298df5\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjoxMSwiYXBwZWFyYW5jZSI6eyJpdGVtcyI6W3sia2luZCI6ImZpbGwiLCJwYWludCI6eyJ0eXBlIjoibm9uZSJ9fSx7ImtpbmQiOiJzdHJva2UiLCJwYWludCI6eyJ0eXBlIjoic29saWQiLCJjb2xvciI6eyJtb2RlbCI6InJnYiIsInIiOjAuMCwiZyI6MC4wLCJiIjowLjB9fSwid2lkdGgiOjIuMH1dfSwia2luZCI6eyJ0eXBlIjoicGF0aCIsInBhdGgiOnsic3VicGF0aHMiOlt7ImFuY2hvcnMiOlt7InAiOlsyNzIuMCw3MC4wXSwiaW4iOlsyNjUuMzcyNTgzMDAyMDMwNDcsNzAuMF19LHsicCI6WzMyOC4wLDcwLjBdLCJvdXQiOlszMzQuNjI3NDE2OTk3OTY5NTMsNzAuMF19LHsicCI6WzM0MC4wLDgyLjBdLCJpbiI6WzM0MC4wLDc1LjM3MjU4MzAwMjAzMDQ4XX0seyJwIjpbMzQwLjAsOTguMF0sIm91dCI6WzM0MC4wLDEwNC42Mjc0MTY5OTc5Njk1Ml19LHsicCI6WzMyOC4wLDExMC4wXSwiaW4iOlszMzQuNjI3NDE2OTk3OTY5NTMsMTEwLjBdfSx7InAiOlsyNzIuMCwxMTAuMF0sIm91dCI6WzI2NS4zNzI1ODMwMDIwMzA0NywxMTAuMF19LHsicCI6WzI2MC4wLDk4LjBdLCJpbiI6WzI2MC4wLDEwNC42Mjc0MTY5OTc5Njk1Ml19LHsicCI6WzI2MC4wLDgyLjBdLCJvdXQiOlsyNjAuMCw3NS4zNzI1ODMwMDIwMzA0OF19XSwiY2xvc2VkIjp0cnVlfV19LCJsaXZlIjp7InNoYXBlIjoicmVjdGFuZ2xlIiwidyI6ODAuMCwiaCI6NDAuMCwicmFkaWkiOlsxMi4wLDEyLjAsMTIuMCwxMi4wXSwieGYiOlsxLjAsMC4wLDAuMCwxLjAsMjYwLjAsNzAuMF19fX19</vectorcraft:recipe></metadata>"
+                "raw": "<metadata><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"o5qgdpjl6\" hash=\"4a416847c27ed46d\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjoxMCwiYXBwZWFyYW5jZSI6eyJpdGVtcyI6W3sia2luZCI6ImZpbGwiLCJwYWludCI6eyJ0eXBlIjoibm9uZSJ9fSx7ImtpbmQiOiJzdHJva2UiLCJwYWludCI6eyJ0eXBlIjoic29saWQiLCJjb2xvciI6eyJtb2RlbCI6InJnYiIsInIiOjAuMCwiZyI6MC4wLCJiIjowLjB9fSwid2lkdGgiOjIuMH1dfSwia2luZCI6eyJ0eXBlIjoicGF0aCIsInBhdGgiOnsic3VicGF0aHMiOlt7ImFuY2hvcnMiOlt7InAiOlsyNzIuMCw3MC4wXSwiaW4iOlsyNjUuMzcyNTgzMDAyMDMwNDcsNzAuMF19LHsicCI6WzMyOC4wLDcwLjBdLCJvdXQiOlszMzQuNjI3NDE2OTk3OTY5NTMsNzAuMF19LHsicCI6WzM0MC4wLDgyLjBdLCJpbiI6WzM0MC4wLDc1LjM3MjU4MzAwMjAzMDQ4XX0seyJwIjpbMzQwLjAsOTguMF0sIm91dCI6WzM0MC4wLDEwNC42Mjc0MTY5OTc5Njk1Ml19LHsicCI6WzMyOC4wLDExMC4wXSwiaW4iOlszMzQuNjI3NDE2OTk3OTY5NTMsMTEwLjBdfSx7InAiOlsyNzIuMCwxMTAuMF0sIm91dCI6WzI2NS4zNzI1ODMwMDIwMzA0NywxMTAuMF19LHsicCI6WzI2MC4wLDk4LjBdLCJpbiI6WzI2MC4wLDEwNC42Mjc0MTY5OTc5Njk1Ml19LHsicCI6WzI2MC4wLDgyLjBdLCJvdXQiOlsyNjAuMCw3NS4zNzI1ODMwMDIwMzA0OF19XSwiY2xvc2VkIjp0cnVlfV19LCJsaXZlIjp7InNoYXBlIjoicmVjdGFuZ2xlIiwidyI6ODAuMCwiaCI6NDAuMCwicmFkaWkiOlsxMi4wLDEyLjAsMTIuMCwxMi4wXSwieGYiOlsxLjAsMC4wLDAuMCwxLjAsMjYwLjAsNzAuMF19fX19</vectorcraft:recipe></metadata>"
               }
             ]
           }
@@ -491,7 +491,7 @@
                 "pos": {
                   "last": true
                 },
-                "raw": "<g id=\"onkkz57hn\"><polygon id=\"oz0000002\" points=\"230,200 249.641,245.981 219.641,285.981 170,280 150.359,234.019 180.359,194.019\" fill=\"none\" stroke=\"#000000\" stroke-width=\"2\" stroke-miterlimit=\"10\"/></g>"
+                "raw": "<g id=\"o28m0yaml\"><polygon id=\"o78tx8btl\" points=\"230,200 249.641,245.981 219.641,285.981 170,280 150.359,234.019 180.359,194.019\" fill=\"none\" stroke=\"#000000\" stroke-width=\"2\" stroke-miterlimit=\"10\"/></g>"
               },
               {
                 "op": "add",
@@ -499,7 +499,7 @@
                 "pos": {
                   "first": true
                 },
-                "raw": "<metadata><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"onkkz57hn\" hash=\"3f6ec745d5a8d976\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjoxMSwiYXBwZWFyYW5jZSI6eyJpdGVtcyI6W3sia2luZCI6ImZpbGwiLCJwYWludCI6eyJ0eXBlIjoibm9uZSJ9fSx7ImtpbmQiOiJzdHJva2UiLCJwYWludCI6eyJ0eXBlIjoic29saWQiLCJjb2xvciI6eyJtb2RlbCI6InJnYiIsInIiOjAuMCwiZyI6MC4wLCJiIjowLjB9fSwid2lkdGgiOjIuMH1dfSwia2luZCI6eyJ0eXBlIjoicGF0aCIsInBhdGgiOnsic3VicGF0aHMiOlt7ImFuY2hvcnMiOlt7InAiOlsyMzAuMCwyMDAuMF19LHsicCI6WzI0OS42NDEwMTYxNTEzNzc1NiwyNDUuOTgwNzYyMTEzNTMzMTZdfSx7InAiOlsyMTkuNjQxMDE2MTUxMzc3NTYsMjg1Ljk4MDc2MjExMzUzMzE2XX0seyJwIjpbMTcwLjAsMjgwLjBdfSx7InAiOlsxNTAuMzU4OTgzODQ4NjIyNDQsMjM0LjAxOTIzNzg4NjQ2Njg3XX0seyJwIjpbMTgwLjM1ODk4Mzg0ODYyMjQ0LDE5NC4wMTkyMzc4ODY0NjY4NF19XSwiY2xvc2VkIjp0cnVlfV19LCJsaXZlIjp7InNoYXBlIjoicG9seWdvbiIsInJhZGl1cyI6NTAuMCwic2lkZXMiOjYsInhmIjpbMC44LDAuNiwtMC42LDAuOCwyMDAuMCwyNDAuMF19fX19</vectorcraft:recipe></metadata>"
+                "raw": "<metadata><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"o28m0yaml\" hash=\"0f695c787744757d\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjoxMCwiYXBwZWFyYW5jZSI6eyJpdGVtcyI6W3sia2luZCI6ImZpbGwiLCJwYWludCI6eyJ0eXBlIjoibm9uZSJ9fSx7ImtpbmQiOiJzdHJva2UiLCJwYWludCI6eyJ0eXBlIjoic29saWQiLCJjb2xvciI6eyJtb2RlbCI6InJnYiIsInIiOjAuMCwiZyI6MC4wLCJiIjowLjB9fSwid2lkdGgiOjIuMH1dfSwia2luZCI6eyJ0eXBlIjoicGF0aCIsInBhdGgiOnsic3VicGF0aHMiOlt7ImFuY2hvcnMiOlt7InAiOlsyMzAuMCwyMDAuMF19LHsicCI6WzI0OS42NDEwMTYxNTEzNzc1NiwyNDUuOTgwNzYyMTEzNTMzMTZdfSx7InAiOlsyMTkuNjQxMDE2MTUxMzc3NTYsMjg1Ljk4MDc2MjExMzUzMzE2XX0seyJwIjpbMTcwLjAsMjgwLjBdfSx7InAiOlsxNTAuMzU4OTgzODQ4NjIyNDQsMjM0LjAxOTIzNzg4NjQ2Njg3XX0seyJwIjpbMTgwLjM1ODk4Mzg0ODYyMjQ0LDE5NC4wMTkyMzc4ODY0NjY4NF19XSwiY2xvc2VkIjp0cnVlfV19LCJsaXZlIjp7InNoYXBlIjoicG9seWdvbiIsInJhZGl1cyI6NTAuMCwic2lkZXMiOjYsInhmIjpbMC44LDAuNiwtMC42LDAuOCwyMDAuMCwyNDAuMF19fX19</vectorcraft:recipe></metadata>"
               }
             ]
           }
@@ -667,7 +667,7 @@
                 "pos": {
                   "last": true
                 },
-                "raw": "<g id=\"o7efmct8i\"><polygon id=\"oz0000003\" points=\"200,210 225.981,225 225.981,255 200,270 174.019,255 174.019,225\" fill=\"#ffffff\" stroke=\"#000000\" stroke-miterlimit=\"10\"/></g>"
+                "raw": "<g id=\"oxqicso2k\"><polygon id=\"ok62swmvx\" points=\"200,210 225.981,225 225.981,255 200,270 174.019,255 174.019,225\" fill=\"#ffffff\" stroke=\"#000000\" stroke-miterlimit=\"10\"/></g>"
               },
               {
                 "op": "add",
@@ -675,7 +675,7 @@
                 "pos": {
                   "first": true
                 },
-                "raw": "<metadata><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"o7efmct8i\" hash=\"d1a6be746c666b9b\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjoxMSwiYXBwZWFyYW5jZSI6eyJpdGVtcyI6W3sia2luZCI6ImZpbGwiLCJwYWludCI6eyJ0eXBlIjoic29saWQiLCJjb2xvciI6eyJtb2RlbCI6InJnYiIsInIiOjEuMCwiZyI6MS4wLCJiIjoxLjB9fX0seyJraW5kIjoic3Ryb2tlIiwicGFpbnQiOnsidHlwZSI6InNvbGlkIiwiY29sb3IiOnsibW9kZWwiOiJyZ2IiLCJyIjowLjAsImciOjAuMCwiYiI6MC4wfX0sIndpZHRoIjoxLjB9XX0sImtpbmQiOnsidHlwZSI6InBhdGgiLCJwYXRoIjp7InN1YnBhdGhzIjpbeyJhbmNob3JzIjpbeyJwIjpbMjAwLjAsMjEwLjBdfSx7InAiOlsyMjUuOTgwNzYyMTEzNTMzMTYsMjI1LjBdfSx7InAiOlsyMjUuOTgwNzYyMTEzNTMzMTYsMjU1LjBdfSx7InAiOlsyMDAuMCwyNzAuMF19LHsicCI6WzE3NC4wMTkyMzc4ODY0NjY4NCwyNTUuMF19LHsicCI6WzE3NC4wMTkyMzc4ODY0NjY4NCwyMjUuMF19XSwiY2xvc2VkIjp0cnVlfV19LCJsaXZlIjp7InNoYXBlIjoicG9seWdvbiIsInJhZGl1cyI6MzAuMCwic2lkZXMiOjYsInhmIjpbMS4wLDAuMCwwLjAsMS4wLDIwMC4wLDI0MC4wXX19fX0=</vectorcraft:recipe></metadata>"
+                "raw": "<metadata><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"oxqicso2k\" hash=\"1009a646b5dce1df\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjoxMCwiYXBwZWFyYW5jZSI6eyJpdGVtcyI6W3sia2luZCI6ImZpbGwiLCJwYWludCI6eyJ0eXBlIjoic29saWQiLCJjb2xvciI6eyJtb2RlbCI6InJnYiIsInIiOjEuMCwiZyI6MS4wLCJiIjoxLjB9fX0seyJraW5kIjoic3Ryb2tlIiwicGFpbnQiOnsidHlwZSI6InNvbGlkIiwiY29sb3IiOnsibW9kZWwiOiJyZ2IiLCJyIjowLjAsImciOjAuMCwiYiI6MC4wfX0sIndpZHRoIjoxLjB9XX0sImtpbmQiOnsidHlwZSI6InBhdGgiLCJwYXRoIjp7InN1YnBhdGhzIjpbeyJhbmNob3JzIjpbeyJwIjpbMjAwLjAsMjEwLjBdfSx7InAiOlsyMjUuOTgwNzYyMTEzNTMzMTYsMjI1LjBdfSx7InAiOlsyMjUuOTgwNzYyMTEzNTMzMTYsMjU1LjBdfSx7InAiOlsyMDAuMCwyNzAuMF19LHsicCI6WzE3NC4wMTkyMzc4ODY0NjY4NCwyNTUuMF19LHsicCI6WzE3NC4wMTkyMzc4ODY0NjY4NCwyMjUuMF19XSwiY2xvc2VkIjp0cnVlfV19LCJsaXZlIjp7InNoYXBlIjoicG9seWdvbiIsInJhZGl1cyI6MzAuMCwic2lkZXMiOjYsInhmIjpbMS4wLDAuMCwwLjAsMS4wLDIwMC4wLDI0MC4wXX19fX0=</vectorcraft:recipe></metadata>"
               }
             ]
           }
@@ -1781,7 +1781,7 @@
               ],
               "area": 2500.0,
               "sources": [
-                4
+                3
               ]
             },
             {
@@ -1793,7 +1793,7 @@
               ],
               "area": 2500.0,
               "sources": [
-                3
+                2
               ]
             },
             {
@@ -1805,8 +1805,8 @@
               ],
               "area": 2500.0,
               "sources": [
-                3,
-                4
+                2,
+                3
               ]
             }
           ],
@@ -1819,7 +1819,7 @@
                 150.0,
                 150.0
               ],
-              "source": 3
+              "source": 2
             },
             {
               "bounds": [
@@ -1828,7 +1828,7 @@
                 200.0,
                 100.0
               ],
-              "source": 4
+              "source": 3
             },
             {
               "bounds": [
@@ -1837,7 +1837,7 @@
                 150.0,
                 150.0
               ],
-              "source": 4
+              "source": 3
             },
             {
               "bounds": [
@@ -1846,7 +1846,7 @@
                 200.0,
                 150.0
               ],
-              "source": 4
+              "source": 3
             },
             {
               "bounds": [
@@ -1855,7 +1855,7 @@
                 250.0,
                 150.0
               ],
-              "source": 4
+              "source": 3
             },
             {
               "bounds": [
@@ -1864,7 +1864,7 @@
                 200.0,
                 150.0
               ],
-              "source": 3
+              "source": 2
             }
           ]
         }
@@ -2086,7 +2086,7 @@
                 "pos": {
                   "first": true
                 },
-                "raw": "<g id=\"okagajvdc\"><polygon id=\"oxxbd79ob\" points=\"40,160 40,40 160,40 160,100 100,100 100,160\" fill=\"none\"/><polygon id=\"ozgfqfj4r\" points=\"40,160 40,40 160,40 160,100 100,100 100,160\" fill=\"#3366aa\"/></g>"
+                "raw": "<g id=\"ov0w0i299\"><polygon id=\"o98nop2dk\" points=\"40,160 40,40 160,40 160,100 100,100 100,160\" fill=\"none\"/><polygon id=\"oblxf13sh\" points=\"40,160 40,40 160,40 160,100 100,100 100,160\" fill=\"#3366aa\"/></g>"
               },
               {
                 "op": "add",
@@ -2094,7 +2094,7 @@
                 "pos": {
                   "first": true
                 },
-                "raw": "<metadata><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"okagajvdc\" hash=\"c66dbe11a379ff08\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjoxNiwiYXBwZWFyYW5jZSI6eyJpdGVtcyI6W3sia2luZCI6ImZpbGwiLCJwYWludCI6eyJ0eXBlIjoic29saWQiLCJjb2xvciI6eyJtb2RlbCI6InJnYiIsInIiOjAuMjAwMDAwMDAyOTgwMjMyMjQsImciOjAuNDAwMDAwMDA1OTYwNDY0NSwiYiI6MC42NjY2NjY2ODY1MzQ4ODE2fX19XX0sImtpbmQiOnsidHlwZSI6Imdyb3VwIiwiY2hpbGRyZW4iOlt7ImlkIjozLCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MC4yMDAwMDAwMDI5ODAyMzIyNCwiZyI6MC40MDAwMDAwMDU5NjA0NjQ1LCJiIjowLjY2NjY2NjY4NjUzNDg4MTZ9fX1dfSwia2luZCI6eyJ0eXBlIjoicGF0aCIsInBhdGgiOnsic3VicGF0aHMiOlt7ImFuY2hvcnMiOlt7InAiOls0MC4wLDQwLjBdfSx7InAiOlsxNjAuMCw0MC4wXX0seyJwIjpbMTYwLjAsMTYwLjBdfSx7InAiOls0MC4wLDE2MC4wXX1dLCJjbG9zZWQiOnRydWV9XX19LCJzaGFwZV9tb2RlIjoic3VidHJhY3QifSx7ImlkIjo0LCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MS4wLCJnIjowLjAsImIiOjAuMH19fSx7ImtpbmQiOiJzdHJva2UiLCJwYWludCI6eyJ0eXBlIjoic29saWQiLCJjb2xvciI6eyJtb2RlbCI6InJnYiIsInIiOjAuMCwiZyI6MC4wLCJiIjowLjB9fSwid2lkdGgiOjIuMCwibWl0ZXJfbGltaXQiOjQuMH1dfSwia2luZCI6eyJ0eXBlIjoicGF0aCIsInBhdGgiOnsic3VicGF0aHMiOlt7ImFuY2hvcnMiOlt7InAiOlsxMDAuMCwxMDAuMF19LHsicCI6WzIyMC4wLDEwMC4wXX0seyJwIjpbMjIwLjAsMjIwLjBdfSx7InAiOlsxMDAuMCwyMjAuMF19XSwiY2xvc2VkIjp0cnVlfV19fSwic2hhcGVfbW9kZSI6InN1YnRyYWN0In1dLCJjbGlwIjpmYWxzZX0sImNvbXBvdW5kX3NoYXBlIjp0cnVlfX0=</vectorcraft:recipe></metadata>"
+                "raw": "<metadata><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"ov0w0i299\" hash=\"08be1273e71d557c\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjoxNSwiYXBwZWFyYW5jZSI6eyJpdGVtcyI6W3sia2luZCI6ImZpbGwiLCJwYWludCI6eyJ0eXBlIjoic29saWQiLCJjb2xvciI6eyJtb2RlbCI6InJnYiIsInIiOjAuMjAwMDAwMDAyOTgwMjMyMjQsImciOjAuNDAwMDAwMDA1OTYwNDY0NSwiYiI6MC42NjY2NjY2ODY1MzQ4ODE2fX19XX0sImtpbmQiOnsidHlwZSI6Imdyb3VwIiwiY2hpbGRyZW4iOlt7ImlkIjoyLCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MC4yMDAwMDAwMDI5ODAyMzIyNCwiZyI6MC40MDAwMDAwMDU5NjA0NjQ1LCJiIjowLjY2NjY2NjY4NjUzNDg4MTZ9fX1dfSwia2luZCI6eyJ0eXBlIjoicGF0aCIsInBhdGgiOnsic3VicGF0aHMiOlt7ImFuY2hvcnMiOlt7InAiOls0MC4wLDQwLjBdfSx7InAiOlsxNjAuMCw0MC4wXX0seyJwIjpbMTYwLjAsMTYwLjBdfSx7InAiOls0MC4wLDE2MC4wXX1dLCJjbG9zZWQiOnRydWV9XX19LCJzaGFwZV9tb2RlIjoic3VidHJhY3QifSx7ImlkIjozLCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MS4wLCJnIjowLjAsImIiOjAuMH19fSx7ImtpbmQiOiJzdHJva2UiLCJwYWludCI6eyJ0eXBlIjoic29saWQiLCJjb2xvciI6eyJtb2RlbCI6InJnYiIsInIiOjAuMCwiZyI6MC4wLCJiIjowLjB9fSwid2lkdGgiOjIuMCwibWl0ZXJfbGltaXQiOjQuMH1dfSwia2luZCI6eyJ0eXBlIjoicGF0aCIsInBhdGgiOnsic3VicGF0aHMiOlt7ImFuY2hvcnMiOlt7InAiOlsxMDAuMCwxMDAuMF19LHsicCI6WzIyMC4wLDEwMC4wXX0seyJwIjpbMjIwLjAsMjIwLjBdfSx7InAiOlsxMDAuMCwyMjAuMF19XSwiY2xvc2VkIjp0cnVlfV19fSwic2hhcGVfbW9kZSI6InN1YnRyYWN0In1dLCJjbGlwIjpmYWxzZX0sImNvbXBvdW5kX3NoYXBlIjp0cnVlfX0=</vectorcraft:recipe></metadata>"
               }
             ]
           }
@@ -2147,7 +2147,7 @@
       "id": "object.compoundShape.setMode",
       "disegno": "composta-meno-davanti.svg",
       "selezione": [
-        "okagajvdc"
+        "ov0w0i299"
       ],
       "argomenti": {
         "mode": "intersect"
@@ -2159,7 +2159,7 @@
             "ops": [
               {
                 "op": "remove",
-                "target": "okagajvdc"
+                "target": "ov0w0i299"
               },
               {
                 "op": "remove",
@@ -2176,7 +2176,7 @@
                 "pos": {
                   "first": true
                 },
-                "raw": "<g id=\"okagajvdc\"><rect id=\"o6d5gs4yq\" x=\"100\" y=\"100\" width=\"60\" height=\"60\" fill=\"none\"/><rect id=\"o3fvhqpx2\" x=\"100\" y=\"100\" width=\"60\" height=\"60\" fill=\"#3366aa\"/></g>"
+                "raw": "<g id=\"ov0w0i299\"><rect id=\"oz2u3zw23\" x=\"100\" y=\"100\" width=\"60\" height=\"60\" fill=\"none\"/><rect id=\"ox6iojy0v\" x=\"100\" y=\"100\" width=\"60\" height=\"60\" fill=\"#3366aa\"/></g>"
               },
               {
                 "op": "add",
@@ -2184,7 +2184,7 @@
                 "pos": {
                   "first": true
                 },
-                "raw": "<metadata><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"okagajvdc\" hash=\"1b58c82fff108d6a\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjo0LCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MC4yMDAwMDAwMDI5ODAyMzIyNCwiZyI6MC40MDAwMDAwMDU5NjA0NjQ1LCJiIjowLjY2NjY2NjY4NjUzNDg4MTZ9fX1dfSwia2luZCI6eyJ0eXBlIjoiZ3JvdXAiLCJjaGlsZHJlbiI6W3siaWQiOjE3LCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MC4yMDAwMDAwMDI5ODAyMzIyNCwiZyI6MC40MDAwMDAwMDU5NjA0NjQ1LCJiIjowLjY2NjY2NjY4NjUzNDg4MTZ9fX1dfSwia2luZCI6eyJ0eXBlIjoicGF0aCIsInBhdGgiOnsic3VicGF0aHMiOlt7ImFuY2hvcnMiOlt7InAiOls0MC4wLDQwLjBdfSx7InAiOlsxNjAuMCw0MC4wXX0seyJwIjpbMTYwLjAsMTYwLjBdfSx7InAiOls0MC4wLDE2MC4wXX1dLCJjbG9zZWQiOnRydWV9XX19LCJzaGFwZV9tb2RlIjoiaW50ZXJzZWN0In0seyJpZCI6MTgsImFwcGVhcmFuY2UiOnsiaXRlbXMiOlt7ImtpbmQiOiJmaWxsIiwicGFpbnQiOnsidHlwZSI6InNvbGlkIiwiY29sb3IiOnsibW9kZWwiOiJyZ2IiLCJyIjoxLjAsImciOjAuMCwiYiI6MC4wfX19LHsia2luZCI6InN0cm9rZSIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MC4wLCJnIjowLjAsImIiOjAuMH19LCJ3aWR0aCI6Mi4wLCJtaXRlcl9saW1pdCI6NC4wfV19LCJraW5kIjp7InR5cGUiOiJwYXRoIiwicGF0aCI6eyJzdWJwYXRocyI6W3siYW5jaG9ycyI6W3sicCI6WzEwMC4wLDEwMC4wXX0seyJwIjpbMjIwLjAsMTAwLjBdfSx7InAiOlsyMjAuMCwyMjAuMF19LHsicCI6WzEwMC4wLDIyMC4wXX1dLCJjbG9zZWQiOnRydWV9XX19LCJzaGFwZV9tb2RlIjoiaW50ZXJzZWN0In1dLCJjbGlwIjpmYWxzZX0sImNvbXBvdW5kX3NoYXBlIjp0cnVlfX0=</vectorcraft:recipe></metadata>"
+                "raw": "<metadata><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"ov0w0i299\" hash=\"628dffbb9ca6219e\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjozLCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MC4yMDAwMDAwMDI5ODAyMzIyNCwiZyI6MC40MDAwMDAwMDU5NjA0NjQ1LCJiIjowLjY2NjY2NjY4NjUzNDg4MTZ9fX1dfSwia2luZCI6eyJ0eXBlIjoiZ3JvdXAiLCJjaGlsZHJlbiI6W3siaWQiOjE2LCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MC4yMDAwMDAwMDI5ODAyMzIyNCwiZyI6MC40MDAwMDAwMDU5NjA0NjQ1LCJiIjowLjY2NjY2NjY4NjUzNDg4MTZ9fX1dfSwia2luZCI6eyJ0eXBlIjoicGF0aCIsInBhdGgiOnsic3VicGF0aHMiOlt7ImFuY2hvcnMiOlt7InAiOls0MC4wLDQwLjBdfSx7InAiOlsxNjAuMCw0MC4wXX0seyJwIjpbMTYwLjAsMTYwLjBdfSx7InAiOls0MC4wLDE2MC4wXX1dLCJjbG9zZWQiOnRydWV9XX19LCJzaGFwZV9tb2RlIjoiaW50ZXJzZWN0In0seyJpZCI6MTcsImFwcGVhcmFuY2UiOnsiaXRlbXMiOlt7ImtpbmQiOiJmaWxsIiwicGFpbnQiOnsidHlwZSI6InNvbGlkIiwiY29sb3IiOnsibW9kZWwiOiJyZ2IiLCJyIjoxLjAsImciOjAuMCwiYiI6MC4wfX19LHsia2luZCI6InN0cm9rZSIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MC4wLCJnIjowLjAsImIiOjAuMH19LCJ3aWR0aCI6Mi4wLCJtaXRlcl9saW1pdCI6NC4wfV19LCJraW5kIjp7InR5cGUiOiJwYXRoIiwicGF0aCI6eyJzdWJwYXRocyI6W3siYW5jaG9ycyI6W3sicCI6WzEwMC4wLDEwMC4wXX0seyJwIjpbMjIwLjAsMTAwLjBdfSx7InAiOlsyMjAuMCwyMjAuMF19LHsicCI6WzEwMC4wLDIyMC4wXX1dLCJjbG9zZWQiOnRydWV9XX19LCJzaGFwZV9tb2RlIjoiaW50ZXJzZWN0In1dLCJjbGlwIjpmYWxzZX0sImNvbXBvdW5kX3NoYXBlIjp0cnVlfX0=</vectorcraft:recipe></metadata>"
               }
             ]
           }
@@ -2196,7 +2196,7 @@
       "id": "object.compoundShape.setMode",
       "disegno": "composta-meno-davanti.svg",
       "selezione": [
-        "okagajvdc"
+        "ov0w0i299"
       ],
       "argomenti": {
         "mode": "subtract"
@@ -2222,7 +2222,7 @@
       "id": "object.compoundShape.release",
       "disegno": "composta-meno-davanti.svg",
       "selezione": [
-        "okagajvdc"
+        "ov0w0i299"
       ],
       "atteso": {
         "ops": [
@@ -2231,7 +2231,7 @@
             "ops": [
               {
                 "op": "remove",
-                "target": "okagajvdc"
+                "target": "ov0w0i299"
               },
               {
                 "op": "remove",
@@ -2294,7 +2294,7 @@
       "id": "object.compoundShape.expand",
       "disegno": "composta-meno-davanti.svg",
       "selezione": [
-        "okagajvdc"
+        "ov0w0i299"
       ],
       "atteso": {
         "ops": [
@@ -2303,7 +2303,7 @@
             "ops": [
               {
                 "op": "remove",
-                "target": "okagajvdc"
+                "target": "ov0w0i299"
               },
               {
                 "op": "remove",
@@ -2349,7 +2349,7 @@
       "id": "object.expandShape",
       "disegno": "roundedrectangle-4.svg",
       "selezione": [
-        "oeopq71hl"
+        "o5qgdpjl6"
       ],
       "atteso": {
         "ops": [
@@ -2358,7 +2358,7 @@
             "ops": [
               {
                 "op": "remove",
-                "target": "oeopq71hl"
+                "target": "o5qgdpjl6"
               },
               {
                 "op": "remove",
@@ -2375,7 +2375,7 @@
                 "pos": {
                   "last": true
                 },
-                "raw": "<g id=\"oeopq71hl\"><path id=\"onreks2pw\" d=\"M272 70 L328 70 C334.627 70 340 75.373 340 82 L340 98 C340 104.627 334.627 110 328 110 L272 110 C265.373 110 260 104.627 260 98 L260 82 C260 75.373 265.373 70 272 70 Z\" fill=\"none\" stroke=\"#000000\" stroke-width=\"2\" stroke-miterlimit=\"10\"/></g>"
+                "raw": "<g id=\"o5qgdpjl6\"><path id=\"ohw6dfchg\" d=\"M272 70 L328 70 C334.627 70 340 75.373 340 82 L340 98 C340 104.627 334.627 110 328 110 L272 110 C265.373 110 260 104.627 260 98 L260 82 C260 75.373 265.373 70 272 70 Z\" fill=\"none\" stroke=\"#000000\" stroke-width=\"2\" stroke-miterlimit=\"10\"/></g>"
               },
               {
                 "op": "add",
@@ -2383,7 +2383,7 @@
                 "pos": {
                   "first": true
                 },
-                "raw": "<metadata><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"oeopq71hl\" hash=\"526499fd9e01a390\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjoxMSwiYXBwZWFyYW5jZSI6eyJpdGVtcyI6W3sia2luZCI6ImZpbGwiLCJwYWludCI6eyJ0eXBlIjoibm9uZSJ9fSx7ImtpbmQiOiJzdHJva2UiLCJwYWludCI6eyJ0eXBlIjoic29saWQiLCJjb2xvciI6eyJtb2RlbCI6InJnYiIsInIiOjAuMCwiZyI6MC4wLCJiIjowLjB9fSwid2lkdGgiOjIuMH1dfSwia2luZCI6eyJ0eXBlIjoicGF0aCIsInBhdGgiOnsic3VicGF0aHMiOlt7ImFuY2hvcnMiOlt7InAiOlsyNzIuMCw3MC4wXSwiaW4iOlsyNjUuMzcyNTgzMDAyMDMwNDcsNzAuMF19LHsicCI6WzMyOC4wLDcwLjBdLCJvdXQiOlszMzQuNjI3NDE2OTk3OTY5NTMsNzAuMF19LHsicCI6WzM0MC4wLDgyLjBdLCJpbiI6WzM0MC4wLDc1LjM3MjU4MzAwMjAzMDQ4XX0seyJwIjpbMzQwLjAsOTguMF0sIm91dCI6WzM0MC4wLDEwNC42Mjc0MTY5OTc5Njk1Ml19LHsicCI6WzMyOC4wLDExMC4wXSwiaW4iOlszMzQuNjI3NDE2OTk3OTY5NTMsMTEwLjBdfSx7InAiOlsyNzIuMCwxMTAuMF0sIm91dCI6WzI2NS4zNzI1ODMwMDIwMzA0NywxMTAuMF19LHsicCI6WzI2MC4wLDk4LjBdLCJpbiI6WzI2MC4wLDEwNC42Mjc0MTY5OTc5Njk1Ml19LHsicCI6WzI2MC4wLDgyLjBdLCJvdXQiOlsyNjAuMCw3NS4zNzI1ODMwMDIwMzA0OF19XSwiY2xvc2VkIjp0cnVlfV19fX19</vectorcraft:recipe></metadata>"
+                "raw": "<metadata><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"o5qgdpjl6\" hash=\"545ffc124654aec5\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjoxMCwiYXBwZWFyYW5jZSI6eyJpdGVtcyI6W3sia2luZCI6ImZpbGwiLCJwYWludCI6eyJ0eXBlIjoibm9uZSJ9fSx7ImtpbmQiOiJzdHJva2UiLCJwYWludCI6eyJ0eXBlIjoic29saWQiLCJjb2xvciI6eyJtb2RlbCI6InJnYiIsInIiOjAuMCwiZyI6MC4wLCJiIjowLjB9fSwid2lkdGgiOjIuMH1dfSwia2luZCI6eyJ0eXBlIjoicGF0aCIsInBhdGgiOnsic3VicGF0aHMiOlt7ImFuY2hvcnMiOlt7InAiOlsyNzIuMCw3MC4wXSwiaW4iOlsyNjUuMzcyNTgzMDAyMDMwNDcsNzAuMF19LHsicCI6WzMyOC4wLDcwLjBdLCJvdXQiOlszMzQuNjI3NDE2OTk3OTY5NTMsNzAuMF19LHsicCI6WzM0MC4wLDgyLjBdLCJpbiI6WzM0MC4wLDc1LjM3MjU4MzAwMjAzMDQ4XX0seyJwIjpbMzQwLjAsOTguMF0sIm91dCI6WzM0MC4wLDEwNC42Mjc0MTY5OTc5Njk1Ml19LHsicCI6WzMyOC4wLDExMC4wXSwiaW4iOlszMzQuNjI3NDE2OTk3OTY5NTMsMTEwLjBdfSx7InAiOlsyNzIuMCwxMTAuMF0sIm91dCI6WzI2NS4zNzI1ODMwMDIwMzA0NywxMTAuMF19LHsicCI6WzI2MC4wLDk4LjBdLCJpbiI6WzI2MC4wLDEwNC42Mjc0MTY5OTc5Njk1Ml19LHsicCI6WzI2MC4wLDgyLjBdLCJvdXQiOlsyNjAuMCw3NS4zNzI1ODMwMDIwMzA0OF19XSwiY2xvc2VkIjp0cnVlfV19fX19</vectorcraft:recipe></metadata>"
               }
             ]
           }

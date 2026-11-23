@@ -445,7 +445,7 @@ impl StatoFamiglia for Stato {
 
     /// Gli argomenti dei comandi di campioni che il file non può prendere, prima del motore e col
     /// perché in italiano: il campione nominato deve esserci, e la posizione essere un intero.
-    fn argomenti_della_copia(id: &str, copia: &Copia, valore: Value) -> Result<Value, PluginError> {
+    fn argomenti_della_copia(id: &str, copia: &Copia, _selezione: &[String], valore: Value) -> Result<Value, PluginError> {
         let senza_nome = || PluginError::BadArgs("Scegli il campione.".into());
         match id {
             "swatch.library.add" => argomenti_della_libreria(&valore)?,

@@ -393,7 +393,7 @@
       "prima": [
         { "id": "clipboard.importSvg", "argomenti": { "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"100\" height=\"50\"><rect x=\"10\" y=\"10\" width=\"30\" height=\"20\" fill=\"#ff0000\"/></svg>" } }
       ],
-      "atteso": { "ops": [{ "op": "add", "parent": "#root", "pos": { "last": true }, "elem": { "tag": "path", "attrs": { "d": "M195 150 L225 150 L225 170 L195 170 Z", "fill": "#ff0000", "id": "oe1e1e1e1" } } }] },
+      "atteso": { "ops": [{ "op": "add", "parent": "l1a2b3c4d", "pos": { "last": true }, "elem": { "tag": "path", "attrs": { "d": "M195 150 L225 150 L225 170 L195 170 Z", "fill": "#ff0000", "id": "oe1e1e1e1" } } }] },
       "dopo": "incolla-rettangolo.svg"
     },
     {
@@ -560,7 +560,7 @@
       "prima": [
         { "id": "clipboard.importSvg", "argomenti": { "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"100\" height=\"50\"><rect x=\"10\" y=\"10\" width=\"30\" height=\"20\" fill=\"#ff0000\"/></svg>" } }
       ],
-      "atteso": { "ops": [{ "op": "add", "parent": "#root", "pos": { "last": true }, "elem": { "tag": "path", "attrs": { "d": "M185 140 L215 140 L215 160 L185 160 Z", "fill": "#ff0000", "id": "oincolla1" } } }] },
+      "atteso": { "ops": [{ "op": "add", "parent": "l1a2b3c4d", "pos": { "last": true }, "elem": { "tag": "path", "attrs": { "d": "M185 140 L215 140 L215 160 L185 160 Z", "fill": "#ff0000", "id": "oincolla1" } } }] },
       "dopo": "incolla-stesso-punto.svg"
     },
     {
@@ -569,7 +569,7 @@
       "prima": [
         { "id": "clipboard.importSvg", "argomenti": { "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"100\" height=\"50\"><rect x=\"10\" y=\"10\" width=\"30\" height=\"20\" fill=\"#ff0000\"/></svg>" } }
       ],
-      "atteso": { "ops": [{ "op": "add", "parent": "#root", "pos": { "last": true }, "elem": { "tag": "path", "attrs": { "d": "M195 150 L225 150 L225 170 L195 170 Z", "fill": "#ff0000", "id": "oincolla1" } } }] },
+      "atteso": { "ops": [{ "op": "add", "parent": "l1a2b3c4d", "pos": { "last": true }, "elem": { "tag": "path", "attrs": { "d": "M195 150 L225 150 L225 170 L195 170 Z", "fill": "#ff0000", "id": "oincolla1" } } }] },
       "dopo": "incolla-senza-formattazione.svg"
     },
     {
@@ -579,8 +579,8 @@
         { "id": "clipboard.importSvg", "argomenti": { "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"100\" height=\"50\"><rect x=\"10\" y=\"10\" width=\"30\" height=\"20\" fill=\"#ff0000\"/></svg>" } }
       ],
       "atteso": { "ops": [{ "op": "batch", "ops": [
-        { "op": "add", "parent": "#root", "pos": { "after": "l1a2b3c4d" }, "elem": { "tag": "path", "attrs": { "d": "M185 140 L215 140 L215 160 L185 160 Z", "fill": "#ff0000", "id": "oincolla1" } } },
-        { "op": "add", "parent": "#root", "pos": { "last": true }, "elem": { "tag": "path", "attrs": { "d": "M605 140 L635 140 L635 160 L605 160 Z", "fill": "#ff0000", "id": "oincolla2" } } }
+        { "op": "add", "parent": "l1a2b3c4d", "pos": { "after": "oi8b8b8b8" }, "elem": { "tag": "path", "attrs": { "d": "M185 140 L215 140 L215 160 L185 160 Z", "fill": "#ff0000", "id": "oincolla1" } } },
+        { "op": "add", "parent": "l1a2b3c4d", "pos": { "last": true }, "elem": { "tag": "path", "attrs": { "d": "M605 140 L635 140 L635 160 L605 160 Z", "fill": "#ff0000", "id": "oincolla2" } } }
       ] }] },
       "dopo": "due-tavole-incolla.svg"
     },
@@ -592,7 +592,7 @@
       "atteso": { "ops": [{ "op": "batch", "ops": [
         { "op": "remove", "target": "oa1a1a1a1" },
         { "op": "add", "parent": "l1a2b3c4d", "pos": { "first": true }, "raw": "<rect id=\"oa1a1a1a1\" x=\"100\" y=\"100\" width=\"100\" height=\"50\" fill=\"#000000\" opacity=\"0.5\"/>" },
-        { "op": "add", "parent": "#root", "pos": { "first": true }, "raw": "<metadata><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"oa1a1a1a1\" hash=\"d111c51c2e4a54c7\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjozLCJvcGFjaXR5IjowLjUsImFwcGVhcmFuY2UiOnsiaXRlbXMiOlt7ImtpbmQiOiJmaWxsIiwicGFpbnQiOnsidHlwZSI6InNvbGlkIiwiY29sb3IiOnsibW9kZWwiOiJyZ2IiLCJyIjowLjAsImciOjAuMCwiYiI6MC4wfX19XX0sImtpbmQiOnsidHlwZSI6InBhdGgiLCJwYXRoIjp7InN1YnBhdGhzIjpbeyJhbmNob3JzIjpbeyJwIjpbMTAwLjAsMTAwLjBdfSx7InAiOlsyMDAuMCwxMDAuMF19LHsicCI6WzIwMC4wLDE1MC4wXX0seyJwIjpbMTAwLjAsMTUwLjBdfV0sImNsb3NlZCI6dHJ1ZX1dfX19fQ==</vectorcraft:recipe></metadata>" }
+        { "op": "add", "parent": "#root", "pos": { "first": true }, "raw": "<metadata><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"oa1a1a1a1\" hash=\"d111c51c2e4a54c7\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjoyLCJvcGFjaXR5IjowLjUsImFwcGVhcmFuY2UiOnsiaXRlbXMiOlt7ImtpbmQiOiJmaWxsIiwicGFpbnQiOnsidHlwZSI6InNvbGlkIiwiY29sb3IiOnsibW9kZWwiOiJyZ2IiLCJyIjowLjAsImciOjAuMCwiYiI6MC4wfX19XX0sImtpbmQiOnsidHlwZSI6InBhdGgiLCJwYXRoIjp7InN1YnBhdGhzIjpbeyJhbmNob3JzIjpbeyJwIjpbMTAwLjAsMTAwLjBdfSx7InAiOlsyMDAuMCwxMDAuMF19LHsicCI6WzIwMC4wLDE1MC4wXX0seyJwIjpbMTAwLjAsMTUwLjBdfV0sImNsb3NlZCI6dHJ1ZX1dfX19fQ==</vectorcraft:recipe></metadata>" }
       ] }] },
       "dopo": "opacita-rettangolo.svg"
     },
@@ -606,40 +606,86 @@
     {
       "id": "document.node",
       "disegno": "base.svg",
-      "argomenti": { "id": 3 },
-      "atteso": { "lettura": { "id": 3, "name": "oa1a1a1a1", "appearance": { "items": [{ "kind": "fill", "paint": { "type": "solid", "color": { "model": "rgb", "r": 0.0, "g": 0.0, "b": 0.0 } } }] }, "kind": { "type": "path", "path": { "subpaths": [{ "anchors": [{ "p": [100.0, 100.0] }, { "p": [200.0, 100.0] }, { "p": [200.0, 150.0] }, { "p": [100.0, 150.0] }], "closed": true }] } } } }
+      "argomenti": {"id": 2},
+      "atteso": { "lettura": {"id": 2, "name": "oa1a1a1a1", "appearance": {"items": [{"kind": "fill", "paint": {"type": "solid", "color": {"model": "rgb", "r": 0.0, "g": 0.0, "b": 0.0}}}]}, "kind": {"type": "path", "path": {"subpaths": [{"anchors": [{"p": [100.0, 100.0]}, {"p": [200.0, 100.0]}, {"p": [200.0, 150.0]}, {"p": [100.0, 150.0]}], "closed": true}]}}} }
     },
     {
       "id": "document.node",
       "disegno": "base.svg",
-      "argomenti": { "id": 3, "summary": true },
-      "atteso": { "lettura": { "id": 3, "name": "oa1a1a1a1", "kind": "Path", "visible": true, "locked": false, "bounds": { "x": 100.0, "y": 100.0, "width": 100.0, "height": 50.0 }, "fill": "#000000", "stroke": "None", "strokeWidth": 0.0, "anchors": 4, "closed": true } }
+      "argomenti": {"id": 2, "summary": true},
+      "atteso": { "lettura": {"id": 2, "name": "oa1a1a1a1", "kind": "Path", "visible": true, "locked": false, "bounds": {"x": 100.0, "y": 100.0, "width": 100.0, "height": 50.0}, "fill": "#000000", "stroke": "None", "strokeWidth": 0.0, "anchors": 4, "closed": true} }
     },
     {
       "id": "document.find",
       "disegno": "base.svg",
       "argomenti": { "name": "oa1" },
-      "atteso": { "lettura": { "matches": [{ "id": 3, "name": "oa1a1a1a1", "kind": "Path", "path": [1, 10] }], "total": 1 } }
+      "atteso": { "lettura": {"matches": [{"id": 2, "name": "oa1a1a1a1", "kind": "Path", "path": [9]}], "total": 1} }
     },
     {
       "id": "document.find",
       "disegno": "base.svg",
       "argomenti": { "kind": "Path", "select": false },
-      "atteso": { "lettura": { "matches": [
-        { "id": 9, "name": "oi8b8b8b8", "kind": "Path", "path": [1, 10] },
-        { "id": 8, "name": "op7a7a7a7", "kind": "Path", "path": [1, 10] },
-        { "id": 6, "name": "of6f6f6f6", "kind": "Path", "path": [1, 10, 7] },
-        { "id": 5, "name": "oe5e5e5e5", "kind": "Path", "path": [1, 10, 7] },
-        { "id": 4, "name": "ob2b2b2b2", "kind": "Path", "path": [1, 10] },
-        { "id": 3, "name": "oa1a1a1a1", "kind": "Path", "path": [1, 10] },
-        { "id": 2, "name": "fub-paper", "kind": "Path", "path": [1] }
-      ], "total": 7 } }
+      "atteso": { "lettura": {
+        "matches": [
+          {
+            "id": 8,
+            "name": "oi8b8b8b8",
+            "kind": "Path",
+            "path": [
+              9
+            ]
+          },
+          {
+            "id": 7,
+            "name": "op7a7a7a7",
+            "kind": "Path",
+            "path": [
+              9
+            ]
+          },
+          {
+            "id": 5,
+            "name": "of6f6f6f6",
+            "kind": "Path",
+            "path": [
+              9,
+              6
+            ]
+          },
+          {
+            "id": 4,
+            "name": "oe5e5e5e5",
+            "kind": "Path",
+            "path": [
+              9,
+              6
+            ]
+          },
+          {
+            "id": 3,
+            "name": "ob2b2b2b2",
+            "kind": "Path",
+            "path": [
+              9
+            ]
+          },
+          {
+            "id": 2,
+            "name": "oa1a1a1a1",
+            "kind": "Path",
+            "path": [
+              9
+            ]
+          }
+        ],
+        "total": 6
+      } }
     },
     {
       "id": "document.inspect",
       "disegno": "base.svg",
-      "argomenti": { "ids": [3] },
-      "atteso": { "lettura_parziale": { "units": "Pixels", "currentLayer": 1, "objects": 10, "artboards": [{ "name": "Artboard 1", "x": 0.0, "y": 0.0, "width": 400.0, "height": 300.0 }], "nodes": [{ "id": 3, "name": "oa1a1a1a1", "kind": "Path" }] } }
+      "argomenti": {"ids": [2]},
+      "atteso": { "lettura_parziale": { "units": "Pixels", "currentLayer": 9, "objects": 8, "artboards": [{ "name": "Artboard 1", "x": 0.0, "y": 0.0, "width": 400.0, "height": 300.0 }], "nodes": [{ "id": 2, "name": "oa1a1a1a1", "kind": "Path" }] } }
     },
     {
       "id": "document.json",
@@ -649,21 +695,21 @@
     {
       "id": "select.set",
       "disegno": "base.svg",
-      "argomenti": { "ids": [3] },
+      "argomenti": {"ids": [2]},
       "atteso": { "selezione": ["oa1a1a1a1"] }
     },
     {
       "id": "select.add",
       "disegno": "base.svg",
       "selezione": ["oa1a1a1a1"],
-      "argomenti": { "ids": [4] },
+      "argomenti": {"ids": [3]},
       "atteso": { "selezione": ["oa1a1a1a1", "ob2b2b2b2"] }
     },
     {
       "id": "select.toggle",
       "disegno": "base.svg",
       "selezione": ["oa1a1a1a1"],
-      "argomenti": { "id": 3 },
+      "argomenti": {"id": 2},
       "atteso": { "selezione": [] }
     },
     {
@@ -692,7 +738,7 @@
     {
       "id": "edit.dropSelection",
       "disegno": "base.svg",
-      "argomenti": { "sourceDocument": 999, "ids": [3], "grab": [0, 0], "at": [0, 0] },
+      "argomenti": {"sourceDocument": 999, "ids": [2], "grab": [0, 0], "at": [0, 0]},
       "atteso": { "errore": "bad_args" }
     },
     {
@@ -783,6 +829,193 @@
         ]
       },
       "dopo": "ricetta-gruppo-nascosta.svg"
+    },
+    {
+      "id": "object.hide.otherLayers",
+      "disegno": "../livelli/tre-livelli.svg",
+      "selezione": [
+        "ob2b2b2b2"
+      ],
+      "dopo": "../livelli/tre-livelli-altri-nascosti.svg",
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "set",
+                "id": "l1a2b3c4d",
+                "attrs": {
+                  "display": "none"
+                }
+              },
+              {
+                "op": "set",
+                "id": "l3c3c3c3c",
+                "attrs": {
+                  "display": "none"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "object.lock.otherLayers",
+      "disegno": "../livelli/tre-livelli.svg",
+      "selezione": [
+        "ob2b2b2b2"
+      ],
+      "dopo": "../livelli/tre-livelli-altri-bloccati.svg",
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "set",
+                "id": "l1a2b3c4d",
+                "attrs": {
+                  "fub:locked": "true"
+                }
+              },
+              {
+                "op": "set",
+                "id": "l3c3c3c3c",
+                "attrs": {
+                  "fub:locked": "true"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "object.hide.otherLayers",
+      "disegno": "../livelli/doppio.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "dopo": "../livelli/doppio-altri-nascosti.svg",
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "l2b2b2b2b",
+            "attrs": {
+              "display": "none"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "object.lock.otherLayers",
+      "disegno": "../livelli/doppio.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "dopo": "../livelli/doppio-altri-bloccati.svg",
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "l2b2b2b2b",
+            "attrs": {
+              "fub:locked": "true"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "object.lock.otherLayers",
+      "disegno": "../livelli/tre-livelli-uno-bloccato-uno-nascosto.svg",
+      "selezione": [
+        "oc3c3c3c3"
+      ],
+      "dopo": "../livelli/tre-livelli-tutti-bloccati-ma-uno.svg",
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "l2b2b2b2b",
+            "attrs": {
+              "fub:locked": "true"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "object.hide.above",
+      "disegno": "../livelli/sovrapposti-un-livello.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "dopo": "sovrapposti-sopra-nascosto.svg",
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "ob2b2b2b2",
+            "attrs": {
+              "display": "none"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "object.lock.above",
+      "disegno": "../livelli/sovrapposti-un-livello.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "dopo": "sovrapposti-sopra-bloccato.svg",
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "ob2b2b2b2",
+            "attrs": {
+              "fub:locked": "true"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "object.hide.above",
+      "disegno": "../livelli/doppio.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "object.lock.above",
+      "disegno": "../livelli/doppio.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "object.hide.above",
+      "disegno": "../livelli/tre-livelli.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "atteso": {
+        "rifiuto": "empty"
+      }
     }
   ]
 }
