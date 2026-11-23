@@ -167,7 +167,7 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // (Taglio con rettangolo) e `path.mirrorCut` (Specchia e taglia). Casi in `tests/famiglie/tracciati.json`.
   // T15 giro 7 porta a «fatto» Seleziona testo per font e Opzioni modifica globale (livelli); Avvia la
   // modifica globale resta «da fare», con la causa nella nota.
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1065, fub: 114, escluso: 12, fatto: 360 });
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1059, fub: 114, escluso: 12, fatto: 366 });
 });
 
 // --- un motore finto ---------------------------------------------------------------

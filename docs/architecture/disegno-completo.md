@@ -155,11 +155,23 @@ o gruppo. Un argomento così è `BadArgs` col perché in italiano, prima del mot
 un livello bloccato si rifiuta (`Locked`). Il livello nel cui nome cade l'unione
 è l'ultimo elencato in `ids`. Seleziona grafica (`layer.selectAll`) sceglie
 l'arte visibile e sbloccata del livello, e con un livello bloccato non sceglie
-niente (`Empty`). Duplica, raccogli in un livello nuovo, il livello corrente e le
-righe di Oggetto che guardano il livello (sopra, altri livelli) restano «da fare»:
-il motore vede i livelli di Fub come figli di un livello radice, e il file non
-scrive un livello dentro un livello, né dice quale livello è corrente fra un
-comando e il successivo.
+niente (`Empty`). Nascondi altri e Blocca altri (`layer.hideOthers`,
+`layer.lockOthers`) tengono i livelli di primo livello della selezione: Fub li
+calcola e li passa al motore come `ids`; senza scelta né righe la voce è spenta
+col suo perché e il comando rifiuta `Empty`. Duplica, raccogli in un livello
+nuovo e il livello corrente restano «da fare»: il file non scrive un livello
+dentro un livello, né dice quale livello è corrente fra un comando e il
+successivo.
+
+La carta (`fub-paper`) resta fuori dalla copia del motore quando gli altri figli
+della radice sono tutti livelli di Fub (`src/apertura.rs`): così il motore apre
+i livelli di Fub come suoi livelli di primo livello, e Oggetto › Nascondi e
+Blocca (sopra, altri livelli) lavorano per livello. La carta non conta come
+perdita, una scelta che la nomina è bloccata (`Locked`), e un livello portato in
+fondo si scrive subito dopo di lei (`after: fub-paper`), mai sotto. Con un
+oggetto fuori dai livelli la carta resta nella copia, dentro il livello del
+motore senza elemento nel file, come prima. Il file non cambia: la carta resta
+il primo figlio della radice.
 
 Nel client la scheda Livelli del Completo è l'albero nativo
 (`apps/client/src/editors/spatial/tools/objects.ts`): l'occhio, il lucchetto,

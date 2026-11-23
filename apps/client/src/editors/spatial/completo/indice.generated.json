@@ -1283,6 +1283,38 @@
     },
     {
       "fonte": "motore",
+      "id": "layer.hideOthers",
+      "chiamata": {
+        "comando": "disegno.layer.hideOthers"
+      },
+      "etichetta": {
+        "it": "Nascondi altri",
+        "en": "Hide Others"
+      },
+      "posto": "ispettore/livelli",
+      "famiglia": "livelli",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "layer.lockOthers",
+      "chiamata": {
+        "comando": "disegno.layer.lockOthers"
+      },
+      "etichetta": {
+        "it": "Blocca altri",
+        "en": "Lock Others"
+      },
+      "posto": "ispettore/livelli",
+      "famiglia": "livelli",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "layer.merge",
       "chiamata": {
         "comando": "disegno.layer.merge"
@@ -1731,6 +1763,38 @@
     },
     {
       "fonte": "motore",
+      "id": "object.hide.above",
+      "chiamata": {
+        "comando": "disegno.object.hide.above"
+      },
+      "etichetta": {
+        "it": "Tutta la grafica soprastante",
+        "en": "All Artwork Above"
+      },
+      "posto": "menu/oggetto/nascondi",
+      "famiglia": "nucleo",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "object.hide.otherLayers",
+      "chiamata": {
+        "comando": "disegno.object.hide.otherLayers"
+      },
+      "etichetta": {
+        "it": "Altri livelli",
+        "en": "Other Layers"
+      },
+      "posto": "menu/oggetto/nascondi",
+      "famiglia": "nucleo",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "object.hide.unselected",
       "chiamata": {
         "comando": "disegno.object.hide.unselected"
@@ -1758,6 +1822,38 @@
       "posto": "menu/oggetto/blocca",
       "famiglia": "nucleo",
       "tasto": "Cmd+2",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "object.lock.above",
+      "chiamata": {
+        "comando": "disegno.object.lock.above"
+      },
+      "etichetta": {
+        "it": "Tutta la grafica soprastante",
+        "en": "All Artwork Above"
+      },
+      "posto": "menu/oggetto/blocca",
+      "famiglia": "nucleo",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "object.lock.otherLayers",
+      "chiamata": {
+        "comando": "disegno.object.lock.otherLayers"
+      },
+      "etichetta": {
+        "it": "Altri livelli",
+        "en": "Other Layers"
+      },
+      "posto": "menu/oggetto/blocca",
+      "famiglia": "nucleo",
+      "tasto": null,
       "effetto": "cambia",
       "finestra": false
     },

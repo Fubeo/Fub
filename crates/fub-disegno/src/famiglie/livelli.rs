@@ -56,11 +56,13 @@ impl StatoFamiglia for Stato {
         if vuole_selezione(id) && selezione.is_empty() {
             return Some(DrawingDisabledReason::NoSelection);
         }
-        if (cambia_il_livello(id) || crea_livello(id)) && !copia.modificabile {
+        if (cambia_il_livello(id) || crea_livello(id) || ALTRI_LIVELLI.contains(&id)) && !copia.modificabile {
             return Some(DrawingDisabledReason::ReadOnly);
         }
         // Con un oggetto che la mappa non ha in selezione, nessun comando che cambia il documento parte.
-        if (cambia_il_livello(id) || crea_livello(id)) && matches!(nodi_scelti(copia, selezione), Err(DrawingRefusal::Unmapped)) {
+        if (cambia_il_livello(id) || crea_livello(id) || ALTRI_LIVELLI.contains(&id))
+            && matches!(nodi_scelti(copia, selezione), Err(DrawingRefusal::Unmapped))
+        {
             return Some(DrawingDisabledReason::Unmapped);
         }
         // `esegui` rifiuta ogni comando con un elemento non mappato in selezione, prima della famiglia: le
@@ -121,7 +123,7 @@ impl StatoFamiglia for Stato {
     /// Il nome di un livello, nuovo o rinominato, è quello che il formato tiene
     /// (`nome_di_livello_sbagliato`): se no `BadArgs` col perché, prima del motore. Un livello nuovo
     /// senza nome prende il primo «Livello N» libero, come la scheda nativa.
-    fn argomenti_della_copia(id: &str, copia: &Copia, mut valore: Value) -> Result<Value, PluginError> {
+    fn argomenti_della_copia(id: &str, copia: &Copia, selezione: &[String], mut valore: Value) -> Result<Value, PluginError> {
         if matches!(id, "layer.merge" | "layer.reverse") {
             righe_da_unire_o_invertire(id, copia, &valore)?;
             return Ok(valore);
@@ -133,6 +135,9 @@ impl StatoFamiglia for Stato {
         if id == "select.globalEditOptions" {
             opzioni_della_modifica_globale(copia, &valore)?;
             return Ok(valore);
+        }
+        if ALTRI_LIVELLI.contains(&id) {
+            return Ok(livelli_della_selezione(copia, selezione, valore));
         }
         if !matches!(id, "layer.new" | "layer.setProps") {
             return Ok(valore);
@@ -160,12 +165,20 @@ impl StatoFamiglia for Stato {
     /// I livelli negli argomenti: senza nessuno il comando non parte (il motore prenderebbe il livello
     /// corrente, quello da cancellare o da spostare). Un livello bloccato non si cancella, non si sposta
     /// e non si rinomina né si colora; un livello non va dentro se stesso.
-    fn rifiuto_valore(id: &str, copia: &Copia, _selezione: &[String], valore: &Value) -> Option<DrawingRefusal> {
+    fn rifiuto_valore(id: &str, copia: &Copia, selezione: &[String], valore: &Value) -> Option<DrawingRefusal> {
         match id {
             // Senza maschere nel file il motore sceglierebbe solo ritagli suoi (un `clip-path` scritto
             // su un tracciato), che la selezione di Fub non sa dire: niente da scegliere.
             "select.object.clippingMasks" => (!c_e_una_maschera(copia)).then_some(DrawingRefusal::Empty),
             "layer.setCurrent" => livelli_del_valore(copia, valore).err(),
+            // Senza righe negli argomenti i livelli da tenere sono quelli della selezione: senza scelta
+            // il motore terrebbe il livello corrente, che la scheda di Fub non mostra. `empty`, come la
+            // voce spenta («Scegli qualcosa»).
+            "layer.hideOthers" | "layer.lockOthers" => match valore.get("ids").or_else(|| valore.get("id")) {
+                None | Some(Value::Null) if selezione.is_empty() => Some(DrawingRefusal::Empty),
+                None | Some(Value::Null) => None,
+                Some(_) => livelli_del_valore(copia, valore).err(),
+            },
             "layer.selectAll" => livelli_del_valore(copia, valore).err(),
             // Unire o invertire cambia l'ordine o il contenuto di un livello bloccato: si rifiuta, con
             // il perché. Le righe senza livello, o poche, le dice `argomenti_della_copia`.
@@ -218,7 +231,41 @@ impl StatoFamiglia for Stato {
 /// l'oggetto scelto, e «Tutto sugli stessi livelli». Gli altri lavorano su tutto
 /// il disegno.
 fn vuole_selezione(id: &str) -> bool {
-    id.starts_with("select.same.") || id == "select.object.allOnSameLayers"
+    id.starts_with("select.same.") || id == "select.object.allOnSameLayers" || ALTRI_LIVELLI.contains(&id)
+}
+
+/// Nascondi altri e Blocca altri (≡ › Livelli): tengono i livelli di primo livello di ciò che è scelto
+/// e nascondono o bloccano gli altri. Il motore, senza righe negli argomenti, terrebbe il livello
+/// corrente; Fub gli dà i livelli della selezione (`livelli_della_selezione`).
+const ALTRI_LIVELLI: [&str; 2] = ["layer.hideOthers", "layer.lockOthers"];
+
+/// Gli argomenti di Nascondi altri e Blocca altri con le righe da tenere: quelle date, o, senza, i
+/// livelli di primo livello degli oggetti scelti, nell'ordine della selezione e senza doppioni. Gli
+/// oggetti che la mappa non ha o che sono bloccati li ha già rifiutati `esegui`.
+fn livelli_della_selezione(copia: &Copia, selezione: &[String], mut valore: Value) -> Value {
+    if valore.get("ids").or_else(|| valore.get("id")).is_some_and(|v| !v.is_null()) {
+        return valore;
+    }
+    let Ok(nodi) = nodi_scelti(copia, selezione) else {
+        return valore;
+    };
+    let mut livelli: Vec<u64> = Vec::new();
+    for livello in nodi.into_iter().filter_map(|n| copia.documento.layer_of(n)) {
+        if !livelli.contains(&livello.0) {
+            livelli.push(livello.0);
+        }
+    }
+    if livelli.is_empty() {
+        return valore;
+    }
+    if !valore.is_object() {
+        valore = Value::Object(serde_json::Map::new());
+    }
+    if let Some(o) = valore.as_object_mut() {
+        o.remove("id");
+        o.insert("ids".into(), Value::from(livelli));
+    }
+    valore
 }
 
 /// I comandi che cambiano il documento su un livello: la scheda Livelli li chiama con il suo livello.
