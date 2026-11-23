@@ -1519,7 +1519,7 @@ pannello	brushes	Brushes	Window	pennelli	F2	T17	da fare	ispettore/risorse	famigl
 pannello	character	Character	Window	testo	F2	T16	fatto	ispettore/design	famiglia		Carattere
 pannello	color	Color	Window	colore	F1	T14	fatto	ispettore/design	famiglia	il pannello è la sezione Colore del Design (colore-sezione.ts) con i pozzi del kit; CMYK, HSB e Grigi sono modelli dell'interfaccia del motore: il formato scrive solo #rrggbb	Colore
 pannello	color_guide	Color Guide	Window	colore	F1	T14	da fare	ispettore/design	famiglia		Guida colori
-pannello	color_themes	Color Themes	Window	colore	F1	T14	da fare	ispettore/risorse	famiglia		Temi colore
+pannello	color_themes	Color Themes	Window	colore	F1	T14	fatto	ispettore/risorse	famiglia		Temi colore
 pannello	css_properties	Css Properties	Window	web	F3	T22	da fare	ispettore/design/documento	famiglia		Css Properties
 pannello	doc_info	Doc Info	Window	dati	F4	T26	da fare	ispettore/design/documento	famiglia		Doc Info
 pannello	flattener_preview	Flattener Preview	Window	stampa	F4	T25	da fare	ispettore/design/documento	famiglia		Anteprima appiattimento

@@ -196,6 +196,16 @@ pub(crate) trait StatoFamiglia: Send + Sync + 'static {
     {
         None
     }
+
+    /// La frase in italiano per un argomento che il motore rifiuta (`BadParams`, con il
+    /// messaggio del motore): quando la famiglia sa dire il perché (K6 T14, temi). Di serie
+    /// `None`, e `esegui` rende il messaggio del motore com'è.
+    fn messaggio_del_motore(_id: &str, _messaggio: &str) -> Option<String>
+    where
+        Self: Sized,
+    {
+        None
+    }
 }
 
 /// Le 26 famiglie, nell'ordine di `fub_abi::DRAWING_FAMILIES`: per ognuna la
@@ -344,6 +354,15 @@ macro_rules! famiglie {
                 match self {
                     $(Famiglia::$variante => {
                         <$modulo::Stato as StatoFamiglia>::rifiuto_del_motore(id, errore)
+                    })*
+                }
+            }
+
+            /// La frase in italiano per un argomento che il motore rifiuta, se la famiglia la sa.
+            fn messaggio_del_motore(self, id: &str, messaggio: &str) -> Option<String> {
+                match self {
+                    $(Famiglia::$variante => {
+                        <$modulo::Stato as StatoFamiglia>::messaggio_del_motore(id, messaggio)
                     })*
                 }
             }
@@ -982,6 +1001,10 @@ fn si_legge_in_sola_lettura(id: &str) -> bool {
     matches!(
         id,
         "edit.copy"
+            // I temi del colore stanno nelle preferenze, non nel disegno: si salvano e si tolgono
+            // anche in sola lettura (K6 T14, temi).
+            | "colorTheme.save"
+            | "colorTheme.delete"
             | "clipboard.flavours"
             | "clipboard.exportSvg"
             | "clipboard.exportPng"
@@ -1116,7 +1139,8 @@ pub(crate) fn esegui(
         Ok(Ok(risultato)) => risultato,
         Ok(Err(EngineError::BadParams { msg, .. })) => {
             banco.ripristina(copia);
-            return Err(PluginError::BadArgs(msg.into()));
+            let frase = famiglia.messaggio_del_motore(&riga.id, &msg).unwrap_or(msg);
+            return Err(PluginError::BadArgs(frase.into()));
         }
         Ok(Err(EngineError::Disabled(..))) => {
             banco.ripristina(copia);

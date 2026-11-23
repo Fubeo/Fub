@@ -6296,6 +6296,11 @@
           }
         }
       ]
+    },
+    {
+      "id": "color_themes",
+      "fonte": "pannello",
+      "prova": "apps/client/src/editors/spatial/completo/temi-sezione.test.ts"
     }
   ]
 }

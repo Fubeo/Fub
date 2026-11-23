@@ -95,6 +95,42 @@ pub(crate) const LETTURE: [&str; 3] = ["paint.toggleActive", "paint.recent", "pa
 /// Aggiungere ai campioni cambia il disegno: quello è un passo normale, e non sta qui.
 pub(crate) const TEMI_LETTURE: [&str; 2] = ["colorTheme.save", "colorTheme.delete"];
 
+/// Il motore dice i rifiuti dei temi in inglese (`colorTheme.*`, `colortheme.rs`): qui le frasi
+/// italiane. Il nome di un tema è quello che il motore scrive tra le parole, e lo si riprende così.
+/// `None` per un messaggio che non si riconosce: resta com'è.
+fn messaggio_dei_temi(id: &str, messaggio: &str) -> Option<String> {
+    if !matches!(id, "colorTheme.save" | "colorTheme.delete") {
+        return None;
+    }
+    if messaggio == "the name is empty" {
+        return Some("Il tema ha bisogno di un nome.".into());
+    }
+    if messaggio == "missing `name`" {
+        return Some("Scegli il tema da togliere.".into());
+    }
+    if let Some(resto) = messaggio.strip_prefix("a theme is already called ") {
+        let nome = resto.split(" (replace").next().unwrap_or(resto);
+        return Some(format!("C'è già un tema «{nome}»: scegli un altro nome, o sostituisci quello."));
+    }
+    if let Some(resto) = messaggio.strip_prefix("no saved theme called ") {
+        let nome = resto.split(" (see").next().unwrap_or(resto);
+        return Some(format!("Non c'è nessun tema «{nome}»."));
+    }
+    if messaggio.starts_with("a theme has 1 to ") {
+        return Some("Un tema ha da 1 a 5 colori.".into());
+    }
+    if messaggio.starts_with("invalid colour") || messaggio == "invalid `color`" {
+        return Some("Un colore non è valido: usa la forma #rrggbb.".into());
+    }
+    if messaggio == "`color` needs a `rule` to make the theme from" {
+        return Some("Per fare il tema da un colore serve una regola d'armonia.".into());
+    }
+    if messaggio == "give `colors`, or `color` and `rule`" {
+        return Some("Dai i colori del tema, oppure un colore e una regola.".into());
+    }
+    None
+}
+
 /// Gli argomenti delle letture del colore che il motore lascerebbe passare in silenzio (K6 T14,
 /// letture): un modello che non c'è dà il RGB, e un colore che non è `#rrggbb` si salta. Il perché
 /// è in italiano, prima del motore.
@@ -351,6 +387,12 @@ impl StatoFamiglia for Stato {
         // Le letture del colore e quelle di Ricolora (i colori della scelta, le proposte di
         // riduzione e casuali) non cambiano il file; `recolor.apply` sì.
         LETTURE.contains(&id) || LETTURE_DELLA_SCELTA.contains(&id) || TEMI_LETTURE.contains(&id)
+    }
+
+    /// Le frasi in italiano per i rifiuti dei temi (K6 T14, temi): il nome vuoto o già usato, il tema
+    /// che non c'è, i colori fuori dal numero o non validi. Il motore le dice in inglese.
+    fn messaggio_del_motore(id: &str, messaggio: &str) -> Option<String> {
+        messaggio_dei_temi(id, messaggio)
     }
 
     /// Un campione nuovo, cambiato o fatto dai colori usati è globale;

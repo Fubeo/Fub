@@ -5537,6 +5537,22 @@
     },
     {
       "fonte": "pannello",
+      "id": "color_themes",
+      "chiamata": {
+        "client": "color_themes"
+      },
+      "etichetta": {
+        "it": "Temi colore",
+        "en": "Color Themes"
+      },
+      "posto": "ispettore/risorse",
+      "famiglia": "colore",
+      "tasto": null,
+      "effetto": "mostra",
+      "finestra": false
+    },
+    {
+      "fonte": "pannello",
       "id": "gradient",
       "chiamata": {
         "client": "gradient"
