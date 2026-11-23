@@ -113,7 +113,10 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // T12 curvatura porta a «fatto» undici righe: `path.curvature`, `.curvatureEdit`, `.reshape`,
   // `.reshapeSegment`, `.setAnchors` e le sei `addon.pen.*` (append, close, segment, removePoint,
   // togglePoint, reshape), come comandi su un punto con `element` (la Curvatura crea o sostituisce).
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1119, fub: 114, escluso: 12, fatto: 306 });
+  // T14 sfumatura libera: le letture `paint.recent` e `paint.proxies` diventano «fatto»; le sette
+  // righe della sfumatura libera (`paint.freeform.*`) restano «da fare», perché il formato della
+  // scena non ha punti né linee per una sfumatura (la causa è nella nota della mappa).
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1117, fub: 114, escluso: 12, fatto: 308 });
 });
 
 // --- un motore finto ---------------------------------------------------------------

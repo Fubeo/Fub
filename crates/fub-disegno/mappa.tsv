@@ -233,13 +233,13 @@ motore	text.replaceFont	Replace Font		testo	F2	T16	da fare	ispettore/design	fami
 motore	select.font	Select Text by Font		livelli	F1	T15	da fare	ispettore/livelli	famiglia		Seleziona testo per font
 motore	text.fontList	Font List		testo	F2	T16	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Elenco font
 motore	text.rescanFonts	Refresh Font List		testo	F2	T16	da fare	ispettore/design	famiglia		Aggiorna elenco font
-motore	paint.freeform.addPoint	Add Freeform Point		colore	F1	T14	da fare	ispettore/design	famiglia		Aggiungi punto libero
-motore	paint.freeform.setPoint	Edit Freeform Point		colore	F1	T14	da fare	ispettore/design	famiglia		Modifica punto libero
-motore	paint.freeform.deletePoint	Delete Freeform Point		colore	F1	T14	da fare	ispettore/design	famiglia		Elimina punto libero
-motore	paint.freeform.addLine	Add Freeform Line		colore	F1	T14	da fare	ispettore/design	famiglia		Aggiungi linea libera
-motore	paint.freeform.splitLine	Split Freeform Line		colore	F1	T14	da fare	ispettore/design	famiglia		Dividi linea libera
-motore	paint.freeform.selectPoint	Select Freeform Point		colore	F1	T14	da fare	ispettore/design	famiglia		Seleziona punto libero
-motore	paint.freeform.get	Freeform Gradient		colore	F1	T14	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Sfumatura a forma libera
+motore	paint.freeform.addPoint	Add Freeform Point		colore	F1	T14	da fare	ispettore/design	famiglia	il formato della scena non ha punti né linee per una sfumatura libera: una sfumatura si scrive solo come linearGradient o radialGradient (docs/reference/scene-format-resources.md), e famiglie/colore.rs la rifiuta (sfumatura_fuori_dalla_scena)	Aggiungi punto libero
+motore	paint.freeform.setPoint	Edit Freeform Point		colore	F1	T14	da fare	ispettore/design	famiglia	il formato della scena non ha punti né linee per una sfumatura libera: una sfumatura si scrive solo come linearGradient o radialGradient (docs/reference/scene-format-resources.md), e famiglie/colore.rs la rifiuta (sfumatura_fuori_dalla_scena)	Modifica punto libero
+motore	paint.freeform.deletePoint	Delete Freeform Point		colore	F1	T14	da fare	ispettore/design	famiglia	il formato della scena non ha punti né linee per una sfumatura libera: una sfumatura si scrive solo come linearGradient o radialGradient (docs/reference/scene-format-resources.md), e famiglie/colore.rs la rifiuta (sfumatura_fuori_dalla_scena)	Elimina punto libero
+motore	paint.freeform.addLine	Add Freeform Line		colore	F1	T14	da fare	ispettore/design	famiglia	il formato della scena non ha punti né linee per una sfumatura libera: una sfumatura si scrive solo come linearGradient o radialGradient (docs/reference/scene-format-resources.md), e famiglie/colore.rs la rifiuta (sfumatura_fuori_dalla_scena)	Aggiungi linea libera
+motore	paint.freeform.splitLine	Split Freeform Line		colore	F1	T14	da fare	ispettore/design	famiglia	il formato della scena non ha punti né linee per una sfumatura libera: una sfumatura si scrive solo come linearGradient o radialGradient (docs/reference/scene-format-resources.md), e famiglie/colore.rs la rifiuta (sfumatura_fuori_dalla_scena)	Dividi linea libera
+motore	paint.freeform.selectPoint	Select Freeform Point		colore	F1	T14	da fare	ispettore/design	famiglia	il formato della scena non ha punti né linee per una sfumatura libera: una sfumatura si scrive solo come linearGradient o radialGradient (docs/reference/scene-format-resources.md), e famiglie/colore.rs la rifiuta (sfumatura_fuori_dalla_scena)	Seleziona punto libero
+motore	paint.freeform.get	Freeform Gradient		colore	F1	T14	da fare	interno	famiglia	il formato della scena non ha punti né linee per una sfumatura libera: una sfumatura si scrive solo come linearGradient o radialGradient (docs/reference/scene-format-resources.md), e famiglie/colore.rs la rifiuta (sfumatura_fuori_dalla_scena)	Sfumatura a forma libera
 motore	select.globalEdit	Start Global Edit	Select	livelli	F1	T15	da fare	menu/selezione	famiglia		Avvia modifica globale
 motore	select.globalEditOptions	Global Edit Options		livelli	F1	T15	da fare	ispettore/livelli	famiglia		Opzioni modifica globale
 motore	paint.editGradient	Gradient	Window › Gradient	colore	F1	T14	fatto	ispettore/design/sfumatura	famiglia	lineare e radiale, nella sezione Sfumatura: tipo, angolo, punti (aggiungi, togli, sposta, colore, opacità) e inverti; la scena la scrive come sfumatura privata. La sfumatura libera, il metodo percettivo, la retinatura, la sfumatura lungo il contorno e il punto di metà spostato la scena non li scrive: tornano non supportati	Sfumatura
@@ -383,8 +383,8 @@ motore	paint.invert	Invert		colore	F1	T14	fatto	ispettore/design	famiglia		Inver
 motore	paint.complement	Complement		colore	F1	T14	fatto	ispettore/design	famiglia		Complementare
 motore	paint.lastColor	Apply Last Color		colore	F1	T14	fatto	ispettore/design	famiglia		Applica ultimo colore
 motore	paint.lastGradient	Apply Last Gradient		colore	F1	T14	fatto	ispettore/design/sfumatura	famiglia	il pulsante Sfumatura della sezione Colore, sul lato attivo	Applica ultima sfumatura
-motore	paint.recent	Recent Colors		colore	F1	T14	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Colori recenti
-motore	paint.proxies	Fill and Stroke		colore	F1	T14	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Riempimento e traccia
+motore	paint.recent	Recent Colors		colore	F1	T14	fatto	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Colori recenti
+motore	paint.proxies	Fill and Stroke		colore	F1	T14	fatto	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Riempimento e traccia
 motore	artboard.reorder	Move Artboard Up/Down		tavole	F2	T19	da fare	ispettore/design/documento	famiglia		Sposta tavola da disegno su/giù
 motore	artboard.duplicate	Duplicate Artboard	Window › Artboards	tavole	F2	T19	da fare	ispettore/design/documento	famiglia		Duplica tavola da disegno
 motore	artboard.copy	Copy Artboard		tavole	F2	T19	da fare	ispettore/design/documento	famiglia		Copia tavola da disegno
