@@ -250,3 +250,44 @@ fn lo_strumento_trascinato_crea_un_testo_in_area() {
     let parole: Vec<&str> = righe.iter().map(|r| r["text"].as_str().unwrap()).collect();
     assert_eq!(parole.join(" "), "Onde del mare che tornano", "{ops}");
 }
+
+/// La marionetta sul testo di punto con Inter (K6 T13, giro «marionetta»): i caratteri veri danno la
+/// scatola del testo, e uno spillo proposto dal motore sul testo passa. Senza caratteri la scatola è
+/// zero e il comando dà `empty` (lo prova il caso di `trasforma.json`, `t-marionetta`, che non c'è più).
+#[test]
+fn la_marionetta_sul_testo_di_punto_con_inter() {
+    let disegni = common::disegni_con_inter();
+    disegni.filtra(fub_disegno::famiglie::Filtro::Tutte);
+    let svg = include_str!("famiglie/trasforma/testo.svg");
+    let (mut d, aperto) = fub_disegno::motore::Disegno::apri_con(&disegni, svg).expect("si apre");
+    let lettura = d
+        .comando(fub_abi::DrawingCommandRequest {
+            revision: aperto.revision,
+            id: "disegno.object.puppetWarp.pins".into(),
+            selection: vec!["ot1t1t1t1".into()],
+            value: json!({}),
+            preview: false,
+        })
+        .expect("la lettura risponde");
+    let pins = lettura.reading.expect("la lettura c'è")["pins"][0].clone();
+    let (x, y) = (pins[0].as_f64().unwrap(), pins[1].as_f64().unwrap());
+    let esito = d
+        .comando(fub_abi::DrawingCommandRequest {
+            revision: aperto.revision,
+            id: "disegno.object.puppetWarp".into(),
+            selection: vec!["ot1t1t1t1".into()],
+            value: json!({ "pins": [[x, y]], "moved": [[x, y + 10.0]] }),
+            preview: false,
+        })
+        .expect("la marionetta risponde");
+    assert_eq!(
+        esito.refused, None,
+        "la marionetta sul testo passa: {esito:?}"
+    );
+    let ops = esito.ops.expect("e dà operazioni");
+    assert!(
+        ops.contains("transform"),
+        "la trasformazione va sul testo: {ops}"
+    );
+    assert!(ops.contains("ot1t1t1t1"), "il testo è il bersaglio: {ops}");
+}

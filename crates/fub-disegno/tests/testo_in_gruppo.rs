@@ -123,11 +123,9 @@ fn le_trasformazioni_del_gruppo_con_un_testo_si_riaprono_come_testo() {
     }
 }
 
-/// Il testo in area dentro un gruppo (`t13-gruppo-area.svg`) è importato come testo di punto, senza
-/// perdita segnalata: le righe si uniscono e `fub:wrap` non entra nel modello. Il caso è fermato qui,
-/// `#[ignore]` finché l'importazione non lo tiene come area (il file minimo è questo).
+/// Il testo in area dentro un gruppo (`t13-gruppo-area.svg`) resta un testo in area: il ponte di apertura
+/// (`apertura.rs`, `testi_in_area`) lo riconosce anche sotto un `<g>`, come sotto un livello.
 #[test]
-#[ignore = "il testo in area dentro un gruppo è importato come testo di punto: da correggere nell'importazione"]
 fn il_testo_in_area_dentro_un_gruppo_resta_in_area() {
     use vectorcraft_doc::text::TextKind;
     let disegni = disegni();
