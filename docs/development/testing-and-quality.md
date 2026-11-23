@@ -234,13 +234,13 @@ importa staticamente e rimette insieme: al tema arriva, byte per byte, la
 pelle minimizzata intera (la build si ferma se no), all'avvio come prima.
 Niente pelle a pezzi con la sua superficie: cascata, momento delle regole e
 temi d'autore non cambiano, e non c'è lampo senza stile da prevenire.
-Il chunk `search` lascia i commenti della Live a `markdown-comments` (la build
-si ferma se fa un ciclo) e i riquadri (`state/layout.ts`) a `shell-layout`; il
-ponte dei documenti lascia `diagram-host` (Mermaid), `markdown-tables` e
-`markdown-format` (solo chunk attesi, come la resa, o la build si ferma) a chunk
-che importano soltanto chunk condivisi; le stringhe hanno un chunk per lingua
-(`shell-strings`, `shell-strings-en`); la barra della formula
-(`editors/core/formula-bar.ts`) sta fuori dall'ospite delle schede.
+Il chunk `search` lascia i commenti della Live a `markdown-comments`, i riquadri
+(`state/layout.ts`) a `shell-layout` e le foglie delle Impostazioni a `shell-shared`;
+il ponte dei documenti lascia `diagram-host` (Mermaid), `markdown-tables` e
+`markdown-format` (solo chunk attesi, o la build si ferma) a chunk che importano
+soltanto chunk condivisi; le stringhe hanno un chunk per lingua; la barra della
+formula sta fuori dall'ospite delle schede. Un ciclo di import statici fra chunk fa
+leggere un valore prima che esista e l'app non parte: la build si ferma a ogni ciclo fuori dai noti di [`build/chunk-cycles.mjs`](../../apps/client/build/chunk-cycles.mjs).
 
 L'audit npm della supply chain
 ([`npm-audit.mjs`](../../.github/scripts/npm-audit.mjs)) è rosso per ogni

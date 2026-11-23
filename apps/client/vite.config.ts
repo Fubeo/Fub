@@ -5,6 +5,7 @@ import { readdirSync } from "node:fs";
 import { canvasWasm } from "./build/canvas-wasm.mjs";
 import { completoBoundaries, completoChunk, completoPreload } from "./build/completo-chunks.mjs";
 import { SKIN_GROUP_TARGET, skinGroups } from "./build/skin-split.mjs";
+import { chunkCycles, newChunkCycles } from "./build/chunk-cycles.mjs";
 
 const CHUNK_BUDGET = 500_000;
 
@@ -205,6 +206,14 @@ export default defineConfig({
       // Dopo la riscrittura degli import e dei preload di Vite: byte finali.
       order: "post",
       handler(_options, bundle) {
+        // Un ciclo statico fra chunk può far leggere un valore prima che
+        // esista, e l'app non parte (`build/chunk-cycles.mjs`).
+        const chunkImports = new Map<string, string[]>();
+        for (const chunk of Object.values(bundle)) if (chunk.type === "chunk") chunkImports.set(chunk.fileName, chunk.imports);
+        const cycles = newChunkCycles(chunkCycles(chunkImports, (file) => (bundle[file] as Rollup.OutputChunk).name));
+        if (cycles.length) {
+          this.error(`chunk legati da un ciclo di import statici: ${cycles.map((group) => group.join(" ↔ ")).join("; ")}; il modulo che condividono va in un chunk chiuso verso il basso (\`manualChunks\`)`);
+        }
         const eager = new Set<string>();
         const visit = (name: string): void => {
           const chunk = bundle[name];
@@ -576,7 +585,11 @@ export default defineConfig({
           // oltre la soglia. Chiusi verso il basso: importano soltanto
           // moduli che stanno nei loro chunk (le stringhe, le icone, il
           // tema, gli appunti, il ponte con l'ospite), nessuno di `search`.
-          if (/\/src\/(panels\/(theme-folder|component-profiles)|ui\/(marcuzzo|permissions|fuzzy)|rules\/canvas-settings|platform\/confirm|host\/dialog)\.ts$/.test(id)) return "shell-shared";
+          // Qui anche le foglie che le Impostazioni leggono al caricamento
+          // (`dom`, gli id della shell, il caricatore del catalogo): lasciate
+          // in `search`, che importa le Impostazioni, il ciclo fra i due chunk
+          // le faceva leggere prima che esistessero e l'app non partiva.
+          if (/\/src\/(panels\/(theme-folder|component-profiles)|ui\/(marcuzzo|permissions|fuzzy|dom|shell-ids\.generated)|rules\/canvas-settings|platform\/confirm|host\/dialog|dev\/catalogo\/carica)\.ts$/.test(id)) return "shell-shared";
           if (/\/node_modules\/postcss\//.test(id)) return "theme-parser";
           if (/\/node_modules\/@tauri-apps\//.test(id)) return "host-bridge";
           if (/\/node_modules\/(d3-(selection|transition|shape|color|dispatch|ease|interpolate|timer|array|path)|dagre-d3-es|roughjs|dompurify|lodash-es|es-toolkit|marked|khroma)\//.test(id)) {
