@@ -325,9 +325,7 @@ dipendenze normali, quelli tratteggiati le sole dipendenze di prova.
 ```mermaid
 flowchart LR
     %% @grafo-dipendenze
-    %% Il seguito del grafo: fub-disegno, chi lo prende (l'host, con la
-    %% feature `engine-drawing`), i crate di Fub da cui dipende e quelli di
-    %% VectorCraft che nomina.
+    %% Il seguito del grafo: fub-disegno, chi lo prende e che cosa nomina.
 
     host["fub-host"]
     disegno["fub-disegno"]
@@ -335,6 +333,7 @@ flowchart LR
     motori["fub-motori"]
     scene["fub-scene"]
     testkit["fub-testkit"]
+    vcolor["vectorcraft-color"]
     vdoc["vectorcraft-doc"]
     vengine["vectorcraft-engine"]
     vgeom["vectorcraft-geom"]
@@ -346,6 +345,7 @@ flowchart LR
     disegno --> abi
     disegno --> motori
     disegno --> scene
+    disegno --> vcolor
     disegno --> vdoc
     disegno --> vengine
     disegno --> vgeom

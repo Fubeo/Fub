@@ -1374,6 +1374,7 @@ const GRIDCRAFT_FREE: &[&str] = &["fub-abi", "fub-kernel", "fub-sdk"];
 /// motore del disegno entra da un adattatore soltanto, `fub-disegno` (vedi
 /// ../../../docs/decisions/0239-il-disegno-sul-motore-vettoriale.md).
 const VECTORCRAFT_OWNERS: &[(&str, &str, Option<&str>)] = &[
+    ("fub-disegno", "vectorcraft-color", None),
     ("fub-disegno", "vectorcraft-doc", None),
     ("fub-disegno", "vectorcraft-engine", None),
     ("fub-disegno", "vectorcraft-geom", None),
