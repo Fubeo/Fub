@@ -3,6 +3,8 @@
 // Selezione diretta, Canc toglie quei punti (`path.deleteAnchors`, coi punti
 // nel `value`), non l'oggetto intero, e lo stato dello strumento si rilegge;
 // senza punti `cancellaPunti` dice di no, e Canc resta quello dell'editor.
+// Con lo stesso Completo finto, le parole di un testo in area dal campo
+// «Testo» (K6 T16) vanno a `text.editRange`.
 import { describe, expect, it, vi } from "vitest";
 import type { DrawingAnchor } from "../../../host/contract";
 import type { MotoreDelDisegno } from "../motore/gesti";
@@ -17,7 +19,12 @@ const PUNTO: DrawingAnchor = { element: "p1", subpath: 0, anchor: 2, at: [330, 2
 
 function completoCon(punti: () => readonly DrawingAnchor[]) {
   const comando = vi.fn((_passo: unknown) => Promise.resolve(ESITO));
-  const comandi = vi.fn(() => Promise.resolve([{ id: "disegno.path.deleteAnchors", enabled: true, disabled_reason: null }]));
+  const comandi = vi.fn(() =>
+    Promise.resolve([
+      { id: "disegno.path.deleteAnchors", enabled: true, disabled_reason: null },
+      { id: "disegno.text.editRange", enabled: true, disabled_reason: null },
+    ]),
+  );
   const sessione = { comandi, comando } as unknown as SessioneMotore;
   const motore = { adesso: () => sessione, pronta: () => Promise.resolve(sessione), assente: () => null } as unknown as MotoreDelDisegno;
   const rileggiStato = vi.fn();
@@ -27,7 +34,10 @@ function completoCon(punti: () => readonly DrawingAnchor[]) {
     {
       indice: () => Promise.resolve(indiceDi(indiceGenerato as never)),
       prepara: () => Promise.resolve("pronta"),
-      moduli: { "./famiglie/tracciati/index.ts": () => Promise.resolve({ default: { registra: () => undefined } }) },
+      moduli: {
+        "./famiglie/tracciati/index.ts": () => Promise.resolve({ default: { registra: () => undefined } }),
+        "./famiglie/testo/index.ts": () => Promise.resolve({ default: { registra: () => undefined } }),
+      },
       tasti: {
         radice: document.createElement("div"),
         selezione: () => ["p1"],
@@ -68,5 +78,16 @@ describe("Canc coi punti scelti", () => {
     const altro = completoCon(() => [PUNTO]);
     altro.completo.chiudi();
     expect(altro.completo.cancellaPunti()).toBe(false);
+  });
+});
+
+describe("le parole di un testo in area dal campo «Testo» (K6 T16)", () => {
+  it("vanno a `text.editRange` con l'elemento e il testo com'è, senza finestra, in un passo", async () => {
+    const { completo, comando, commit } = completoCon(() => []);
+    completo.parole("p1", "Le onde  del mare \n\nsera");
+    await vi.waitFor(() => expect(comando).toHaveBeenCalledTimes(1));
+    expect(comando.mock.calls[0]?.[0]).toMatchObject({ id: "disegno.text.editRange", value: { element: "p1", text: "Le onde  del mare \n\nsera" } });
+    await vi.waitFor(() => expect(commit).toHaveBeenCalledTimes(1));
+    completo.chiudi();
   });
 });

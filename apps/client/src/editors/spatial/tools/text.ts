@@ -130,6 +130,45 @@ export function wordsOf(elem: Elem): string | null {
   return lines.length === 0 ? null : editableText(lines);
 }
 
+/// Le parole di un testo in area (`fub:wrap`) come si modificano nel campo
+/// «Testo»: le righe di ogni paragrafo riunite come dice il loro `fub:join`
+/// (`space` uno spazio, `word` niente), i paragrafi con `\n`; un paragrafo
+/// scritto come uno spazio indivisibile si rilegge vuoto. Gli spazi restano
+/// come li scrive il file, carattere per carattere: gli a capo li rifà il
+/// motore (`text.editRange`), che li riscrive senza perdere niente. `null`
+/// se non è un testo in area di sole righe semplici con gli stessi
+/// attributi tranne `dy` e `fub:join`: un'etichetta, un testo con pezzi.
+export function areaWordsOf(elem: Elem): string | null {
+  if (elem.tag !== "text" || elem.attrs["fub:wrap"] === undefined) return null;
+  if (NOT_FREE.some((name) => name !== "fub:wrap" && elem.attrs[name] !== undefined)) return null;
+  const lines: Array<{ readonly text: string; readonly join: "space" | "word" | null }> = [];
+  let shared: string | null = null;
+  for (const child of elem.children ?? []) {
+    if (child.tag === "title" || child.tag === "desc") continue;
+    if (child.tag !== "tspan" || child.runs !== undefined || (child.children?.length ?? 0) > 0) return null;
+    const rest = Object.entries(child.attrs).filter(([name]) => name !== "dy" && name !== "fub:join");
+    if (rest.some(([name]) => NOT_FREE.includes(name))) return null;
+    const look = JSON.stringify(rest.sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
+    if (shared !== null && look !== shared) return null;
+    shared = look;
+    const join = child.attrs["fub:join"];
+    lines.push({ text: child.text ?? "", join: lines.length > 0 && (join === "space" || join === "word") ? join : null });
+  }
+  if (lines.length === 0) return null;
+  let words = "";
+  lines.forEach((line, at) => {
+    if (at > 0) words += line.join === "space" ? " " : line.join === "word" ? "" : "\n";
+    const alone = line.join === null && (lines[at + 1]?.join ?? null) === null;
+    words += alone && line.text === BLANK_LINE ? "" : line.text;
+  });
+  return words;
+}
+
+/// Le parole scritte nel campo «Testo» per un testo in area, come le riceve
+/// il motore: senza ciò che XML non ammette, gli a capo come `\n`, e il resto
+/// com'è scritto, spazi compresi.
+export const areaWords = (input: string): string => xmlText(input).replace(/\r\n|[\r\u2028\u2029]/g, "\n");
+
 /// I file dei caratteri che l'app porta, coi nomi che il file del disegno
 /// scrive, i pesi e lo stile che coprono: quelli di `theme/serie/fonts.css`,
 /// e il corsivo vero di ciascuno, che un testo del disegno può chiedere.

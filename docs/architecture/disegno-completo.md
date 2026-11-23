@@ -177,7 +177,17 @@ motore i comandi sul testo scelto; il formato è quello di
   testo bloccato o nascosto si rifiuta prima (`locked`, `hidden`).
 - **Il doppio clic** con la Selezione su un testo scelto porta al campo
   «Testo» dell'ispettore (`motore/gesti.ts`, `doubleTap`), che scrive alla
-  conferma: nessun IPC per tasto.
+  conferma: nessun IPC per tasto. Per un testo in area il campo
+  (`tools/text.ts`, `areaWordsOf`) manda le parole a `text.editRange`
+  (`Completo.parole`, dal percorso unico `eseguiPerId`), mai all'operazione
+  `text`, che scriverebbe righe senza a capo; senza motore il campo non c'è.
+- **All'apertura** (`apertura.rs`) un testo di punto perde gli spazi che
+  l'importazione del motore aggiunge in fondo alle righe per i nodi di soli
+  spazi fra i `tspan` (`spazi_fra_le_righe`), e un testo in area riprende le
+  righe del file, col paragrafo di uno spazio indivisibile vuoto
+  (`testi_in_area`, `RIGA_VUOTA`). Le righe in area si dispongono nella
+  larghezza arrotondata come il file la scrive, così chi riapre ritrova gli
+  stessi a capo.
 - `type.createOutlines` trasforma il testo in tracciati; senza i caratteri
   si rifiuta (`unsupported`). `edit.findReplace` ha una finestra scritta da
   Fub (`FINESTRE_SCRITTE`, senza `ids`).

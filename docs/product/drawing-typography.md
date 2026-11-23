@@ -112,6 +112,12 @@ Col Completo il testo si fa e si cambia anche così:
   Annulla, e nessun tasto va al motore mentre si scrive. Il comando
   **Modifica testo** (`text.editRange`) riceve il testo intero e cambia solo
   il pezzo diverso, così lo stile delle altre parole resta.
+- **Il campo «Testo» di un testo in area** mostra i paragrafi come si
+  leggono, con le righe del riquadro riunite, e le parole confermate passano
+  da **Modifica testo**, che rifà gli a capo nel riquadro. Gli spazi, anche
+  due di fila, e le righe vuote restano come sono scritti: salvato e
+  riaperto, il testo si rilegge uguale carattere per carattere. Senza il
+  motore del Completo il campo non c'è per un testo in area.
 - **Testo › Maiuscole/minuscole** e **Testo › Crea contorni**: il secondo
   trasforma le lettere in tracciati pieni, che non si scrivono più (serve il
   carattere sul computer).
