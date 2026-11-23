@@ -2364,6 +2364,18 @@ punti scelti con la Selezione diretta. Rischio annotato: quando lo
 spostamento è affine la differenza scrive un `transform` invece di
 riscrivere `d` (funziona, il file resta diverso da come lo scriverebbe
 Illustrator); i campi X/Y non sono ancora nella mappa della conformità.
+Giro 9 unito in 419a685fe: i gesti a mano libera (`path.freehand`,
+`knife`, `eraseRegion`, `eraseSegments`, `smoothRegion`) passano dal
+motore con un passo di Annulla. Giro 10 unito in 801800adb: Curvatura
+(strumento e comando), Rimodella (`path.reshape`, `reshapeSegment`),
+`path.setAnchors` e la penna a passi (`addon.pen.append`, `close`,
+`segment`, `removePoint`, `togglePoint`, `reshape`), con casi riusciti,
+rifiutati e con argomenti sbagliati. Restano da fare `path.joinScrub`,
+`path.blob` e `path.create` (il formato di `d` in coordinate di scena e
+l'unione con la scelta vanno decisi). Rischi: `setAnchors` su un
+triangolo scrive un `transform` invece di riscrivere `d`; Curvatura senza
+`element` crea un tracciato col riempimento bianco della sessione del
+motore.
 Aspetta: niente
 
 ## T13 · Le forme e le trasformazioni
@@ -2467,6 +2479,17 @@ dal motore con un passo di Annulla; un oggetto bloccato o non mappato
 rifiuta il gesto come la finestra (`rifiuto_dello_strumento`). Rischio: il
 banco non dà anteprima ai gesti del motore, il trascinamento va guardato
 nell'app vera.
+Giro «disponi» unito in 7f729a473: le sette voci di ≡ › Oggetto ›
+Disponi (griglia, scambia, sostituisci con l'oggetto superiore, dimensione
+di ciascuno, raggruppa sovrapposti, opacità casuale, ordina), con finestra
+dove servono valori e seme ripetibile. Giro 7 unito in 6b991fcf5:
+Trasforma singolarmente (finestra con anteprima, `object.transformEach`),
+griglie rettangolare e polare (comandi e strumenti), Generatore forme
+(`shapeBuilder.merge`, `regions` come lettura, strumento con Alt, nella
+casella «modificare» come nel prototipo). Rischi: il gesto del Generatore
+con meno di due forme tace (il contratto non ha un motivo); «Trasforma
+singolarmente…» tagliata nel menu a 1280 px (aspetto); il trascinamento
+del Generatore va guardato nell'app vera.
 Aspetta: niente
 
 ## T14 · Il colore
@@ -2693,6 +2716,21 @@ da fare il testo di punto e quello in area (il motore legge il testo con
 `fub:wrap` come testo di punto) e le maniglie (la risposta porta solo gli
 oggetti, non i punti: nessun campo nuovo nel contratto); a 800 px la
 motivazione nei sottomenu si tronca.
+≡ › Selezione, secondo giro, unito in 98e1d9707: Riseleziona
+(`select.reselect`, ricordo nel Banco). Restano da fare col perché nella
+mappa: selezioni salvate (il formato della scena non ha
+`saved_selections`), bacchetta magica (stato di sessione del motore non
+salvato), testo di punto e in area. Rischi: Riseleziona perde il ricordo
+se il testo cambia dall'esterno; la frase è tagliata nel menu (aspetto).
+Comandi dei livelli uniti in ae036a43b: `layer.selectAll`, `layer.merge`,
+`layer.reverse` dal motore. Restano da fare col perché: livello corrente
+(`layer.setCurrent`, `sendToCurrentLayer`: non sopravvive a
+`Banco::ripristina`), livelli annidati (`layer.duplicate`, `collectInNew`:
+il livello nuovo nasce sotto il livello radice del motore) e Sopra / Altri
+livelli per Blocca e Nascondi; sono un giro sul motore (modello dei
+livelli). Il ramo `feat/k6-t15-livelli-pulsanti` (porta con unisci e
+inverti, pulsanti non collegati) non è entrato: lo riprende quel giro,
+con la selezione di più livelli e la selezione nell'esito della porta.
 Aspetta: niente
 
 ## T16 · Il testo

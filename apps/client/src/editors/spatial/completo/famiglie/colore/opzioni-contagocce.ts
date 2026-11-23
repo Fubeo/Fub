@@ -1,5 +1,5 @@
 // La fila delle opzioni del Contagocce nel Disegno completo (piano K6, T14, giro 7;
-// `docs/architecture/disegno-completo.md`, «Il Contagocce»). Le sue opzioni non sono dello
+// `docs/architecture/disegno-strumenti.md`, «Il Contagocce»). Le sue opzioni non sono dello
 // strumento: sono le preferenze del motore (`eyedropper.setOptions`, in `draw.motore`), e la
 // fila le legge con `disegno.prefs.get` e le cambia con `disegno.eyedropper.setOptions`.
 //

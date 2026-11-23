@@ -1,5 +1,5 @@
 //! La famiglia `tracciati` della mappa (piano K6, T12;
-//! `docs/architecture/disegno-completo.md`, «I tracciati e i punti»).
+//! `docs/architecture/disegno-strumenti.md`, «I tracciati e i punti»).
 //!
 //! - **I comandi sui punti scelti** (`SUI_PUNTI`): la selezione di Fub dice
 //!   oggetti, non punti. I punti scelti col gesto tornano nel `value` del
