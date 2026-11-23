@@ -175,6 +175,18 @@ spostamento delle righe resta nativo, perché `node.move` non è nell'indice.
 L'albero si rifà dalla scena dopo ogni commit, quindi non serve un aggancio in
 più per sapere che il motore ha cambiato il documento.
 
+Seleziona testo per font (`select.font`) sceglie i testi che hanno il carattere,
+e lo stile se c'è, in una delle loro parti (anche dentro un gruppo), fra quelli
+visibili e sbloccati: la selezione di prima non conta, e il comando non cambia il
+file. Un carattere che nel disegno non c'è, o c'è solo su testi nascosti o
+bloccati, è un `BadArgs` col perché in italiano, prima del motore. Le opzioni
+della modifica globale (`select.globalEditOptions`) cambiano la sessione del
+motore e non il file: rispondono con una lettura, le opzioni e il conteggio di
+ciò che Avvia prenderebbe (la stessa regola di appartenenza del motore), e
+restano nella sessione finché il disegno è aperto. Avvia la modifica globale
+(`select.globalEdit`) non è ancora nel Completo: il suo stato sta nel documento
+del motore, che Fub ricrea a ogni comando, e la causa è nella mappa.
+
 ## Chi possiede che cosa
 
 | Che cosa | Chi lo possiede | Perché |

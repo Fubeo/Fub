@@ -1,5 +1,6 @@
 //! La famiglia `livelli` della mappa: le voci di ≡ › Selezione (K6 T15, giro 1; il testo uguale e i
-//! punti per specie, giro 6) e i comandi di livello della scheda Livelli del Completo (giro 3):
+//! punti per specie, giro 6; il testo per carattere e le opzioni della modifica globale, giro 7) e i
+//! comandi di livello della scheda Livelli del Completo (giro 3):
 //! nuovo livello, elimina, rinomina e colore, occhio, lucchetto, livello corrente e spostamento; e
 //! (giro 2) seleziona grafica, unisci e inverti l'ordine, con le loro righe che non valgono ancora.
 //! «Maschere di ritaglio» (K6 T12) sceglie le maschere, i `<g clip-path>` del file.
@@ -39,6 +40,12 @@ impl StatoFamiglia for Stato {
         0
     }
 
+    /// Le opzioni della modifica globale cambiano la sessione del motore, non il file: rispondono con le
+    /// opzioni e con il conteggio di ciò che Avvia prenderebbe, una lettura.
+    fn legge(&self, id: &str) -> bool {
+        id == "select.globalEditOptions"
+    }
+
     /// Le voci spente col loro perché, prima di chiedere al motore. Il confronto con l'oggetto scelto
     /// (Uguale) e «Tutto sugli stessi livelli» vogliono qualcosa di scelto, e con un oggetto che la mappa
     /// non ha non si usano, come nel nucleo; l'istanza di simbolo vuole un'istanza scelta; il confronto del
@@ -54,6 +61,11 @@ impl StatoFamiglia for Stato {
         }
         // Con un oggetto che la mappa non ha in selezione, nessun comando che cambia il documento parte.
         if (cambia_il_livello(id) || crea_livello(id)) && matches!(nodi_scelti(copia, selezione), Err(DrawingRefusal::Unmapped)) {
+            return Some(DrawingDisabledReason::Unmapped);
+        }
+        // `esegui` rifiuta ogni comando con un elemento non mappato in selezione, prima della famiglia: le
+        // due voci del giro 7 (il carattere, e le opzioni che contano la scelta) si spengono con lo stesso motivo.
+        if matches!(id, "select.font" | "select.globalEditOptions") && matches!(nodi_scelti(copia, selezione), Err(DrawingRefusal::Unmapped)) {
             return Some(DrawingDisabledReason::Unmapped);
         }
         if vuole_selezione(id) {
@@ -91,7 +103,7 @@ impl StatoFamiglia for Stato {
             }
             "select.object.strayPoints" => senza_oggetti(copia, e_punto_isolato, "Nel disegno non ci sono punti isolati."),
             "select.object.openPaths" => senza_oggetti(copia, e_tracciato_aperto, "Nel disegno non ci sono tracciati aperti."),
-            "select.object.pointText" | "select.object.areaText" => spento_testi(id, copia),
+            "select.font" | "select.object.pointText" | "select.object.areaText" => spento_testi(id, copia),
             _ => None,
         }
     }
@@ -112,6 +124,14 @@ impl StatoFamiglia for Stato {
     fn argomenti_della_copia(id: &str, copia: &Copia, mut valore: Value) -> Result<Value, PluginError> {
         if matches!(id, "layer.merge" | "layer.reverse") {
             righe_da_unire_o_invertire(id, copia, &valore)?;
+            return Ok(valore);
+        }
+        if id == "select.font" {
+            carattere_da_cercare(copia, &valore)?;
+            return Ok(valore);
+        }
+        if id == "select.globalEditOptions" {
+            opzioni_della_modifica_globale(copia, &valore)?;
             return Ok(valore);
         }
         if !matches!(id, "layer.new" | "layer.setProps") {
@@ -296,6 +316,11 @@ fn spento_testi(id: &str, copia: &Copia) -> Option<DrawingDisabledReason> {
             "Nel disegno non ci sono testi in area.",
             "I testi in area sono nascosti o bloccati: il motore non li sceglie.",
         ),
+        "select.font" => (
+            e_testo,
+            "Nel disegno non ci sono testi.",
+            "I testi sono nascosti o bloccati: il motore non li sceglie.",
+        ),
         _ => return None,
     };
     if let Some(perche) = senza_oggetti(copia, specie, assenti) {
@@ -347,6 +372,86 @@ fn e_punto_isolato(n: &Node) -> bool {
 fn e_tracciato_aperto(n: &Node) -> bool {
     n.path_data().is_some_and(|p| !p.is_closed())
 }
+
+/// Un testo di qualunque specie: il perché di «Seleziona testo per font» quando il disegno non ne ha.
+fn e_testo(n: &Node) -> bool {
+    matches!(n.kind, NodeKind::Text(_))
+}
+
+/// Il carattere di «Seleziona testo per font» (K6 T15, giro 7). Il motore sceglie i testi che hanno
+/// `family` (e `style`, se c'è) in una delle loro parti, fra quelli che si possono toccare: la scelta
+/// della selezione non conta, il carattere è l'argomento. Senza un carattere, o con uno stile che non è
+/// un testo non vuoto, è `BadArgs`. Un carattere che nel disegno non c'è, o c'è solo su testi nascosti o
+/// bloccati, dice perché in italiano, prima del motore: il motore non sceglie niente e non lo dice.
+fn carattere_da_cercare(copia: &Copia, valore: &Value) -> Result<(), PluginError> {
+    let famiglia = match valore.get("family") {
+        Some(Value::String(f)) if !f.is_empty() => f.as_str(),
+        _ => return Err(PluginError::BadArgs("Scegli il carattere da cercare.".into())),
+    };
+    let stile = match valore.get("style") {
+        None | Some(Value::Null) => None,
+        Some(Value::String(s)) if !s.is_empty() => Some(s.as_str()),
+        Some(_) => return Err(PluginError::BadArgs("Lo stile del carattere dev'essere un testo, non vuoto.".into())),
+    };
+    let modificabile = copia.documento.editable();
+    let (mut c_e, mut scelto) = (false, false);
+    copia.documento.walk(|n| {
+        if testo_in_carattere(n, famiglia, stile) {
+            c_e = true;
+            scelto |= modificabile(n.id);
+        }
+    });
+    let nome = nome_del_carattere(famiglia, stile);
+    if !c_e {
+        return Err(PluginError::BadArgs(format!("Nel disegno non ci sono testi con il carattere {nome}.").into()));
+    }
+    if !scelto {
+        return Err(PluginError::BadArgs(
+            format!("I testi con il carattere {nome} sono nascosti o bloccati: il motore non li sceglie.").into(),
+        ));
+    }
+    Ok(())
+}
+
+/// Un testo che ha il carattere, e lo stile se c'è, in una delle sue parti. Il confronto è senza
+/// maiuscole, come quello del motore (`select.font`).
+fn testo_in_carattere(n: &Node, famiglia: &str, stile: Option<&str>) -> bool {
+    matches!(&n.kind, NodeKind::Text(t) if t.runs.iter().any(|r| {
+        r.style.font_family.eq_ignore_ascii_case(famiglia)
+            && stile.is_none_or(|s| r.style.font_style.eq_ignore_ascii_case(s))
+    }))
+}
+
+/// Il carattere come lo dice un messaggio: «Georgia», o «Georgia» nello stile «Italic».
+fn nome_del_carattere(famiglia: &str, stile: Option<&str>) -> String {
+    match stile {
+        None => format!("«{famiglia}»"),
+        Some(s) => format!("«{famiglia}» nello stile «{s}»"),
+    }
+}
+
+/// Le opzioni di «Opzioni modifica globale» (K6 T15, giro 7): `appearance`, `size` e `includeCanvas` sono
+/// vero o falso, e `artboards` è `all` o un intervallo di tavole del disegno, come `1, 3-5`. Un valore che
+/// non è questo è `BadArgs` col perché, prima del motore (che lo direbbe in inglese).
+fn opzioni_della_modifica_globale(copia: &Copia, valore: &Value) -> Result<(), PluginError> {
+    for chiave in ["appearance", "size", "includeCanvas"] {
+        if !matches!(valore.get(chiave), None | Some(Value::Null) | Some(Value::Bool(_))) {
+            return Err(PluginError::BadArgs(format!("«{chiave}» dev'essere vero o falso.").into()));
+        }
+    }
+    let intervallo = match valore.get("artboards") {
+        None | Some(Value::Null) => return Ok(()),
+        Some(Value::String(s)) if s.trim().is_empty() || s.trim().eq_ignore_ascii_case("all") => return Ok(()),
+        Some(Value::String(s)) => s,
+        Some(_) => return Err(PluginError::BadArgs(TAVOLE_SBAGLIATE.into())),
+    };
+    vectorcraft_doc::range::parse_range(intervallo, copia.documento.artboards.len())
+        .map(|_| ())
+        .map_err(|_| PluginError::BadArgs(TAVOLE_SBAGLIATE.into()))
+}
+
+/// Il perché di `artboards` che non va, in italiano.
+const TAVOLE_SBAGLIATE: &str = "Le tavole vanno indicate con «all» o con un intervallo, per esempio 1, 3-5.";
 
 /// Le chiavi di `layer.setProps` che un livello bloccato non prende.
 const CHIAVI_DI_UN_LIVELLO_BLOCCATO: [&str; 6] = ["name", "color", "template", "printable", "preview", "dimImages"];
