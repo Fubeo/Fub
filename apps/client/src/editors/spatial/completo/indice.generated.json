@@ -355,6 +355,22 @@
     },
     {
       "fonte": "motore",
+      "id": "appearance.reduceToBasic",
+      "chiamata": {
+        "comando": "disegno.appearance.reduceToBasic"
+      },
+      "etichetta": {
+        "it": "Riduci ad aspetto di base",
+        "en": "Reduce to Basic Appearance"
+      },
+      "posto": "ispettore/design",
+      "famiglia": "aspetto",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "clipboard.conflicts",
       "chiamata": {
         "comando": "disegno.clipboard.conflicts"
