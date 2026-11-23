@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:fub="https://fubeo.github.io/ns/scene/1" fub:version="1" viewBox="0 0 400 300" width="400" height="300">
+  <rect id="fub-paper" fub:role="paper" x="0" y="0" width="400" height="300" fill="#ffffff"/>
+  <g id="l1a2b3c4d" fub:layer="Livello 1">
+    <path id="oavoh6rjc" d="M50.71 45.05 L120.71 55.05 C121.54 55.17 122.33 55.5 123 56 L163 86 C165.21 87.66 165.66 90.79 164 93 C162.34 95.21 159.21 95.66 157 94 L118.02 64.77 L49.29 54.95 C46.56 54.56 44.66 52.03 45.05 49.29 C45.44 46.56 47.97 44.66 50.71 45.05 Z" fill="#ff0000"/>
+  </g>
+</svg>

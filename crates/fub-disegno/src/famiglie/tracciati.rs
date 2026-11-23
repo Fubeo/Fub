@@ -62,6 +62,9 @@ use ritagli::{ritaglio_rifiutato, ritaglio_spento, RITAGLI};
 mod su_un_punto;
 use su_un_punto::{argomenti_del_punto, punto_rifiutato, SU_UN_PUNTO};
 
+#[path = "tracciati_pennello.rs"]
+pub(crate) mod pennello;
+
 #[path = "tracciati_mano.rs"]
 mod mano;
 
@@ -448,6 +451,9 @@ impl StatoFamiglia for Stato {
         if strumenti::STRUMENTI.contains(&id) {
             return strumenti::argomenti(id, copia, valore);
         }
+        if id == pennello::PENNELLO {
+            return pennello::argomenti(valore, copia);
+        }
         argomenti_del_punto(id, copia, valore)
     }
 
@@ -503,6 +509,10 @@ impl StatoFamiglia for Stato {
 
     /// Un'operazione di Elaborazione tracciati che non lascia niente: `empty`.
     fn rifiuto_del_motore(id: &str, errore: &EngineError) -> Option<DrawingRefusal> {
+        // Il pennello su un livello bloccato: il motore dà un solo messaggio anche per uno nascosto.
+        if id == pennello::PENNELLO && matches!(errore, EngineError::Other(m) if m == "the target layer is locked or hidden") {
+            return Some(DrawingRefusal::Locked);
+        }
         let vuoto = matches!(errore, EngineError::Other(m) if m.ends_with(RISULTATO_VUOTO));
         (ELABORAZIONE.contains(&id) && vuoto).then_some(DrawingRefusal::Empty)
     }

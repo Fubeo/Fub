@@ -1129,6 +1129,11 @@ pub(crate) fn esegui(
             None => vec![scelti.clone()],
         };
     let argomenti = nata.stato().adatta(&riga.id, valore)?;
+    let pennello_colore = if riga.id == tracciati::pennello::PENNELLO {
+        tracciati::pennello::colore(&argomenti)
+    } else {
+        None
+    };
     // Un gesto lasciato a metà non entra nel comando.
     if banco.in_corso.is_some() {
         banco.ripristina(copia);
@@ -1141,6 +1146,11 @@ pub(crate) fn esegui(
         // Il comando cambia anche lo stile delle forme nuove: quello della
         // sessione resta com'era.
         let stile = sessione.paint.clone();
+        // Il pennello tondo dipinge col colore che il client ha mandato: solo per questo comando, poi la
+        // tavolozza della sessione torna com'era (qui sotto).
+        if let Some(colore) = pennello_colore {
+            sessione.paint.stroke = vectorcraft_color::Paint::solid(colore);
+        }
         let mut fatto = Ok(Value::Null);
         for giro in &giri {
             fatto = sessione

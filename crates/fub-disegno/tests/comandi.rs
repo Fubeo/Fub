@@ -262,6 +262,8 @@ fn una_selezione_con_un_elemento_non_mappato_non_cambia_niente() {
         // Allunga e Fai scorrere (K6 T12, strumenti dei punti) prendono il tratto dal valore (`element`).
         "disegno.addon.pathtools.extend",
         "disegno.addon.pathtools.slideAnchor",
+        // Il Pennello tondo (K6 T12, giro 2) dipinge un tratto nuovo: prende i punti e il colore dal valore, non dalla scelta.
+        "disegno.path.blob",
         // Mostra tutti e Sblocca tutti (K6 T15, livelli altri) guardano tutti i livelli, non la scelta.
         "disegno.layer.showAll",
         "disegno.layer.unlockAll",
