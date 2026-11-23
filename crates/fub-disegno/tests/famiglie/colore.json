@@ -2790,6 +2790,52 @@
           ]
         }
       }
+    },
+    {
+      "id": "paint.recent",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": {
+        "lettura_parziale": {
+          "colors": []
+        }
+      }
+    },
+    {
+      "id": "paint.proxies",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "lettura_parziale": {
+          "fillMixed": false
+        }
+      }
+    },
+    {
+      "id": "paint.proxies",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": {
+        "lettura_parziale": {
+          "fillMixed": false
+        }
+      }
+    },
+    {
+      "id": "paint.proxies",
+      "disegno": "base.svg",
+      "selezione": [
+        "onessuno1"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "rifiuto": "unmapped"
+      }
     }
   ]
 }

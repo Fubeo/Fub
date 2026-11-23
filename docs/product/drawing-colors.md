@@ -62,6 +62,12 @@ colore ignoto.
 
 ## I colori recenti
 
+I recenti e i due colori del riempimento e del tratto si leggono dal motore
+con `paint.recent` e `paint.proxies` (letture, senza cambiare il file). La
+sfumatura a forma libera (punti e linee, `paint.freeform.*`) non si scrive
+ancora: il formato della scena ha solo sfumature lineari e radiali, e il
+Disegno non la accetta come argomento di una sfumatura.
+
 Un colore scritto e scelto entra fra i recenti: dal campo del
 riempimento o del contorno e come colore con cui si disegna; anche il colore con cui si disegnava prima resta fra loro. Un
 campione no, perché ha la sua griglia. I recenti valgono per tutti i disegni

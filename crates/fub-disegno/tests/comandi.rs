@@ -259,6 +259,10 @@ fn una_selezione_con_un_elemento_non_mappato_non_cambia_niente() {
         "disegno.addon.pen.removePoint",
         "disegno.addon.pen.togglePoint",
         "disegno.addon.pen.reshape",
+        // I colori recenti e i proxy di riempimento e tratto (K6 T14) sono letture della sessione:
+        // non guardano la scelta.
+        "disegno.paint.recent",
+        "disegno.paint.proxies",
         // La Matita (K6 T12, giro 9) fa un tracciato nuovo: non guarda la scelta.
         "disegno.path.freehand",
         "disegno.swatch.new",

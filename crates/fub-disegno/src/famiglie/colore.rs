@@ -84,8 +84,10 @@ pub(crate) const CAMPIONA: &str = "paint.sampleColor";
 /// giro 5): i punti, il tipo e l'angolo, la geometria, l'ultima usata.
 pub(crate) const SFUMATURE: [&str; 3] = ["paint.editGradient", "paint.setGradientGeom", "paint.lastGradient"];
 
-/// Il comando che porta davanti il riempimento o il tratto: una lettura.
-pub(crate) const ALTERNA: &str = "paint.toggleActive";
+/// Le letture del colore (K6 T14, sfumatura libera e colori recenti): il motore
+/// le dà con lo stato della sessione (i colori recenti, riempimento e tratto
+/// come li mostrano i proxy) e non cambiano il file. Non portano una scelta.
+pub(crate) const LETTURE: [&str; 3] = ["paint.toggleActive", "paint.recent", "paint.proxies"];
 
 /// Le voci di Modifica › Modifica colori.
 pub(crate) const MODIFICA_COLORI: [&str; 10] = [
@@ -213,7 +215,7 @@ impl StatoFamiglia for Stato {
     }
 
     fn legge(&self, id: &str) -> bool {
-        id == ALTERNA
+        LETTURE.contains(&id)
     }
 
     /// Un campione nuovo, cambiato o fatto dai colori usati è globale;
