@@ -229,6 +229,7 @@ export function installWorkspace(ctx: EditorContext): void {
             tasti: {
               radice: ctx.root,
               selezione: () => ctx.selection,
+              strumento: (id) => ctx.sceltaMotore(id),
               seleziona: (ids) => ctx.select(ids),
               anteprima: (anteprima) =>
                 ctx.showShape(

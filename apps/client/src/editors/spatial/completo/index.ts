@@ -9,6 +9,7 @@
 // `apri` porta l'indice e prepara il nucleo, e basta.
 
 import { caricatore, type Caricatore, type ContestoCompleto, type OpzioniCaricatore } from "./carica";
+import { STRUMENTO_PENNELLO } from "../motore/pennello-tondo";
 import { costruisciFila, type CostruisciFila, type FilaOpzioni } from "./opzioni";
 import { creaSezioni, type Sezioni, type VoceDelCompleto } from "./sezioni";
 import type { Indice, VoceIndice } from "./indice";
@@ -195,6 +196,8 @@ export interface OpzioniCompleto {
 /// modifiche dell'utente quando ci sono.
 export interface OpzioniTastiCompleto extends AzioniEsito {
   readonly radice: HTMLElement;
+  /// Sceglie lo strumento del motore `id`, come la colonna (`sceltaMotore`): un tasto di strumento lo usa.
+  readonly strumento?: (id: string) => void;
   readonly selezione: () => readonly string[];
   readonly anteprima: (anteprima: DrawingPreview | null) => void;
   readonly stato: () => { readonly vuoleTesto: boolean; readonly componendo: boolean };
@@ -569,6 +572,12 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila" | "e
   // Una voce del menu o della ricerca: uno strumento lo sceglie l'editor; un
   // comando del motore parte dal percorso unico.
   const avvia = (voce: VoceIndice, azioni: AzioniVoci): void => {
+    // Il comando del pennello (`path.blob`) vuole il suo tratto, che solo lo strumento dà: la voce della
+    // ricerca sceglie lo strumento Pennello tondo (K6 T12, giro 2).
+    if (voce.id === "path.blob") {
+      azioni.strumento(STRUMENTO_PENNELLO);
+      return;
+    }
     const chiamata = voce.chiamata;
     if ("strumento" in chiamata) {
       azioni.strumento(chiamata.strumento);
@@ -613,6 +622,11 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila" | "e
     piattaforma: opzioni.tasti?.piattaforma ?? piattaformaDi(),
     esegui: (voce) => {
       if (chiuso) return;
+      // Uno strumento del motore con tasto (Maiusc+B) lo sceglie l'editor, come dalla colonna.
+      if ("strumento" in voce.chiamata) {
+        opzioni.tasti?.strumento?.(voce.chiamata.strumento);
+        return;
+      }
       void lancia(voce);
     },
   });

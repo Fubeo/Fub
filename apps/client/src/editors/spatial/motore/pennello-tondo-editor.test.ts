@@ -307,4 +307,27 @@ describe("il Pennello tondo nell'editor", () => {
     expect(comandi(fake)[0]!.selection).toEqual([]);
     expect(spoken()).not.toBe(t("draw.gomma_punti.scegli"));
   });
+
+  it("Esc dopo aver scelto lo strumento torna alla selezione: un trascinamento dopo non dipinge", async () => {
+    const fake = createFakeHost({ drawing: motoreFinto(() => esito([], { ops: OPS_COLPO })) });
+    const editor = await mount(fake);
+    editor.setEngineTool("blobBrush");
+    editor.setColor("#ff0000");
+    surfaceOf().dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", code: "Escape", bubbles: true, cancelable: true }));
+    await settle();
+    await drag(editor, TRATTO);
+    expect(comandi(fake)).toHaveLength(0);
+  });
+
+  it("cambiare strumento dopo aver scelto il pennello: un trascinamento dopo non dipinge", async () => {
+    const fake = createFakeHost({ drawing: motoreFinto(() => esito([], { ops: OPS_COLPO })) });
+    const editor = await mount(fake);
+    editor.setEngineTool("blobBrush");
+    editor.setColor("#ff0000");
+    // Il tasto del selettore (`v`), come lo sceglie chi disegna: toglie lo strumento del motore.
+    surfaceOf().dispatchEvent(new KeyboardEvent("keydown", { key: "v", code: "KeyV", bubbles: true, cancelable: true }));
+    await settle();
+    await drag(editor, TRATTO);
+    expect(comandi(fake)).toHaveLength(0);
+  });
 });

@@ -99,12 +99,13 @@ describe("gli strumenti dei tracciati nella colonna (T12)", () => {
     // la sua, con la gomma di Fub dopo (`colonna-penna` del prototipo).
     expect(draw.caselle).toEqual([
       ["motore:pen", "motore:smartPen", "motore:curvature", "motore:addAnchor", "motore:deleteAnchor", "motore:anchorPoint", "motore:cornerTool", "motore:slideAnchor", "motore:extendPath"],
-      ["motore:pencil", "pen", "highlighter", "motore:smooth", "motore:join", "motore:sharedEdge"],
+      ["motore:pencil", "pen", "highlighter", "motore:blobBrush", "motore:smooth", "motore:join", "motore:sharedEdge"],
       ["motore:eraser", "eraser", "motore:pathEraser", "motore:anchorEraserBrush", "motore:scissors", "motore:knife", "motore:mirrorCut", "motore:lineCut", "motore:rectCut"],
     ]);
     const tracciati = VOCI.filter((voce) => voce.famiglia === "tracciati" && voce.chiamata.strumento !== undefined).map((voce) => voce.chiamata.strumento!);
     expect(tracciati).toHaveLength(21);
-    expect(draw.caselle.flat().filter((id) => id.startsWith(PREFISSO_MOTORE)).map((id) => id.slice(PREFISSO_MOTORE.length)).sort()).toEqual([...tracciati].sort());
+    // Il Pennello tondo (`blobBrush`) sta nella casella della Matita, ma è della famiglia `pennelli`, non dei tracciati.
+    expect(draw.caselle.flat().filter((id) => id.startsWith(PREFISSO_MOTORE)).map((id) => id.slice(PREFISSO_MOTORE.length)).filter((id) => id !== "blobBrush").sort()).toEqual([...tracciati].sort());
   });
 
   it("la Penna di Fub si chiama «Inchiostro», e la Penna è quella del motore", () => {

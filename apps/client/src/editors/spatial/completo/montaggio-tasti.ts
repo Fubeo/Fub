@@ -43,6 +43,16 @@ export interface MontaggioTasti {
 /// niente e il Semplice funziona come prima. L'indice si chiede al montaggio, e
 /// poi a ogni tasto finché non arriva: un rifiuto non si tiene, e il tasto dopo
 /// lo chiede di nuovo. Una richiesta alla volta.
+/// Gli strumenti del motore con il tasto attivo nel Completo. Gli altri strumenti che hanno un tasto
+/// nell'indice restano senza: attivarli è una scelta a parte (ci sono tasti di Fub come `Shift-p`, e
+/// molte lettere da decidere). Il Pennello tondo ha Maiusc+B, che nel motore è il suo (K6 T12, giro 2).
+const STRUMENTI_CON_TASTO: ReadonlySet<string> = new Set(["blobBrush"]);
+
+/// Uno strumento della lista sopra, con il suo tasto nell'indice.
+function tastoDiStrumento(voce: VoceIndice): boolean {
+  return "strumento" in voce.chiamata && STRUMENTI_CON_TASTO.has(voce.id);
+}
+
 export function montaTasti(opzioni: OpzioniMontaggioTasti): MontaggioTasti {
   // Solo i comandi del motore: gli strumenti e i pezzi del client non partono qui.
   let comandi: Map<string, VoceIndice> | null = null;
@@ -66,7 +76,7 @@ export function montaTasti(opzioni: OpzioniMontaggioTasti): MontaggioTasti {
       (indice) => {
         richiesta = null;
         if (chiuso) return;
-        comandi = new Map(indice.voci.filter((voce) => "comando" in voce.chiamata).map((voce) => [voce.id, voce]));
+        comandi = new Map(indice.voci.filter((voce) => "comando" in voce.chiamata || tastoDiStrumento(voce)).map((voce) => [voce.id, voce]));
         ricalcola();
       },
       () => {

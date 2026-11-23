@@ -85,6 +85,7 @@ export const MOTORE_PRONTO: ReadonlySet<string> = new Set([
   "slideAnchor",
   "extendPath",
   "pencil",
+  "blobBrush",
   "smooth",
   "join",
   "sharedEdge",
@@ -172,6 +173,8 @@ export const ICONE_MOTORE: Readonly<Record<string, string>> = {
   eraser: "draw-eraser",
   pathEraser: "draw-eraser",
   anchorEraserBrush: "draw-point-delete",
+  // Il Pennello tondo (K6 T12, giro 2): l'icona del catalogo, nella casella della Matita.
+  blobBrush: "draw-brush",
   scissors: "draw-scissors",
   knife: "draw-scissors",
   mirrorCut: "draw-scissors",
