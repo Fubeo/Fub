@@ -295,12 +295,12 @@ motore	layer.releaseToLayers	Release to Layers (Sequence)	Window › Layers	live
 motore	layer.releaseToLayersBuild	Release to Layers (Build)	Window › Layers	livelli	F1	T15	da fare	ispettore/livelli	famiglia		Rilascia su livelli (accumulo)
 motore	layer.reverse	Reverse Order	Window › Layers	livelli	F1	T15	fatto	ispettore/livelli	famiglia		Inverti ordine
 motore	layer.template	Template	Window › Layers	livelli	F1	T15	da fare	ispettore/livelli	famiglia		Modello
-motore	layer.hideOthers	Hide Others	Window › Layers	livelli	F1	T15	da fare	ispettore/livelli	famiglia		Nascondi altri
-motore	layer.showAll	Show All Layers	Window › Layers	livelli	F1	T15	da fare	ispettore/livelli	famiglia		Mostra tutti i livelli
+motore	layer.hideOthers	Hide Others	Window › Layers	livelli	F1	T15	da fare	ispettore/livelli	famiglia	il comando non cambia niente sui livelli di un disegno di Fub, nemmeno con il livello scelto: lavora sui livelli di primo livello (layerpanel.rs, others) e la prova di tre livelli dà «empty»; la causa non è ancora trovata, va indagata con una prova a parte	Nascondi altri
+motore	layer.showAll	Show All Layers	Window › Layers	livelli	F1	T15	fatto	ispettore/livelli	famiglia		Mostra tutti i livelli
 motore	layer.outlineOthers	Outline Others	Window › Layers	livelli	F1	T15	da fare	ispettore/livelli	famiglia		Altri in contorno
 motore	layer.previewAll	Preview All Layers	Window › Layers	livelli	F1	T15	da fare	ispettore/livelli	famiglia		Anteprima di tutti i livelli
-motore	layer.lockOthers	Lock Others	Window › Layers	livelli	F1	T15	da fare	ispettore/livelli	famiglia		Blocca altri
-motore	layer.unlockAll	Unlock All Layers	Window › Layers	livelli	F1	T15	da fare	ispettore/livelli	famiglia		Sblocca tutti i livelli
+motore	layer.lockOthers	Lock Others	Window › Layers	livelli	F1	T15	da fare	ispettore/livelli	famiglia	il comando non cambia niente sui livelli di un disegno di Fub, nemmeno con il livello scelto: lavora sui livelli di primo livello (layerpanel.rs, others) e la prova di tre livelli dà «empty»; la causa non è ancora trovata, va indagata con una prova a parte	Blocca altri
+motore	layer.unlockAll	Unlock All Layers	Window › Layers	livelli	F1	T15	fatto	ispettore/livelli	famiglia		Sblocca tutti i livelli
 motore	layer.locate	Locate Object	Window › Layers	livelli	F1	T15	da fare	ispettore/livelli	famiglia		Individua oggetto
 motore	library.list	Libraries		simboli	F3	T22	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Librerie
 motore	library.get	Library		simboli	F3	T22	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Libreria

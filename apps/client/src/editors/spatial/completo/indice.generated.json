@@ -1267,6 +1267,38 @@
     },
     {
       "fonte": "motore",
+      "id": "layer.showAll",
+      "chiamata": {
+        "comando": "disegno.layer.showAll"
+      },
+      "etichetta": {
+        "it": "Mostra tutti i livelli",
+        "en": "Show All Layers"
+      },
+      "posto": "ispettore/livelli",
+      "famiglia": "livelli",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "layer.unlockAll",
+      "chiamata": {
+        "comando": "disegno.layer.unlockAll"
+      },
+      "etichetta": {
+        "it": "Sblocca tutti i livelli",
+        "en": "Unlock All Layers"
+      },
+      "posto": "ispettore/livelli",
+      "famiglia": "livelli",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "object.align",
       "chiamata": {
         "comando": "disegno.object.align"
