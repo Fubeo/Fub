@@ -18,8 +18,13 @@
 //! - **I campioni del documento** (`swatch.*`, Risorse › Campioni): nuovo,
 //!   opzioni (nome e colore), elimina, duplica, unisci, ordina per nome,
 //!   sposta, «Aggiungi i colori usati» e l'elenco di quelli che nessuno usa.
-//!   I gruppi di colori e i campioni predefiniti non ci sono nel formato, e
-//!   restano da fare. Nel file un campione si usa sempre per
+//!   I gruppi di colori (nuovo, modifica, separa, «Aggiungi ai campioni» di un
+//!   tema) sono l'attributo `fub:group` dei loro campioni; un gruppo vuoto non
+//!   si scrive, e il comando che lo lascia si rifiuta con [`TESTO_GRUPPO_VUOTO`].
+//!   «Campioni predefiniti» rimette quelli di serie del motore coi nomi in
+//!   italiano, e dice nell'esito ciò che il file non prende: le sfumature, e i
+//!   colori CMYK scritti in RGB ([`crate::campioni_predefiniti`]). Nel file un
+//!   campione si usa sempre per
 //!   riferimento, quindi è sempre **globale**: la famiglia lo chiede al motore
 //!   anche se gli argomenti dicono altro, così cambiarlo cambia in un passo chi
 //!   lo usa ([`crate::campioni`]). Eliminare lascia a chi lo usava il suo
@@ -57,7 +62,8 @@ use vectorcraft_geom::Point;
 
 use super::aspetto::testo;
 use super::tracciati::{inchiostro_toccato, sceglie_inchiostro};
-use super::{byte_delle_tabelle, libera_le_tabelle, nodi_scelti, StatoFamiglia};
+use super::{byte_delle_tabelle, libera_le_tabelle, nodi_scelti, StatoFamiglia, Tradotto};
+use crate::campioni::{gruppo_vuoto, TESTO_GRUPPO_VUOTO};
 use crate::apertura::Copia;
 
 /// Le tabelle del motore che la famiglia fa crescere (patch 0008).
@@ -290,7 +296,7 @@ pub(crate) const MODIFICA_COLORI: [&str; 10] = [
 /// I comandi dei campioni del documento che cambiano il file: i campioni nuovi, cambiati o tolti, e
 /// l'ordine (`swatch.duplicate` mette la copia dopo l'originale, `swatch.merge` toglie gli uniti,
 /// `swatch.sortByName` e `swatch.move` riordinano: [`crate::campioni`]).
-pub(crate) const CAMPIONI: [&str; 9] = [
+pub(crate) const CAMPIONI: [&str; 14] = [
     "swatch.new",
     "swatch.edit",
     "swatch.delete",
@@ -300,6 +306,11 @@ pub(crate) const CAMPIONI: [&str; 9] = [
     "swatch.sortByName",
     "swatch.move",
     "swatch.library.add",
+    "swatch.newGroup",
+    "swatch.editGroup",
+    "swatch.ungroup",
+    "swatch.resetDefaults",
+    "colorTheme.addToSwatches",
 ];
 
 /// La libreria di campioni di base che `swatch.library.add` nomina (per id, o per nome in ogni caso),
@@ -369,6 +380,51 @@ fn campione_del_file(copia: &Copia, nome: &str) -> Result<(), PluginError> {
         ));
     }
     Ok(())
+}
+
+/// I comandi che creano o riscrivono un gruppo di colori: un gruppo che resta vuoto si rifiuta con
+/// [`TESTO_GRUPPO_VUOTO`], perché il file non lo scrive.
+const FANNO_UN_GRUPPO: [&str; 3] = ["swatch.newGroup", "swatch.editGroup", "colorTheme.addToSwatches"];
+
+/// Il nome di un gruppo di colori nuovo senza nome: il motore direbbe «Color Group».
+pub(crate) const NOME_DI_UN_GRUPPO: &str = "Gruppo colori";
+
+/// Un gruppo di colori che il comando nomina nei suoi argomenti (`chiave`) deve essere un gruppo del
+/// file.
+fn gruppo_del_file<'a>(copia: &Copia, valore: &'a Value, chiave: &str) -> Result<&'a str, PluginError> {
+    let nome = valore
+        .get(chiave)
+        .and_then(Value::as_str)
+        .filter(|n| !n.trim().is_empty())
+        .ok_or_else(|| PluginError::BadArgs("Scegli il gruppo di colori.".into()))?;
+    if !copia.campioni.elenco.iter().any(|c| c.gruppo.as_deref() == Some(nome)) {
+        return Err(PluginError::BadArgs(
+            format!("«{nome}» non è un gruppo di colori del disegno.").into(),
+        ));
+    }
+    Ok(nome)
+}
+
+/// Le frasi in italiano per i rifiuti dei gruppi di colori che passano i controlli di prima
+/// (`swatch.rs` del motore li dice in inglese).
+fn messaggio_dei_gruppi(id: &str, messaggio: &str) -> Option<String> {
+    if !matches!(id, "swatch.newGroup" | "swatch.editGroup" | "swatch.ungroup") {
+        return None;
+    }
+    if let Some(resto) = messaggio.split("no colour group `").nth(1) {
+        let nome = resto.split('`').next().unwrap_or_default();
+        return Some(format!("«{nome}» non è un gruppo di colori del disegno."));
+    }
+    if messaggio.contains("missing `name`") || messaggio.contains("missing `group`") {
+        return Some("Scegli il gruppo di colori.".into());
+    }
+    if messaggio.contains("missing `colors`") || messaggio.contains("bad colour") {
+        return Some("I colori del gruppo sono un elenco di colori, come «#ff0000».".into());
+    }
+    if messaggio.contains("can't be edited or removed") {
+        return Some("«Nessuno» e «Registrazione» non si cambiano e non si tolgono da un gruppo.".into());
+    }
+    None
 }
 
 /// Vero se nessuno dei nomi torna due volte.
@@ -471,7 +527,9 @@ impl StatoFamiglia for Stato {
     /// Le frasi in italiano per i rifiuti dei temi (K6 T14, temi): il nome vuoto o già usato, il tema
     /// che non c'è, i colori fuori dal numero o non validi. Il motore le dice in inglese.
     fn messaggio_del_motore(id: &str, messaggio: &str) -> Option<String> {
-        messaggio_dei_temi(id, messaggio).or_else(|| messaggio_delle_librerie(id, messaggio))
+        messaggio_dei_temi(id, messaggio)
+            .or_else(|| messaggio_delle_librerie(id, messaggio))
+            .or_else(|| messaggio_dei_gruppi(id, messaggio))
     }
 
     /// Un campione nuovo, cambiato o fatto dai colori usati è globale;
@@ -496,6 +554,11 @@ impl StatoFamiglia for Stato {
                 o.insert("unlink".into(), Value::Bool(true));
             } else if matches!(id, "swatch.new" | "swatch.edit" | "swatch.addUsedColors") {
                 o.insert("global".into(), Value::Bool(true));
+            } else if id == "swatch.newGroup"
+                && o.get("name").and_then(Value::as_str).is_none_or(|n| n.trim().is_empty())
+            {
+                // Senza nome il motore lo chiamerebbe «Color Group».
+                o.insert("name".into(), Value::String(NOME_DI_UN_GRUPPO.into()));
             }
         }
         Ok(argomenti)
@@ -529,10 +592,30 @@ impl StatoFamiglia for Stato {
                     ));
                 }
             }
+            "swatch.newGroup" => {
+                if let Some(nomi) = valore.get("swatches").and_then(Value::as_array) {
+                    for nome in nomi {
+                        let nome = nome.as_str().ok_or_else(senza_nome)?;
+                        campione_del_file(copia, nome)?;
+                    }
+                }
+            }
+            "swatch.ungroup" => {
+                gruppo_del_file(copia, &valore, "name")?;
+            }
+            "swatch.editGroup" => {
+                gruppo_del_file(copia, &valore, "group")?;
+                let colori = valore.get("colors").and_then(Value::as_array).ok_or_else(|| {
+                    PluginError::BadArgs("I colori del gruppo sono un elenco di colori, come «#ff0000».".into())
+                })?;
+                if colori.is_empty() {
+                    return Err(PluginError::BadArgs(TESTO_GRUPPO_VUOTO.into()));
+                }
+            }
             "swatch.move" => {
                 if valore.get("group").is_some_and(|g| !g.is_null()) {
                     return Err(PluginError::BadArgs(
-                        "Il formato non ha gruppi di colori: si sposta un campione, non un gruppo.".into(),
+                        "Sposta campione cambia il posto di un campione, non il suo gruppo: usa «Modifica gruppo colori».".into(),
                     ));
                 }
                 let nomi = nomi_di_campioni(&valore).filter(|nomi| !nomi.is_empty()).ok_or_else(senza_nome)?;
@@ -649,10 +732,34 @@ impl StatoFamiglia for Stato {
         Some(scelti.into_iter().filter(|n| !testo(copia, *n)).collect())
     }
 
-    /// La copia di una libreria di base nel formato: i campioni diventano globali e senza gruppo
-    /// ([`crate::campioni::porta_nel_formato`]), per `swatch.library.add`.
-    fn traduci_dopo(id: &str, _copia: &Copia, dopo: &Document) -> Option<Document> {
-        (id == "swatch.library.add").then(|| crate::campioni::porta_nel_formato(dopo)).flatten()
+    /// Il documento dopo un comando di campioni, nel formato ([`crate::campioni::porta_nel_formato`]):
+    /// i campioni di una libreria di base diventano globali e senza gruppo; quelli di un gruppo nuovo
+    /// o riscritto globali, e un gruppo rimasto vuoto si rifiuta col suo perché; i predefiniti
+    /// prendono i nomi italiani, e ciò che il file non prende diventa una perdita dell'esito
+    /// ([`crate::campioni_predefiniti`]).
+    fn traduci_dopo(id: &str, copia: &Copia, dopo: &Document) -> Result<Option<Tradotto>, PluginError> {
+        let senza_perdite = |documento: Option<Document>| {
+            documento.map(|documento| Tradotto {
+                documento,
+                perdite: Vec::new(),
+            })
+        };
+        match id {
+            "swatch.library.add" => Ok(senza_perdite(crate::campioni::porta_nel_formato(dopo, true))),
+            _ if FANNO_UN_GRUPPO.contains(&id) => {
+                if dopo.swatch_groups.iter().any(gruppo_vuoto) {
+                    return Err(PluginError::BadArgs(TESTO_GRUPPO_VUOTO.into()));
+                }
+                Ok(senza_perdite(crate::campioni::porta_nel_formato(dopo, false)))
+            }
+            "swatch.ungroup" => Ok(senza_perdite(crate::campioni::porta_nel_formato(dopo, false))),
+            "swatch.resetDefaults" => {
+                let (documento, perdite) =
+                    crate::campioni_predefiniti::porta_i_predefiniti(&copia.documento, dopo);
+                Ok(Some(Tradotto { documento, perdite }))
+            }
+            _ => Ok(None),
+        }
     }
 
     /// Un tratto dell'Inchiostro cambiato, anche se non era scelto (dentro un

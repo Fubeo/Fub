@@ -739,6 +739,22 @@
     },
     {
       "fonte": "motore",
+      "id": "colorTheme.addToSwatches",
+      "chiamata": {
+        "comando": "disegno.colorTheme.addToSwatches"
+      },
+      "etichetta": {
+        "it": "Aggiungi ai campioni",
+        "en": "Add to Swatches"
+      },
+      "posto": "ispettore/risorse",
+      "famiglia": "colore",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "colorTheme.delete",
       "chiamata": {
         "comando": "disegno.colorTheme.delete"
@@ -4099,6 +4115,22 @@
     },
     {
       "fonte": "motore",
+      "id": "swatch.editGroup",
+      "chiamata": {
+        "comando": "disegno.swatch.editGroup"
+      },
+      "etichetta": {
+        "it": "Modifica gruppo colori",
+        "en": "Edit Color Group"
+      },
+      "posto": "ispettore/risorse",
+      "famiglia": "colore",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "swatch.library.add",
       "chiamata": {
         "comando": "disegno.swatch.library.add"
@@ -4211,6 +4243,38 @@
     },
     {
       "fonte": "motore",
+      "id": "swatch.newGroup",
+      "chiamata": {
+        "comando": "disegno.swatch.newGroup"
+      },
+      "etichetta": {
+        "it": "Nuovo gruppo colori",
+        "en": "New Color Group"
+      },
+      "posto": "ispettore/risorse",
+      "famiglia": "colore",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "swatch.resetDefaults",
+      "chiamata": {
+        "comando": "disegno.swatch.resetDefaults"
+      },
+      "etichetta": {
+        "it": "Campioni predefiniti",
+        "en": "Default Swatches"
+      },
+      "posto": "ispettore/risorse",
+      "famiglia": "colore",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "swatch.sortByKind",
       "chiamata": {
         "comando": "disegno.swatch.sortByKind"
@@ -4234,6 +4298,22 @@
       "etichetta": {
         "it": "Ordina per nome",
         "en": "Sort by Name"
+      },
+      "posto": "ispettore/risorse",
+      "famiglia": "colore",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "swatch.ungroup",
+      "chiamata": {
+        "comando": "disegno.swatch.ungroup"
+      },
+      "etichetta": {
+        "it": "Separa gruppo colori",
+        "en": "Ungroup Color Group"
       },
       "posto": "ispettore/risorse",
       "famiglia": "colore",

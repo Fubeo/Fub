@@ -20,16 +20,27 @@
 //!   `set` del suo `stop` (`part: [0]`), un nome cambiato un `set` di
 //!   `fub:name`. Chi usa un campione lo scrive col riferimento
 //!   ([`Riferimenti`]).
+//! - **I gruppi di colori** stanno in un attributo di ogni campione del
+//!   gruppo, `fub:group` col nome del gruppo (§2): niente elemento nuovo, così
+//!   un'altra versione di Fub, o un altro programma, legge i campioni e
+//!   ignora il gruppo. Nel motore un gruppo è uno `SwatchGroup` di
+//!   `Document::swatch_groups`, nell'ordine del suo primo campione nel file.
+//!   Un `fub:group` che non si legge come gruppo (vuoto, col nome di un
+//!   campione, di un motivo o di un campione riservato), o i cui membri non
+//!   stanno uno dopo l'altro nella stessa `defs`, si ignora e resta com'è: il
+//!   campione è senza gruppo. Nel file si scrivono prima i campioni
+//!   senza gruppo, poi i membri di ogni gruppo, gruppo dopo gruppo; un
+//!   gruppo vuoto non lascia niente, e il comando che lo crea vuoto si rifiuta.
 //!
 //! Il formato non ha campioni non globali, tinte, sfumature o motivi del
-//! motore come campioni, né gruppi di colori: un comando che li fa si
-//! rifiuta, e il file resta com'è.
+//! motore come campioni: un comando che li fa si rifiuta, e il file resta
+//! com'è.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use fub_scene::{Item, Role};
 use serde_json::{json, Value};
-use vectorcraft_doc::color::{Color, Paint, Swatch};
+use vectorcraft_doc::color::{Color, Paint, Swatch, SwatchGroup};
 use vectorcraft_doc::{Document, NodeKind};
 
 use crate::apertura::{attributi, valore};
@@ -37,6 +48,13 @@ use crate::mappa::Mappa;
 
 /// Il nome del campione «Nessuno» del motore, che resta: non è del file.
 const NESSUNO: &str = "[None]";
+
+/// L'attributo del gruppo di colori di un campione (formato della scena, risorse, §2).
+pub(crate) const ATTRIBUTO_GRUPPO: &str = "fub:group";
+
+/// Il perché di un gruppo di colori senza campioni: il file non lo scrive.
+pub(crate) const TESTO_GRUPPO_VUOTO: &str =
+    "Un gruppo di colori vuoto non si salva: scegli almeno un campione.";
 
 /// L'id della `defs` che FubDraw crea per le sue risorse.
 pub(crate) const DEFS_DI_FUB: &str = "fub-defs";
@@ -53,6 +71,10 @@ pub struct Campione {
     /// L'id della `defs` che lo contiene, se ne ha una: l'ordine si scrive
     /// solo dentro la `defs` dove nascono i campioni nuovi.
     pub genitore: Option<String>,
+    /// Il gruppo di colori, da `fub:group` com'è scritto, se si legge come
+    /// gruppo ([`gruppo_valido`]); `None` per un campione senza gruppo, o
+    /// con un `fub:group` che si ignora.
+    pub gruppo: Option<String>,
 }
 
 /// I campioni del file e dove ne nascono di nuovi.
@@ -104,11 +126,14 @@ pub(crate) fn leggi(testo: &str, items: &[Item]) -> (CampioniDelFile, HashMap<Ve
                     .split_last()
                     .and_then(|(_, padre)| defs_per_percorso.get(padre))
                     .cloned();
+                let gruppo = attributi(testo, e.span.bytes[0])
+                    .and_then(|(_, attr)| valore(&attr, ATTRIBUTO_GRUPPO).map(str::to_owned));
                 campioni.elenco.push(Campione {
                     id: id.clone(),
                     nome: s.name.clone(),
                     colore: s.color.clone(),
                     genitore,
+                    gruppo,
                 });
             }
             if let Some(m) = &e.motif {
@@ -118,6 +143,44 @@ pub(crate) fn leggi(testo: &str, items: &[Item]) -> (CampioniDelFile, HashMap<Ve
     }
     if campioni.defs.is_none() {
         campioni.defs = prima_defs;
+    }
+    // Un `fub:group` si legge come gruppo solo quando il nome è libero: non è vuoto, né il nome di
+    // un campione, di un motivo o di un campione riservato del motore.
+    let nomi: HashSet<String> = campioni.elenco.iter().map(|c| c.nome.clone()).collect();
+    let motivi = campioni.motivi.clone();
+    for c in &mut campioni.elenco {
+        if !c.gruppo.as_deref().is_some_and(|g| {
+            gruppo_valido(g, &|n| nomi.contains(n) || motivi.iter().any(|m| m == n))
+        }) {
+            c.gruppo = None;
+        }
+    }
+    // I membri di un gruppo stanno uno dopo l'altro nella stessa `defs`, come Fub li scrive: un
+    // gruppo sparso (un altro programma, un file scritto a mano) si ignora tutto, così un comando non
+    // sposta i campioni di chi l'ha scritto.
+    let sparsi: HashSet<String> = campioni
+        .elenco
+        .iter()
+        .filter_map(|c| c.gruppo.clone())
+        .filter(|g| {
+            let posti: Vec<usize> = campioni
+                .elenco
+                .iter()
+                .enumerate()
+                .filter(|(_, c)| c.gruppo.as_deref() == Some(g.as_str()))
+                .map(|(i, _)| i)
+                .collect();
+            let primo = &campioni.elenco[posti[0]];
+            posti.windows(2).any(|w| w[1] != w[0] + 1)
+                || posti
+                    .iter()
+                    .any(|i| campioni.elenco[*i].genitore != primo.genitore)
+        })
+        .collect();
+    for c in &mut campioni.elenco {
+        if c.gruppo.as_ref().is_some_and(|g| sparsi.contains(g)) {
+            c.gruppo = None;
+        }
     }
     let mut usi = HashMap::new();
     if campioni.elenco.is_empty() {
@@ -150,6 +213,16 @@ pub(crate) fn leggi(testo: &str, items: &[Item]) -> (CampioniDelFile, HashMap<Ve
     (campioni, usi)
 }
 
+/// Vero se `gruppo` è il nome di un gruppo di colori che il file può avere: non vuoto, né un nome
+/// riservato del motore («[None]», «[Registration]»), né un nome che `preso` dice già di un campione
+/// o di un motivo (nel motore campioni e gruppi hanno i nomi in comune).
+pub(crate) fn gruppo_valido(gruppo: &str, preso: &dyn Fn(&str) -> bool) -> bool {
+    !gruppo.trim().is_empty()
+        && gruppo != NESSUNO
+        && gruppo != vectorcraft_doc::color::swatch::REGISTRATION
+        && !preso(gruppo)
+}
+
 /// L'id di `url(#id)` in testa a un valore di `fill` o `stroke`.
 fn riferimento(v: &str) -> Option<&str> {
     let resto = v.trim_start().strip_prefix("url(")?.trim_start();
@@ -172,22 +245,35 @@ pub(crate) fn nel_motore(
         .find(|s| s.name == NESSUNO)
         .cloned();
     let mut elenco: Vec<Swatch> = nessuno.into_iter().collect();
+    let mut gruppi: Vec<SwatchGroup> = Vec::new();
+    let mut visti: HashSet<String> = HashSet::new();
     for c in &campioni.elenco {
         let Some(colore) = Color::from_hex(&c.colore) else {
             continue;
         };
-        if elenco.iter().any(|s| s.name == c.nome) {
+        if !visti.insert(c.nome.clone()) || c.nome == NESSUNO {
             continue;
         }
-        elenco.push(Swatch {
+        let campione = Swatch {
             name: c.nome.clone(),
             paint: Paint::solid(colore),
             global: true,
             spot: false,
-        });
+        };
+        // Il gruppo prende il posto del suo primo campione nel file, anche coi membri sparsi.
+        match &c.gruppo {
+            None => elenco.push(campione),
+            Some(nome) => match gruppi.iter_mut().find(|g| &g.name == nome) {
+                Some(g) => g.swatches.push(campione),
+                None => gruppi.push(SwatchGroup {
+                    name: nome.clone(),
+                    swatches: vec![campione],
+                }),
+            },
+        }
     }
     *documento.swatches = elenco;
-    documento.swatch_groups.clear();
+    *documento.swatch_groups = gruppi;
     if usi.is_empty() {
         return;
     }
@@ -328,22 +414,56 @@ pub(crate) struct OpsDeiCampioni {
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum NonSiScrive {
     /// Un campione che il formato non ha: una sfumatura, un motivo, una
-    /// tinta, un colore non globale o spot, un gruppo di colori.
+    /// tinta, un colore non globale o spot, o un gruppo col nome di un motivo o che il file non scrive.
     Forma(String),
     /// Un nome che è già di un motivo del documento.
     NomeDiUnMotivo(String),
 }
 
-/// I campioni del motore di dopo il comando che il file deve avere: tutti
-/// tranne «Nessuno» e la Registrazione.
-fn del_documento(dopo: &Document) -> Result<Vec<(&str, String)>, NonSiScrive> {
-    if !dopo.swatch_groups.is_empty() {
-        return Err(NonSiScrive::Forma(
-            "un gruppo di colori: il formato non ne ha".into(),
-        ));
-    }
+/// Vero se il gruppo non ha campioni che il file scrive (nessuno, o solo i riservati).
+pub(crate) fn gruppo_vuoto(gruppo: &SwatchGroup) -> bool {
+    gruppo.swatches.iter().all(Swatch::is_reserved)
+}
+
+/// Un campione del motore di dopo il comando, come il file lo scrive.
+#[derive(Debug)]
+struct DiDopo<'a> {
+    nome: &'a str,
+    colore: String,
+    gruppo: Option<&'a str>,
+}
+
+/// I campioni del motore di dopo il comando che il file deve avere, tutti
+/// tranne «Nessuno» e la Registrazione: prima quelli senza gruppo, poi i
+/// membri di ogni gruppo, gruppo dopo gruppo. Un gruppo vuoto non lascia
+/// niente; uno col nome di un motivo, o con un nome che il file non scrive, non si scrive.
+fn del_documento<'a>(
+    dopo: &'a Document,
+    motivi: &[String],
+) -> Result<Vec<DiDopo<'a>>, NonSiScrive> {
     let mut fuori = Vec::new();
-    for s in dopo.swatches.iter() {
+    let senza = dopo.swatches.iter().map(|s| (s, None));
+    let nei_gruppi = dopo
+        .swatch_groups
+        .iter()
+        .flat_map(|g| g.swatches.iter().map(move |s| (s, Some(g.name.as_str()))));
+    for g in dopo.swatch_groups.iter() {
+        // Un gruppo senza campioni non ha niente da scrivere: sparisce (l'ultimo membro eliminato o
+        // spostato fuori). Il comando che lo crea vuoto si rifiuta prima, nella famiglia.
+        if gruppo_vuoto(g) {
+            continue;
+        }
+        if motivi.contains(&g.name) {
+            return Err(NonSiScrive::NomeDiUnMotivo(g.name.clone()));
+        }
+        if !gruppo_valido(&g.name, &|n| dopo.swatch(n).is_some()) {
+            return Err(NonSiScrive::Forma(format!(
+                "il gruppo di colori «{}» non ha un nome che il file scrive",
+                g.name
+            )));
+        }
+    }
+    for (s, gruppo) in senza.chain(nei_gruppi) {
         if s.is_reserved() {
             continue;
         }
@@ -352,7 +472,11 @@ fn del_documento(dopo: &Document) -> Result<Vec<(&str, String)>, NonSiScrive> {
                 color,
                 swatch: None,
                 ..
-            } if s.global && !s.spot => fuori.push((s.name.as_str(), color.to_hex())),
+            } if s.global && !s.spot => fuori.push(DiDopo {
+                nome: s.name.as_str(),
+                colore: color.to_hex(),
+                gruppo,
+            }),
             _ => {
                 return Err(NonSiScrive::Forma(format!(
                     "il campione «{}» non è un colore globale: il formato non lo scrive",
@@ -364,23 +488,25 @@ fn del_documento(dopo: &Document) -> Result<Vec<(&str, String)>, NonSiScrive> {
     Ok(fuori)
 }
 
-/// La copia di una libreria di campioni di base (`swatch.library.add`) nel formato del disegno (K6
-/// T14, decisione del coordinatore): il motore copia i campioni com'erano nella libreria, non globali
-/// e in gruppi, e il file non ne scrive. Qui i campioni diventano globali e senza gruppo, nell'ordine
-/// in cui il motore li ha messi: prima quelli senza gruppo, poi i membri dei gruppi nell'ordine dei
-/// gruppi. `None` se il documento è già nel formato (nessun gruppo, tutti globali).
-pub(crate) fn porta_nel_formato(dopo: &Document) -> Option<Document> {
-    let serve = !dopo.swatch_groups.is_empty()
-        || dopo.swatches.iter().any(|s| !s.is_reserved() && !s.global);
+/// I campioni che un comando lascia nel motore, portati nel formato del disegno (K6 T14): nel file un
+/// campione si usa sempre per riferimento, quindi diventa **globale** (il motore fa non globali i
+/// colori nuovi di un gruppo e quelli delle librerie). Con `piatto` (`swatch.library.add`, decisione
+/// del coordinatore) i gruppi si sciolgono: i membri vanno dopo i campioni senza gruppo, nell'ordine
+/// dei gruppi. `None` se il documento è già nel formato.
+pub(crate) fn porta_nel_formato(dopo: &Document, piatto: bool) -> Option<Document> {
+    let serve = (piatto && !dopo.swatch_groups.is_empty())
+        || dopo.swatches_iter().any(|s| !s.is_reserved() && !s.global);
     if !serve {
         return None;
     }
     let mut nuovo = dopo.clone();
-    let gruppi = std::mem::take(&mut *nuovo.swatch_groups);
-    for gruppo in gruppi {
-        nuovo.swatches.extend(gruppo.swatches);
+    if piatto {
+        let gruppi = std::mem::take(&mut *nuovo.swatch_groups);
+        for gruppo in gruppi {
+            nuovo.swatches.extend(gruppo.swatches);
+        }
     }
-    for swatch in nuovo.swatches.iter_mut().filter(|s| !s.is_reserved()) {
+    for swatch in nuovo.swatches_iter_mut().filter(|s| !s.is_reserved()) {
         swatch.global = true;
     }
     Some(nuovo)
@@ -397,13 +523,12 @@ pub(crate) fn operazioni(
         riferimenti: Riferimenti::del_file(campioni),
         ..OpsDeiCampioni::default()
     };
-    let poi = del_documento(dopo)?;
+    let poi = del_documento(dopo, &campioni.motivi)?;
     let prima = &campioni.elenco;
     let uguali_di_prima = prima.len() == poi.len()
-        && prima
-            .iter()
-            .zip(&poi)
-            .all(|(a, (nome, colore))| a.nome == *nome && a.colore == *colore);
+        && prima.iter().zip(&poi).all(|(a, d)| {
+            a.nome == d.nome && a.colore == d.colore && a.gruppo.as_deref() == d.gruppo
+        });
     if uguali_di_prima {
         return Ok(fuori);
     }
@@ -411,8 +536,8 @@ pub(crate) fn operazioni(
     // sono tanti quanti: un nome cambiato.
     let mut compagno: Vec<Option<usize>> = vec![None; poi.len()];
     let mut preso = vec![false; prima.len()];
-    for (j, (nome, _)) in poi.iter().enumerate() {
-        if let Some(i) = prima.iter().position(|c| c.nome == *nome) {
+    for (j, d) in poi.iter().enumerate() {
+        if let Some(i) = prima.iter().position(|c| c.nome == d.nome) {
             if !preso[i] {
                 preso[i] = true;
                 compagno[j] = Some(i);
@@ -430,7 +555,8 @@ pub(crate) fn operazioni(
     // Gli id di dopo, in ordine di documento: quello del file, o uno nuovo.
     let mut ids: Vec<String> = Vec::with_capacity(poi.len());
     let mut elementi: Vec<Value> = Vec::with_capacity(poi.len());
-    for (j, (nome, colore)) in poi.iter().enumerate() {
+    for (j, d) in poi.iter().enumerate() {
+        let (nome, colore) = (&d.nome, &d.colore);
         match compagno[j] {
             Some(i) => {
                 let c = &prima[i];
@@ -446,6 +572,13 @@ pub(crate) fn operazioni(
                     fuori.davanti.push(json!({
                         "op": "set", "id": c.id, "part": [0],
                         "attrs": { "stop-color": colore },
+                    }));
+                }
+                // Il gruppo: un `fub:group` che si ignorava resta com'è finché il campione resta
+                // senza gruppo; entrare in un gruppo lo scrive, uscirne lo toglie.
+                if c.gruppo.as_deref() != d.gruppo {
+                    fuori.davanti.push(json!({
+                        "op": "set", "id": c.id, "attrs": { ATTRIBUTO_GRUPPO: d.gruppo },
                     }));
                 }
                 fuori.riferimenti.dopo.remove(&c.nome);
@@ -467,12 +600,16 @@ pub(crate) fn operazioni(
                     .riferimenti
                     .dopo
                     .insert((*nome).to_string(), id.clone());
+                let mut attrs = json!({
+                    "id": id, "fub:role": "swatch", "fub:name": nome,
+                    "gradientUnits": "userSpaceOnUse",
+                });
+                if let Some(gruppo) = d.gruppo {
+                    attrs[ATTRIBUTO_GRUPPO] = json!(gruppo);
+                }
                 elementi.push(json!({
                     "tag": "linearGradient",
-                    "attrs": {
-                        "id": id, "fub:role": "swatch", "fub:name": nome,
-                        "gradientUnits": "userSpaceOnUse",
-                    },
+                    "attrs": attrs,
                     "children": [ { "tag": "stop", "attrs": { "stop-color": colore } } ],
                 }));
                 ids.push(id);
@@ -639,6 +776,7 @@ mod tests {
                 nome: "Blu".into(),
                 colore: "#0072b2".into(),
                 genitore: Some("fub-defs".into()),
+                gruppo: None,
             }],
             ..CampioniDelFile::default()
         };

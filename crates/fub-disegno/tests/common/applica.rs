@@ -153,12 +153,18 @@ fn applica_op(testo: &mut String, op: &Value) -> Result<(), String> {
         }
         "set" => {
             let id = testo_di(&op["id"], "id")?;
+            let parte: Vec<usize> = match op.get("part") {
+                Some(p) if !p.is_null() => serde_json::from_value(p.clone())
+                    .map_err(|e| format!("una parte che non si legge: {e}"))?,
+                _ => Vec::new(),
+            };
             for (k, v) in op["attrs"].as_object().ok_or("un set senza attrs")? {
+                let da = inizio_della_parte(testo, span_dell_id(testo, id)?[0], &parte)?;
                 if v.is_null() {
                     // Come il client: `null` toglie l'attributo.
-                    togli(testo, id, k)?;
+                    togli(testo, da, k)?;
                 } else {
-                    imposta(testo, id, k, testo_di(v, k)?)?;
+                    imposta(testo, da, k, testo_di(v, k)?)?;
                 }
             }
         }
@@ -241,8 +247,43 @@ fn inserisci(testo: &mut String, op: &Value, corpo: &str) -> Result<(), String> 
     Ok(())
 }
 
-fn imposta(testo: &mut String, id: &str, k: &str, v: &str) -> Result<(), String> {
-    let [da, _] = span_dell_id(testo, id)?;
+/// Dove comincia il tag della parte `parte` (gli indici dei figli elemento, uno per livello)
+/// dell'elemento che comincia in `da`; `da` stesso per una parte vuota.
+fn inizio_della_parte(testo: &str, mut da: usize, parte: &[usize]) -> Result<usize, String> {
+    for &indice in parte {
+        let apre = fine_del_tag(testo, da)?;
+        if testo[..apre].ends_with("/>") {
+            return Err("una parte di un elemento senza figli".into());
+        }
+        let (mut i, mut profondita, mut figlio) = (apre, 0usize, 0usize);
+        loop {
+            let dove = i + testo[i..].find('<').ok_or("una parte che non c'è")?;
+            let fine = fine_del_tag(testo, dove)?;
+            let tag = &testo[dove..fine];
+            if tag.starts_with("</") {
+                if profondita == 0 {
+                    return Err("una parte che non c'è".into());
+                }
+                profondita -= 1;
+            } else if !tag.starts_with("<!") && !tag.starts_with("<?") {
+                if profondita == 0 {
+                    if figlio == indice {
+                        da = dove;
+                        break;
+                    }
+                    figlio += 1;
+                }
+                if !tag.ends_with("/>") {
+                    profondita += 1;
+                }
+            }
+            i = fine;
+        }
+    }
+    Ok(da)
+}
+
+fn imposta(testo: &mut String, da: usize, k: &str, v: &str) -> Result<(), String> {
     let fine = fine_del_tag(testo, da)?;
     let tag = &testo[da..fine];
     let chiave = format!(" {k}=\"");
@@ -257,8 +298,7 @@ fn imposta(testo: &mut String, id: &str, k: &str, v: &str) -> Result<(), String>
     Ok(())
 }
 
-fn togli(testo: &mut String, id: &str, k: &str) -> Result<(), String> {
-    let [da, _] = span_dell_id(testo, id)?;
+fn togli(testo: &mut String, da: usize, k: &str) -> Result<(), String> {
     let fine = fine_del_tag(testo, da)?;
     let chiave = format!(" {k}=\"");
     if let Some(i) = testo[da..fine].find(&chiave) {

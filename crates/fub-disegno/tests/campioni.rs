@@ -91,7 +91,7 @@ fn gli_argomenti_dei_campioni_dicono_il_perche() {
             "disegno.swatch.move",
             json!({ "names": ["Blu"], "group": "Grigi" })
         ),
-        "Il formato non ha gruppi di colori: si sposta un campione, non un gruppo."
+        "Sposta campione cambia il posto di un campione, non il suo gruppo: usa «Modifica gruppo colori»."
     );
     assert_eq!(
         perche(

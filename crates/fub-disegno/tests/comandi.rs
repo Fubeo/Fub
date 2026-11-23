@@ -325,6 +325,13 @@ fn una_selezione_con_un_elemento_non_mappato_non_cambia_niente() {
         // Salvare e togliere un tema prendono il nome o i colori dal valore, non dalla scelta (K6 T14, temi).
         "disegno.colorTheme.save",
         "disegno.colorTheme.delete",
+        // I gruppi di colori e i campioni predefiniti (K6 T14, gruppi) lavorano sui campioni nominati
+        // nel valore, non sulla scelta.
+        "disegno.colorTheme.addToSwatches",
+        "disegno.swatch.newGroup",
+        "disegno.swatch.ungroup",
+        "disegno.swatch.editGroup",
+        "disegno.swatch.resetDefaults",
     ];
     let comandi = d.comandi(&["oa1a1a1a1".into(), "onessuno1".into()]);
     let accesi: Vec<&str> = comandi

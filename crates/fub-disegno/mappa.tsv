@@ -107,7 +107,7 @@ motore	swatch.setSpot	Spot Color		colore	F1	T14	da fare	ispettore/design	famigli
 motore	colorTheme.list	Color Themes		colore	F1	T14	fatto	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Temi colore
 motore	colorTheme.save	Save Theme	Window › Color Themes	colore	F1	T14	fatto	ispettore/risorse	famiglia		Salva tema
 motore	colorTheme.delete	Delete Theme	Window › Color Themes	colore	F1	T14	fatto	ispettore/risorse	famiglia		Elimina tema
-motore	colorTheme.addToSwatches	Add to Swatches	Window › Color Themes	colore	F1	T14	da fare	ispettore/risorse	famiglia	crea un gruppo di colori, e il formato non ne ha (campioni.rs: «un gruppo di colori: il formato non ne ha»): il rifiuto oggi è unsupported	Aggiungi ai campioni
+motore	colorTheme.addToSwatches	Add to Swatches	Window › Color Themes	colore	F1	T14	fatto	ispettore/risorse	famiglia	aggiunge i colori di un tema salvato come gruppo di colori col nome del tema (come swatch.newGroup): campioni globali con fub:group (scene-format-resources §2); il tema che non c'è è un errore degli argomenti in italiano (K6 T14 gruppi)	Aggiungi ai campioni
 motore	object.compoundShape.make	Make Compound Shape	Window › Pathfinder	forme	F1	T13	fatto	menu/oggetto/elaborazione	famiglia		Crea forma composta
 motore	object.compoundShape.setMode	Shape Mode	Window › Pathfinder	forme	F1	T13	fatto	menu/oggetto/elaborazione	famiglia	finestra, il metodo (T13: il campo in catalogo::FINESTRE_SCRITTE)	Metodo forma
 motore	object.compoundShape.release	Release Compound Shape	Window › Pathfinder	forme	F1	T13	fatto	menu/oggetto/elaborazione	famiglia		Rilascia forma composta
@@ -575,7 +575,7 @@ motore	graphicStyle.saveLibrary	Save Graphic Style Library…	Window › Graphic
 motore	graphicStyle.loadLibrary	Other Library…	Window › Graphic Style Libraries	aspetto	F1	T15	da fare	ispettore/risorse	famiglia	finestra	Altra libreria…
 motore	swatch.new	New Swatch	Window › Swatches	colore	F1	T14	fatto	ispettore/risorse	famiglia		Nuovo campione
 motore	swatch.delete	Delete Swatch	Window › Swatches	colore	F1	T14	fatto	ispettore/risorse	famiglia		Elimina campione
-motore	swatch.newGroup	New Color Group	Window › Swatches	colore	F1	T14	da fare	ispettore/risorse	famiglia	il formato della scena non ha gruppi di colori (campioni.rs): un gruppo non si scrive	Nuovo gruppo colori
+motore	swatch.newGroup	New Color Group	Window › Swatches	colore	F1	T14	fatto	ispettore/risorse	famiglia	il gruppo è l'attributo fub:group dei suoi campioni (scene-format-resources §2), che il comando scrive; senza nome si chiama «Gruppo colori», i colori nuovi diventano campioni globali; un gruppo vuoto si rifiuta col perché in italiano, e si riapre uguale (K6 T14 gruppi, tests/campioni_gruppi.rs)	Nuovo gruppo colori
 motore	swatch.duplicate	Duplicate Swatch	Window › Swatches	colore	F1	T14	fatto	ispettore/risorse	famiglia		Duplica campione
 motore	swatch.sortByName	Sort by Name	Window › Swatches	colore	F1	T14	fatto	ispettore/risorse	famiglia		Ordina per nome
 motore	swatch.edit	Swatch Options	Window › Swatches	colore	F1	T14	fatto	ispettore/risorse	famiglia		Opzioni campione
@@ -584,14 +584,14 @@ motore	swatch.move	Move Swatch	Window › Swatches	colore	F1	T14	fatto	ispettore
 motore	swatch.addUsedColors	Add Used Colors	Window › Swatches	colore	F1	T14	fatto	ispettore/risorse	famiglia		Aggiungi colori usati
 motore	swatch.unused	Select All Unused	Window › Swatches	colore	F1	T14	fatto	ispettore/risorse	famiglia		Seleziona tutti gli elementi non usati
 motore	swatch.merge	Merge Swatches	Window › Swatches	colore	F1	T14	fatto	ispettore/risorse	famiglia		Unisci campioni
-motore	swatch.ungroup	Ungroup Color Group	Window › Swatches	colore	F1	T14	da fare	ispettore/risorse	famiglia	il formato della scena non ha gruppi di colori (campioni.rs): un gruppo non si scrive	Separa gruppo colori
+motore	swatch.ungroup	Ungroup Color Group	Window › Swatches	colore	F1	T14	fatto	ispettore/risorse	famiglia	toglie fub:group dai campioni del gruppo, che restano dove sono; un gruppo che non c'è è un errore degli argomenti in italiano (K6 T14 gruppi)	Separa gruppo colori
 motore	swatch.sortByKind	Sort by Kind	Window › Swatches	colore	F1	T14	fatto	ispettore/risorse	famiglia	nel formato tutti i campioni sono colori pieni globali: l'ordine per specie non cambia niente, e il comando dà empty (K6 T14, campioni)	Ordina per tipo
 motore	swatch.spotOptions	Spot Colors	Window › Swatches	colore	F1	T14	da fare	ispettore/risorse	famiglia	il motore cambia un'opzione del documento (useLab) che il formato non scrive: il comando dà empty e al salvataggio l'opzione si perde (T14)	Colori spot
-motore	swatch.editGroup	Edit Color Group	Window › Swatches	colore	F1	T14	da fare	ispettore/risorse	famiglia	il formato della scena non ha gruppi di colori (campioni.rs): un gruppo non si scrive	Modifica gruppo colori
+motore	swatch.editGroup	Edit Color Group	Window › Swatches	colore	F1	T14	fatto	ispettore/risorse	famiglia	cambia i colori del gruppo (chi usa un campione lo segue), ne aggiunge o ne toglie in fondo, e con rename lo rinomina: fub:group dei membri; senza colori si rifiuta col perché, il gruppo vuoto non si scrive (K6 T14 gruppi)	Modifica gruppo colori
 motore	swatch.library.list	Swatch Libraries		colore	F1	T14	fatto	interno	famiglia		Librerie campioni
 motore	swatch.library.get	Swatch Library		colore	F1	T14	fatto	interno	famiglia		Libreria campioni
 motore	swatch.library.add	Add to Swatches	Window › Swatch Libraries	colore	F1	T14	fatto	ispettore/risorse	famiglia	i campioni entrano globali e senza gruppo, nell'ordine della libreria (decisione del coordinatore, T14); un nome già presente con lo stesso colore non si raddoppia, con un colore diverso prende un numero («Clay 1 2»); apply è spento (il colore si sceglie dopo)	Aggiungi ai campioni
-motore	swatch.resetDefaults	Default Swatches	Window › Swatch Libraries	colore	F1	T14	da fare	ispettore/risorse	famiglia	i campioni predefiniti portano gruppi di colori, che il formato non ha: il comando è rifiutato (T14)	Campioni predefiniti
+motore	swatch.resetDefaults	Default Swatches	Window › Swatch Libraries	colore	F1	T14	fatto	ispettore/risorse	famiglia	rimette i campioni di serie del motore coi nomi in italiano (campioni_predefiniti.rs), i grigi e i brillanti come gruppi; un nome già presente non torna; le quattro sfumature e i colori CMYK scritti in RGB sono perdite dell'esito; con replace chi usava un campione tolto tiene il suo colore, e un campione usato da un bloccato si rifiuta (locked) (K6 T14 gruppi)	Campioni predefiniti
 motore	swatch.library.save	Save Swatch Library…	Window › Swatches	colore	F1	T14	da fare	ispettore/risorse	famiglia	lettura pronta nel motore: il contenuto torna nella risposta, senza percorso né cartella utente. Da fare: l'indice del client non legge lo schema (path e data senza tipo, crates/fub-motori/src/modulo.rs)	Salva libreria campioni…
 motore	swatch.library.load	Other Library…	Window › Swatch Libraries	colore	F1	T14	da fare	ispettore/risorse	famiglia	lettura pronta nel motore: carica dai dati passati (data o dataBase64), mai da un percorso. Da fare: stessa causa dello schema (path e data senza tipo); la finestra è window.swatchLibrary.other	Altra libreria…
 motore	swatch.library.copyToUser	Copy to User Defined	Window › Swatch Libraries	colore	F1	T14	da fare	ispettore/risorse	famiglia	scrive la cartella utente del desktop, cioè su disco: il motore non lo fa (D11, 21/11: le librerie dell'utente stanno in .fub/plugins/fub.draw/librerie/, scritte da Fub)	Copia in Definito dall'utente
@@ -1102,7 +1102,7 @@ interfaccia	help.commandPalette	Search Commands…		fub	—	T9	fub	fub	—	la ta
 interfaccia	app.quit	Quit VectorCraft		fub	—	T2	fub	fub	—	chiudere Fub	Esci da VectorCraft
 interfaccia	ui.swatchOptions	Swatch Options…		colore	F1	T14	fatto	finestra	famiglia		Opzioni campione…
 interfaccia	ui.newSwatch	New Swatch…		colore	F1	T14	fatto	finestra	famiglia		Nuovo campione…
-interfaccia	ui.newColorGroup	New Color Group…		colore	F1	T14	da fare	finestra	famiglia		Nuovo gruppo colori…
+interfaccia	ui.newColorGroup	New Color Group…		colore	F1	T14	da fare	finestra	famiglia	finestra	Nuovo gruppo colori…
 interfaccia	ui.colorPicker	Color Picker…		colore	F1	T14	da fare	finestra	famiglia	il selettore è quello del kit (kit/color/picker.ts), aperto dal pozzo; la voce «Selettore colore…» è una finestra di Fub da fare col menu, non un comando del motore	Selettore colore…
 interfaccia	ui.sampleScreenColor	Sample Color from Screen		colore	F1	T14	da fare	finestra	famiglia	serve l'EyeDropper della WebView, che il client non ha ancora: pezzo da fare nel client	Campiona colore dallo schermo
 interfaccia	ui.newBrush	New Brush…		pennelli	F2	T17	da fare	finestra	famiglia		Nuovo pennello…
