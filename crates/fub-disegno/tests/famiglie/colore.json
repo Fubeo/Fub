@@ -6041,6 +6041,261 @@
           "themes": []
         }
       }
+    },
+    {
+      "id": "colorTheme.save",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "colors": [
+          "#ff0000",
+          "#00ff00"
+        ],
+        "name": "Tramonto"
+      },
+      "atteso": {
+        "lettura": {
+          "name": "Tramonto",
+          "count": 1
+        }
+      }
+    },
+    {
+      "id": "colorTheme.save",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "color": "#ff0000",
+        "rule": "complementary"
+      },
+      "atteso": {
+        "lettura": {
+          "name": "Theme 1",
+          "count": 1
+        }
+      }
+    },
+    {
+      "id": "colorTheme.save",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "ob2b2b2b2"
+      ],
+      "argomenti": {
+        "colors": [
+          "#ff0000"
+        ],
+        "name": "Scelta"
+      },
+      "atteso": {
+        "lettura": {
+          "name": "Scelta",
+          "count": 1
+        }
+      }
+    },
+    {
+      "id": "colorTheme.save",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "colors": [
+          "#ff0000"
+        ],
+        "name": "Tramonto è"
+      },
+      "atteso": {
+        "lettura": {
+          "name": "Tramonto è",
+          "count": 1
+        }
+      }
+    },
+    {
+      "id": "colorTheme.save",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "colors": [
+          "#ff0000"
+        ],
+        "name": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+      },
+      "atteso": {
+        "lettura": {
+          "name": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+          "count": 1
+        }
+      }
+    },
+    {
+      "id": "colorTheme.save",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "colors": [
+          "#ff0000"
+        ],
+        "name": ""
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "colorTheme.save",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "colors": []
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "colorTheme.save",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "colors": [
+          "#12"
+        ]
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "colorTheme.save",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "color": "#ff0000"
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "colorTheme.save",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "colors": [
+          "#0000ff"
+        ],
+        "name": "Tramonto"
+      },
+      "atteso": {
+        "errore": "bad_args"
+      },
+      "prima": [
+        {
+          "id": "colorTheme.save",
+          "selezione": [],
+          "argomenti": {
+            "colors": [
+              "#ff0000",
+              "#00ff00"
+            ],
+            "name": "Tramonto"
+          }
+        }
+      ]
+    },
+    {
+      "id": "colorTheme.save",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "colors": [
+          "#0000ff"
+        ],
+        "name": "Tramonto",
+        "replace": "Tramonto"
+      },
+      "atteso": {
+        "lettura": {
+          "name": "Tramonto",
+          "count": 1
+        }
+      },
+      "prima": [
+        {
+          "id": "colorTheme.save",
+          "selezione": [],
+          "argomenti": {
+            "colors": [
+              "#ff0000",
+              "#00ff00"
+            ],
+            "name": "Tramonto"
+          }
+        }
+      ]
+    },
+    {
+      "id": "colorTheme.delete",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "name": "Tramonto"
+      },
+      "atteso": {
+        "lettura": {
+          "deleted": "Tramonto"
+        }
+      },
+      "prima": [
+        {
+          "id": "colorTheme.save",
+          "selezione": [],
+          "argomenti": {
+            "colors": [
+              "#ff0000",
+              "#00ff00"
+            ],
+            "name": "Tramonto"
+          }
+        }
+      ]
+    },
+    {
+      "id": "colorTheme.delete",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "name": "Tramonto"
+      },
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "colorTheme.delete",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "name": "Altro"
+      },
+      "atteso": {
+        "errore": "bad_args"
+      },
+      "prima": [
+        {
+          "id": "colorTheme.save",
+          "selezione": [],
+          "argomenti": {
+            "colors": [
+              "#ff0000",
+              "#00ff00"
+            ],
+            "name": "Tramonto"
+          }
+        }
+      ]
     }
   ]
 }

@@ -89,6 +89,12 @@ pub(crate) const SFUMATURE: [&str; 3] = ["paint.editGradient", "paint.setGradien
 /// come li mostrano i proxy) e non cambiano il file. Non portano una scelta.
 pub(crate) const LETTURE: [&str; 3] = ["paint.toggleActive", "paint.recent", "paint.proxies"];
 
+/// I temi del colore (K6 T14, temi): salvare e togliere un tema cambia la libreria dei temi, che sta
+/// nelle preferenze del motore (`draw.motore`), non nel disegno. Il file non cambia e non c'è un
+/// passo da annullare; il risultato (il nome, il numero, il cancellato) è la lettura del comando.
+/// Aggiungere ai campioni cambia il disegno: quello è un passo normale, e non sta qui.
+pub(crate) const TEMI_LETTURE: [&str; 2] = ["colorTheme.save", "colorTheme.delete"];
+
 /// Gli argomenti delle letture del colore che il motore lascerebbe passare in silenzio (K6 T14,
 /// letture): un modello che non c'è dà il RGB, e un colore che non è `#rrggbb` si salta. Il perché
 /// è in italiano, prima del motore.
@@ -344,7 +350,7 @@ impl StatoFamiglia for Stato {
     fn legge(&self, id: &str) -> bool {
         // Le letture del colore e quelle di Ricolora (i colori della scelta, le proposte di
         // riduzione e casuali) non cambiano il file; `recolor.apply` sì.
-        LETTURE.contains(&id) || LETTURE_DELLA_SCELTA.contains(&id)
+        LETTURE.contains(&id) || LETTURE_DELLA_SCELTA.contains(&id) || TEMI_LETTURE.contains(&id)
     }
 
     /// Un campione nuovo, cambiato o fatto dai colori usati è globale;

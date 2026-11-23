@@ -105,9 +105,9 @@ motore	color.plates	Plates		colore	F1	T14	fatto	interno	famiglia	lettura del mot
 motore	edit.colors.overprintBlack	Overprint Black…	Edit › Edit Colors	colore	F1	T14	fatto	menu/modifica/colori	famiglia	finestra	Sovrastampa nero…
 motore	swatch.setSpot	Spot Color		colore	F1	T14	da fare	ispettore/design	famiglia	il formato del campione non ha la tinta piatta: swatch.new con spot è rifiutato (caso in colore.json)	Colore spot
 motore	colorTheme.list	Color Themes		colore	F1	T14	fatto	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Temi colore
-motore	colorTheme.save	Save Theme	Window › Color Themes	colore	F1	T14	da fare	ispettore/risorse	famiglia		Salva tema
-motore	colorTheme.delete	Delete Theme	Window › Color Themes	colore	F1	T14	da fare	ispettore/risorse	famiglia		Elimina tema
-motore	colorTheme.addToSwatches	Add to Swatches	Window › Color Themes	colore	F1	T14	da fare	ispettore/risorse	famiglia		Aggiungi ai campioni
+motore	colorTheme.save	Save Theme	Window › Color Themes	colore	F1	T14	fatto	ispettore/risorse	famiglia		Salva tema
+motore	colorTheme.delete	Delete Theme	Window › Color Themes	colore	F1	T14	fatto	ispettore/risorse	famiglia		Elimina tema
+motore	colorTheme.addToSwatches	Add to Swatches	Window › Color Themes	colore	F1	T14	da fare	ispettore/risorse	famiglia	crea un gruppo di colori, e il formato non ne ha (campioni.rs: «un gruppo di colori: il formato non ne ha»): il rifiuto oggi è unsupported	Aggiungi ai campioni
 motore	object.compoundShape.make	Make Compound Shape	Window › Pathfinder	forme	F1	T13	fatto	menu/oggetto/elaborazione	famiglia		Crea forma composta
 motore	object.compoundShape.setMode	Shape Mode	Window › Pathfinder	forme	F1	T13	fatto	menu/oggetto/elaborazione	famiglia	finestra, il metodo (T13: il campo in catalogo::FINESTRE_SCRITTE)	Metodo forma
 motore	object.compoundShape.release	Release Compound Shape	Window › Pathfinder	forme	F1	T13	fatto	menu/oggetto/elaborazione	famiglia		Rilascia forma composta
