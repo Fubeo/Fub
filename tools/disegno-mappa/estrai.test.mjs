@@ -194,7 +194,8 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // T12: il Pennello tondo (path.blob e lo strumento blobBrush) è fatto, con Maiusc+B.
   // T12: «Pulisci…» (object.path.cleanUp) è fatta: vale su tutto il disegno, con i tre interruttori del motore.
   // T14: «Nuovo gruppo colori…» (ui.newColorGroup) è fatta, un dialogo del kit in Ctrl+/.
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1030, fub: 114, escluso: 12, fatto: 395 });
+  // T13: la Trasformazione libera (strumento freeTransform, `E`) è fatta: scala, sposta e deforma un tracciato.
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1029, fub: 114, escluso: 12, fatto: 396 });
 });
 
 // --- un motore finto ---------------------------------------------------------------

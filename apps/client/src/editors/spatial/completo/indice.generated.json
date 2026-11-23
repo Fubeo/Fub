@@ -5639,6 +5639,22 @@
     },
     {
       "fonte": "strumento",
+      "id": "freeTransform",
+      "chiamata": {
+        "strumento": "freeTransform"
+      },
+      "etichetta": {
+        "it": "Strumento Trasformazione libera",
+        "en": "Free Transform Tool"
+      },
+      "posto": "colonna/trasforma",
+      "famiglia": "trasforma",
+      "tasto": "E",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "strumento",
       "id": "gradient",
       "chiamata": {
         "strumento": "gradient"

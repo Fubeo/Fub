@@ -115,6 +115,8 @@ export const MOTORE_PRONTO: ReadonlySet<string> = new Set([
   "reflect",
   "scale",
   "shear",
+  // La Trasformazione libera (E), nella stessa casella.
+  "freeTransform",
   // T16 giro 1: il Testo di punto.
   "type",
   // T15 giro 6: lo strumento Sfumatura, con il suo annotatore.
@@ -143,6 +145,7 @@ export const ICONE_MOTORE: Readonly<Record<string, string>> = {
   reflect: "draw-flip-h",
   scale: "draw-scale",
   shear: "draw-shear",
+  freeTransform: "draw-free-transform",
   lineSegment: "draw-line",
   arc: "draw-arc",
   spiral: "draw-spiral",

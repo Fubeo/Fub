@@ -1332,7 +1332,7 @@ strumento	bloat	Bloat Tool		pennelli	F2	T17	da fare	colonna/disegna	famiglia	riq
 strumento	scallop	Scallop Tool		pennelli	F2	T17	da fare	colonna/disegna	famiglia	riquadro «width»	Strumento Smerla
 strumento	crystallize	Crystallize Tool		pennelli	F2	T17	da fare	colonna/disegna	famiglia	riquadro «width»	Strumento Cristallizza
 strumento	wrinkle	Wrinkle Tool		pennelli	F2	T17	da fare	colonna/disegna	famiglia	riquadro «width»	Strumento Grinza
-strumento	freeTransform	Free Transform Tool		trasforma	F1	T13	da fare	colonna/trasforma	famiglia	riquadro «freeTransform»	Strumento Trasformazione libera
+strumento	freeTransform	Free Transform Tool		trasforma	F1	T13	fatto	colonna/trasforma	famiglia	riquadro «freeTransform»	Strumento Trasformazione libera
 strumento	puppetWarp	Puppet Warp Tool		trasforma	F1	T13	da fare	colonna/trasforma	famiglia	riquadro «freeTransform»	Strumento Alterazione marionetta
 strumento	shapeBuilder	Shape Builder Tool		forme	F1	T13	fatto	colonna/forme	famiglia	riquadro «shapeBuilder»	Strumento Generatore forme
 strumento	livePaintBucket	Live Paint Bucket		trame	F2	T21	da fare	colonna/colore	famiglia	riquadro «shapeBuilder»	Secchiello pittura dinamica

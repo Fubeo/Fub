@@ -39,9 +39,9 @@ Togli punto (`+` e `-`), Punto di ancoraggio (`Maiusc+C`), Testo (`T`), Segmento
 (`\`), Rettangolo (`M`), Ellisse (`L`), Pennello a macchia (`Maiusc+B`), Matita
 (`N`), Gomma (`Maiusc+E`), Forbici (`C`), Ruota (`R`), Rifletti (`O`), Scala
 (`S`), Costruzione forme (`Maiusc+M`), Sfumatura (`G`), Contagocce (`I`), Mano
-(`H`), Ruota vista (`Maiusc+H` senza selezione) e Zoom (`Z`). Col motore
+(`H`), Trasformazione libera (`E`), Ruota vista (`Maiusc+H` senza selezione) e Zoom (`Z`). Col motore
 presente nessuna lettera sceglie uno strumento di Fub: una lettera di uno
-strumento non ancora pronto (per esempio `E`, Trasformazione libera) non fa
+strumento non ancora pronto (per esempio `Maiusc+W`, Larghezza) non fa
 niente, e `Maiusc+H`/`Maiusc+V` non capovolgono. La lettera da sola e quella con
 `Maiusc` sono due tasti. Il Completo si apre sempre sulla Selezione di
 VectorCraft, qualunque strumento fosse acceso prima, e ci torna dopo `Esc` su un
