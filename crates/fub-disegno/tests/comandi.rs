@@ -295,6 +295,8 @@ fn una_selezione_con_un_elemento_non_mappato_non_cambia_niente() {
         // Le librerie di campioni (K6 T14) si leggono dal motore, senza guardare la scelta.
         "disegno.swatch.library.list",
         "disegno.swatch.library.get",
+        // Aggiungi una libreria (K6 T14) copia i suoi campioni, senza guardare la scelta.
+        "disegno.swatch.library.add",
         // Le letture della Trasparenza (K6 T15, giro maschere) non cambiano il disegno: con un
         // elemento non mappato danno il vuoto, come le altre letture.
         "disegno.transparency.info",

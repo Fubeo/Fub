@@ -21,6 +21,9 @@ vectorcraft-engine = { workspace = true, default-features = false }
 vectorcraft-tools = { workspace = true }
 vectorcraft-svg = { workspace = true }
 vectorcraft-doc = { workspace = true }
+# Le librerie di campioni di base (`swatch.library.add`): la regola di Fub le legge per controllare
+# libreria e campioni prima del motore, con le sue parole, e per tradurre la copia nel formato.
+vectorcraft-color = { workspace = true }
 vectorcraft-geom = { workspace = true }
 # La `FontDb` del motore, riempita con i caratteri di Fub (`src/motore.rs`).
 vectorcraft-text = { workspace = true, default-features = false }

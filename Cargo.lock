@@ -2120,6 +2120,7 @@ dependencies = [
  "regex",
  "serde_json",
  "uuid",
+ "vectorcraft-color",
  "vectorcraft-doc",
  "vectorcraft-engine",
  "vectorcraft-geom",

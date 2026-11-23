@@ -175,6 +175,17 @@ pub(crate) trait StatoFamiglia: Send + Sync + 'static {
         None
     }
 
+    /// La traduzione del documento che il motore ha lasciato dopo il comando `id`, nel formato del
+    /// disegno, prima della differenza: un comando che copia roba che il file non scrive (K6 T14, i
+    /// campioni di una libreria) la riporta com'è il file. `None` se non c'è niente da tradurre. Di
+    /// serie nessuna traduzione.
+    fn traduci_dopo(_id: &str, _copia: &Copia, _dopo: &Document) -> Option<Document>
+    where
+        Self: Sized,
+    {
+        None
+    }
+
     /// Il rifiuto per un errore del motore sul comando `id`, quando la famiglia
     /// sa che cosa vuol dire: un'operazione fra tracciati che non lascia
     /// niente è `empty`, non un errore. Di serie nessuno, e `esegui` rende
@@ -316,6 +327,16 @@ macro_rules! famiglie {
                         <$modulo::Stato as StatoFamiglia>::rifiuto_dopo(id, copia, dopo, scelti_dopo)
                     })*
                 }
+            }
+
+            /// La traduzione del documento dopo il comando `id`, se la famiglia ne ha una.
+            fn traduci_dopo(self, id: &str, copia: &Copia, dopo: Arc<Document>) -> Arc<Document> {
+                let tradotto = match self {
+                    $(Famiglia::$variante => {
+                        <$modulo::Stato as StatoFamiglia>::traduci_dopo(id, copia, &dopo)
+                    })*
+                };
+                tradotto.map_or(dopo, Arc::new)
             }
 
             /// Il rifiuto per un errore del motore sul comando `id`, se la famiglia lo sa.
@@ -1129,6 +1150,8 @@ pub(crate) fn esegui(
         banco.ripristina(copia);
         return Ok(rifiuta(DrawingRefusal::Unsupported));
     };
+    // Il documento che il motore lascia, tradotto nel formato dalla famiglia (se lo chiede).
+    let dopo = famiglia.traduci_dopo(&riga.id, copia, dopo);
     let selezione: Vec<NodeId> = banco
         .sessione
         .doc()

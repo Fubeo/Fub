@@ -1,5 +1,5 @@
 {
-  "$nota": "I casi della famiglia colore (piano K6, T14, giro 1): il colore attivo di Design › Colore (`paint.*`) e Modifica › Modifica colori (`edit.colors.*`) sugli oggetti scelti. Un tratto dell'Inchiostro di Fub scelto non cambia (`unmapped`), un oggetto bloccato nemmeno (`locked`); una fusione vuole tre riempimenti pieni; i colori di un SVG sono già RGB, e Converti in RGB non cambia niente (`empty`), e nemmeno Sovrastampa nero, che tocca solo l'inchiostro nero CMYK o grigio (`empty`). Le finestre di Satura e Regola bilanciamento colore sono voci del client: la loro prova è il test che le apre. Giro librerie (K6 T14): swatch.library.list e swatch.library.get leggono le librerie di base del motore (la mappa le dà «fatto»); la lettura non cambia il disegno, e una libreria che non c'è è un errore degli argomenti.",
+  "$nota": "I casi della famiglia colore (piano K6, T14, giro 1): il colore attivo di Design › Colore (`paint.*`) e Modifica › Modifica colori (`edit.colors.*`) sugli oggetti scelti. Un tratto dell'Inchiostro di Fub scelto non cambia (`unmapped`), un oggetto bloccato nemmeno (`locked`); una fusione vuole tre riempimenti pieni; i colori di un SVG sono già RGB, e Converti in RGB non cambia niente (`empty`), e nemmeno Sovrastampa nero, che tocca solo l'inchiostro nero CMYK o grigio (`empty`). Le finestre di Satura e Regola bilanciamento colore sono voci del client: la loro prova è il test che le apre. Giro librerie (K6 T14): swatch.library.list e swatch.library.get leggono le librerie di base del motore (la mappa le dà «fatto»); la lettura non cambia il disegno, e una libreria che non c'è è un errore degli argomenti. Giro librerie 2 (K6 T14): swatch.library.add copia una libreria di base. I campioni diventano globali e senza gruppo, nell'ordine della libreria; un nome già presente con lo stesso colore non si raddoppia (si salta), con un colore diverso prende un numero («Clay 1 2»). Una libreria o un campione che non c'è, o `apply`, sono errori degli argomenti in italiano.",
   "casi": [
     {
       "id": "paint.setFill",
@@ -2893,6 +2893,807 @@
       "disegno": "base.svg",
       "selezione": [],
       "argomenti": {},
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "swatch.library.add",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "library": "earth-tones",
+        "names": [
+          "Clay"
+        ]
+      },
+      "dopo": "libreria-clay-dopo.svg",
+      "atteso": {
+        "ops": [
+          {
+            "op": "add",
+            "parent": "#root",
+            "pos": {
+              "first": true
+            },
+            "elem": {
+              "tag": "defs",
+              "attrs": {
+                "id": "fub-defs"
+              },
+              "children": [
+                {
+                  "tag": "linearGradient",
+                  "attrs": {
+                    "id": "rxm988m4t",
+                    "fub:role": "swatch",
+                    "fub:name": "Clay 1",
+                    "gradientUnits": "userSpaceOnUse"
+                  },
+                  "children": [
+                    {
+                      "tag": "stop",
+                      "attrs": {
+                        "stop-color": "#f5c5b4"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "tag": "linearGradient",
+                  "attrs": {
+                    "id": "ram2zmuqz",
+                    "fub:role": "swatch",
+                    "fub:name": "Clay 2",
+                    "gradientUnits": "userSpaceOnUse"
+                  },
+                  "children": [
+                    {
+                      "tag": "stop",
+                      "attrs": {
+                        "stop-color": "#df9e87"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "tag": "linearGradient",
+                  "attrs": {
+                    "id": "rsm9bkte3",
+                    "fub:role": "swatch",
+                    "fub:name": "Clay 3",
+                    "gradientUnits": "userSpaceOnUse"
+                  },
+                  "children": [
+                    {
+                      "tag": "stop",
+                      "attrs": {
+                        "stop-color": "#c37a61"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "tag": "linearGradient",
+                  "attrs": {
+                    "id": "r6uenzp8c",
+                    "fub:role": "swatch",
+                    "fub:name": "Clay 4",
+                    "gradientUnits": "userSpaceOnUse"
+                  },
+                  "children": [
+                    {
+                      "tag": "stop",
+                      "attrs": {
+                        "stop-color": "#a15c43"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "tag": "linearGradient",
+                  "attrs": {
+                    "id": "reoqrzm59",
+                    "fub:role": "swatch",
+                    "fub:name": "Clay 5",
+                    "gradientUnits": "userSpaceOnUse"
+                  },
+                  "children": [
+                    {
+                      "tag": "stop",
+                      "attrs": {
+                        "stop-color": "#7b422d"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "tag": "linearGradient",
+                  "attrs": {
+                    "id": "riedidwgs",
+                    "fub:role": "swatch",
+                    "fub:name": "Clay 6",
+                    "gradientUnits": "userSpaceOnUse"
+                  },
+                  "children": [
+                    {
+                      "tag": "stop",
+                      "attrs": {
+                        "stop-color": "#522c1f"
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "swatch.library.add",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {
+        "library": "earth-tones",
+        "names": [
+          "Clay"
+        ]
+      },
+      "dopo": "libreria-clay-dopo.svg",
+      "atteso": {
+        "ops": [
+          {
+            "op": "add",
+            "parent": "#root",
+            "pos": {
+              "first": true
+            },
+            "elem": {
+              "tag": "defs",
+              "attrs": {
+                "id": "fub-defs"
+              },
+              "children": [
+                {
+                  "tag": "linearGradient",
+                  "attrs": {
+                    "id": "rxm988m4t",
+                    "fub:role": "swatch",
+                    "fub:name": "Clay 1",
+                    "gradientUnits": "userSpaceOnUse"
+                  },
+                  "children": [
+                    {
+                      "tag": "stop",
+                      "attrs": {
+                        "stop-color": "#f5c5b4"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "tag": "linearGradient",
+                  "attrs": {
+                    "id": "ram2zmuqz",
+                    "fub:role": "swatch",
+                    "fub:name": "Clay 2",
+                    "gradientUnits": "userSpaceOnUse"
+                  },
+                  "children": [
+                    {
+                      "tag": "stop",
+                      "attrs": {
+                        "stop-color": "#df9e87"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "tag": "linearGradient",
+                  "attrs": {
+                    "id": "rsm9bkte3",
+                    "fub:role": "swatch",
+                    "fub:name": "Clay 3",
+                    "gradientUnits": "userSpaceOnUse"
+                  },
+                  "children": [
+                    {
+                      "tag": "stop",
+                      "attrs": {
+                        "stop-color": "#c37a61"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "tag": "linearGradient",
+                  "attrs": {
+                    "id": "r6uenzp8c",
+                    "fub:role": "swatch",
+                    "fub:name": "Clay 4",
+                    "gradientUnits": "userSpaceOnUse"
+                  },
+                  "children": [
+                    {
+                      "tag": "stop",
+                      "attrs": {
+                        "stop-color": "#a15c43"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "tag": "linearGradient",
+                  "attrs": {
+                    "id": "reoqrzm59",
+                    "fub:role": "swatch",
+                    "fub:name": "Clay 5",
+                    "gradientUnits": "userSpaceOnUse"
+                  },
+                  "children": [
+                    {
+                      "tag": "stop",
+                      "attrs": {
+                        "stop-color": "#7b422d"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "tag": "linearGradient",
+                  "attrs": {
+                    "id": "riedidwgs",
+                    "fub:role": "swatch",
+                    "fub:name": "Clay 6",
+                    "gradientUnits": "userSpaceOnUse"
+                  },
+                  "children": [
+                    {
+                      "tag": "stop",
+                      "attrs": {
+                        "stop-color": "#522c1f"
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "swatch.library.add",
+      "disegno": "campioni-ordinati.svg",
+      "selezione": [],
+      "argomenti": {
+        "library": "earth-tones",
+        "names": [
+          "Clay"
+        ]
+      },
+      "dopo": "libreria-clay-ordinati-dopo.svg",
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "add",
+                "parent": "fub-defs",
+                "pos": {
+                  "last": true
+                },
+                "elem": {
+                  "tag": "linearGradient",
+                  "attrs": {
+                    "id": "rgbs4ip10",
+                    "fub:role": "swatch",
+                    "fub:name": "Clay 1",
+                    "gradientUnits": "userSpaceOnUse"
+                  },
+                  "children": [
+                    {
+                      "tag": "stop",
+                      "attrs": {
+                        "stop-color": "#f5c5b4"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "op": "add",
+                "parent": "fub-defs",
+                "pos": {
+                  "last": true
+                },
+                "elem": {
+                  "tag": "linearGradient",
+                  "attrs": {
+                    "id": "r7kudsnmm",
+                    "fub:role": "swatch",
+                    "fub:name": "Clay 2",
+                    "gradientUnits": "userSpaceOnUse"
+                  },
+                  "children": [
+                    {
+                      "tag": "stop",
+                      "attrs": {
+                        "stop-color": "#df9e87"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "op": "add",
+                "parent": "fub-defs",
+                "pos": {
+                  "last": true
+                },
+                "elem": {
+                  "tag": "linearGradient",
+                  "attrs": {
+                    "id": "ryrb836ri",
+                    "fub:role": "swatch",
+                    "fub:name": "Clay 3",
+                    "gradientUnits": "userSpaceOnUse"
+                  },
+                  "children": [
+                    {
+                      "tag": "stop",
+                      "attrs": {
+                        "stop-color": "#c37a61"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "op": "add",
+                "parent": "fub-defs",
+                "pos": {
+                  "last": true
+                },
+                "elem": {
+                  "tag": "linearGradient",
+                  "attrs": {
+                    "id": "r4bdt733v",
+                    "fub:role": "swatch",
+                    "fub:name": "Clay 4",
+                    "gradientUnits": "userSpaceOnUse"
+                  },
+                  "children": [
+                    {
+                      "tag": "stop",
+                      "attrs": {
+                        "stop-color": "#a15c43"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "op": "add",
+                "parent": "fub-defs",
+                "pos": {
+                  "last": true
+                },
+                "elem": {
+                  "tag": "linearGradient",
+                  "attrs": {
+                    "id": "rszg6tknf",
+                    "fub:role": "swatch",
+                    "fub:name": "Clay 5",
+                    "gradientUnits": "userSpaceOnUse"
+                  },
+                  "children": [
+                    {
+                      "tag": "stop",
+                      "attrs": {
+                        "stop-color": "#7b422d"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "op": "add",
+                "parent": "fub-defs",
+                "pos": {
+                  "last": true
+                },
+                "elem": {
+                  "tag": "linearGradient",
+                  "attrs": {
+                    "id": "rrxzb17xj",
+                    "fub:role": "swatch",
+                    "fub:name": "Clay 6",
+                    "gradientUnits": "userSpaceOnUse"
+                  },
+                  "children": [
+                    {
+                      "tag": "stop",
+                      "attrs": {
+                        "stop-color": "#522c1f"
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "swatch.library.add",
+      "disegno": "libreria-clay-presente.svg",
+      "selezione": [],
+      "argomenti": {
+        "library": "earth-tones",
+        "names": [
+          "Clay"
+        ]
+      },
+      "dopo": "libreria-clay-presente-dopo.svg",
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "add",
+                "parent": "fub-defs",
+                "pos": {
+                  "last": true
+                },
+                "elem": {
+                  "tag": "linearGradient",
+                  "attrs": {
+                    "id": "rozvuuu3m",
+                    "fub:role": "swatch",
+                    "fub:name": "Clay 3",
+                    "gradientUnits": "userSpaceOnUse"
+                  },
+                  "children": [
+                    {
+                      "tag": "stop",
+                      "attrs": {
+                        "stop-color": "#c37a61"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "op": "add",
+                "parent": "fub-defs",
+                "pos": {
+                  "last": true
+                },
+                "elem": {
+                  "tag": "linearGradient",
+                  "attrs": {
+                    "id": "r9bqlxtz5",
+                    "fub:role": "swatch",
+                    "fub:name": "Clay 4",
+                    "gradientUnits": "userSpaceOnUse"
+                  },
+                  "children": [
+                    {
+                      "tag": "stop",
+                      "attrs": {
+                        "stop-color": "#a15c43"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "op": "add",
+                "parent": "fub-defs",
+                "pos": {
+                  "last": true
+                },
+                "elem": {
+                  "tag": "linearGradient",
+                  "attrs": {
+                    "id": "rkargbjgv",
+                    "fub:role": "swatch",
+                    "fub:name": "Clay 5",
+                    "gradientUnits": "userSpaceOnUse"
+                  },
+                  "children": [
+                    {
+                      "tag": "stop",
+                      "attrs": {
+                        "stop-color": "#7b422d"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "op": "add",
+                "parent": "fub-defs",
+                "pos": {
+                  "last": true
+                },
+                "elem": {
+                  "tag": "linearGradient",
+                  "attrs": {
+                    "id": "rffx8d1bz",
+                    "fub:role": "swatch",
+                    "fub:name": "Clay 6",
+                    "gradientUnits": "userSpaceOnUse"
+                  },
+                  "children": [
+                    {
+                      "tag": "stop",
+                      "attrs": {
+                        "stop-color": "#522c1f"
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "swatch.library.add",
+      "disegno": "libreria-nome-preso.svg",
+      "selezione": [],
+      "argomenti": {
+        "library": "earth-tones",
+        "names": [
+          "Clay"
+        ]
+      },
+      "dopo": "libreria-nome-preso-dopo.svg",
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "add",
+                "parent": "fub-defs",
+                "pos": {
+                  "last": true
+                },
+                "elem": {
+                  "tag": "linearGradient",
+                  "attrs": {
+                    "id": "r4ovim1oo",
+                    "fub:role": "swatch",
+                    "fub:name": "Clay 1 2",
+                    "gradientUnits": "userSpaceOnUse"
+                  },
+                  "children": [
+                    {
+                      "tag": "stop",
+                      "attrs": {
+                        "stop-color": "#f5c5b4"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "op": "add",
+                "parent": "fub-defs",
+                "pos": {
+                  "last": true
+                },
+                "elem": {
+                  "tag": "linearGradient",
+                  "attrs": {
+                    "id": "rta9yxnro",
+                    "fub:role": "swatch",
+                    "fub:name": "Clay 2",
+                    "gradientUnits": "userSpaceOnUse"
+                  },
+                  "children": [
+                    {
+                      "tag": "stop",
+                      "attrs": {
+                        "stop-color": "#df9e87"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "op": "add",
+                "parent": "fub-defs",
+                "pos": {
+                  "last": true
+                },
+                "elem": {
+                  "tag": "linearGradient",
+                  "attrs": {
+                    "id": "rm46hnqw3",
+                    "fub:role": "swatch",
+                    "fub:name": "Clay 3",
+                    "gradientUnits": "userSpaceOnUse"
+                  },
+                  "children": [
+                    {
+                      "tag": "stop",
+                      "attrs": {
+                        "stop-color": "#c37a61"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "op": "add",
+                "parent": "fub-defs",
+                "pos": {
+                  "last": true
+                },
+                "elem": {
+                  "tag": "linearGradient",
+                  "attrs": {
+                    "id": "rc3wb59vw",
+                    "fub:role": "swatch",
+                    "fub:name": "Clay 4",
+                    "gradientUnits": "userSpaceOnUse"
+                  },
+                  "children": [
+                    {
+                      "tag": "stop",
+                      "attrs": {
+                        "stop-color": "#a15c43"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "op": "add",
+                "parent": "fub-defs",
+                "pos": {
+                  "last": true
+                },
+                "elem": {
+                  "tag": "linearGradient",
+                  "attrs": {
+                    "id": "rpzqivfub",
+                    "fub:role": "swatch",
+                    "fub:name": "Clay 5",
+                    "gradientUnits": "userSpaceOnUse"
+                  },
+                  "children": [
+                    {
+                      "tag": "stop",
+                      "attrs": {
+                        "stop-color": "#7b422d"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "op": "add",
+                "parent": "fub-defs",
+                "pos": {
+                  "last": true
+                },
+                "elem": {
+                  "tag": "linearGradient",
+                  "attrs": {
+                    "id": "r3hv8r7oy",
+                    "fub:role": "swatch",
+                    "fub:name": "Clay 6",
+                    "gradientUnits": "userSpaceOnUse"
+                  },
+                  "children": [
+                    {
+                      "tag": "stop",
+                      "attrs": {
+                        "stop-color": "#522c1f"
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "swatch.library.add",
+      "disegno": "libreria-clay-dopo.svg",
+      "selezione": [],
+      "argomenti": {
+        "library": "earth-tones",
+        "names": [
+          "Clay"
+        ]
+      },
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "swatch.library.add",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "library": "earth-tones",
+        "names": [
+          "Nope"
+        ]
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "swatch.library.add",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "library": "qualcosa"
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "swatch.library.add",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "swatch.library.add",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "library": "metallic-gradients"
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "swatch.library.add",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "library": "earth-tones",
+        "names": [
+          "Clay"
+        ],
+        "apply": "fill"
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "swatch.library.add",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "library": "earth-tones",
+        "names": "Clay"
+      },
       "atteso": {
         "errore": "bad_args"
       }

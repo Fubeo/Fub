@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:fub="https://fubeo.github.io/ns/scene/1" fub:version="1" viewBox="0 0 400 300" width="400" height="300">
+  <defs id="fub-defs">
+    <linearGradient id="r2b2b2b2b" fub:role="swatch" fub:name="Arancio" gradientUnits="userSpaceOnUse"><stop stop-color="#e69f00"/></linearGradient>
+    <linearGradient id="r1a1a1a1a" fub:role="swatch" fub:name="Blu" gradientUnits="userSpaceOnUse"><stop stop-color="#0072b2"/></linearGradient>
+    <linearGradient id="r3c3c3c3c" fub:role="swatch" fub:name="Viola" gradientUnits="userSpaceOnUse"><stop stop-color="#cc79a7"/></linearGradient>
+    <linearGradient id="rgbs4ip10" fub:role="swatch" fub:name="Clay 1" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#f5c5b4"/>
+    </linearGradient>
+    <linearGradient id="r7kudsnmm" fub:role="swatch" fub:name="Clay 2" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#df9e87"/>
+    </linearGradient>
+    <linearGradient id="ryrb836ri" fub:role="swatch" fub:name="Clay 3" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#c37a61"/>
+    </linearGradient>
+    <linearGradient id="r4bdt733v" fub:role="swatch" fub:name="Clay 4" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#a15c43"/>
+    </linearGradient>
+    <linearGradient id="rszg6tknf" fub:role="swatch" fub:name="Clay 5" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#7b422d"/>
+    </linearGradient>
+    <linearGradient id="rrxzb17xj" fub:role="swatch" fub:name="Clay 6" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#522c1f"/>
+    </linearGradient>
+  </defs>
+  <rect id="fub-paper" fub:role="paper" x="0" y="0" width="400" height="300" fill="#ffffff"/>
+  <g id="l1a2b3c4d" fub:layer="Livello 1">
+    <rect id="oa1a1a1a1" x="100" y="100" width="100" height="50" fill="url(#r1a1a1a1a) #0072b2" stroke="#000000" stroke-width="2"/>
+  </g>
+</svg>

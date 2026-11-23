@@ -364,6 +364,28 @@ fn del_documento(dopo: &Document) -> Result<Vec<(&str, String)>, NonSiScrive> {
     Ok(fuori)
 }
 
+/// La copia di una libreria di campioni di base (`swatch.library.add`) nel formato del disegno (K6
+/// T14, decisione del coordinatore): il motore copia i campioni com'erano nella libreria, non globali
+/// e in gruppi, e il file non ne scrive. Qui i campioni diventano globali e senza gruppo, nell'ordine
+/// in cui il motore li ha messi: prima quelli senza gruppo, poi i membri dei gruppi nell'ordine dei
+/// gruppi. `None` se il documento è già nel formato (nessun gruppo, tutti globali).
+pub(crate) fn porta_nel_formato(dopo: &Document) -> Option<Document> {
+    let serve = !dopo.swatch_groups.is_empty()
+        || dopo.swatches.iter().any(|s| !s.is_reserved() && !s.global);
+    if !serve {
+        return None;
+    }
+    let mut nuovo = dopo.clone();
+    let gruppi = std::mem::take(&mut *nuovo.swatch_groups);
+    for gruppo in gruppi {
+        nuovo.swatches.extend(gruppo.swatches);
+    }
+    for swatch in nuovo.swatches.iter_mut().filter(|s| !s.is_reserved()) {
+        swatch.global = true;
+    }
+    Some(nuovo)
+}
+
 /// Le operazioni dei campioni fra il file e il documento di dopo. `id_nuovo`
 /// dà l'id di una risorsa nuova.
 pub(crate) fn operazioni(

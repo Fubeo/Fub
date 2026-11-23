@@ -106,7 +106,7 @@ pub(crate) const MODIFICA_COLORI: [&str; 10] = [
 /// I comandi dei campioni del documento che cambiano il file: i campioni nuovi, cambiati o tolti, e
 /// l'ordine (`swatch.duplicate` mette la copia dopo l'originale, `swatch.merge` toglie gli uniti,
 /// `swatch.sortByName` e `swatch.move` riordinano: [`crate::campioni`]).
-pub(crate) const CAMPIONI: [&str; 8] = [
+pub(crate) const CAMPIONI: [&str; 9] = [
     "swatch.new",
     "swatch.edit",
     "swatch.delete",
@@ -115,7 +115,66 @@ pub(crate) const CAMPIONI: [&str; 8] = [
     "swatch.merge",
     "swatch.sortByName",
     "swatch.move",
+    "swatch.library.add",
 ];
+
+/// La libreria di campioni di base che `swatch.library.add` nomina (per id, o per nome in ogni caso),
+/// con i suoi campioni. Le librerie di sfumature non sono campioni del formato.
+fn libreria_di_base(nome: &str) -> Result<Arc<vectorcraft_color::libraries::SwatchLibrary>, PluginError> {
+    use vectorcraft_color::libraries::{builtin_library, BuiltinLibrary, GRADIENT_LIBRARIES, SWATCH_LIBRARIES};
+    let trovata = |b: &&BuiltinLibrary| b.id == nome || b.name.eq_ignore_ascii_case(nome);
+    if let Some(b) = SWATCH_LIBRARIES.iter().find(trovata) {
+        return builtin_library(b.id).ok_or_else(|| PluginError::BadArgs(format!("Non c'è la libreria di campioni «{nome}».").into()));
+    }
+    if GRADIENT_LIBRARIES.iter().any(|b| trovata(&b)) {
+        return Err(PluginError::BadArgs(
+            format!("«{nome}» è una libreria di sfumature: il formato del disegno non ha campioni di sfumatura.").into(),
+        ));
+    }
+    Err(PluginError::BadArgs(format!("Non c'è la libreria di campioni «{nome}».").into()))
+}
+
+/// Gli argomenti di `swatch.library.add` che il motore direbbe in inglese: la libreria c'è, i nomi
+/// scelti ci sono nella libreria, e il colore da applicare (`apply`) è un altro comando.
+fn argomenti_della_libreria(valore: &Value) -> Result<(), PluginError> {
+    let nome = valore
+        .get("library")
+        .and_then(Value::as_str)
+        .filter(|n| !n.is_empty())
+        .ok_or_else(|| PluginError::BadArgs("Scegli la libreria di campioni da aggiungere.".into()))?;
+    let libreria = libreria_di_base(nome)?;
+    if valore.get("apply").is_some_and(|a| !a.is_null()) {
+        return Err(PluginError::BadArgs(
+            "Il colore da applicare si sceglie dopo: aggiungi i campioni, poi scegli il colore.".into(),
+        ));
+    }
+    let scelti: Vec<&vectorcraft_color::Swatch> = match valore.get("names") {
+        None | Some(Value::Null) => libreria.iter().collect(),
+        Some(Value::Array(nomi)) => {
+            let mut scelti = vec![];
+            for n in nomi {
+                let n = n.as_str().ok_or_else(|| PluginError::BadArgs("«names» è una lista di nomi di campioni.".into()))?;
+                match (libreria.group(n), libreria.swatch(n)) {
+                    (Some(gruppo), _) => scelti.extend(gruppo.swatches.iter()),
+                    (None, Some(campione)) => scelti.push(campione),
+                    (None, None) => {
+                        return Err(PluginError::BadArgs(format!("Non c'è il campione «{n}» in «{}».", libreria.name).into()));
+                    }
+                }
+            }
+            scelti
+        }
+        Some(_) => return Err(PluginError::BadArgs("«names» è una lista di nomi di campioni.".into())),
+    };
+    // Il formato ha solo colori pieni globali: una sfumatura o un tinta della libreria (che il motore
+    // copierebbe com'è) si dice qui, non come `unsupported` dopo.
+    if let Some(sfumatura) = scelti.iter().find(|s| !matches!(s.paint, vectorcraft_doc::color::Paint::Solid { swatch: None, .. })) {
+        return Err(PluginError::BadArgs(
+            format!("«{}» non è un colore pieno: il formato del disegno ha solo colori pieni.", sfumatura.name).into(),
+        ));
+    }
+    Ok(())
+}
 
 /// Un campione che il comando nomina nei suoi argomenti deve essere un campione del file: i colori
 /// dei gruppi e i Nessuno non ci sono.
@@ -244,6 +303,7 @@ impl StatoFamiglia for Stato {
     fn argomenti_della_copia(id: &str, copia: &Copia, valore: Value) -> Result<Value, PluginError> {
         let senza_nome = || PluginError::BadArgs("Scegli il campione.".into());
         match id {
+            "swatch.library.add" => argomenti_della_libreria(&valore)?,
             "swatch.duplicate" => {
                 let nome = valore.get("name").and_then(Value::as_str).ok_or_else(senza_nome)?;
                 campione_del_file(copia, nome)?;
@@ -360,6 +420,12 @@ impl StatoFamiglia for Stato {
             return None;
         }
         Some(scelti.into_iter().filter(|n| !testo(copia, *n)).collect())
+    }
+
+    /// La copia di una libreria di base nel formato: i campioni diventano globali e senza gruppo
+    /// ([`crate::campioni::porta_nel_formato`]), per `swatch.library.add`.
+    fn traduci_dopo(id: &str, _copia: &Copia, dopo: &Document) -> Option<Document> {
+        (id == "swatch.library.add").then(|| crate::campioni::porta_nel_formato(dopo)).flatten()
     }
 
     /// Un tratto dell'Inchiostro cambiato, anche se non era scelto (dentro un

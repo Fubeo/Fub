@@ -121,7 +121,10 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // libreria (`swatch.library.add`) e le finestre restano «da fare», con la causa nella nota.
   // T15 maschere: Crea maschera di opacità e le due letture della Trasparenza («fatto»); le altre
   // maschere, il pannello e l'isolamento della pagina restano «da fare» con la causa nella nota.
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1112, fub: 114, escluso: 12, fatto: 313 });
+  // T14 librerie 2 porta a «fatto» `swatch.library.add`: copia una libreria di base nel disegno, con i
+  // campioni globali e senza gruppo (casi in `tests/famiglie/colore.json`). Restano «da fare» le finestre
+  // delle librerie e le librerie dell'utente (la cartella del desktop non c'è nel Completo).
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1111, fub: 114, escluso: 12, fatto: 314 });
 });
 
 // --- un motore finto ---------------------------------------------------------------
