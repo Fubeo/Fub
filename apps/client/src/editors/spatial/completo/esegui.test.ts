@@ -537,17 +537,3 @@ describe("eseguiVoce, Seleziona testo per font e Opzioni modifica globale (K6 T1
     expect(azioni.commit).not.toHaveBeenCalled();
   });
 });
-
-describe("eseguiVoce, togli, duplica e sposta una voce della pila dell'aspetto (K6 T15, voci d'aspetto)", () => {
-  it.each([
-    ["appearance.removeItem", "Rimuovi elemento", { index: 0 }],
-    ["appearance.duplicateItem", "Duplica elemento", { index: 0 }],
-    ["appearance.moveItem", "Riordina elemento aspetto", { from: 0, to: 1 }],
-  ])("%s manda al motore disegno.%s col numero della voce, e il passo va alla cronologia", async (id, etichetta, valore) => {
-    const { d, sessione, azioni } = dipendenze();
-    eseguiVoce(voce({ id, famiglia: "aspetto", etichetta: { it: etichetta, en: id }, chiamata: { comando: `disegno.${id}`, valore } }), d);
-    await tick();
-    expect(sessione.comando).toHaveBeenCalledWith({ id: `disegno.${id}`, selection: ["n1", "n2"], value: valore, preview: false });
-    expect(azioni.commit).toHaveBeenCalledOnce();
-  });
-});

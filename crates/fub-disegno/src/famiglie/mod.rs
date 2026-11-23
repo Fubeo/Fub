@@ -147,22 +147,6 @@ pub(crate) trait StatoFamiglia: Send + Sync + 'static {
         None
     }
 
-    /// Gli argomenti del comando `id` che la copia e la scelta dicono sbagliati, prima del motore: una voce
-    /// d'aspetto che l'oggetto scelto non ha. È `BadArgs`, col perché in italiano, perché il motore lo direbbe
-    /// in inglese o non direbbe niente. Di serie nessuno: serve a un argomento che dipende dalla scelta, che
-    /// `argomenti_della_copia` non riceve.
-    fn argomenti_della_selezione(
-        _id: &str,
-        _copia: &Copia,
-        _selezione: &[String],
-        _valore: &Value,
-    ) -> Result<(), PluginError>
-    where
-        Self: Sized,
-    {
-        Ok(())
-    }
-
     /// Gli argomenti del comando `id` completati con ciò che solo la copia sa, prima che il motore li
     /// veda: il nome di serie di un livello nuovo, che dipende dai livelli del file. Un argomento che
     /// il formato non tiene (il nome di un livello troppo lungo) è `BadArgs`, col perché, e niente
@@ -281,21 +265,6 @@ macro_rules! famiglie {
                 match self {
                     $(Famiglia::$variante => {
                         <$modulo::Stato as StatoFamiglia>::rifiuto_valore(id, copia, selezione, valore)
-                    })*
-                }
-            }
-
-            /// Gli argomenti del comando `id` che la copia e la scelta dicono sbagliati.
-            fn argomenti_della_selezione(
-                self,
-                id: &str,
-                copia: &Copia,
-                selezione: &[String],
-                valore: &Value,
-            ) -> Result<(), PluginError> {
-                match self {
-                    $(Famiglia::$variante => {
-                        <$modulo::Stato as StatoFamiglia>::argomenti_della_selezione(id, copia, selezione, valore)
                     })*
                 }
             }
@@ -1089,9 +1058,6 @@ pub(crate) fn esegui(
     {
         return Ok(rifiuta(motivo));
     }
-    // Gli argomenti che la copia e la scelta dicono sbagliati (una voce d'aspetto che non c'è): `BadArgs`,
-    // col perché, prima del motore.
-    famiglia.argomenti_della_selezione(&riga.id, copia, &richiesta.selection, &richiesta.value)?;
     let livello = match famiglia.livello(&riga.id, copia) {
         Ok(livello) => livello,
         Err(motivo) => return Ok(rifiuta(motivo)),

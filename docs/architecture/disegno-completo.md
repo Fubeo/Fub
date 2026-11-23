@@ -187,15 +187,6 @@ restano nella sessione finché il disegno è aperto. Avvia la modifica globale
 (`select.globalEdit`) non è ancora nel Completo: il suo stato sta nel documento
 del motore, che Fub ricrea a ogni comando, e la causa è nella mappa.
 
-Togli, duplica e sposta una voce della pila d'aspetto (`appearance.removeItem`,
-`appearance.duplicateItem`, `appearance.moveItem`) lavorano sulla voce per il suo
-numero nella pila di ogni oggetto scelto. Togliere l'ultima voce di una forma si
-rifiuta, perché il file non riapre una forma senza riempimento né contorno.
-Spostare un riempimento sopra o sotto un contorno si rifiuta, perché il file non
-dice l'ordine tra i due (`crates/fub-disegno/src/differenza.rs`). Un numero che la
-scelta non ha è un `BadArgs` col perché, prima del motore. La ricetta della pila si
-riscrive e si riapre senza perdite (`crates/fub-disegno/tests/ricette_riapertura.rs`).
-
 ## Chi possiede che cosa
 
 | Che cosa | Chi lo possiede | Perché |
