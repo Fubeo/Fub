@@ -4778,6 +4778,11 @@
       "prova": "apps/client/src/editors/spatial/completo/ricolora.test.ts"
     },
     {
+      "id": "ui.colorPicker",
+      "fonte": "interfaccia",
+      "prova": "apps/client/src/editors/spatial/completo/selettore-colore.test.ts"
+    },
+    {
       "id": "recolor.apply",
       "disegno": "ricolora-scena.svg",
       "selezione": [

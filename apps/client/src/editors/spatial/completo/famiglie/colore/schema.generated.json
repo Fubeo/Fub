@@ -139,6 +139,11 @@
     },
     {
       "fonte": "interfaccia",
+      "id": "ui.colorPicker",
+      "campi": []
+    },
+    {
+      "fonte": "interfaccia",
       "id": "ui.newSwatch",
       "campi": []
     },

@@ -173,6 +173,12 @@ finestra.
 - Le fusioni vogliono almeno tre oggetti con un riempimento; Converti in RGB e
   Sovrastampa nero non cambiano un SVG, che ha già i colori in RGB e non ha la
   sovrastampa. Quando non c'è niente da cambiare il file resta com'è.
+- **Selettore colore…** apre il selettore del pozzo, nello stesso menu e in Ctrl+/:
+  parte dal riempimento, o dal contorno se è quello attivo nel pozzo, e OK applica il
+  colore a tutti gli oggetti scelti in un solo passo di Annulla. Con colori diversi fra
+  gli oggetti, una sfumatura o un motivo il selettore parte senza colore, e lo dice;
+  senza niente di scelto la voce è spenta, con la frase del pozzo. Un oggetto bloccato
+  dice il suo perché, il colore non cambia, e la finestra resta aperta.
 - **Campione più vicino (T14 giro 9).** Oggetto › Plug-ins › Colore: «Applica
   campione più vicino» dà a ogni colore pieno del riempimento e del tratto il
   campione più vicino del documento, per differenza di colore (ΔE); il colore
