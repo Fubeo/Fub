@@ -282,6 +282,8 @@ fn una_selezione_con_un_elemento_non_mappato_non_cambia_niente() {
         "disegno.swatch.merge",
         "disegno.swatch.sortByName",
         "disegno.swatch.move",
+        // L'ordine per specie guarda i campioni del documento, non la scelta (K6 T14, campioni).
+        "disegno.swatch.sortByKind",
         "disegno.select.all",
         "disegno.select.inverse",
         "disegno.select.none",

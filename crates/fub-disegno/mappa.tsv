@@ -21,7 +21,7 @@ motore	assets.list	Assets		web	F3	T22	da fare	interno	famiglia	lettura del motor
 motore	assets.export	Export Assets		web	F3	T22	da fare	ispettore/design/documento	famiglia		Esporta risorse
 motore	assets.settings.set	Asset Export Settings		web	F3	T22	da fare	ispettore/design/documento	famiglia		Impostazioni esportazione risorse
 motore	attributes.set	Attributes		dati	F4	T26	da fare	ispettore/design/documento	famiglia		Attributi
-motore	path.setFillRule	Fill Rule		tracciati	F1	T12	da fare	ispettore/design	famiglia	il motore tiene la regola, ma il formato della scena non ha fill-rule sui tracciati (scene-format.md: nessun attributo; clip-rule solo nelle risorse), e differenza.rs:93 rifiuta `fill-rule` come unsupported; aspetta il formato	Regola di riempimento
+motore	path.setFillRule	Fill Rule		tracciati	F1	T12	da fare	ispettore/design	famiglia	il motore tiene la regola, ma il formato della scena non ha fill-rule sui tracciati (scene-format.md: nessun attributo; clip-rule solo nelle risorse), e differenza.rs:93 rifiuta `fill-rule` come unsupported; resta finché il formato non la scrive	Regola di riempimento
 motore	brush.libraries	Brush Libraries		pennelli	F2	T17	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Librerie pennelli
 motore	brush.library	Brush Library		pennelli	F2	T17	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Libreria pennelli
 motore	brush.addFromLibrary	Add to Brushes	Window › Brush Libraries	pennelli	F2	T17	da fare	ispettore/risorse	famiglia		Aggiungi ai pennelli
@@ -103,7 +103,7 @@ motore	view.overprintPreview	Overprint Preview	View	stampa	F4	T25	da fare	menu/v
 motore	view.separationsPreview	Separations Preview		stampa	F4	T25	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Anteprima separazioni
 motore	color.plates	Plates		colore	F1	T14	fatto	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Lastre
 motore	edit.colors.overprintBlack	Overprint Black…	Edit › Edit Colors	colore	F1	T14	fatto	menu/modifica/colori	famiglia	finestra	Sovrastampa nero…
-motore	swatch.setSpot	Spot Color		colore	F1	T14	da fare	ispettore/design	famiglia	il formato del campione non ha la tinta piatta: swatch.new con spot è rifiutato (caso in colore.json)	Colore spot
+motore	swatch.setSpot	Spot Color		colore	F1	T14	da fare	ispettore/design	famiglia	il formato non scrive la tinta piatta: il campione con spot è rifiutato da campioni.rs (T14)	Colore spot
 motore	colorTheme.list	Color Themes		colore	F1	T14	fatto	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Temi colore
 motore	colorTheme.save	Save Theme	Window › Color Themes	colore	F1	T14	fatto	ispettore/risorse	famiglia		Salva tema
 motore	colorTheme.delete	Delete Theme	Window › Color Themes	colore	F1	T14	fatto	ispettore/risorse	famiglia		Elimina tema
@@ -585,13 +585,13 @@ motore	swatch.addUsedColors	Add Used Colors	Window › Swatches	colore	F1	T14	fa
 motore	swatch.unused	Select All Unused	Window › Swatches	colore	F1	T14	fatto	ispettore/risorse	famiglia		Seleziona tutti gli elementi non usati
 motore	swatch.merge	Merge Swatches	Window › Swatches	colore	F1	T14	fatto	ispettore/risorse	famiglia		Unisci campioni
 motore	swatch.ungroup	Ungroup Color Group	Window › Swatches	colore	F1	T14	da fare	ispettore/risorse	famiglia	il formato della scena non ha gruppi di colori (campioni.rs): un gruppo non si scrive	Separa gruppo colori
-motore	swatch.sortByKind	Sort by Kind	Window › Swatches	colore	F1	T14	da fare	ispettore/risorse	famiglia	tutti i campioni del formato sono colori globali: l'ordine per specie non cambia niente	Ordina per tipo
-motore	swatch.spotOptions	Spot Colors	Window › Swatches	colore	F1	T14	da fare	ispettore/risorse	famiglia	le opzioni delle tinte piatte non hanno un posto nel formato della scena	Colori spot
+motore	swatch.sortByKind	Sort by Kind	Window › Swatches	colore	F1	T14	fatto	ispettore/risorse	famiglia	nel formato tutti i campioni sono colori pieni globali: l'ordine per specie non cambia niente, e il comando dà empty (K6 T14, campioni)	Ordina per tipo
+motore	swatch.spotOptions	Spot Colors	Window › Swatches	colore	F1	T14	da fare	ispettore/risorse	famiglia	il motore cambia un'opzione del documento (useLab) che il formato non scrive: il comando dà empty e al salvataggio l'opzione si perde (T14)	Colori spot
 motore	swatch.editGroup	Edit Color Group	Window › Swatches	colore	F1	T14	da fare	ispettore/risorse	famiglia	il formato della scena non ha gruppi di colori (campioni.rs): un gruppo non si scrive	Modifica gruppo colori
 motore	swatch.library.list	Swatch Libraries		colore	F1	T14	fatto	interno	famiglia		Librerie campioni
 motore	swatch.library.get	Swatch Library		colore	F1	T14	fatto	interno	famiglia		Libreria campioni
 motore	swatch.library.add	Add to Swatches	Window › Swatch Libraries	colore	F1	T14	fatto	ispettore/risorse	famiglia	i campioni entrano globali e senza gruppo, nell'ordine della libreria (decisione del coordinatore, T14); un nome già presente con lo stesso colore non si raddoppia, con un colore diverso prende un numero («Clay 1 2»); apply è spento (il colore si sceglie dopo)	Aggiungi ai campioni
-motore	swatch.resetDefaults	Default Swatches	Window › Swatch Libraries	colore	F1	T14	da fare	ispettore/risorse	famiglia	i campioni predefiniti portano gruppi di colori, che il formato non ha (campioni.rs)	Campioni predefiniti
+motore	swatch.resetDefaults	Default Swatches	Window › Swatch Libraries	colore	F1	T14	da fare	ispettore/risorse	famiglia	i campioni predefiniti portano gruppi di colori, che il formato non ha: il comando è rifiutato (T14)	Campioni predefiniti
 motore	swatch.library.save	Save Swatch Library…	Window › Swatches	colore	F1	T14	da fare	ispettore/risorse	famiglia	finestra	Salva libreria campioni…
 motore	swatch.library.load	Other Library…	Window › Swatch Libraries	colore	F1	T14	da fare	ispettore/risorse	famiglia	finestra	Altra libreria…
 motore	swatch.library.copyToUser	Copy to User Defined	Window › Swatch Libraries	colore	F1	T14	da fare	ispettore/risorse	famiglia		Copia in Definito dall'utente
