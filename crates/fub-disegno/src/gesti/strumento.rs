@@ -297,7 +297,7 @@ pub(crate) fn gesto(
         Err(_) => return rifiuta(banco, esito, DrawingRefusal::Unsupported),
     };
     match differenza.testo() {
-        Ok(Some(ops)) => match con_le_righe(&ops, &differenza, &dopo) {
+        Ok(Some(ops)) => match con_le_righe(&ops, &differenza, &dopo, copia) {
             Ok(ops) => esito.ops = Some(ops),
             Err(r) => return rifiuta(banco, esito, r),
         },
@@ -361,13 +361,20 @@ fn col_carattere_di_fub(
 /// Il `<text>` di un testo a punto orizzontale fatto da uno strumento del
 /// motore: l'ancora (l'inizio della linea di base della prima riga), il
 /// colore, il carattere e la misura del primo pezzo. Le righe le aggiunge
-/// [`con_le_righe`]; un altro testo (in un'area, su un tracciato,
-/// verticale) resta alla differenza, che non lo sa scrivere.
+/// [`con_le_righe`], che mette il `textPath` a un testo su tracciato; un
+/// testo verticale, o su tracciato con una fine, resta alla differenza, che
+/// non lo sa scrivere.
 fn scrivi_testo(nodo: &Node, locale: Affine) -> Option<(String, Map<String, Value>)> {
     let NodeKind::Text(t) = &nodo.kind else {
         return None;
     };
-    if t.vertical || !matches!(t.kind, TextKind::Point | TextKind::Area { .. }) {
+    let su_tracciato = matches!(t.kind, TextKind::OnPath { .. });
+    if t.vertical
+        || !matches!(
+            t.kind,
+            TextKind::Point | TextKind::Area { .. } | TextKind::OnPath { end: None, .. }
+        )
+    {
         return None;
     }
     let primo = t.runs.first()?;
@@ -392,6 +399,9 @@ fn scrivi_testo(nodo: &Node, locale: Affine) -> Option<(String, Map<String, Valu
             attrs.insert("x".into(), json!(r.x));
             attrs.insert("y".into(), json!(r.y));
         }
+        // Su un tracciato il testo sta dove dice il `textPath`: `x` e `y` sul
+        // `text` lo renderebbero estraneo (formato del testo, §5).
+        None if su_tracciato => {}
         None => {
             attrs.insert("x".into(), json!(numero(ancora.x, 2)));
             attrs.insert("y".into(), json!(numero(ancora.y, 2)));
@@ -485,6 +495,11 @@ fn testo_in_scrittura(sessione: &Session, copia: &Copia) -> Option<Value> {
     let NodeKind::Text(t) = &nodo.kind else {
         return None;
     };
+    // Un testo su tracciato non ha righe da mostrare: il suo tracciato è una
+    // risorsa che nasce solo col rilascio.
+    if matches!(t.kind, TextKind::OnPath { .. }) {
+        return None;
+    }
     let indietro = copia.radice.inverse();
     let (tag, mut attrs) = scrivi_testo(nodo, indietro)?;
     if let Some(id) = copia
@@ -507,6 +522,7 @@ fn con_le_righe(
     ops: &str,
     differenza: &differenza::Differenza,
     dopo: &Document,
+    copia: &Copia,
 ) -> Result<String, DrawingRefusal> {
     let mut lista: Value = serde_json::from_str(ops).map_err(|_| DrawingRefusal::Unsupported)?;
     let per_id: std::collections::HashMap<&str, NodeId> = differenza
@@ -515,6 +531,10 @@ fn con_le_righe(
         .map(|(n, id)| (id.as_str(), *n))
         .collect();
     let mut cambiato = false;
+    // I tracciati dei testi su tracciato nuovi, per le risorse.
+    let mut tracciati: Vec<Value> = Vec::new();
+    let mut presi: BTreeSet<String> = BTreeSet::new();
+    let mut fallito = false;
     let mut righe = |op: &mut Value| {
         if op.get("op") != Some(&json!("add")) || op["elem"]["tag"] != json!("text") {
             return;
@@ -531,11 +551,23 @@ fn con_le_righe(
             return;
         };
         let x = elem["attrs"]["x"].as_str().unwrap_or("0").to_string();
-        elem["children"] = match t.kind {
+        elem["children"] = match &t.kind {
             TextKind::Area { .. } => match differenza::righe_scritte(t, t.xf, None) {
                 Ok(r) => Value::Array(r.righe),
                 Err(_) => return,
             },
+            TextKind::OnPath { path, start, .. } => {
+                let Some(id) = crate::id::nuovo(crate::id::Specie::Risorsa, &|id| {
+                    copia.mappa.id_preso(id) || presi.contains(id) || per_id.contains_key(id)
+                }) else {
+                    fallito = true;
+                    return;
+                };
+                presi.insert(id.clone());
+                let (figlio, tracciato) = sul_tracciato(t, path, *start, &id);
+                tracciati.push(tracciato);
+                json!([figlio])
+            }
             _ => Value::Array(righe_del_testo(t, &x, t.xf)),
         };
         cambiato = true;
@@ -550,14 +582,63 @@ fn con_le_righe(
         }),
         op => righe(op),
     }
+    if fallito {
+        return Err(DrawingRefusal::Unsupported);
+    }
     if !cambiato {
         return Ok(ops.to_string());
+    }
+    if !tracciati.is_empty() {
+        let risorse = differenza::ops_delle_risorse(copia, &lista, tracciati);
+        lista = match lista {
+            Value::Array(mut v) if v.len() == 1 && v[0]["op"] == "batch" => {
+                let mut dentro = v.remove(0);
+                if let Some(o) = dentro["ops"].as_array_mut() {
+                    // Le risorse prima del testo che le segue.
+                    o.splice(0..0, risorse);
+                }
+                json!([dentro])
+            }
+            Value::Array(v) => {
+                json!([{ "op": "batch", "ops": risorse.into_iter().chain(v).collect::<Vec<_>>() }])
+            }
+            op => {
+                json!([{ "op": "batch", "ops": risorse.into_iter().chain([op]).collect::<Vec<_>>() }])
+            }
+        };
     }
     let fuori = serde_json::to_string(&lista).map_err(|_| DrawingRefusal::Unsupported)?;
     if fuori.len() > fub_abi::MAX_DRAWING_OPS_BYTES {
         return Err(DrawingRefusal::TooLarge);
     }
     Ok(fuori)
+}
+
+/// Il `textPath` di un testo su tracciato nuovo e il tracciato che segue,
+/// una risorsa `id` privata (formato del testo, §5): il `d` nelle coordinate
+/// del testo, che non ha `transform`, e lo `startOffset` come distanza, che
+/// all'inizio del tracciato non si scrive.
+fn sul_tracciato(
+    t: &vectorcraft_doc::text::TextObject,
+    path: &vectorcraft_geom::PathData,
+    start: f64,
+    id: &str,
+) -> (Value, Value) {
+    let d = path.transformed(t.xf);
+    let lunghezza = vectorcraft_geom::Shape::perimeter(&d.to_bezpath(), 1e-3);
+    let mut attrs = Map::new();
+    let da = start * lunghezza;
+    if da.abs() >= 0.005 {
+        attrs.insert("startOffset".into(), json!(numero(da, 2)));
+    }
+    attrs.insert("href".into(), json!(format!("#{id}")));
+    let testo = t
+        .plain_text()
+        .replace(['\n', '\r', '\u{2028}', '\u{2029}'], " ");
+    (
+        json!({ "tag": "textPath", "attrs": attrs, "text": testo }),
+        json!({ "tag": "path", "attrs": { "id": id, "fub:role": "private", "d": differenza::scrivi_d(&d) } }),
+    )
 }
 
 /// Annulla il gesto in corso: l'interazione del motore si ferma (lo

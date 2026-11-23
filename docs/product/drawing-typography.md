@@ -110,6 +110,8 @@ Col Completo il testo si fa e si cambia anche così:
   (un triangolo, un'ellisse, un rettangolo girato) è rifiutato, perché il
   file scrive di un testo in area solo la larghezza. Un clic lontano dai
   contorni fa un testo da punto.
+- **Testo su tracciato**, nella stessa casella: un clic su un tracciato ci
+  scrive sopra (vedi «Il testo su tracciato»).
 - **Testo › Converti in testo in area** mette un testo da punto in un
   riquadro largo quanto la sua riga più lunga; **Converti in testo per
   punti** lo toglie, e le righe restano quelle che si vedevano. Lo stesso
@@ -171,8 +173,14 @@ Un testo su tracciato scorre lungo una linea, una curva o il bordo di una
 forma, su una riga sola, e non va a capo. Il tracciato non si vede: dice
 soltanto dove passa il testo, che sta dalla parte sinistra del suo verso,
 sopra una linea tracciata da sinistra a destra. Fub lo disegna e lo
-riscrive quando un disegno lo porta; non mette più un testo su un
-tracciato, e non lo toglie.
+riscrive quando un disegno lo porta. Il Disegno completo ne fa uno nuovo
+con **Testo su tracciato**, come VectorCraft: un clic su un tracciato o sul
+contorno di una forma ci mette il testo, che comincia nel punto toccato; il
+tracciato diventa del testo soltanto (non si vede più da solo), in un passo
+solo di Annulla. Un clic lontano dai contorni fa un testo da punto, e Alt
+tenuto passa a Testo in area. Mentre si scrive il testo non scorre ancora
+sul tracciato: lo fa appena il gesto finisce. Fub non toglie un testo da
+un tracciato.
 
 **Dove comincia il testo.** Una forma si segue come la disegna SVG: un
 tracciato, una linea o una spezzata dal primo punto, un rettangolo

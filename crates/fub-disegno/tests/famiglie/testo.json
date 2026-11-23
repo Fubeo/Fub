@@ -889,6 +889,124 @@
       "disegno": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 400 300\" width=\"400\" height=\"300\"><rect id=\"fub-paper\" fub:role=\"paper\" x=\"0\" y=\"0\" width=\"400\" height=\"300\" fill=\"#ffffff\"/><g id=\"l1a2b3c4d\" fub:layer=\"Livello 1\"><path id=\"op7a7a7a7\" d=\"M300 200 L360 200 L330 260 Z\" fill=\"#cccccc\"/></g></svg>",
       "selezione": [],
       "argomenti": {}
+    },
+    {
+      "id": "typeOnPath",
+      "fonte": "strumento",
+      "gesto": [
+        {
+          "phase": "preview",
+          "events": [
+            {
+              "kind": "down",
+              "x": 200,
+              "y": 125,
+              "pressure": 1,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "up",
+              "x": 200,
+              "y": 125,
+              "pressure": 0,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ],
+          "inputs": []
+        },
+        {
+          "phase": "preview",
+          "events": [],
+          "inputs": [
+            {
+              "kind": "text",
+              "text": "Onde del mare"
+            }
+          ]
+        },
+        {
+          "phase": "commit",
+          "events": [],
+          "inputs": [
+            {
+              "kind": "key",
+              "key": "Escape",
+              "code": "Escape",
+              "pressed": true
+            }
+          ]
+        }
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "first": true
+                },
+                "elem": {
+                  "tag": "defs",
+                  "attrs": {
+                    "id": "fub-defs"
+                  },
+                  "children": [
+                    {
+                      "tag": "path",
+                      "attrs": {
+                        "id": "rwnm1svrw",
+                        "fub:role": "private",
+                        "d": "M50 200 C150 100 250 100 350 200"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "op": "remove",
+                "target": "op7a7a7a7"
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "last": true
+                },
+                "elem": {
+                  "tag": "text",
+                  "attrs": {
+                    "fill": "#000000",
+                    "font-family": "Inter, sans-serif",
+                    "font-size": "32",
+                    "id": "ok7thtlvb"
+                  },
+                  "children": [
+                    {
+                      "tag": "textPath",
+                      "attrs": {
+                        "startOffset": "172.17",
+                        "href": "#rwnm1svrw"
+                      },
+                      "text": "Onde del mare"
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "disegno": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 400 300\" width=\"400\" height=\"300\"><rect id=\"fub-paper\" fub:role=\"paper\" x=\"0\" y=\"0\" width=\"400\" height=\"300\" fill=\"#ffffff\"/><g id=\"l1a2b3c4d\" fub:layer=\"Livello 1\"><path id=\"op7a7a7a7\" d=\"M50 200 C150 100 250 100 350 200\" fill=\"none\" stroke=\"#000000\"/></g></svg>",
+      "selezione": [],
+      "argomenti": {},
+      "dopo": "typeOnPath-curva.svg"
     }
   ]
 }

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:fub="https://fubeo.github.io/ns/scene/1" fub:version="1" viewBox="0 0 400 300" width="400" height="300">
+  <defs id="fub-defs">
+    <path id="rwnm1svrw" fub:role="private" d="M50 200 C150 100 250 100 350 200"/>
+  </defs><rect id="fub-paper" fub:role="paper" x="0" y="0" width="400" height="300" fill="#ffffff"/><g id="l1a2b3c4d" fub:layer="Livello 1">
+    <text id="ok7thtlvb" fill="#000000" font-family="Inter, sans-serif" font-size="32">
+      <textPath startOffset="172.17" href="#rwnm1svrw">Onde del mare</textPath>
+    </text>
+  </g></svg>

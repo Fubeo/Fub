@@ -215,6 +215,9 @@ fn canonicalizza(ops: &mut Value) {
             Value::String(s) => {
                 if let Some(n) = mappa.get(s.as_str()) {
                     *s = n.clone();
+                } else if let Some(n) = s.strip_prefix('#').and_then(|id| mappa.get(id)) {
+                    // Un riferimento nudo, come `href` del testo su tracciato.
+                    *s = format!("#{n}");
                 } else if s.starts_with("url(#") && !s.contains('<') {
                     // Un colore legato a un campione: `url(#id) #hex`.
                     for (vecchio, nuovo) in mappa {

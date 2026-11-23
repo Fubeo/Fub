@@ -389,6 +389,20 @@ fn ops_delle_sfumature(copia: &Copia, campioni: &[Value], elems: Vec<Value>) -> 
     }
 }
 
+/// Gli `add` delle risorse nuove `elems` di un gesto, come quelle delle
+/// sfumature: nella `fub-defs` del file, o in quella che le `ops` del gesto
+/// fanno, se no in una nuova.
+pub(crate) fn ops_delle_risorse(copia: &Copia, ops: &Value, elems: Vec<Value>) -> Vec<Value> {
+    let mut piatte = Vec::new();
+    for op in ops.as_array().into_iter().flatten() {
+        match op["ops"].as_array() {
+            Some(dentro) => piatte.extend(dentro.iter().cloned()),
+            None => piatte.push(op.clone()),
+        }
+    }
+    ops_delle_sfumature(copia, &piatte, elems)
+}
+
 struct Lavoro<'a> {
     copia: &'a Copia,
     scrittore: Option<Scrittore<'a>>,
@@ -2261,7 +2275,7 @@ fn g2(v: f64) -> String {
 }
 
 /// Il `d` di un tracciato del motore: `M`, `L`, `C`, `Z`, due decimali.
-fn scrivi_d(p: &vectorcraft_geom::PathData) -> String {
+pub(crate) fn scrivi_d(p: &vectorcraft_geom::PathData) -> String {
     let mut parti: Vec<String> = Vec::new();
     for s in &p.subpaths {
         let Some(primo) = s.anchors.first() else {

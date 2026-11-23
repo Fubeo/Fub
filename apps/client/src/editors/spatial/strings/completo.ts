@@ -1222,6 +1222,7 @@ export const COLONNA_IT = {
   // Il Testo del motore (K6 T16) sta nella casella del Testo di Fub.
   "draw.engine.name.type": "Testo (Completo)",
   "draw.engine.name.areaType": "Testo in area",
+  "draw.engine.name.typeOnPath": "Testo su tracciato",
   "draw.engine.type.box": "Testo che stai scrivendo: Esc per uscire",
   "draw.chrome.drawer.title": "Tutti gli strumenti",
   "draw.chrome.drawer.note": "Scegline uno per usarlo adesso.",
@@ -1332,6 +1333,7 @@ export const COLONNA_EN: Record<keyof typeof COLONNA_IT, string> = {
   "draw.engine.name.puppetWarp": "Puppet Warp",
   "draw.engine.name.type": "Type (Full)",
   "draw.engine.name.areaType": "Area Type",
+  "draw.engine.name.typeOnPath": "Type on a Path",
   "draw.engine.type.box": "Text you are typing: Esc to leave",
   "draw.chrome.drawer.title": "All tools",
   "draw.chrome.drawer.note": "Choose one to use it now.",

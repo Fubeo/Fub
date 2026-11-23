@@ -6391,6 +6391,22 @@
     },
     {
       "fonte": "strumento",
+      "id": "typeOnPath",
+      "chiamata": {
+        "strumento": "typeOnPath"
+      },
+      "etichetta": {
+        "it": "Strumento Testo su tracciato",
+        "en": "Type on a Path Tool"
+      },
+      "posto": "colonna/testo",
+      "famiglia": "testo",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "strumento",
       "id": "warp",
       "chiamata": {
         "strumento": "warp"

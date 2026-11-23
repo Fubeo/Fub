@@ -238,6 +238,7 @@ const COLUMN: Readonly<Record<string, readonly string[]>> = {
   "draw-star": ["M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8L3.5 9.7l5.9-.9z"],
   "draw-symbol-spray": ["M6 10h6v10H6z", "M8 10V6h2v4", "M15 6h.01", "M18 4h.01", "M18 8h.01", "M21 6h.01"],
   "draw-area-type": ["M4 4h16v16H4z", "M8 8h8", "M12 8v8"],
+  "draw-type-on-path": ["M3 18c4-8 14-8 18 0", "M9 6h6", "M12 6v7"],
   "draw-type": ["M5 6V4h14v2", "M12 4v16", "M9 20h6"],
   "draw-width-tool": ["M3 12c4-6 14-6 18 0", "M3 12c4 6 14 6 18 0", "M12 7v10"],
 };
