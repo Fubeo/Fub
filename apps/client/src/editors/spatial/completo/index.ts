@@ -536,6 +536,8 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila" | "e
       ...(Object.keys(unita).length === 0 ? {} : { unita }),
     };
   };
+  // Le finestre dei comandi aperte adesso, per id: una finestra per comando (`esegui.ts`).
+  const finestreAperte = new Set<string>();
   // Il percorso unico di un comando del motore (`esegui.ts`): il menu ≡, Ctrl+/ e
   // i tasti lo usano con queste stesse dipendenze, costruite qui una volta sola.
   const dipendenze: DipendenzeComando = {
@@ -547,6 +549,7 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila" | "e
     ...(opzioni.tasti?.livello === undefined ? {} : { livello: opzioni.tasti.livello }),
     anteprima: opzioni.tasti?.anteprima ?? (() => undefined),
     finestra: finestraDi,
+    finestreAperte,
     leggi: opzioni.tasti?.leggi ?? (() => null),
     commit: opzioni.tasti?.commit ?? (() => false),
     seleziona: opzioni.tasti?.seleziona ?? (() => undefined),

@@ -70,6 +70,9 @@ export interface DipendenzeComando extends AzioniEsito {
   /// I comandi del motore che Fub fa da sé, con la sua regola: vero se il
   /// comando `id` è uno di quelli ed è partito. Senza, ogni comando va al motore.
   readonly diFub?: (id: string) => boolean;
+  /// I comandi con finestra la cui finestra è aperta o si sta aprendo, per id: un secondo
+  /// comando sulla stessa voce (un doppio clic) non apre una finestra in più. Senza, nessuna guardia.
+  readonly finestreAperte?: Set<string>;
 }
 
 /// I comandi del motore che passano dagli appunti del Completo (`appunti.ts`). Le
@@ -214,12 +217,24 @@ export function eseguiVoce(voce: VoceIndice, dipendenze: DipendenzeComando): Pro
   if (dipendenze.diFub?.(comando.id) === true) return Promise.resolve(false);
 
   if (voce.finestra) {
+    // Una finestra per comando: un secondo comando sulla voce, mentre la sua finestra si apre o è
+    // aperta (un doppio clic), non ne apre un'altra. Si libera quando la finestra si chiude.
+    const aperte = dipendenze.finestreAperte;
+    if (aperte?.has(voce.id) === true) return Promise.resolve(false);
+    aperte?.add(voce.id);
+    const libera = (): void => {
+      aperte?.delete(voce.id);
+    };
     return dipendenze.finestra(voce).then((opzioni) => {
       if (opzioni === null) {
+        libera();
         dipendenze.annuncia(t("draw.completo.key.nowindow"));
         return false;
       }
-      if (dipendenze.vita.closed) return false;
+      if (dipendenze.vita.closed) {
+        libera();
+        return false;
+      }
       // I punti scelti quando la finestra si apre: valgono fino a OK.
       const partenza = valoreDi(comando.id, comando.valore, dipendenze);
       const esegui: Esegui = async (valori, anteprima): Promise<EsitoComando> => {
@@ -229,6 +244,7 @@ export function eseguiVoce(voce: VoceIndice, dipendenze: DipendenzeComando): Pro
         if (!anteprima) applicaEsito(esito, etichetta, dipendenze);
         return { anteprima: esito.preview, rifiuto: esito.refused };
       };
+      // La finestra risolve quando si chiude (OK, Annulla o Esc): allora la voce è di nuovo libera.
       void apriFinestra(opzioni.modulo, dipendenze.carica.famiglia(voce.famiglia).then(attesaFamiglia), esegui, {
         ...opzioni,
         id: voce.id,
@@ -238,8 +254,11 @@ export function eseguiVoce(voce: VoceIndice, dipendenze: DipendenzeComando): Pro
         sulFoglio: dipendenze.anteprima,
         // «Riprova» dell'errore della famiglia: rifà la sua attesa.
         riprova: () => dipendenze.carica.riprova(voce.famiglia).then(attesaFamiglia),
-      });
+      }).then(libera);
       return false;
+    }, (errore: unknown) => {
+      libera();
+      throw errore;
     });
   }
 
