@@ -5,7 +5,7 @@
 
 import { describe, expect, it } from "vitest";
 import type { DrawingOutcome } from "../../../host/contract";
-import { CodaGommaPunti, COMANDO_GOMMA_PUNTI, segnoDelTratto, tratto, valoreGomma, type FraseGomma } from "./gomma-punti";
+import { CodaGommaPunti, COMANDO_GOMMA_PUNTI, segnoDelTratto, tratto, valoreGomma } from "./gomma-punti";
 import type { SessioneMotore } from "./sessione";
 
 const esitoVuoto = (selection: string[], refused: DrawingOutcome["refused"] = null): DrawingOutcome => ({
@@ -34,13 +34,14 @@ function sessioneFinta(risposte: Array<DrawingOutcome | null> = [], attesa: Prom
 
 function coda(opzioni: { sessione?: SessioneMotore | null; selezione?: string[]; accettaFrasi?: boolean } = {}) {
   const esiti: DrawingOutcome[] = [];
-  const frasi: FraseGomma[] = [];
+  const frasi: string[] = [];
   let selezione = opzioni.selezione ?? ["oc1c1c1c1"];
   const c = new CodaGommaPunti({
     sessione: async () => (opzioni.sessione === undefined ? null : opzioni.sessione),
     selezione: () => selezione,
     esito: (e) => esiti.push(e),
     dici: (f) => frasi.push(f),
+    rifiutati: (r) => frasi.push(r.message),
   });
   return { c, esiti, frasi, scegli: (s: string[]) => (selezione = s) };
 }

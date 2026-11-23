@@ -33,6 +33,7 @@ import { MAX_EDIT_BYTES } from "../scene/read";
 import { utf8Length } from "../scene/text";
 import { plural, t, type DrawKey } from "../strings";
 import type { MotoreDelDisegno } from "../motore/gesti";
+import type { ArgomentiRifiutati } from "../motore/sessione";
 import {
   cronologiaDi,
   leggiAppuntiDaVoci,
@@ -136,19 +137,35 @@ export function creaAppuntiCompleto(dipendenze: DipendenzeAppunti): AppuntiCompl
   /// se non c'è niente di sicuro.
   let impronta: string | null = null;
 
-  /// Il comando al motore, come `esegui.ts`: `null` se il motore non risponde.
-  async function chiama(id: string, valore: unknown, selezione: readonly string[] = []): Promise<DrawingOutcome | null> {
+  /// Il comando al motore, come `esegui.ts`: gli argomenti rifiutati con la
+  /// frase del motore; `null` se il motore non risponde.
+  async function risposta(id: string, valore: unknown, selezione: readonly string[]): Promise<DrawingOutcome | ArgomentiRifiutati | null> {
     try {
       const sessione: Sessione | null = await motore.pronta(ATTESA_MOTORE_MS);
       if (sessione === null) return null;
       const esito = await sessione.comando({ id, selection: [...selezione], value: valore, preview: false });
-      if (esito === null || "kind" in esito) return null;
+      if (esito === null || ("kind" in esito && esito.kind === "assente")) return null;
       return esito;
     } catch {
       // Un motore che lancia non ha fatto il comando: chi chiede lo dice, senza
       // lasciare una promessa rifiutata.
       return null;
     }
+  }
+
+  /// Una lettura del motore: `null` se non risponde o non ne prende gli argomenti.
+  async function chiama(id: string, valore: unknown, selezione: readonly string[] = []): Promise<DrawingOutcome | null> {
+    const esito = await risposta(id, valore, selezione);
+    return esito === null || "kind" in esito ? null : esito;
+  }
+
+  /// Un comando che fa qualcosa: senza esito lo dice da sé, con la frase del
+  /// motore se ne ha rifiutato gli argomenti, se no che non è riuscito; poi `null`.
+  async function fai(id: string, valore: unknown, selezione: readonly string[] = []): Promise<DrawingOutcome | null> {
+    const esito = await risposta(id, valore, selezione);
+    if (esito !== null && !("kind" in esito)) return esito;
+    if (!vita.closed) annuncia(esito === null ? t("draw.completo.key.failed") : esito.message);
+    return null;
   }
 
   // --- Copia e taglia ---------------------------------------------------------
@@ -162,12 +179,8 @@ export function creaAppuntiCompleto(dipendenze: DipendenzeAppunti): AppuntiCompl
     // Finché il motore non ha copiato, gli appunti di sistema non sono più la
     // sua copia: l'impronta vecchia non vale.
     impronta = null;
-    const esito = await chiama(`disegno.edit.${tipo}`, {}, selezione);
-    if (vita.closed) return;
-    if (esito === null) {
-      annuncia(t("draw.completo.key.failed"));
-      return;
-    }
+    const esito = await fai(`disegno.edit.${tipo}`, {}, selezione);
+    if (vita.closed || esito === null) return;
     if (tipo === "cut") {
       applica(esito, t("draw.cut"));
       if (esito.ops === null) return;
@@ -215,12 +228,8 @@ export function creaAppuntiCompleto(dipendenze: DipendenzeAppunti): AppuntiCompl
       if (risposta === null || vita.closed) return true;
       scelta = risposta;
     }
-    const esito = await chiama(`disegno.${comando}`, { swatchConflict: scelta });
-    if (vita.closed) return true;
-    if (esito === null) {
-      annuncia(t("draw.completo.key.failed"));
-      return true;
-    }
+    const esito = await fai(`disegno.${comando}`, { swatchConflict: scelta });
+    if (vita.closed || esito === null) return true;
     if (esito.refused === "empty") return false;
     applica(esito, etichetta);
     return true;
@@ -270,10 +279,7 @@ export function creaAppuntiCompleto(dipendenze: DipendenzeAppunti): AppuntiCompl
         annuncia(t(problema, { limit: limite(MAX_EDIT_BYTES) }));
         return false;
       }
-      if ((await chiama("disegno.clipboard.importSvg", { svg })) === null) {
-        annuncia(t("draw.completo.key.failed"));
-        return false;
-      }
+      if ((await fai("disegno.clipboard.importSvg", { svg })) === null) return false;
       // L'impronta è dell'SVG che sta anche negli appunti di sistema: un disegno
       // estero non ci sta, e allora non ne ha.
       impronta = lettura.svg;
@@ -286,10 +292,7 @@ export function creaAppuntiCompleto(dipendenze: DipendenzeAppunti): AppuntiCompl
         return false;
       }
       const dataBase64 = await base64Di(immagine.byte);
-      if ((await chiama("disegno.clipboard.importImage", { dataBase64, mime: immagine.tipo })) === null) {
-        annuncia(t("draw.completo.key.failed"));
-        return false;
-      }
+      if ((await fai("disegno.clipboard.importImage", { dataBase64, mime: immagine.tipo })) === null) return false;
       return true;
     }
     if (lettura.testo !== null) {
@@ -297,10 +300,7 @@ export function creaAppuntiCompleto(dipendenze: DipendenzeAppunti): AppuntiCompl
         annuncia(t("draw.paste.too_large", { limit: limite(MAX_EDIT_BYTES) }));
         return false;
       }
-      if ((await chiama("disegno.clipboard.importText", { text: lettura.testo })) === null) {
-        annuncia(t("draw.completo.key.failed"));
-        return false;
-      }
+      if ((await fai("disegno.clipboard.importText", { text: lettura.testo })) === null) return false;
       return true;
     }
     annuncia(lettura.altri.length > 0 ? t("draw.paste.format_unsupported") : t("draw.paste.nothing"));

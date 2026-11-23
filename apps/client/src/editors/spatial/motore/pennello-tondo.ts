@@ -14,7 +14,7 @@
 import type { DrawingOutcome } from "../../../host/contract";
 import type { Point } from "../scene/matrix";
 import type { Elem } from "../scene/serialize";
-import type { MotoreAssente, SessioneMotore } from "./sessione";
+import type { ArgomentiRifiutati, RispostaMotore, SessioneMotore } from "./sessione";
 
 /// Lo strumento del motore del pennello tondo (la sua riga della mappa è `blobBrush`).
 export const STRUMENTO_PENNELLO = "blobBrush";
@@ -62,6 +62,9 @@ export interface PennelloDipendenze {
   readonly esito: (esito: DrawingOutcome) => void;
   /// Dice una frase a chi disegna.
   readonly dici: (frase: FrasePennello) => void;
+  /// Dice la frase del motore che ha rifiutato gli argomenti del comando:
+  /// non è cambiato niente, e il motore resta pronto per il colpo dopo.
+  readonly rifiutati: (rifiutati: ArgomentiRifiutati) => void;
 }
 
 /// La coda dei colpi del pennello: un comando alla volta, uno per colpo.
@@ -94,13 +97,17 @@ export class CodaPennello {
       this.dici("draw.pennello.assente");
       return;
     }
-    const risposta: DrawingOutcome | MotoreAssente | null = await sessione.comando({
+    const risposta: RispostaMotore = await sessione.comando({
       id: COMANDO_PENNELLO,
       selection: [],
       value: valorePennello(punti, colore),
       preview: false,
     });
     if (!this.aperta) return;
+    if (risposta !== null && "kind" in risposta && risposta.kind === "argomenti") {
+      this.dip.rifiutati(risposta);
+      return;
+    }
     if (risposta === null || "kind" in risposta) {
       this.dici("draw.pennello.assente");
       return;

@@ -27,7 +27,7 @@ import { motivoDelRifiuto } from "../motore/rifiuto";
 import { t, type DrawKey } from "../strings";
 import { drawPickerText } from "../tools/color-text";
 import { testoPerche, type StatoComandi } from "./comandi";
-import { applicaEsito, chiama, type DipendenzeComando } from "./esegui";
+import { applicaEsito, chiamaConArgomenti, type DipendenzeComando } from "./esegui";
 import {
   conProposta,
   gruppiIniziali,
@@ -226,11 +226,16 @@ export function apriRicolora(dipendenze: DipendenzeComando): Promise<boolean> {
         mostraErrore(null);
         return;
       }
-      const esito = await chiama(dipendenze, APPLICA, { map: mappa, method: metodo }, true).catch(() => null);
+      const esito = await chiamaConArgomenti(dipendenze, APPLICA, { map: mappa, method: metodo }, true).catch(() => null);
       if (chiusa || questa !== versione) return;
       if (esito === null) {
         dipendenze.anteprima(null);
         mostraErrore(t("draw.recolor.errore.motore"));
+        return;
+      }
+      if ("kind" in esito) {
+        dipendenze.anteprima(null);
+        mostraErrore(esito.message);
         return;
       }
       if (esito.refused !== null) {
@@ -248,9 +253,14 @@ export function apriRicolora(dipendenze: DipendenzeComando): Promise<boolean> {
       versione += 1;
       fermaTimer();
       aggiornaStato();
-      const esito = await chiama(dipendenze, id, valore, false).catch(() => null);
+      const esito = await chiamaConArgomenti(dipendenze, id, valore, false).catch(() => null);
       occupato = false;
       if (chiusa) return null;
+      if (esito !== null && "kind" in esito) {
+        mostraErrore(esito.message);
+        aggiornaStato();
+        return null;
+      }
       if (esito === null || esito.refused !== null) {
         mostraErrore(esito?.refused ? messaggioDelRifiuto(esito.refused) : t("draw.recolor.errore.motore"));
         aggiornaStato();
@@ -345,11 +355,16 @@ export function apriRicolora(dipendenze: DipendenzeComando): Promise<boolean> {
       versione += 1;
       fermaTimer();
       aggiornaStato();
-      const esito = await chiama(dipendenze, APPLICA, { map: mappa, method: metodo }, false).catch(() => null);
+      const esito = await chiamaConArgomenti(dipendenze, APPLICA, { map: mappa, method: metodo }, false).catch(() => null);
       occupato = false;
       if (chiusa) return false;
       if (esito === null) {
         mostraErrore(t("draw.recolor.errore.motore"));
+        aggiornaStato();
+        return false;
+      }
+      if ("kind" in esito) {
+        mostraErrore(esito.message);
         aggiornaStato();
         return false;
       }

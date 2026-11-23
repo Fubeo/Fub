@@ -68,7 +68,7 @@ import type { ToolId } from "../tools/registry";
 import { motivoDelRifiuto, motivoDelRifiutoDelloStrumento } from "./rifiuto";
 import { CodaGommaPunti, STRUMENTO_GOMMA_PUNTI } from "./gomma-punti";
 import { CodaPennello, STRUMENTO_PENNELLO } from "./pennello-tondo";
-import type { GestoMotore, MotoreAssente, SessioneMotore } from "./sessione";
+import type { ArgomentiRifiutati, GestoMotore, MotoreAssente, SessioneMotore } from "./sessione";
 import { cursoreDelloStrumento, motoreDelloStrumento, StatiStrumenti } from "./strumento";
 import { Scrittura, STRUMENTI_CHE_SCRIVONO } from "./scrittura";
 import { A_PIU_CLIC, segniComeForma, STRUMENTI_DEI_TRACCIATI } from "./tracciati";
@@ -669,7 +669,12 @@ export function installGestiMotore(ctx: EditorContext): void {
     const done = ultimo
       .then(() => sessione.comando({ id: DRAWING_COMMAND_TOOL_OPTION, selection: [], value: { strumento: id, chiave, valore } }))
       .then((esito) => {
-        if (esito === null || "kind" in esito) return;
+        if (esito === null) return;
+        if ("kind" in esito) {
+          // Un valore che il motore non prende si dice con la sua frase.
+          if (esito.kind === "argomenti" && !ctx.disposed) ctx.announce(esito.message);
+          return;
+        }
         if (esito.state) stati.registra(id, esito.state);
       })
       .catch((error: unknown) => {
@@ -799,7 +804,9 @@ export function installGestiMotore(ctx: EditorContext): void {
       }
       // Il motore è mancato a metà: fermo (`outcome` dice perché), o la
       // sessione chiusa mentre la richiesta era in volo (spento, o il
-      // disegno finito).
+      // disegno finito). Un gesto che il motore rifiuta per i suoi argomenti
+      // si annulla allo stesso modo, con la frase del motore; la sessione
+      // resta aperta per il gesto dopo.
       perso(g, outcome ?? porta!.assente());
       return null;
     }).catch((error: unknown): null => {
@@ -814,7 +821,7 @@ export function installGestiMotore(ctx: EditorContext): void {
   /// strada, si annulla. Via l'anteprima, la selezione di prima, niente si
   /// scrive, e lo si dice col motivo; il gesto dopo fa da sé (`motoreBegin`
   /// trova il motore che manca). Una volta per gesto.
-  const perso = (g: MotoreGesture, assente: MotoreAssente | null): void => {
+  const perso = (g: MotoreGesture, assente: MotoreAssente | ArgomentiRifiutati | null): void => {
     const inner = interni.get(g)!;
     if (inner.perso) return;
     inner.perso = true;
@@ -825,6 +832,10 @@ export function installGestiMotore(ctx: EditorContext): void {
     ctx.showHandles();
     // Senza un perché, è il disegno che finisce: non c'è niente da dire.
     if (assente === null) return;
+    if (assente.kind === "argomenti") {
+      ctx.announce(assente.message);
+      return;
+    }
     const reason = assente.perche === "spento" ? "draw.reason.engine_off" : "draw.reason.engine_stopped";
     ctx.announce(t("draw.rejected", { reason: t(reason) }));
   };
@@ -1159,6 +1170,9 @@ export function installGestiMotore(ctx: EditorContext): void {
     dici: (frase) => {
       if (!ctx.disposed) ctx.announce(t(frase));
     },
+    rifiutati: (rifiutati) => {
+      if (!ctx.disposed) ctx.announce(rifiutati.message);
+    },
   });
   ctx.gommaPuntiEnd = (punti) => gomma.lancia(punti);
   // Il Pennello tondo (K6 T12, giro 2): un colpo, un comando, col colore di adesso (`pennello-tondo.ts`).
@@ -1173,6 +1187,9 @@ export function installGestiMotore(ctx: EditorContext): void {
     },
     dici: (frase) => {
       if (!ctx.disposed) ctx.announce(t(frase));
+    },
+    rifiutati: (rifiutati) => {
+      if (!ctx.disposed) ctx.announce(rifiutati.message);
     },
   });
   ctx.pennelloEnd = (punti, colore) => pennello.lancia(punti, colore);

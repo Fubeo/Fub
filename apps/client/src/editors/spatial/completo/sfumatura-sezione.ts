@@ -313,7 +313,9 @@ export function sezioneSfumatura(
                   ? { testo: t("draw.sfumatura.elimina.vuota", { nome: scelta.nome }), errore: true }
                   : esito.kind === "bloccato"
                     ? { testo: testoDelBlocco(esito.perche), errore: true }
-                    : { testo: t("draw.sfumatura.preimpostate.motore"), errore: true };
+                    : esito.kind === "argomenti"
+                      ? { testo: esito.frase, errore: true }
+                      : { testo: t("draw.sfumatura.preimpostate.motore"), errore: true };
             if (esito.kind === "fatto" || esito.kind === "vuoto") preimpostataScelta = null;
           });
         });
@@ -367,7 +369,9 @@ export function sezioneSfumatura(
               testo:
                 esito.kind === "bloccato"
                   ? testoDelBlocco(esito.perche)
-                  : t(esito.kind === "vuoto" ? "draw.sfumatura.salva.niente" : "draw.sfumatura.preimpostate.motore"),
+                  : esito.kind === "argomenti"
+                    ? esito.frase
+                    : t(esito.kind === "vuoto" ? "draw.sfumatura.salva.niente" : "draw.sfumatura.preimpostate.motore"),
               errore: true,
             };
           }

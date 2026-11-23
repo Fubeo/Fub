@@ -19,8 +19,8 @@ import { openDialog } from "../../../kit/dialog";
 import { formBody, formCheck, formError, formNote, formText } from "../../../kit/form";
 import { openLifetime, type Lifetime } from "../../../ui/lifetime";
 import { motivoDelRifiuto } from "../motore/rifiuto";
-import { t, type DrawKey } from "../strings";
-import { applicaEsito, chiama, type DipendenzeComando } from "./esegui";
+import { t } from "../strings";
+import { applicaEsito, chiama, chiamaConArgomenti, type DipendenzeComando } from "./esegui";
 import { famigliaColorePronta } from "./selettore-colore";
 import type { VoceDelCompleto } from "./sezioni";
 
@@ -60,20 +60,25 @@ function etichettaDelCampione(campione: CampioneDelGruppo): string {
 }
 
 /// Manda il gruppo al motore dal percorso dei comandi del Completo: la famiglia `colore` è pronta prima. Dà
-/// il perché in italiano se il motore lo rifiuta; `null` se è andata, o se non c'è niente da dire.
+/// il perché, già a parole, se il motore lo rifiuta (o ne rifiuta gli argomenti, con la sua frase); `null` se
+/// è andata, o se non c'è niente da dire.
 async function inviaGruppo(
   dipendenze: DipendenzeComando,
   valore: { readonly name: string; readonly swatches: readonly string[] },
   finestra: Lifetime,
-): Promise<DrawKey | null> {
+): Promise<string | null> {
   const pronta = await famigliaColorePronta(dipendenze.carica);
   if (finestra.closed) return null;
-  if (!pronta) return "draw.window.failed";
-  const esito = await chiama(dipendenze, "disegno.swatch.newGroup", { name: valore.name, swatches: [...valore.swatches] }, false);
+  if (!pronta) return t("draw.window.failed");
+  const esito = await chiamaConArgomenti(dipendenze, "disegno.swatch.newGroup", { name: valore.name, swatches: [...valore.swatches] }, false);
   if (finestra.closed) return null;
-  if (esito === null) return "draw.window.unanswered";
-  if (esito.refused !== null) return motivoDelRifiuto(esito.refused);
-  return applicaEsito(esito, t("draw.colorGroup.undo"), dipendenze) ? null : "draw.completo.key.failed";
+  if (esito === null) return t("draw.window.unanswered");
+  if ("kind" in esito) return esito.message;
+  if (esito.refused !== null) {
+    const motivo = motivoDelRifiuto(esito.refused);
+    return motivo === null ? null : t(motivo);
+  }
+  return applicaEsito(esito, t("draw.colorGroup.undo"), dipendenze) ? null : t("draw.completo.key.failed");
 }
 
 /// La finestra: il nome, la lista dei campioni con le caselle, e Annulla e OK. Un gruppo senza campioni non
@@ -128,10 +133,10 @@ function apriFinestraNuovoGruppo(dipendenze: DipendenzeComando, finestra: Lifeti
       dimmi(null);
       const swatches = campioni.filter((campione) => scelti.has(campione.name)).map((campione) => campione.name);
       return inviaGruppo(dipendenze, { name: nome.value(), swatches }, finestra)
-        .catch((): DrawKey => "draw.window.unanswered")
+        .catch((): string => t("draw.window.unanswered"))
         .then((rifiuto) => {
           if (rifiuto === null) return true;
-          dimmi(t(rifiuto));
+          dimmi(rifiuto);
           return false;
         });
     },

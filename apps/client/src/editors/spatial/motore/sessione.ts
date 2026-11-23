@@ -21,6 +21,14 @@
 //   non ferma la fila per sempre. Scaduto il tempo, o al primo errore, la
 //   sessione si ferma come `MotoreAssente { perche: "errore" }`: la copia del
 //   motore non è più certa, e gli strumenti tornano a chi li sa fare senza.
+// - **Una richiesta sbagliata non è un motore guasto.** Un `bad_args` a un
+//   gesto o a un comando vuol dire che la richiesta non vale (due campioni
+//   da unire, un punto che il tracciato non ha), non che il motore ha
+//   sbagliato: il motore rifiuta prima di toccare la copia, la sessione resta
+//   aperta, la fila va avanti, e chi ha chiesto riceve la frase del motore
+//   (`ArgomentiRifiutati`) da dire a chi usa Fub. Un `bad_args` a un sync, o
+//   alla chiusura di un tracciato aperto, resta un guasto: lì la richiesta
+//   la fa la sessione, e la copia non è più certa.
 // - **Spento a metà.** Un `unserved` a una richiesta della sessione aperta
 //   vuol dire che il motore si è spento nel vault e l'host ne ha chiuso le
 //   istanze (T29): la sessione si ferma come `MotoreAssente { perche:
@@ -49,7 +57,7 @@ import {
   type DrawingOpen,
   type DrawingOutcome,
 } from "../../../host/contract";
-import { isErrorKind } from "../../../host/errors";
+import { asPluginError, isErrorKind } from "../../../host/errors";
 import type { api } from "../../../host/ipc";
 import type { DocumentSession, DocumentSurfaceUpdate } from "../../../state/document-session";
 import { lineFeeds } from "../../core/text-operation";
@@ -93,6 +101,19 @@ export interface MotoreAssente {
   readonly perche: "spento" | "errore";
 }
 
+/// Il motore ha rifiutato un gesto o un comando perché i suoi argomenti non
+/// valgono (`bad_args`): niente è cambiato e la sessione resta aperta.
+/// `message` è la frase del motore, già scritta per chi usa Fub.
+export interface ArgomentiRifiutati {
+  readonly kind: "argomenti";
+  readonly message: string;
+}
+
+/// Ciò che torna da un gesto o da un comando: l'esito; gli argomenti
+/// rifiutati; il motore assente; `null` se la sessione è stata chiusa prima
+/// che l'esito arrivasse.
+export type RispostaMotore = DrawingOutcome | ArgomentiRifiutati | MotoreAssente | null;
+
 /// Un gesto, senza la revisione: la mette la sessione.
 export type GestoMotore = Omit<DrawingGesture, "revision">;
 /// Un comando, senza la revisione: la mette la sessione.
@@ -119,11 +140,11 @@ export interface SessioneMotore {
   /// perché la `DocumentSession` è finita (il file cancellato, il vault
   /// chiuso o cambiato). Il ritorno smette.
   quandoChiusa(listener: () => void): Teardown;
-  /// L'esito del gesto; il motore assente; `null` se la sessione è stata
-  /// chiusa prima che l'esito arrivasse.
-  gesto(gesture: GestoMotore): Promise<DrawingOutcome | MotoreAssente | null>;
+  /// L'esito del gesto; gli argomenti rifiutati; il motore assente; `null`
+  /// se la sessione è stata chiusa prima che l'esito arrivasse.
+  gesto(gesture: GestoMotore): Promise<RispostaMotore>;
   comandi(selection: string[]): Promise<DrawingCommandInfo[] | MotoreAssente | null>;
-  comando(request: ComandoMotore): Promise<DrawingOutcome | MotoreAssente | null>;
+  comando(request: ComandoMotore): Promise<RispostaMotore>;
   /// Un tracciato aperto: il primo sync che arriva lo chiude prima di
   /// partire (il `commit` alla revisione del gesto), una volta sola. Uno
   /// nuovo prende il posto di quello di prima; il ritorno lo toglie.
@@ -291,7 +312,7 @@ class Sessione implements SessioneMotore {
     };
   }
 
-  gesto(gesture: GestoMotore): Promise<DrawingOutcome | MotoreAssente | null> {
+  gesto(gesture: GestoMotore): Promise<RispostaMotore> {
     return this.#conRiprova((revision) =>
       this.#host.drawingGesture(this.instance, { ...gesture, revision }, this.#vault));
   }
@@ -300,7 +321,7 @@ class Sessione implements SessioneMotore {
     return this.#inFila(() => entro(this.#host.drawingCommands(this.instance, [...selection], this.#vault)));
   }
 
-  comando(request: ComandoMotore): Promise<DrawingOutcome | MotoreAssente | null> {
+  comando(request: ComandoMotore): Promise<RispostaMotore> {
     // Il motore scarta il gesto lasciato a metà quando un comando cambia il
     // disegno: il tracciato aperto o il testo che si scrive si chiudono prima,
     // in un passo, come prima di un sync (K6 T16).
@@ -370,14 +391,21 @@ class Sessione implements SessioneMotore {
   // --- La fila ---------------------------------------------------------------
 
   /// Un gesto o un comando: con `stale` rimanda il testo intero e riprova una
-  /// volta.
-  #conRiprova(send: (revision: string) => Promise<DrawingOutcome>): Promise<DrawingOutcome | MotoreAssente | null> {
+  /// volta. Un `bad_args` della richiesta torna come `ArgomentiRifiutati`;
+  /// quello del sync della riprova resta un guasto (`#inFila`).
+  #conRiprova(send: (revision: string) => Promise<DrawingOutcome>): Promise<RispostaMotore> {
+    const manda = (): Promise<DrawingOutcome | ArgomentiRifiutati> =>
+      entro(send(this.revision())).catch((error: unknown) => {
+        const rifiutati = argomentiRifiutati(error);
+        if (rifiutati === null) throw error;
+        return rifiutati;
+      });
     return this.#inFila(async () => {
-      const outcome = await entro(send(this.revision()));
-      if (outcome.refused !== "stale" || this.#stato !== "aperta") return outcome;
+      const outcome = await manda();
+      if ("kind" in outcome || outcome.refused !== "stale" || this.#stato !== "aperta") return outcome;
       await this.#rimandaTesto();
       if (this.#stato !== "aperta") return outcome;
-      return entro(send(this.revision()));
+      return manda();
     });
   }
 
@@ -423,6 +451,13 @@ class Sessione implements SessioneMotore {
   #chiudiNelMotore(): Promise<void> {
     return this.#fila.enqueue(() => entro(this.#host.closeDrawing(this.instance, this.#vault)).catch(() => {}));
   }
+}
+
+/// Gli argomenti rifiutati di un errore `bad_args` del contratto, o `null`
+/// per ogni altro errore (che ferma la sessione).
+function argomentiRifiutati(error: unknown): ArgomentiRifiutati | null {
+  const plugin = asPluginError(error);
+  return plugin?.kind === "bad_args" ? { kind: "argomenti", message: plugin.message } : null;
 }
 
 /// Avvisa una volta chi ascolta in `listeners`, e li dimentica: l'errore di

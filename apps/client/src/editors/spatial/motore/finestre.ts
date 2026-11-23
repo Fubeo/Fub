@@ -57,6 +57,9 @@ export type ValoreCampo = string | number | boolean;
 export interface EsitoComando {
   readonly anteprima: DrawingPreview | null;
   readonly rifiuto: DrawingRefusal | null;
+  /// La frase del motore che non prende questi valori (`bad_args`): la
+  /// finestra la dice sotto i campi e resta aperta, perché si cambino.
+  readonly argomenti?: string;
 }
 
 /// Manda il comando con questi valori. Con `anteprima` vero il motore lo
@@ -240,6 +243,19 @@ export function apriFinestra(
       riprova.hidden = false;
     };
 
+    /// La frase del motore sui valori: senza «Riprova», che rimanderebbe gli
+    /// stessi valori; si cambia un campo e si riprova con OK.
+    const mostraArgomenti = (frase: string): void => {
+      if (errore === null) {
+        errore = formError(frase);
+        corpo.append(errore);
+      } else {
+        errore.textContent = frase;
+      }
+      ripeti = null;
+      riprova.hidden = true;
+    };
+
     const mandaAnteprima = (): void => {
       if (chiusa || !formaPronta || !anteprimaAccesa || !anteprimaPossibile || campi.some((campo) => !campo.valido())) return;
       ultimoInvio = Date.now();
@@ -250,6 +266,11 @@ export function apriFinestra(
         .then(
           (esito) => {
             if (chiusa || mio !== numero) return;
+            if (esito.argomenti !== undefined) {
+              opzioni.sulFoglio(null);
+              mostraArgomenti(esito.argomenti);
+              return;
+            }
             if (esito.rifiuto === "no_preview") {
               anteprimaPossibile = false;
               anteprimaRiga?.remove();
@@ -305,6 +326,10 @@ export function apriFinestra(
         .then(() => esegui(valori, false))
         .then(
           (esito) => {
+            if (esito.argomenti !== undefined) {
+              mostraArgomenti(esito.argomenti);
+              return false;
+            }
             if (esito.rifiuto === null) {
               RICORDATI.set(opzioni.id, valori);
               return true;

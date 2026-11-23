@@ -25,11 +25,13 @@ export interface Tema {
 /// La lista dei temi, o perché non c'è (il motore non risponde).
 export type EsitoTemi = { readonly kind: "pronti"; readonly temi: readonly Tema[] } | { readonly kind: "assente" };
 
-/// Com'è andato Salva o Togli: `fatto` col nome; `rifiuto` se il motore non ha fatto niente; `assente` se
-/// non ha risposto.
+/// Com'è andato Salva o Togli: `fatto` col nome; `rifiuto` se il motore non ha fatto niente;
+/// `argomenti` se il motore non prende il nome o i colori, con la sua frase; `assente` se non ha
+/// risposto.
 export type EsitoTema =
   | { readonly kind: "fatto"; readonly nome: string }
   | { readonly kind: "rifiuto" }
+  | { readonly kind: "argomenti"; readonly frase: string }
   | { readonly kind: "assente" };
 
 /// La porta dei temi del pannello.
@@ -94,7 +96,8 @@ export function creaPortaTemi(dipendenze: DipendenzeTemi): PortaTemi {
       const s = await sessione();
       if (s === null) return { kind: "assente" };
       const esito = await s.comando({ id: "disegno.colorTheme.save", selection: [], value: { name: nome.trim(), colors: [...colori] }, preview: false });
-      if (esito === null || "kind" in esito || dipendenze.vita.closed) return { kind: "assente" };
+      if (esito === null || dipendenze.vita.closed) return { kind: "assente" };
+      if ("kind" in esito) return esito.kind === "argomenti" ? { kind: "argomenti", frase: esito.message } : { kind: "assente" };
       if (esito.refused !== null) return { kind: "rifiuto" };
       const salvato = (esito.reading as { name?: unknown } | null)?.name;
       return typeof salvato === "string" ? { kind: "fatto", nome: salvato } : { kind: "rifiuto" };
@@ -103,7 +106,8 @@ export function creaPortaTemi(dipendenze: DipendenzeTemi): PortaTemi {
       const s = await sessione();
       if (s === null) return { kind: "assente" };
       const esito = await s.comando({ id: "disegno.colorTheme.delete", selection: [], value: { name: nome }, preview: false });
-      if (esito === null || "kind" in esito || dipendenze.vita.closed) return { kind: "assente" };
+      if (esito === null || dipendenze.vita.closed) return { kind: "assente" };
+      if ("kind" in esito) return esito.kind === "argomenti" ? { kind: "argomenti", frase: esito.message } : { kind: "assente" };
       if (esito.refused !== null) return { kind: "rifiuto" };
       const tolto = (esito.reading as { deleted?: unknown } | null)?.deleted;
       return typeof tolto === "string" ? { kind: "fatto", nome: tolto } : { kind: "rifiuto" };

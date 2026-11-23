@@ -78,7 +78,13 @@ questi pezzi:
 Un comando di sola lettura (un pannello che mostra dati) rende una lettura
 invece delle operazioni (arriva con T4). Una famiglia che non trova memoria
 nel `Budget` rifiuta il comando con `NoMemory` (arriva con T4), e il disegno
-resta com'era.
+resta com'era. Un comando con argomenti che il motore non prende (`BadArgs`)
+non tocca la copia né la revisione e non rende operazioni: la sessione resta
+aperta, la frase del motore si annuncia, o nella finestra del comando si
+mostra sotto i campi senza «Riprova», e la finestra resta aperta
+([Quando il motore manca](disegno.md#quando-il-motore-manca)). Le finestre
+che controllano da sé i valori (per esempio «Nuovo gruppo colori…») lo fanno
+prima di mandare il comando.
 
 ## Il percorso di uno strumento del motore
 

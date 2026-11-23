@@ -8,7 +8,7 @@ import type { DrawingCommandRequest, DrawingOutcome } from "../../../host/contra
 import { openLifetime, type Lifetime } from "../../../ui/lifetime";
 import type { DipendenzeComando } from "./esegui";
 import { apriFinestraLibrerie, creaPortaLibrerie, type CampioneVoce, type LibreriaVoce, type PortaLibrerie } from "./librerie-finestra";
-import { t, type DrawKey } from "../strings";
+import { t } from "../strings";
 
 const LIBRERIE: LibreriaVoce[] = [
   { id: "earth-tones", name: "Earth Tones", category: "builtIn", count: 42 },
@@ -39,7 +39,7 @@ function portaFinta(over: Partial<PortaLibrerie> = {}) {
   const porta = {
     elenco: vi.fn(() => Promise.resolve<LibreriaVoce[] | null>(LIBRERIE)),
     campioni: vi.fn((id: string) => Promise.resolve<CampioneVoce[] | null>(CAMPIONI[id] ?? [])),
-    aggiungi: vi.fn((_id: string, _nomi: readonly string[] | null) => Promise.resolve<{ rifiuto: DrawKey | null } | null>({ rifiuto: null })),
+    aggiungi: vi.fn((_id: string, _nomi: readonly string[] | null) => Promise.resolve<{ rifiuto: string | null } | null>({ rifiuto: null })),
     ...over,
   };
   return porta;
@@ -114,7 +114,7 @@ describe("la finestra Librerie di campioni", () => {
   });
 
   it("il motore rifiuta: la frase in italiano, la finestra resta aperta, e nessun passo", async () => {
-    const porta = portaFinta({ aggiungi: vi.fn(() => Promise.resolve({ rifiuto: "draw.disabled.unmapped" as DrawKey })) });
+    const porta = portaFinta({ aggiungi: vi.fn(() => Promise.resolve({ rifiuto: t("draw.disabled.unmapped") })) });
     apriFinestraLibrerie(porta, vita());
     await attesa();
     sceglie("earth-tones");
