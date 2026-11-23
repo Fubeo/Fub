@@ -64,7 +64,18 @@ export type OverlayHandle =
   /// un quadratino di misura fissa, pieno del colore della linea se è scelto.
   | { readonly kind: "anchor"; readonly x: number; readonly y: number; readonly filled: boolean }
   /// La fine di una maniglia di un punto scelto: un cerchietto pieno.
-  | { readonly kind: "control"; readonly x: number; readonly y: number };
+  | { readonly kind: "control"; readonly x: number; readonly y: number }
+  /// Il contorno di un tracciato scelto, largo un pixel, coi pezzi già nella
+  /// scena (come VectorCraft lo disegna con gli strumenti del motore).
+  | { readonly kind: "outline"; readonly parts: readonly OutlinePart[] };
+
+/// Un pezzo di [`OverlayHandle`] `outline`, in coordinate di scena.
+export type OutlinePart =
+  | { readonly kind: "move"; readonly to: Point }
+  | { readonly kind: "line"; readonly to: Point }
+  | { readonly kind: "quad"; readonly control: Point; readonly to: Point }
+  | { readonly kind: "cubic"; readonly c1: Point; readonly c2: Point; readonly to: Point }
+  | { readonly kind: "close" };
 
 /// La forma della punta: `round` un cerchio, `flat` l'ellisse stretta della
 /// punta piatta, `block` il rettangolo tondo dell'evidenziatore, `eraser` il
@@ -281,6 +292,17 @@ export function createOverlay(host: HTMLElement, owner: Lifetime): SceneOverlay 
         ctx.beginPath();
         ctx.moveTo(...screen(handle.stem[0], handle.stem[1]));
         ctx.lineTo(...screen(handle.x, handle.y));
+        ctx.stroke();
+      } else if (handle.kind === "outline") {
+        ctx.setLineDash([]);
+        ctx.beginPath();
+        for (const part of handle.parts) {
+          if (part.kind === "close") ctx.closePath();
+          else if (part.kind === "move") ctx.moveTo(...screen(part.to[0], part.to[1]));
+          else if (part.kind === "line") ctx.lineTo(...screen(part.to[0], part.to[1]));
+          else if (part.kind === "quad") ctx.quadraticCurveTo(...screen(part.control[0], part.control[1]), ...screen(part.to[0], part.to[1]));
+          else ctx.bezierCurveTo(...screen(part.c1[0], part.c1[1]), ...screen(part.c2[0], part.c2[1]), ...screen(part.to[0], part.to[1]));
+        }
         ctx.stroke();
       } else if (handle.kind === "guide") {
         ctx.setLineDash(handle.dashed ? [4, 3] : []);

@@ -193,3 +193,43 @@ describe("gli interruttori si ricordano nella griglia, come la griglia", () => {
     expect(letta.hideBoundingBox).toBe(true);
   });
 });
+
+describe("i segni della selezione con gli strumenti del motore, come in VectorCraft", () => {
+  const TRACCIATO = doc(`<title>Prova</title>${LAYER}<path id="${UNO}" d="M60 60 C 80 40 100 80 120 60" fill="none" stroke="#000000" stroke-width="2"/></g>`);
+
+  it("con la Selezione diretta: contorno di un pixel e punti pieni, senza cornice né maniglie della cornice", () => {
+    const e = mount(TRACCIATO);
+    e.select([UNO]);
+    expect(tipi()).toContain("grip");
+    e.setEngineTool("directSelection");
+    e.select([]);
+    e.select([UNO]);
+    expect(tipi()).not.toContain("grip");
+    expect(tipi()).not.toContain("box");
+    expect(tipi()).not.toContain("rotor");
+    expect(tipi()).toContain("outline");
+    const punti = disegno.ultime.filter((h) => h.kind === "anchor");
+    expect(punti).toHaveLength(2);
+    expect(punti.every((h) => h.kind === "anchor" && h.filled)).toBe(true);
+    // Scelto intero, con uno strumento che cambia i punti: tutte le maniglie.
+    expect(disegno.ultime.filter((h) => h.kind === "control")).toHaveLength(2);
+  });
+
+  it("con la Selezione del motore la cornice resta, e i punti sono pieni senza maniglie", () => {
+    const e = mount(TRACCIATO);
+    e.setEngineTool("selection");
+    e.select([UNO]);
+    expect(tipi()).toContain("grip");
+    expect(tipi()).toContain("outline");
+    expect(tipi()).not.toContain("control");
+  });
+
+  it("Nascondi bordi toglie il contorno anche col motore", () => {
+    const e = mount(TRACCIATO);
+    e.setEngineTool("directSelection");
+    e.setGrid({ ...DEFAULT_GRID, hideEdges: true });
+    e.select([UNO]);
+    expect(tipi()).not.toContain("outline");
+    expect(tipi()).toContain("anchor");
+  });
+});

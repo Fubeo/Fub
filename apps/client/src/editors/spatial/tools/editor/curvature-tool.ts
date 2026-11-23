@@ -220,6 +220,9 @@ export function installCurvatureTool(ctx: EditorContext): void {
         ctx.hoverNib(event.buttons === 0 && !(off && MARKING_TOOLS.has(ctx.tool)) ? point : null, pointer);
         ctx.hoverRuler(event.buttons === 0 ? point : null, pointer);
       }
+      // Il passaggio senza premere va allo strumento del motore (il tocco non
+      // passa sopra niente).
+      ctx.motoreSopra(ctx.current === null && ctx.pressed === null && event.buttons === 0 && event.pointerType !== "touch" ? point : null);
     },
     { capture: true },
   );
@@ -228,6 +231,7 @@ export function installCurvatureTool(ctx: EditorContext): void {
     offPage(null);
     ctx.pointerAt = null;
     ctx.hoverNib(null, "mouse");
+    ctx.motoreSopra(null);
   });
 
 

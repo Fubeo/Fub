@@ -130,7 +130,9 @@ riceve `transform = G⁻¹·M·G·T`. Nella Selezione la ricevono gli oggetti sc
 come nel client; altrimenti un gruppo mosso tutto se ha più figli o uno
 estraneo, se no il figlio; un livello mai. I colori pieni e lo spessore
 diventano `fill`, `stroke` e `stroke-width`, un tracciato cambiato punto per
-punto `d`; i nuovi sono `add` (`rect`, `ellipse`, `line` o `path`, geometria
+punto `d`. Quando a cambiare sono i punti (uno strumento o un comando dei
+tracciati, la Selezione diretta) M vale solo se è uno spostamento: un punto
+spostato è sempre `d`, anche quando una matrice inclinata lo spiegherebbe; i nuovi sono `add` (`rect`, `ellipse`, `line` o `path`, geometria
 con due decimali), i tolti `remove` e l'ordine `move`, uno per ogni oggetto
 fuori dalla sottosequenza crescente più lunga dei fratelli. Ciò che non si
 scrive così è `Unsupported`; un oggetto fuori dalla mappa toccato è `Unmapped`.

@@ -9,7 +9,7 @@
 // gesto annullato non scrivono niente.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { DRAWING_COMMAND_TOOL_OPTION, DRAWING_COMMAND_TOOL_STATE, type DrawingFrame, type DrawingGesture, type DrawingOutcome, type DrawingPointer } from "../../../host/contract";
+import { DRAWING_COMMAND_TOOL_OPTION, DRAWING_COMMAND_TOOL_STATE, type DrawingFrame, type DrawingGesture, type DrawingOutcome, type DrawingOverlay, type DrawingPointer } from "../../../host/contract";
 import { createFakeHost, type DrawingFake, type FakeHost } from "../../../host/fake";
 import { DocumentSessionCollection, type DocumentSessionApi } from "../../../state/document-session";
 import { openLifetime, type Lifetime } from "../../../ui/lifetime";
@@ -1031,6 +1031,78 @@ describe("lo strumento del motore nei gesti (K6 T8)", () => {
     await settle(16, 8);
     expect(gestures(fake).slice(-1)[0]!.phase).toBe("commit");
     expect(gestures(fake)[0]!.tool).toEqual({ engine: { id: "pencil" } });
+  });
+
+  it("i punti scelti al gesto di prima vanno col gesto dopo, e solo per lo strumento che li ha", async () => {
+    const punto = { element: "t", subpath: 0, anchor: 1, at: [100, 60] as [number, number], end: false };
+    const fake = createFakeHost({
+      drawing: {
+        comando: statoDiSerie,
+        gesto: (gesture) => {
+          const id = typeof gesture.tool === "object" ? gesture.tool.engine.id : "";
+          const esito = esitoConStato("arrow", null);
+          return id === "directSelection" ? { ...esito, state: { ...esito.state!, anchors: [punto] } } : esito;
+        },
+      } as DrawingFake,
+    });
+    const editor = await montaConPreparazione(EMPTY, fake);
+    editor.setEngineTool("directSelection");
+    await drag(editor, [[220, 40], [222, 41]]);
+    // Il primo gesto non ha punti da portare.
+    expect(gestures(fake).every((g) => g.anchors === undefined)).toBe(true);
+    const primi = gestures(fake).length;
+    await drag(editor, [[220, 40], [260, 70]]);
+    const dopo = gestures(fake).slice(primi);
+    expect(dopo.length).toBeGreaterThan(0);
+    expect(dopo.every((g) => JSON.stringify(g.anchors) === JSON.stringify([punto]))).toBe(true);
+    // Un altro strumento non porta i punti della Selezione diretta.
+    editor.setEngineTool("pencil");
+    const prima = gestures(fake).length;
+    await drag(editor, [[220, 40], [260, 70]]);
+    expect(gestures(fake).slice(prima).every((g) => g.anchors === undefined)).toBe(true);
+  });
+
+  it("il mouse che passa senza premere va al motore, al più una volta per fotogramma, e ne mostra cursore e segni", async () => {
+    const fake = createFakeHost({
+      drawing: {
+        comando: statoDiSerie,
+        gesto: (gesture) => {
+          if (gesture.phase !== "preview" || gesture.events[0]?.kind !== "move") return esitoConStato("arrow", null);
+          const sopraIlPunto = Math.hypot(gesture.events[0].x - 220, gesture.events[0].y - 40) < 5;
+          const esito = esitoConStato(sopraIlPunto ? "crosshair" : "arrow", null);
+          const overlays: DrawingOverlay[] = sopraIlPunto ? [{ kind: "anchor", at: [220, 40], role: "selection", filled: false, size: 7 }] : [];
+          return { ...esito, preview: { shape: null, overlays, marquee: null, matrix: null } };
+        },
+      } as DrawingFake,
+    });
+    const editor = await montaConPreparazione(EMPTY, fake);
+    editor.setEngineTool("directSelection");
+    const prima = gestures(fake).length;
+    // Tre movimenti nello stesso fotogramma: parte solo l'ultimo.
+    dispatch(editor, point("move", 100, 100));
+    dispatch(editor, point("move", 150, 100));
+    dispatch(editor, point("move", 220, 40));
+    await settle();
+    const passaggi = gestures(fake).slice(prima);
+    expect(passaggi).toHaveLength(1);
+    expect(passaggi[0]).toEqual(expect.objectContaining({ phase: "preview", tool: { engine: { id: "directSelection" } }, selection: [] }));
+    expect(passaggi[0]!.events).toEqual([expect.objectContaining({ kind: "move", x: 220, y: 40 })]);
+    expect(surfaceOf().style.cursor).toBe("crosshair");
+    // Il punto sotto il mouse è sullo strato dell'anteprima.
+    const anteprima = (): number => host.querySelector(".draw-preview g g")?.childElementCount ?? 0;
+    expect(anteprima()).toBeGreaterThan(0);
+    // Lontano dal punto il cursore torna quello di serie; fuori dal foglio
+    // non parte niente.
+    dispatch(editor, point("move", 400, 300));
+    await settle();
+    expect(surfaceOf().style.cursor).toBe("default");
+    expect(anteprima()).toBe(0);
+    const dopo = gestures(fake).length;
+    surfaceOf().dispatchEvent(new PointerEvent("pointerleave", { bubbles: false, pointerType: "mouse" }));
+    await settle();
+    expect(gestures(fake).length).toBe(dopo);
+    // Nessun passaggio scrive.
+    expect(gestures(fake).slice(prima).every((g) => g.phase === "preview")).toBe(true);
   });
 
   it("Esc annulla il gesto e lo strumento del motore resta", async () => {

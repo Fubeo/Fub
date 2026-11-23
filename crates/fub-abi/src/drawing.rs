@@ -653,6 +653,13 @@ pub struct DrawingGesture {
     /// mancare (vale vuoto); solo per [`DrawingTool::Engine`].
     #[serde(default)]
     pub inputs: Vec<DrawingInput>,
+    /// I punti di ancoraggio scelti prima del gesto, come li ha detti lo stato
+    /// dello strumento ([`DrawingToolState::anchors`]): il motore li rimette
+    /// nella selezione, e ignora quelli che non stanno più dove il client li
+    /// ha visti. Al più [`MAX_DRAWING_ANCHORS`]; solo per
+    /// [`DrawingTool::Engine`]. Può mancare (vale vuoto).
+    #[serde(default)]
+    pub anchors: Vec<DrawingAnchor>,
 }
 
 impl DrawingGesture {
@@ -702,7 +709,11 @@ impl DrawingGesture {
                 self.inputs.len()
             )));
         }
-        self.inputs.iter().try_for_each(DrawingInput::validate)
+        self.inputs.iter().try_for_each(DrawingInput::validate)?;
+        if !self.anchors.is_empty() && !matches!(self.tool, DrawingTool::Engine { .. }) {
+            return Err(bad("`anchors` are only for an engine tool".into()));
+        }
+        anchors("anchors", &self.anchors)
     }
 }
 
@@ -1000,21 +1011,27 @@ pub struct DrawingAnchor {
 impl DrawingToolState {
     /// Il controllo di chi scrive lo stato, prima di mandarlo.
     pub fn validate(&self) -> Result<(), PluginError> {
-        if self.anchors.len() > MAX_DRAWING_ANCHORS {
+        anchors("state.anchors", &self.anchors)
+    }
+}
+
+/// I punti di ancoraggio del campo `field`: al più [`MAX_DRAWING_ANCHORS`],
+/// ognuno su un elemento con un id e in un punto finito.
+fn anchors(field: &str, anchors: &[DrawingAnchor]) -> Result<(), PluginError> {
+    if anchors.len() > MAX_DRAWING_ANCHORS {
+        return Err(bad(format!(
+            "`{field}` has {} anchors, at most {MAX_DRAWING_ANCHORS}",
+            anchors.len()
+        )));
+    }
+    for a in anchors {
+        if a.element.is_empty() || !a.at.iter().all(|v| v.is_finite()) {
             return Err(bad(format!(
-                "`state.anchors` has {} anchors, at most {MAX_DRAWING_ANCHORS}",
-                self.anchors.len()
+                "`{field}` has an empty element or a point that is not finite"
             )));
         }
-        for a in &self.anchors {
-            if a.element.is_empty() || !a.at.iter().all(|v| v.is_finite()) {
-                return Err(bad(
-                    "`state.anchors` has an empty element or a point that is not finite".into(),
-                ));
-            }
-        }
-        Ok(())
     }
+    Ok(())
 }
 
 impl DrawingOutcome {

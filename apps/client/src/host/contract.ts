@@ -2086,6 +2086,10 @@ export interface DrawingGesture {
   events: DrawingPointer[];
   /** Tasti, testo e IME, solo per uno strumento del motore; può mancare. */
   inputs?: DrawingInput[];
+  /** I punti scelti prima del gesto, come li ha detti lo stato dello
+   *  strumento (al più 1000, come lì); solo per uno strumento del motore;
+   *  può mancare. Il motore lascia quelli che non stanno più lì. */
+  anchors?: DrawingAnchor[];
 }
 
 /** La cornice di trasformazione che il client tiene (`Frame` di

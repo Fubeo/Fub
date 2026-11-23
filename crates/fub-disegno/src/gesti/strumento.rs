@@ -22,6 +22,7 @@
 //! coordinate di scena, con un ruolo al posto del colore ([`ruolo`]); il
 //! client le colora con i suoi token.
 
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 use fub_abi::{
@@ -66,6 +67,21 @@ pub(crate) struct Ponte {
     /// I testi nuovi del gesto che hanno già preso il carattere di Fub
     /// ([`col_carattere_di_fub`]): uno cambiato dopo resta com'è.
     ritoccati: Vec<NodeId>,
+    /// Il gesto con cui la sessione si è preparata, senza eventi né fase
+    /// ([`chiave`]): un passaggio del mouse o una pressione con una selezione,
+    /// dei punti, uno zoom o uno stile diversi la preparano di nuovo.
+    chiave: Option<DrawingGesture>,
+}
+
+/// Ciò che decide come la sessione si prepara per il gesto `gesto`: tutto
+/// tranne gli eventi, i tasti e la fase.
+fn chiave(gesto: &DrawingGesture) -> DrawingGesture {
+    DrawingGesture {
+        phase: DrawingPhase::Preview,
+        events: Vec::new(),
+        inputs: Vec::new(),
+        ..gesto.clone()
+    }
 }
 
 /// Il rifiuto del Pennello tondo per il livello del gesto, come `forme::destinazione`: un livello scelto
@@ -123,7 +139,23 @@ pub(crate) fn gesto(
         tool: gesto.tool.clone(),
         revisione: gesto.revision,
     };
-    let ricomincia = banco.in_corso.as_ref() != Some(&qui);
+    // Lo strumento resta vivo fra un passaggio del mouse e l'altro, e fra il
+    // passaggio e la pressione (come in VectorCraft, dove l'hover va allo
+    // strumento): si prepara di nuovo solo se il disegno è un altro, o se un
+    // passaggio o una pressione arrivano con un gesto diverso mentre lo
+    // strumento non ha niente in corso (un tracciato aperto della Penna resta).
+    let chiave_qui = chiave(gesto);
+    let comincia = gesto.events.first().is_some_and(|e| {
+        matches!(
+            e.kind,
+            fub_abi::DrawingPointerKind::Move | fub_abi::DrawingPointerKind::Down
+        )
+    });
+    let ricomincia = banco.in_corso.as_ref() != Some(&qui)
+        || (comincia
+            && banco.ponte.chiave.as_ref() != Some(&chiave_qui)
+            && !vectorcraft_engine::guard::catch_panic(|| banco.sessione.tool_busy())
+                .unwrap_or(false));
     let cx = Contesto::nuovo(gesto, copia, None, false);
     // Uno strumento che trasforma la selezione non tocca un oggetto bloccato: il rifiuto
     // è quello della finestra del comando (T13 giro 5), e vale anche per l'anteprima. Il
@@ -161,6 +193,7 @@ pub(crate) fn gesto(
         banco.ponte = Ponte {
             inizio: banco.documento(),
             corpo: TEXT_SIZE * forme::scala(al_motore),
+            chiave: Some(chiave_qui),
             ..Ponte::default()
         };
     }
@@ -235,7 +268,16 @@ pub(crate) fn gesto(
         .map(|d| d.selection.objects.clone())
         .unwrap_or_default();
     let differenza = vectorcraft_engine::guard::catch_panic(|| {
-        differenza::differenza(copia, &dopo, Some(&scrivi_testo), None)
+        differenza::differenza(
+            copia,
+            &dopo,
+            Some(&scrivi_testo),
+            None,
+            // Gli strumenti dei tracciati e quelli che spostano i punti (la
+            // Selezione diretta): una matrice spiega un oggetto solo se lo
+            // sposta.
+            dei_tracciati || vectorcraft_tools::catalog::edits_anchors(id),
+        )
     });
     // Lo stato si legge prima che la sessione torni alla copia (che rimette
     // lo strumento a capo); il gesto è chiuso, quindi non è più `busy` per
@@ -642,14 +684,62 @@ fn prepara(
         .filter_map(|id| cx.copia.mappa.dell_id(id))
         .filter_map(|i| cx.copia.mappa.elemento(i)?.nodo)
         .collect();
+    let punti = punti_del_gesto(cx);
     let stato = sessione
         .doc_mut()
         .map_err(|_| DrawingRefusal::Unsupported)?;
     stato.active_layer = livello;
     stato.isolation = None;
     stato.selection = Selection::default();
+    // Un tracciato scelto senza punti è scelto intero, come in VectorCraft:
+    // la Selezione diretta lo trascina intero da un suo punto, e un clic
+    // sceglie quel punto da solo.
     scelti.iter().for_each(|n| stato.selection.add(*n));
+    for (n, set) in punti {
+        stato.selection.add(n);
+        stato.selection.anchors.entry(n).or_default().extend(set);
+    }
     Ok(())
+}
+
+/// Quanto lontano, in unità della scena, un punto scelto si riconosce ancora.
+const TOLLERANZA_DEI_PUNTI: f64 = 1e-3;
+
+/// I punti scelti che il gesto porta (`DrawingGesture::anchors`, gli ultimi
+/// che lo stato dello strumento ha detto), per oggetto del motore. Uno su un
+/// elemento che il motore non conosce, o che non sta più dove il client l'ha
+/// visto (il disegno è cambiato sotto), si lascia: il gesto vale sugli altri.
+fn punti_del_gesto(cx: &Contesto<'_>) -> BTreeMap<NodeId, BTreeSet<(usize, usize)>> {
+    let mut fuori: BTreeMap<NodeId, BTreeSet<(usize, usize)>> = BTreeMap::new();
+    let indietro = cx.copia.radice.inverse();
+    for punto in &cx.gesto.anchors {
+        let Some(nodo) = cx
+            .copia
+            .mappa
+            .dell_id(&punto.element)
+            .and_then(|i| cx.copia.mappa.elemento(i))
+            .and_then(|e| e.nodo)
+        else {
+            continue;
+        };
+        let (si, ai) = (punto.subpath as usize, punto.anchor as usize);
+        let qui = cx
+            .copia
+            .documento
+            .node(nodo)
+            .and_then(|n| n.path_data())
+            .and_then(|pd| pd.subpaths.get(si))
+            .and_then(|sp| sp.anchors.get(ai))
+            .map(|a| in_scena(a.p, indietro));
+        let Some(qui) = qui else { continue };
+        if (qui[0] - punto.at[0]).abs() > TOLLERANZA_DEI_PUNTI
+            || (qui[1] - punto.at[1]).abs() > TOLLERANZA_DEI_PUNTI
+        {
+            continue;
+        }
+        fuori.entry(nodo).or_default().insert((si, ai));
+    }
+    fuori
 }
 
 /// La griglia di Fub, come per le forme: senza Ctrl/⌘ e con la griglia

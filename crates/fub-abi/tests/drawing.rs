@@ -73,6 +73,7 @@ fn gesture() -> DrawingGesture {
         text: None,
         frame: None,
         inputs: Vec::new(),
+        anchors: Vec::new(),
         events: vec![
             pointer(DrawingPointerKind::Down, 10.0, 10.0),
             pointer(DrawingPointerKind::Drag, 40.0, 30.0),
@@ -652,6 +653,43 @@ fn inputs_default_to_none_and_belong_to_engine_tools() {
     g.validate().unwrap();
     g.inputs = vec![input; MAX_DRAWING_INPUTS + 1];
     refused(g.validate(), "inputs");
+}
+
+#[test]
+fn anchors_default_to_none_and_belong_to_engine_tools() {
+    // Un gesto senza `anchors` si legge come prima.
+    let mut raw = serde_json::to_value(gesture()).unwrap();
+    raw.as_object_mut().unwrap().remove("anchors");
+    let g: DrawingGesture = serde_json::from_value(raw).unwrap();
+    assert!(g.anchors.is_empty());
+    let punto = DrawingAnchor {
+        element: "oc1c1c1c1".into(),
+        subpath: 0,
+        anchor: 1,
+        at: [100.0, 60.0],
+        end: false,
+    };
+    let mut g = gesture();
+    g.anchors = vec![punto.clone()];
+    refused(g.validate(), "anchors");
+    g.tool = DrawingTool::Engine {
+        id: "directSelection".into(),
+    };
+    g.validate().unwrap();
+    let tondo: DrawingGesture = serde_json::from_value(serde_json::to_value(&g).unwrap()).unwrap();
+    assert_eq!(tondo, g);
+    g.anchors = vec![DrawingAnchor {
+        element: String::new(),
+        ..punto.clone()
+    }];
+    refused(g.validate(), "anchors");
+    g.anchors = vec![DrawingAnchor {
+        at: [f64::NAN, 0.0],
+        ..punto.clone()
+    }];
+    refused(g.validate(), "anchors");
+    g.anchors = vec![punto; MAX_DRAWING_ANCHORS + 1];
+    refused(g.validate(), "anchors");
 }
 
 #[test]

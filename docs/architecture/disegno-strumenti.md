@@ -59,8 +59,17 @@ Selezione diretta lo stato porta i punti scelti (`DrawingToolState.anchors`).
 Il motore disegna i segni dei punti solo nell'anteprima di un gesto: a gesto
 fermo `tools/editor/marks.ts` mette sul foglio i punti dei tracciati scelti e
 di quelli dei punti scelti (`motore/punti-diretti.ts`, dal `d`, dai `points`
-o da `x1…y2`), pieni se fra gli `anchors`, e li ridisegna a ogni stato o
-strumento nuovo;
+o da `x1…y2`), con le regole di VectorCraft (`selection_marks.rs`): il
+contorno, tutti pieni se il tracciato è scelto intero (con le maniglie se lo
+strumento cambia i punti), se no pieni quelli fra gli `anchors`; li ridisegna
+a ogni stato o strumento nuovo. La cornice della selezione c'è solo con la
+Selezione e con gli strumenti delle forme (`STRUMENTI_CON_LA_CORNICE`, come
+`selection_overlay`). Il mouse che passa senza premere va al motore come gesto
+`preview` con un `move` (`motore/gesti.ts`, `ctx.motoreSopra`, al più uno per
+fotogramma), che ne dà il cursore e i segni. Il gesto dopo li riporta al motore (`DrawingGesture.anchors`,
+da `StatiStrumenti`), che li rimette nella selezione
+(`gesti/strumento.rs`, `punti_del_gesto`): ciò che è pieno è ciò che si
+sposta;
 la famiglia `tracciati` registra la sua fila (`ContestoCompleto.registraFila`,
 `completo/famiglie/tracciati/opzioni-punto.ts`), che manda i comandi sui
 punti con `anchors` nel `value` e dopo l'esito rilegge lo stato. Gli

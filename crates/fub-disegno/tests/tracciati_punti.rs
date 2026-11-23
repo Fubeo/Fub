@@ -608,3 +608,257 @@ fn i_comandi_su_un_punto_dicono_perche_non_si_fanno() {
         assert_eq!(voce.disabled_reason, None, "{id}");
     }
 }
+
+/// Trascina con la Selezione diretta dal punto (100, 60) del tracciato
+/// `oc1c1c1c1` di 30 in giù, coi punti scelti `punti` portati dal gesto.
+fn trascina_il_punto(scelti: &[&str], punti: Vec<Value>) -> String {
+    let (mut d, _) = apri(BASE);
+    let evs = vec![
+        ev("down", 100.0, 60.0),
+        ev("drag", 100.0, 75.0),
+        ev("drag", 100.0, 90.0),
+        ev("up", 100.0, 90.0),
+    ];
+    let mut g = gesto("directSelection", "commit", evs, vec![], scelti);
+    g.anchors = punti
+        .into_iter()
+        .map(|p| serde_json::from_value(p).expect("il punto si legge"))
+        .collect();
+    let esito = d.gesto(g).expect("il gesto vale");
+    let salvato = common::applica::applica(BASE, &riuscito(&esito)).expect("si applica");
+    d_di(&salvato, "oc1c1c1c1").to_string()
+}
+
+#[test]
+fn la_selezione_diretta_su_un_tracciato_scelto_intero_lo_sposta_intero() {
+    // Come in VectorCraft (`direct.rs`, `press_anchor`): un tracciato non
+    // scelto si prende per il punto, che si sposta da solo; uno scelto intero
+    // (tutti i punti pieni) si trascina intero da un suo punto.
+    assert_eq!(
+        trascina_il_punto(&[], vec![]),
+        "M40 60 L100 90 L160 60 L160 120"
+    );
+    let intero = trascina_il_punto(&["oc1c1c1c1"], vec![]);
+    assert_ne!(intero, "M40 60 L100 90 L160 60 L160 120");
+}
+
+#[test]
+fn un_punto_spostato_resta_un_d_anche_quando_una_matrice_lo_spiegherebbe() {
+    // Il punto finale da (160,120) a (180,140): i tre punti sulla retta y=60
+    // restano, e la polilinea nuova è la vecchia inclinata e stirata, ma ciò
+    // che si è fatto è spostare un punto. Il `d` cambia, la `transform` e lo
+    // spessore no. Con un altro oggetto scelto, come dopo un clic altrove.
+    let atteso = "M40 60 L100 60 L160 60 L180 140";
+    let (mut d, _) = apri(BASE);
+    let evs = vec![
+        ev("down", 160.0, 120.0),
+        ev("drag", 170.0, 130.0),
+        ev("drag", 180.0, 140.0),
+        ev("up", 180.0, 140.0),
+    ];
+    let esito = d
+        .gesto(gesto(
+            "directSelection",
+            "commit",
+            evs,
+            vec![],
+            &["op7a7a7a7"],
+        ))
+        .expect("il gesto vale");
+    let ops = riuscito(&esito);
+    let testo = ops.to_string();
+    assert!(
+        !testo.contains("transform") && !testo.contains("stroke-width"),
+        "{testo}"
+    );
+    let salvato = common::applica::applica(BASE, &ops).expect("si applica");
+    assert_eq!(d_di(&salvato, "oc1c1c1c1"), atteso);
+    // Lo stesso col comando sul punto.
+    let (mut d, _) = apri(BASE);
+    let valore = json!({ "element": "oc1c1c1c1", "anchor": 3, "x": 180, "y": 140 });
+    let esito = comando(&mut d, "path.moveAnchor", &["oc1c1c1c1"], valore).expect("vale");
+    let ops = riuscito(&esito);
+    let testo = ops.to_string();
+    assert!(
+        !testo.contains("transform") && !testo.contains("stroke-width"),
+        "{testo}"
+    );
+    let salvato = common::applica::applica(BASE, &ops).expect("si applica");
+    assert_eq!(d_di(&salvato, "oc1c1c1c1"), atteso);
+}
+
+#[test]
+fn i_punti_scelti_passano_da_un_gesto_all_altro() {
+    // Un clic sceglie il punto, e lo stato lo dice.
+    let (mut d, _) = apri(BASE);
+    let clic = d
+        .gesto(gesto(
+            "directSelection",
+            "commit",
+            clic(160.0, 60.0),
+            vec![],
+            &["oc1c1c1c1"],
+        ))
+        .expect("il gesto vale");
+    let stato = clic.state.expect("lo stato c'è").anchors;
+    assert_eq!(
+        stato,
+        vec![DrawingAnchor {
+            element: "oc1c1c1c1".into(),
+            subpath: 0,
+            anchor: 2,
+            at: [160.0, 60.0],
+            end: false
+        }]
+    );
+    // Il gesto dopo li porta: Maiusc+clic aggiunge (100, 60), e trascinare
+    // uno dei due li sposta insieme.
+    let portati = [punto("oc1c1c1c1", 0, 2, [160.0, 60.0], false)];
+    let mut piu = gesto(
+        "directSelection",
+        "commit",
+        vec![
+            json!({ "kind": "down", "x": 100.0, "y": 60.0, "pressure": 0.5, "shift": true, "alt": false, "cmd": false }),
+            json!({ "kind": "up", "x": 100.0, "y": 60.0, "pressure": 0.5, "shift": true, "alt": false, "cmd": false }),
+        ],
+        vec![],
+        &["oc1c1c1c1"],
+    );
+    piu.revision = d.revisione();
+    piu.anchors = portati
+        .iter()
+        .map(|p| serde_json::from_value(p.clone()).expect("si legge"))
+        .collect();
+    let due = d
+        .gesto(piu)
+        .expect("il gesto vale")
+        .state
+        .expect("lo stato c'è")
+        .anchors;
+    assert_eq!(
+        due.iter().map(|a| a.anchor).collect::<Vec<_>>(),
+        vec![1, 2],
+        "Maiusc aggiunge al punto di prima: {due:?}"
+    );
+    let insieme = vec![
+        punto("oc1c1c1c1", 0, 1, [100.0, 60.0], false),
+        punto("oc1c1c1c1", 0, 2, [160.0, 60.0], false),
+    ];
+    assert_eq!(
+        trascina_il_punto(&["oc1c1c1c1"], insieme),
+        "M40 60 L100 90 L160 90 L160 120"
+    );
+}
+
+#[test]
+fn un_punto_portato_che_non_sta_piu_li_si_lascia() {
+    // Il punto 2 detto altrove (il disegno è cambiato sotto), e uno su un
+    // elemento che non c'è: si lasciano, e il gesto vale sul punto preso.
+    let vecchi = vec![
+        punto("oc1c1c1c1", 0, 2, [500.0, 500.0], false),
+        punto("nessuno", 0, 0, [40.0, 60.0], false),
+        punto("oc1c1c1c1", 7, 0, [40.0, 60.0], false),
+    ];
+    assert_eq!(
+        trascina_il_punto(&[], vecchi),
+        "M40 60 L100 90 L160 60 L160 120"
+    );
+}
+
+/// Il passaggio del mouse va allo strumento, come in VectorCraft: sopra un
+/// punto del tracciato scelto la Selezione diretta lo illumina e cambia il
+/// cursore; il clic dopo continua la stessa sessione e prende quel punto.
+#[test]
+fn il_passaggio_del_mouse_illumina_il_punto_e_cambia_il_cursore() {
+    let (mut d, _) = apri(BASE);
+    let scelti = &["op7a7a7a7"];
+    let sopra = |d: &mut Disegno, x: f64, y: f64| {
+        let mut g = gesto(
+            "directSelection",
+            "preview",
+            vec![ev("move", x, y)],
+            vec![],
+            scelti,
+        );
+        g.revision = d.revisione();
+        d.gesto(g).expect("il passaggio vale")
+    };
+    let esito = sopra(&mut d, 300.0, 200.0);
+    assert_eq!(esito.refused, None);
+    assert!(esito.ops.is_none(), "un passaggio non scrive niente");
+    let stato = esito.state.expect("lo stato dello strumento");
+    assert!(
+        stato.cursor.starts_with("direct_anchor"),
+        "sopra un punto il cursore lo dice: {}",
+        stato.cursor
+    );
+    let segni = esito.preview.expect("i segni").overlays;
+    let illuminato = segni.iter().any(|s| {
+        matches!(s, fub_abi::DrawingOverlay::Anchor { at, filled: false, .. }
+            if (at[0] - 300.0).abs() < 1e-6 && (at[1] - 200.0).abs() < 1e-6)
+    });
+    assert!(illuminato, "il punto sotto il mouse si illumina: {segni:?}");
+
+    // Lontano dal tracciato il punto si spegne e il cursore torna quello di riposo.
+    let esito = sopra(&mut d, 20.0, 280.0);
+    let stato = esito.state.expect("lo stato dello strumento");
+    assert!(
+        !stato.cursor.starts_with("direct_anchor"),
+        "{}",
+        stato.cursor
+    );
+
+    // Il clic dopo il passaggio prende il punto, nella stessa sessione.
+    let mut g = gesto(
+        "directSelection",
+        "commit",
+        clic(300.0, 200.0),
+        vec![],
+        scelti,
+    );
+    g.revision = d.revisione();
+    let esito = d.gesto(g).expect("il gesto vale");
+    let stato = esito.state.expect("lo stato dello strumento");
+    assert_eq!(stato.anchors.len(), 1);
+    assert_eq!(stato.anchors[0].at, [300.0, 200.0]);
+}
+
+/// I punti scelti cambiati fra un passaggio e il clic (un altro gesto li ha
+/// scelti, o la tastiera) preparano di nuovo lo strumento: Maiusc+clic
+/// aggiunge ai punti di adesso, non a quelli del passaggio.
+#[test]
+fn il_clic_dopo_il_passaggio_vede_i_punti_di_adesso() {
+    let (mut d, _) = apri(BASE);
+    let mut g = gesto(
+        "directSelection",
+        "preview",
+        vec![ev("move", 10.0, 290.0)],
+        vec![],
+        &["oc1c1c1c1"],
+    );
+    g.revision = d.revisione();
+    d.gesto(g).expect("il passaggio vale");
+    let maiusc = |kind: &str| json!({ "kind": kind, "x": 100.0, "y": 60.0, "pressure": 0.5, "shift": true, "alt": false, "cmd": false });
+    let mut piu = gesto(
+        "directSelection",
+        "commit",
+        vec![maiusc("down"), maiusc("up")],
+        vec![],
+        &["oc1c1c1c1"],
+    );
+    piu.revision = d.revisione();
+    piu.anchors = vec![
+        serde_json::from_value(punto("oc1c1c1c1", 0, 2, [160.0, 60.0], false)).expect("si legge"),
+    ];
+    let due = d
+        .gesto(piu)
+        .expect("il gesto vale")
+        .state
+        .expect("lo stato c'è")
+        .anchors;
+    assert_eq!(
+        due.iter().map(|a| a.anchor).collect::<Vec<_>>(),
+        vec![1, 2],
+        "{due:?}"
+    );
+}

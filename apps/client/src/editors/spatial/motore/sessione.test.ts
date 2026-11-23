@@ -9,7 +9,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { DrawingGesture, DrawingOutcome, DrawingSync, PluginError } from "../../../host/contract";
 import { createFakeHost, type DrawingFake, type FakeHost } from "../../../host/fake";
 import { DocumentSessionCollection, type DocumentSessionApi } from "../../../state/document-session";
-import { apriSessione, TEMPO_LIMITE_MS, type ArgomentiRifiutati, type GestoMotore, type MotoreAssente, type SessioneMotore } from "./sessione";
+import { apriSessione, TEMPO_LIMITE_MS, TRATTIENI_AL_PIU_MS, type ArgomentiRifiutati, type GestoMotore, type MotoreAssente, type SessioneMotore } from "./sessione";
 
 const DOC = "disegni/mappa.svg";
 const SVG = '<svg xmlns="http://www.w3.org/2000/svg">\n  <rect id="r-1" width="10" height="10"/>\n</svg>\n';
@@ -246,6 +246,66 @@ describe("`stale`", () => {
     const outcome = await session.comando({ id: "disegno.spessore", selection: ["r-1"], value: 3 });
     expect(outcome).toEqual(esito("1"));
     expect(host.atGate("drawingCommand")).toHaveLength(2);
+  });
+});
+
+describe("un trascinamento non si interrompe (`trattieni`)", () => {
+  const PREVIEW: GestoMotore = { ...GESTO, phase: "preview" };
+  const ordine = (host: FakeHost) =>
+    host.calls.filter((call) => call.gate === "drawingGesture" || call.gate === "drawingCommand").map((call) => call.gate);
+
+  it("un comando chiesto a metà gesto parte dopo il `commit`, non fra la pressione e il resto", async () => {
+    const host = createFakeHost({ drawing: { gesto: (gesture) => esito(gesture.revision), comando: (request) => esito(request.revision) } });
+    const session = await apri(host);
+    const lascia = session.trattieni();
+    const pressione = session.gesto(PREVIEW);
+    // La guida dei colori che legge il colore attivo mentre la scelta cambia.
+    const lettura = session.comando({ id: "disegno.paint.proxies", selection: [], value: {} });
+    await pressione;
+    const trascina = session.gesto(PREVIEW);
+    const rilascio = session.gesto(GESTO);
+    await Promise.all([trascina, rilascio]);
+    expect(ordine(host)).toEqual(["drawingGesture", "drawingGesture", "drawingGesture"]);
+    lascia();
+    expect(await lettura).toEqual(esito("0"));
+    expect(ordine(host)).toEqual(["drawingGesture", "drawingGesture", "drawingGesture", "drawingCommand"]);
+  });
+
+  it("due trattenute: i comandi partono quando le lascia tutte, e lasciare due volte non conta", async () => {
+    const host = createFakeHost({ drawing: { comando: (request) => esito(request.revision) } });
+    const session = await apri(host);
+    const prima = session.trattieni();
+    const seconda = session.trattieni();
+    const comando = session.comando({ id: "disegno.spessore", selection: ["r-1"], value: 3 });
+    prima();
+    prima();
+    await Promise.resolve();
+    expect(host.atGate("drawingCommand")).toHaveLength(0);
+    seconda();
+    await comando;
+    expect(host.atGate("drawingCommand")).toHaveLength(1);
+  });
+
+  it("un trascinamento che non finisce mai lascia partire i comandi dopo il tetto", async () => {
+    vi.useFakeTimers();
+    const host = createFakeHost({ drawing: { comando: (request) => esito(request.revision) } });
+    const session = await apri(host);
+    session.trattieni();
+    const comando = session.comando({ id: "disegno.spessore", selection: ["r-1"], value: 3 });
+    await vi.advanceTimersByTimeAsync(TRATTIENI_AL_PIU_MS - 1);
+    expect(host.atGate("drawingCommand")).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(await comando).toEqual(esito("0"));
+  });
+
+  it("chiusa a metà trascinamento: il comando in attesa non parte", async () => {
+    const host = createFakeHost({ drawing: { comando: (request) => esito(request.revision) } });
+    const session = await apri(host);
+    session.trattieni();
+    const comando = session.comando({ id: "disegno.spessore", selection: ["r-1"], value: 3 });
+    await session.chiudi();
+    expect(await comando).toBeNull();
+    expect(host.atGate("drawingCommand")).toHaveLength(0);
   });
 });
 

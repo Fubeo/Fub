@@ -1230,7 +1230,7 @@ fn applica(
             }
         }
         let unita: HashSet<NodeId> = lista.iter().copied().collect();
-        differenza::differenza(copia, &dopo, None, Some(&unita)).and_then(|d| d.testo())
+        differenza::differenza(copia, &dopo, None, Some(&unita), false).and_then(|d| d.testo())
     })
     .map_err(|_| DrawingRefusal::Unsupported)?
     .map_err(|r| r.rifiuto())

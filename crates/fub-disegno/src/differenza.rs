@@ -14,7 +14,11 @@
 //!   quali oggetti ha scelto (le unità della Selezione), la `transform` va a
 //!   quelli, come la scrive il client. I colori pieni e lo
 //!   spessore diventano `fill`, `stroke`, `stroke-width`; un tracciato
-//!   cambiato in un modo che nessuna matrice spiega diventa `d`.
+//!   cambiato in un modo che nessuna matrice spiega diventa `d`. Quando il
+//!   cambio sposta i punti (uno strumento o un comando dei tracciati, la
+//!   Selezione diretta), solo uno spostamento puro diventa `transform`: un
+//!   punto spostato diventa sempre `d`, anche se per caso una matrice
+//!   inclinata lo spiegherebbe.
 //! - **`add`** per gli oggetti nuovi, con l'`Elem` come lo scrive il client
 //!   (`rect`, `ellipse`, `line` o `path`, geometria con due decimali); uno
 //!   strumento può scriverlo lui ([`Scrittore`]). Un gruppo nuovo fatto di
@@ -181,11 +185,18 @@ impl Differenza {
 /// (un comando, una prova a mano) lascia la regola senza scelta: la
 /// `transform` va al gruppo se ha più figli o figli che non vengono da Fub,
 /// se no al figlio.
+///
+/// `punti` dice che il cambio sposta i punti dei tracciati (la Selezione
+/// diretta, la penna, un comando sui punti): allora una matrice spiega un
+/// oggetto solo se è uno spostamento. Una polilinea con un punto spostato può
+/// coincidere per caso con la stessa polilinea inclinata o stirata, e la
+/// `transform` (con lo spessore corretto) non sarebbe ciò che si è fatto.
 pub(crate) fn differenza(
     copia: &Copia,
     dopo: &Document,
     scrittore: Option<Scrittore<'_>>,
     unita: Option<&HashSet<NodeId>>,
+    punti: bool,
 ) -> Result<Differenza, Rifiuto> {
     let prima = Posti::di(&copia.documento);
     let poi = Posti::di(dopo);
@@ -193,6 +204,7 @@ pub(crate) fn differenza(
         copia,
         scrittore,
         unita,
+        punti,
         ident: Vec::new(),
         remove: Vec::new(),
         moves: Vec::new(),
@@ -382,6 +394,8 @@ struct Lavoro<'a> {
     scrittore: Option<Scrittore<'a>>,
     /// Gli oggetti scelti dal gesto, se il gesto li dice.
     unita: Option<&'a HashSet<NodeId>>,
+    /// Il cambio sposta i punti: solo una traslazione spiega un oggetto.
+    punti: bool,
     ident: Vec<Value>,
     /// Con il percorso dell'elemento tolto, per ordinarli.
     remove: Vec<(Vec<usize>, Value)>,
@@ -1174,7 +1188,7 @@ impl Lavoro<'_> {
             if con_ricetta {
                 // Spostato, ruotato o scalato: cambia solo la sua `transform`
                 // e la ricetta resta. Ogni altro cambio lo riscrive intero.
-                if let Some(m) = adatta(b, a) {
+                if let Some(m) = self.adatta(b, a) {
                     if mosso_da(b, m, true).is_some_and(|c| nodi_vicini(&c, a)) {
                         if !vicina_all_identita(m) {
                             let t = nuova_trasformazione(&e, m)?;
@@ -1285,7 +1299,7 @@ impl Lavoro<'_> {
                 None => figli.len() > 1 || figli.iter().any(|c| self.ha_estranei(c)),
             };
             if gruppo && per_il_gruppo {
-                if let Some(m) = adatta(b, a) {
+                if let Some(m) = self.adatta(b, a) {
                     if !vicina_all_identita(m)
                         && mosso_da(b, m, true).is_some_and(|c| nodi_vicini(&c, a))
                     {
@@ -1463,6 +1477,12 @@ impl Lavoro<'_> {
     /// Gli attributi cambiati di un oggetto senza figli, e le sfumature
     /// nuove del riempimento (`fill`) o del contorno (`stroke`), ancora
     /// senza id ([`Lavoro::foglia_scritta`]).
+    /// La matrice che porta `b` su `a` ([`adatta`]); con un cambio dei punti
+    /// solo se è una traslazione.
+    fn adatta(&self, b: &Node, a: &Node) -> Option<Affine> {
+        adatta(b, a).filter(|m| !self.punti || traslazione(*m))
+    }
+
     fn foglia(&self, e: &Elemento, b: &Node, a: &Node) -> Result<AttributiDellaFoglia, Rifiuto> {
         let mut attrs = Map::new();
         let mut nuove = Vec::new();
@@ -1494,7 +1514,8 @@ impl Lavoro<'_> {
         };
         // Una matrice che schiaccia (Media che allinea tutti i punti su una
         // retta) non è uno spostamento: il tracciato si riscrive col suo `d`.
-        let m = adatta(b, a)
+        let m = self
+            .adatta(b, a)
             .filter(|m| m.determinant().abs() > 1e-9)
             .unwrap_or(Affine::IDENTITY);
         let con_tratti =
@@ -1834,6 +1855,12 @@ fn mosso_da(n: &Node, m: Affine, tratti: bool) -> Option<Node> {
         c
     })
     .ok()
+}
+
+/// `m` sposta soltanto: la parte lineare è l'identità.
+fn traslazione(m: Affine) -> bool {
+    let [a, b, c, d, _, _] = m.as_coeffs();
+    vicini(a, 1.0) && vicini(b, 0.0) && vicini(c, 0.0) && vicini(d, 1.0)
 }
 
 fn vicina_all_identita(m: Affine) -> bool {

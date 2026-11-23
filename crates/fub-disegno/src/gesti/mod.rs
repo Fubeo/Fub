@@ -284,7 +284,7 @@ impl Banco {
         };
         let mut dopo = (*doc).clone();
         f(&mut dopo);
-        let esito = differenza::differenza(copia, &dopo, None, None);
+        let esito = differenza::differenza(copia, &dopo, None, None, false);
         self.ripristina(copia);
         esito
     }
@@ -396,7 +396,7 @@ impl Banco {
         let scrittore = |n: &Node, m: Affine| strumento.elemento(n, m);
         let differenza = vectorcraft_engine::guard::catch_panic(|| {
             let unita = strumento.unita(&cx);
-            differenza::differenza(copia, &dopo, Some(&scrittore), unita.as_ref())
+            differenza::differenza(copia, &dopo, Some(&scrittore), unita.as_ref(), false)
         });
         self.ripristina(copia);
         let differenza = match differenza {

@@ -1269,8 +1269,12 @@ pub(crate) fn esegui(
         banco.ripristina(copia);
         return Ok(rifiuta(motivo));
     }
-    let differenza =
-        vectorcraft_engine::guard::catch_panic(|| differenza::differenza(copia, &dopo, None, None));
+    // I comandi dei tracciati spostano punti: una matrice li spiega solo se
+    // è uno spostamento.
+    let dei_punti = riga.famiglia == Some(Famiglia::Tracciati);
+    let differenza = vectorcraft_engine::guard::catch_panic(|| {
+        differenza::differenza(copia, &dopo, None, None, dei_punti)
+    });
     banco.ripristina(copia);
     let differenza = match differenza {
         Ok(Ok(d)) => d,

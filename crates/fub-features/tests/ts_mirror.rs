@@ -1790,6 +1790,17 @@ fn drawing_samples() -> Value {
                 frame: select.then_some(frame),
                 events: pointers.clone(),
                 inputs: if engine { inputs.clone() } else { Vec::new() },
+                anchors: if engine {
+                    vec![DrawingAnchor {
+                        element: "oc1c1c1c1".into(),
+                        subpath: 0,
+                        anchor: 1,
+                        at: [100.0, 60.0],
+                        end: false,
+                    }]
+                } else {
+                    Vec::new()
+                },
             })
         })
         .collect();

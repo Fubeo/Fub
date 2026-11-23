@@ -44,6 +44,12 @@ Sei porte tipate, come quelle della griglia, registrate dall'app
   `no_preview`, `unknown_tool`), la cornice da tenere, lo stato dello
   strumento del motore e la lettura di un comando (vedi
   [gli strumenti del motore](#gli-strumenti-del-motore));
+- **il mouse che passa** sopra il foglio senza premere, con uno strumento del
+  motore, è un gesto `preview` con un solo evento `move` (al più uno per
+  fotogramma, uno alla volta): il motore tiene vivo lo strumento fra un
+  passaggio e l'altro, e l'esito porta il cursore (`state.cursor`) e i segni
+  (`preview.overlays`) che lo strumento mostra lì. Non cambia niente e non
+  entra nella cronologia;
 - la **cornice tenuta** (`frame`, un `DrawingFrame` o `null`, in
   `DrawingGesture` e in `DrawingOutcome`) è la cornice di trasformazione che
   il client tiene per più oggetti scelti dopo averli girati o ridimensionati
@@ -73,7 +79,12 @@ Dal lato del client le sei porte sono `openDrawing`, `drawingSync`,
 `host/ipc.ts`, con il vault in coda; le usa soltanto la sessione del motore
 (`editors/spatial/motore/sessione.ts`), che tiene la copia allineata alla
 `DocumentSession`, manda le richieste in fila con un tempo limite di 10 s e,
-a un `stale`, rimanda il testo intero e riprova una volta.
+a un `stale`, rimanda il testo intero e riprova una volta. Il motore scarta un
+gesto lasciato a metà a ogni comando, anche uno che legge soltanto: mentre un
+gesto è nel motore (dalla prima richiesta al `commit` o al `cancel`, o al
+rilascio di un clic della penna) la sessione tiene fermi i comandi
+(`trattieni`) e li manda dopo, nell'ordine; al più per 60 s, se il gesto non
+finisce mai.
 
 Gli errori escono dalle sei porte nella lingua della shell, `{kind,
 message}` con `message` già una frase (`drawing_port` di
@@ -162,6 +173,14 @@ leggono come prima.
   vuoto chiude la composizione. `active` è `[da, a)` in **caratteri Unicode**
   di `preedit`, come li conta il motore: il client converte dagli indici
   UTF-16 di JavaScript.
+- **I punti scelti** (`DrawingGesture.anchors`, solo con uno strumento del
+  motore, al più 1000): quelli che lo stato dello strumento ha detto al gesto
+  di prima (`DrawingToolState.anchors`, nella stessa forma). Il motore li
+  rimette nella selezione prima del gesto; ignora quelli su un elemento che
+  non conosce o che non stanno più dove il client li ha visti (tolleranza
+  0,001). Un tracciato scelto senza punti è scelto intero, come in
+  VectorCraft: la Selezione diretta lo trascina intero da un suo punto, e un
+  clic su un punto sceglie quel punto da solo.
 - **I segni** (`DrawingPreview.overlays`, al più 10.000, in coordinate di
   scena, nell'ordine in cui si disegnano; `width` e `size` in pixel dello
   schermo):

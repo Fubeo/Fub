@@ -12,7 +12,8 @@ import { t } from "../../strings";
 import type { OverlayHandle } from "../../painter/overlay";
 import { movedMatrix } from "../edit";
 import { fubAttributes, linkTarget, nodeOf, plainAttributes } from "../arrange";
-import { segniDeiPunti } from "../../motore/punti-diretti";
+import { segniDeiPunti, STRUMENTI_CHE_CAMBIANO_I_PUNTI, STRUMENTI_CON_LA_CORNICE } from "../../motore/punti-diretti";
+import { vistaDelMotore } from "./hand-zoom";
 import {
   angleOf,
   FRAME_PX,
@@ -125,6 +126,9 @@ export function installMarks(ctx: EditorContext): void {
   /// si ritaglia, che ha i suoi segni.
   const frameNow = (): FrameView | null => {
     if (ctx.tool !== "select" || !editable() || ctx.selection.length === 0) return null;
+    // Uno strumento del motore senza cornice (la Selezione diretta, la
+    // Penna…): niente maniglie da vedere, né da prendere.
+    if (!conCornice()) return null;
     // Nascondi riquadro di delimitazione (K6 T11): senza cornice non ci sono
     // maniglie da vedere, né da prendere col puntatore.
     if (ctx.grid.hideBoundingBox === true) return null;
@@ -194,22 +198,43 @@ export function installMarks(ctx: EditorContext): void {
   /// motore, se ce n'è una.
   const motoreMatrix = (): Matrix | null => (ctx.current?.kind === "motore" ? ctx.current.matrix : null);
 
-  /// I punti di ancoraggio dei tracciati scelti con la Selezione diretta del
-  /// motore, a gesto fermo: durante un gesto li disegna l'anteprima del
-  /// motore, e quelli di prima starebbero dove il tracciato non è più. Un
-  /// tratto dell'Inchiostro non ne ha (`motore/punti-diretti.ts`).
+  /// Lo strumento scelto mostra la cornice della selezione: uno di Fub, o uno
+  /// del motore che in VectorCraft la mostra.
+  const conCornice = (): boolean => {
+    const id = ctx.motoreTool ?? null;
+    return id === null || STRUMENTI_CON_LA_CORNICE.has(id);
+  };
+
+  /// Lo strumento del motore scelto disegna i segni dei tracciati scelti, come
+  /// VectorCraft: contorno, punti e maniglie (non quelli della vista, che non
+  /// toccano il disegno).
+  const segniDelMotore = (): string | null => {
+    const id = ctx.motoreTool ?? null;
+    return id === null || vistaDelMotore(id) !== null ? null : id;
+  };
+
+  /// Un oggetto che il motore segna col suo contorno invece che col riquadro:
+  /// un tracciato vero, non un tratto dell'Inchiostro.
+  const tracciatoVero = (unit: Unit): boolean =>
+    (unit.tag === "path" || unit.tag === "polyline" || unit.tag === "polygon" || unit.tag === "line") && !fubAttributes(unit.node).has("ink");
+
+  /// I segni dei tracciati scelti con uno strumento del motore, a gesto
+  /// fermo (`motore/punti-diretti.ts`): il contorno, i punti e le maniglie.
+  /// Durante un gesto li disegna l'anteprima del motore, e quelli di prima
+  /// starebbero dove il tracciato non è più. Un tratto dell'Inchiostro non ne
+  /// ha.
   const anchorHandles = (): OverlayHandle[] => {
-    const id = ctx.motoreTool;
-    if (id !== "directSelection" || !editable() || ctx.current !== null) return [];
+    const id = segniDelMotore();
+    if (id === null || !editable() || ctx.current !== null) return [];
     // Gli oggetti scelti e quelli dei punti scelti: il motore può dire un
     // punto senza mettere il suo tracciato nella scelta (l'id del file è la
     // chiave dell'editor).
     const punti = ctx.statoStrumento(id)?.anchors ?? [];
     const tracciati = unitsOf([...ctx.selection, ...punti.map((p) => p.element)])
-      .filter((unit) => !fubAttributes(unit.node).has("ink"))
+      .filter(tracciatoVero)
       .map((unit) => ({ id: unit.id, tag: unit.tag, attributi: plainAttributes(unit.node), matrice: unit.matrix }));
     if (tracciati.length === 0) return [];
-    return segniDeiPunti(tracciati, punti, 0.5 / ctx.camera.scale);
+    return segniDeiPunti(tracciati, punti, 0.5 / ctx.camera.scale, { diretto: STRUMENTI_CHE_CAMBIANO_I_PUNTI.has(id), contorni: ctx.grid.hideEdges !== true });
   };
 
   const showHandles = (): void => {
@@ -248,7 +273,9 @@ export function installMarks(ctx: EditorContext): void {
       const padY = sy > 0 ? FRAME_PX / sy : 0;
       // Il contorno di evidenziazione di ogni oggetto scelto: Nascondi bordi
       // (K6 T11) lo toglie, e la cornice comune resta com'è.
-      if (ctx.grid.hideEdges !== true) {
+      // Con uno strumento del motore un tracciato ha il suo contorno al posto
+      // del riquadro (`anchorHandles`), come in VectorCraft.
+      if (ctx.grid.hideEdges !== true && !(segniDelMotore() !== null && tracciatoVero(unit))) {
         handles.push({
           kind: "box",
           x: frame.min[0] - padX,

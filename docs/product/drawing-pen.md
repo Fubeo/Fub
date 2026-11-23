@@ -199,11 +199,27 @@ disegno resta com'è. Per tagliare un tratto a mano c'è la gomma di Fub,
 
 ### I punti scelti
 
-Con la **Selezione diretta**, un tracciato scelto mostra sul foglio tutti i
-suoi punti di ancoraggio come quadratini vuoti; i punti scelti sono pieni e
-mostrano le loro maniglie (una linea fino a un pallino). Durante il gesto li
-disegna il motore, a gesto finito l'editor. Un tratto d'Inchiostro non mostra
-punti: gli strumenti dei tracciati non lo modificano.
+I segni sul foglio sono quelli di VectorCraft (licenza MIT):
+
+- ogni tracciato scelto ha il suo **contorno** sottile (Nascondi bordi lo
+  toglie);
+- un tracciato **scelto intero** ha tutti i punti pieni; con uno strumento che
+  cambia i punti (Selezione diretta, Penna, Aggiungi e Elimina punto, Punto di
+  ancoraggio, Curvatura) mostra anche tutte le maniglie (una linea fino a un
+  pallino);
+- uno **scelto in parte** ha pieni solo i punti scelti, con le loro maniglie,
+  e vuoti gli altri;
+- la **cornice** con le maniglie per ridimensionare e girare c'è solo con la
+  Selezione e con gli strumenti delle forme; con gli altri strumenti non c'è.
+
+Con la **Selezione diretta**, un clic su un punto lo sceglie da solo (Maiusc
+lo aggiunge o lo toglie) e trascinarlo lo sposta; trascinare un punto di un
+tracciato scelto intero sposta tutto il tracciato. Passando col mouse il
+cursore dice cosa si prende (un punto, un segmento, il tracciato), e un
+trascinamento sul vuoto disegna il riquadro che sceglie i punti dentro.
+Durante il gesto i segni li disegna il motore, a gesto finito l'editor. Un
+tratto d'Inchiostro non mostra punti: gli strumenti dei tracciati non lo
+modificano.
 
 Con la **Selezione diretta** o il **Punto di ancoraggio**, i punti scelti
 sul foglio danno la riga delle opzioni:

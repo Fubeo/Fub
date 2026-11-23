@@ -42,6 +42,13 @@
 //   vecchia, e ne passa l'esito a chi l'ha aperto (un passo, come Invio).
 //   Lo stesso prima di un comando che cambia il disegno (T16): il motore
 //   scarterebbe il gesto a metà, e con lui il testo che si sta scrivendo.
+// - **Un trascinamento non si interrompe.** Il motore scarta il gesto a
+//   metà anche per un comando che legge soltanto (la guida dei colori chiede
+//   il colore attivo mentre la scelta cambia): i punti dopo arriverebbero
+//   senza la pressione, e niente si sposterebbe. Chi trascina lo dice con
+//   `trattieni`; i comandi chiesti intanto partono quando lo lascia, dopo
+//   il `commit`. Un trascinamento che non finisce mai (un rilascio perso)
+//   li lascia partire dopo `TRATTIENI_AL_PIU_MS`.
 // - **Chiusa è chiusa.** Dopo `chiudi()` non parte più niente, e l'esito di
 //   una richiesta già in volo si scarta (`null`).
 
@@ -66,6 +73,9 @@ import { Queue } from "../../../ui/race";
 
 /// Quanto aspetta una richiesta al motore prima di darlo per perso.
 export const TEMPO_LIMITE_MS = 10_000;
+
+/// Quanto al più un trascinamento tiene fermi i comandi (`trattieni`).
+export const TRATTIENI_AL_PIU_MS = 60_000;
 
 /// I comandi che non toccano il disegno: lo stato e le opzioni di uno
 /// strumento, la preparazione di una famiglia. Lasciano il tracciato aperto
@@ -149,6 +159,9 @@ export interface SessioneMotore {
   /// partire (il `commit` alla revisione del gesto), una volta sola. Uno
   /// nuovo prende il posto di quello di prima; il ritorno lo toglie.
   tieniAperto(aperto: TracciatoAperto): Teardown;
+  /// Un trascinamento in corso nel motore: i comandi chiesti finché non lo
+  /// si lascia (il ritorno, una volta) partono dopo, nell'ordine.
+  trattieni(): Teardown;
   /// Chiude l'istanza nel motore e si toglie dalla `DocumentSession`. Torna
   /// quando la chiusura è partita e ha risposto (o il suo tempo è scaduto).
   chiudi(): Promise<void>;
@@ -253,6 +266,11 @@ class Sessione implements SessioneMotore {
   #testo: string;
   /// Il tracciato aperto da chiudere prima del prossimo sync.
   #aperto: TracciatoAperto | null = null;
+  /// I trascinamenti in corso (`trattieni`) e la promessa che si risolve
+  /// quando l'ultimo è lasciato.
+  #trattenuti = 0;
+  #lasciati: Promise<void> = Promise.resolve();
+  #lascia: () => void = () => {};
 
   constructor(
     host: HostDisegno,
@@ -322,6 +340,8 @@ class Sessione implements SessioneMotore {
   }
 
   comando(request: ComandoMotore): Promise<RispostaMotore> {
+    // Un trascinamento in corso: il comando parte quando è finito.
+    if (this.#trattenuti > 0) return this.#lasciati.then(() => this.comando(request));
     // Il motore scarta il gesto lasciato a metà quando un comando cambia il
     // disegno: il tracciato aperto o il testo che si scrive si chiudono prima,
     // in un passo, come prima di un sync (K6 T16).
@@ -338,10 +358,33 @@ class Sessione implements SessioneMotore {
     };
   }
 
+  trattieni(): Teardown {
+    if (this.#stato !== "aperta") return () => {};
+    if (this.#trattenuti === 0) {
+      this.#lasciati = new Promise<void>((resolve) => {
+        this.#lascia = resolve;
+      });
+    }
+    this.#trattenuti += 1;
+    let lasciato = false;
+    const lascia = (): void => {
+      if (lasciato) return;
+      lasciato = true;
+      clearTimeout(scadenza);
+      this.#trattenuti -= 1;
+      if (this.#trattenuti === 0) this.#lascia();
+    };
+    const scadenza = setTimeout(lascia, TRATTIENI_AL_PIU_MS);
+    return lascia;
+  }
+
   async chiudi(): Promise<void> {
     if (this.#stato !== "aperta") return;
     this.#stato = "chiusa";
     this.#aperto = null;
+    // I comandi in attesa partono e trovano la sessione chiusa.
+    this.#trattenuti = 0;
+    this.#lascia();
     this.#assenti.clear();
     this.#life.close();
     const chiusura = this.#chiudiNelMotore();

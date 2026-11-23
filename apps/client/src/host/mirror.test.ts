@@ -807,6 +807,7 @@ const RECORD_KEYS: Record<string, string[]> = {
     frame: true,
     events: true,
     inputs: true,
+    anchors: true,
   }),
   DrawingPreview: keysOf<DrawingPreview>({ shape: true, matrix: true, marquee: true, overlays: true }),
   DrawingOutcome: keysOf<DrawingOutcome>({
