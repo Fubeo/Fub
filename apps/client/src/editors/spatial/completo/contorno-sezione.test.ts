@@ -83,6 +83,20 @@ describe("la sezione Contorno del Design", () => {
     expect(esegui).toHaveBeenLastCalledWith("stroke.set", { weight: 8 }, { senzaFinestra: true });
   });
 
+  it("lo stesso spessore che c'è già non manda niente; uno fuori dai limiti è portato al limite", () => {
+    const { elemento, esegui } = corpoDi(1, { contorno: contorno() });
+    const spessore = campo(elemento, t("draw.contorno.spessore"));
+    scrivi(spessore, "3");
+    expect(esegui).not.toHaveBeenCalled();
+    // Il campo porta -1 a 0 e 1001 a 1000 (pt), come il motore porta lo spessore in 0..1000.
+    scrivi(spessore, "-1");
+    expect(esegui).toHaveBeenLastCalledWith("stroke.set", { weight: 0 }, { senzaFinestra: true });
+    scrivi(spessore, "1001");
+    const ultimo = esegui.mock.calls[esegui.mock.calls.length - 1]!;
+    expect(ultimo[0]).toBe("stroke.set");
+    expect((ultimo[1] as { weight: number }).weight).toBeCloseTo(1000 * 4 / 3, 6);
+  });
+
   it("gli estremi e gli angoli scelti vanno al motore", () => {
     const { elemento, esegui } = corpoDi(1, { contorno: contorno() });
     const estremi = scelta(elemento, "draw-outline-cap");

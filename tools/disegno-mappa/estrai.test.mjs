@@ -113,6 +113,8 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // T12 curvatura porta a «fatto» undici righe: `path.curvature`, `.curvatureEdit`, `.reshape`,
   // `.reshapeSegment`, `.setAnchors` e le sei `addon.pen.*` (append, close, segment, removePoint,
   // togglePoint, reshape), come comandi su un punto con `element` (la Curvatura crea o sostituisce).
+  // T15 pannello contorno: `stroke.set` resta «fatto» con i campi che il formato scrive (nessuna
+  // riga cambia stato); i profili di spessore restano da fare, in T27.
   // T14 sfumatura libera: le letture `paint.recent` e `paint.proxies` diventano «fatto»; le sette
   // righe della sfumatura libera (`paint.freeform.*`) restano «da fare», perché il formato della
   // scena non ha punti né linee per una sfumatura (la causa è nella nota della mappa).
