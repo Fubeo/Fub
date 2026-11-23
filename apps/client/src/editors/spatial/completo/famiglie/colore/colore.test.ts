@@ -28,6 +28,8 @@ describe("le parole della famiglia colore", () => {
     expect(finestre.map((f) => f.id).sort()).toEqual(["addon.color.select", "edit.colors.adjustBalance", "edit.colors.overprintBlack", "edit.colors.saturate"]);
     expect(tutte.filter((f) => f.fonte === "interfaccia").map((f) => f.id).sort()).toEqual([
       "ui.colorBalanceDialog",
+      "ui.colorGuideLimit",
+      "ui.colorGuideOptions",
       "ui.newSwatch",
       "ui.recolorDialog",
       "ui.saturateDialog",

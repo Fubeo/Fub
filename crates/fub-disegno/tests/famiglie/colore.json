@@ -5818,6 +5818,586 @@
       "atteso": {
         "rifiuto": "locked"
       }
+    },
+    {
+      "id": "paint.setFill",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {
+        "color": "#3366cc"
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oa1a1a1a1",
+            "attrs": {
+              "fill": "#3366cc"
+            }
+          }
+        ]
+      },
+      "dopo": "guida-setfill-pieno.svg"
+    },
+    {
+      "id": "paint.setStroke",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {
+        "color": "#3366cc"
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oa1a1a1a1",
+            "attrs": {
+              "stroke": "#3366cc"
+            }
+          }
+        ]
+      },
+      "dopo": "guida-setstroke-pieno.svg"
+    },
+    {
+      "id": "paint.setFill",
+      "disegno": "ricolora-scena.svg",
+      "selezione": [
+        "ox1x1x1x1"
+      ],
+      "argomenti": {
+        "color": "#3366cc"
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "ox1x1x1x1",
+            "attrs": {
+              "fill": "#3366cc"
+            }
+          }
+        ]
+      },
+      "dopo": "guida-setfill-sfumatura.svg"
+    },
+    {
+      "id": "paint.setFill",
+      "disegno": "guida-scena.svg",
+      "selezione": [
+        "on1n1n1n1"
+      ],
+      "argomenti": {
+        "color": "#3366cc"
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "on1n1n1n1",
+            "attrs": {
+              "fill": "#3366cc"
+            }
+          }
+        ]
+      },
+      "dopo": "guida-setfill-senza.svg"
+    },
+    {
+      "id": "paint.setFill",
+      "disegno": "guida-scena.svg",
+      "selezione": [
+        "ot1t1t1t1"
+      ],
+      "argomenti": {
+        "color": "#3366cc"
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "ot1t1t1t1",
+            "attrs": {
+              "fill": "#3366cc"
+            }
+          }
+        ]
+      },
+      "dopo": "guida-setfill-testo.svg"
+    },
+    {
+      "id": "paint.setFill",
+      "disegno": "guida-scena.svg",
+      "selezione": [
+        "oi8b8b8b8"
+      ],
+      "argomenti": {
+        "color": "#3366cc"
+      },
+      "atteso": {
+        "rifiuto": "unmapped"
+      }
+    },
+    {
+      "id": "paint.setFill",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "color": "#3366cc"
+      },
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "color.harmony",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "color": "#ff0000",
+        "rule": "complementary",
+        "steps": 1
+      },
+      "atteso": {
+        "lettura": {
+          "rule": "complementary",
+          "colors": [
+            "#ff0000",
+            "#00ffff"
+          ],
+          "grid": [
+            [
+              "#800000",
+              "#ff0000",
+              "#ff8080"
+            ],
+            [
+              "#008080",
+              "#00ffff",
+              "#80ffff"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "id": "color.harmony",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "color": "#ff0000",
+        "rule": "complementary",
+        "steps": 20
+      },
+      "atteso": {
+        "lettura": {
+          "rule": "complementary",
+          "colors": [
+            "#ff0000",
+            "#00ffff"
+          ],
+          "grid": [
+            [
+              "#800000",
+              "#860000",
+              "#8c0000",
+              "#930000",
+              "#990000",
+              "#9f0000",
+              "#a60000",
+              "#ac0000",
+              "#b30000",
+              "#b90000",
+              "#bf0000",
+              "#c60000",
+              "#cc0000",
+              "#d20000",
+              "#d90000",
+              "#df0000",
+              "#e60000",
+              "#ec0000",
+              "#f20000",
+              "#f90000",
+              "#ff0000",
+              "#ff0606",
+              "#ff0d0d",
+              "#ff1313",
+              "#ff1a1a",
+              "#ff2020",
+              "#ff2626",
+              "#ff2d2d",
+              "#ff3333",
+              "#ff3939",
+              "#ff4040",
+              "#ff4646",
+              "#ff4d4d",
+              "#ff5353",
+              "#ff5959",
+              "#ff6060",
+              "#ff6666",
+              "#ff6c6c",
+              "#ff7373",
+              "#ff7979",
+              "#ff8080"
+            ],
+            [
+              "#008080",
+              "#008686",
+              "#008c8c",
+              "#009393",
+              "#009999",
+              "#009f9f",
+              "#00a6a6",
+              "#00acac",
+              "#00b3b3",
+              "#00b9b9",
+              "#00bfbf",
+              "#00c6c6",
+              "#00cccc",
+              "#00d2d2",
+              "#00d9d9",
+              "#00dfdf",
+              "#00e6e6",
+              "#00ecec",
+              "#00f2f2",
+              "#00f9f9",
+              "#00ffff",
+              "#06ffff",
+              "#0dffff",
+              "#13ffff",
+              "#1affff",
+              "#20ffff",
+              "#26ffff",
+              "#2dffff",
+              "#33ffff",
+              "#39ffff",
+              "#40ffff",
+              "#46ffff",
+              "#4dffff",
+              "#53ffff",
+              "#59ffff",
+              "#60ffff",
+              "#66ffff",
+              "#6cffff",
+              "#73ffff",
+              "#79ffff",
+              "#80ffff"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "id": "color.harmony",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "color": "#ff0000",
+        "rule": "complementary",
+        "steps": 0
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "color.harmony",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "color": "#ff0000",
+        "rule": "complementary",
+        "steps": 21
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "color.harmony",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "color": "#ff0000",
+        "rule": "complementary",
+        "amount": 0
+      },
+      "atteso": {
+        "lettura": {
+          "rule": "complementary",
+          "colors": [
+            "#ff0000",
+            "#00ffff"
+          ],
+          "grid": [
+            [
+              "#e60000",
+              "#ec0000",
+              "#f20000",
+              "#f90000",
+              "#ff0000",
+              "#ff0606",
+              "#ff0d0d",
+              "#ff1313",
+              "#ff1a1a"
+            ],
+            [
+              "#00e6e6",
+              "#00ecec",
+              "#00f2f2",
+              "#00f9f9",
+              "#00ffff",
+              "#06ffff",
+              "#0dffff",
+              "#13ffff",
+              "#1affff"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "id": "color.harmony",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "color": "#ff0000",
+        "rule": "complementary",
+        "amount": 100
+      },
+      "atteso": {
+        "lettura": {
+          "rule": "complementary",
+          "colors": [
+            "#ff0000",
+            "#00ffff"
+          ],
+          "grid": [
+            [
+              "#190000",
+              "#530000",
+              "#8c0000",
+              "#c60000",
+              "#ff0000",
+              "#ff3939",
+              "#ff7373",
+              "#ffacac",
+              "#ffe6e6"
+            ],
+            [
+              "#001919",
+              "#005353",
+              "#008c8c",
+              "#00c6c6",
+              "#00ffff",
+              "#39ffff",
+              "#73ffff",
+              "#acffff",
+              "#e6ffff"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "id": "color.harmony",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "color": "#ff0000",
+        "rule": "complementary",
+        "amount": 101
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "color.harmony",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "color": "#ff0000",
+        "rule": "complementary",
+        "variation": "warmCool"
+      },
+      "atteso": {
+        "lettura": {
+          "rule": "complementary",
+          "colors": [
+            "#ff0000",
+            "#00ffff"
+          ],
+          "grid": [
+            [
+              "#c2224d",
+              "#d11a39",
+              "#e01126",
+              "#f00913",
+              "#ff0000",
+              "#ff0b02",
+              "#ff1504",
+              "#ff2006",
+              "#ff2a08"
+            ],
+            [
+              "#0fd5ff",
+              "#0bdfff",
+              "#08eaff",
+              "#04f4ff",
+              "#00ffff",
+              "#13f6ee",
+              "#26eedd",
+              "#39e5cb",
+              "#4dddba"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "id": "color.harmony",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "color": "#ff0000",
+        "rule": "complementary",
+        "variation": "arcobaleno"
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "color.harmony",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "color": "#ff0000",
+        "rule": "complementary",
+        "limitTo": "grays-neutrals"
+      },
+      "atteso": {
+        "lettura": {
+          "rule": "complementary",
+          "colors": [
+            "#847065",
+            "#e7f0f8"
+          ],
+          "grid": [
+            [
+              "#3b3631",
+              "#534d47",
+              "#847065",
+              "#847065",
+              "#847065",
+              "#847065",
+              "#847065",
+              "#847065",
+              "#a09993"
+            ],
+            [
+              "#60686f",
+              "#949ba4",
+              "#afb7bf",
+              "#cbd3dc",
+              "#e7f0f8",
+              "#e7f0f8",
+              "#e7f0f8",
+              "#e7f0f8",
+              "#e7f0f8"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "id": "color.harmony",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "color": "#ff0000",
+        "rule": "complementary",
+        "limitTo": "libreria-che-non-c-e"
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "color.harmony",
+      "disegno": "campioni.svg",
+      "selezione": [],
+      "argomenti": {
+        "color": "#ff0000",
+        "rule": "complementary",
+        "limitTo": "document"
+      },
+      "atteso": {
+        "lettura": {
+          "rule": "complementary",
+          "colors": [
+            "#cc79a7",
+            "#0072b2"
+          ],
+          "grid": [
+            [
+              "#cc79a7",
+              "#cc79a7",
+              "#cc79a7",
+              "#cc79a7",
+              "#cc79a7",
+              "#cc79a7",
+              "#cc79a7",
+              "#cc79a7",
+              "#cc79a7"
+            ],
+            [
+              "#0072b2",
+              "#0072b2",
+              "#0072b2",
+              "#0072b2",
+              "#0072b2",
+              "#0072b2",
+              "#0072b2",
+              "#0072b2",
+              "#0072b2"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "id": "color.harmony",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "color": "#ff0000",
+        "rule": "complementary",
+        "limitTo": "document"
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "ui.colorGuideOptions",
+      "fonte": "interfaccia",
+      "prova": "apps/client/src/editors/spatial/completo/guida-colori.test.ts"
+    },
+    {
+      "id": "ui.colorGuideLimit",
+      "fonte": "interfaccia",
+      "prova": "apps/client/src/editors/spatial/completo/guida-colori.test.ts"
+    },
+    {
+      "id": "color_guide",
+      "fonte": "pannello",
+      "prova": "apps/client/src/editors/spatial/completo/guida-colori.test.ts"
     }
   ]
 }

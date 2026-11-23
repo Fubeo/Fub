@@ -4321,6 +4321,38 @@
     },
     {
       "fonte": "interfaccia",
+      "id": "ui.colorGuideLimit",
+      "chiamata": {
+        "client": "ui.colorGuideLimit"
+      },
+      "etichetta": {
+        "it": "Limita guida colori alla libreria",
+        "en": "Limit Color Guide to Library"
+      },
+      "posto": "finestra",
+      "famiglia": "colore",
+      "tasto": null,
+      "effetto": "mostra",
+      "finestra": true
+    },
+    {
+      "fonte": "interfaccia",
+      "id": "ui.colorGuideOptions",
+      "chiamata": {
+        "client": "ui.colorGuideOptions"
+      },
+      "etichetta": {
+        "it": "Opzioni guida colori…",
+        "en": "Color Guide Options…"
+      },
+      "posto": "finestra",
+      "famiglia": "colore",
+      "tasto": null,
+      "effetto": "mostra",
+      "finestra": true
+    },
+    {
+      "fonte": "interfaccia",
       "id": "ui.newSwatch",
       "chiamata": {
         "client": "ui.newSwatch"
@@ -5368,6 +5400,22 @@
       "etichetta": {
         "it": "Colore",
         "en": "Color"
+      },
+      "posto": "ispettore/design",
+      "famiglia": "colore",
+      "tasto": null,
+      "effetto": "mostra",
+      "finestra": false
+    },
+    {
+      "fonte": "pannello",
+      "id": "color_guide",
+      "chiamata": {
+        "client": "color_guide"
+      },
+      "etichetta": {
+        "it": "Guida colori",
+        "en": "Color Guide"
       },
       "posto": "ispettore/design",
       "famiglia": "colore",

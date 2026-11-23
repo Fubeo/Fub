@@ -145,7 +145,9 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // il pannello Aspetto e il resto dell'aspetto restano «da fare».
   // T15 livelli altri: `layer.showAll` e `layer.unlockAll` diventano «fatto» (la visita dell'albero, con
   // i loro casi in livelli.json); `layer.hideOthers` e `layer.lockOthers` restano «da fare», con la causa.
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1085, fub: 114, escluso: 12, fatto: 340 });
+  // T14 guida colori: tre righe fatte (il pannello Guida colori, Opzioni guida colori e Limita guida
+  // colori alla libreria), con i loro casi in colore.json e i test della sezione.
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1082, fub: 114, escluso: 12, fatto: 343 });
 });
 
 // --- un motore finto ---------------------------------------------------------------

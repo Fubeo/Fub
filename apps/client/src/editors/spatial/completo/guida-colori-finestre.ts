@@ -1,12 +1,14 @@
-// Le finestre della guida dei colori (K6 T14, giro 3): Opzioni guida colori (armonia, passi,
-// variazione, ampiezza) e Limita guida colori. Le scelte vivono nella sezione, per la pagina aperta:
-// non vanno sul disco e non cambiano il disegno.
+// Le finestre della guida dei colori (K6 T14, guida): Opzioni guida colori (armonia, passi,
+// variazione, ampiezza) e Limita guida colori (nessun limite, una libreria di base del motore, o i
+// campioni del documento). Le scelte stanno nella sezione, per la pagina aperta: non vanno sul disco
+// e non cambiano il disegno.
 import { openDialog } from "../../../kit/dialog";
-import { formBody, formCheck, formChoice, formNote, formNumber, formRow, type FormChoiceHandle, type FormNumber } from "../../../kit/form";
-import type { QuantityProblem } from "../../../kit/quantity";
+import { formBody, formChoice, formNote, formNumber, formRow, type FormChoiceHandle, type FormNumber } from "../../../kit/form";
 import { adopt } from "../../../kit/owned";
+import type { QuantityProblem } from "../../../kit/quantity";
 import { openLifetime, type Lifetime } from "../../../ui/lifetime";
 import { t, type DrawKey } from "../strings";
+import { chiama, type DipendenzeComando } from "./esegui";
 
 /// Le armonie che il motore conosce (`color.harmony`), nell'ordine in cui la finestra le mostra.
 export const REGOLE = [
@@ -38,23 +40,26 @@ export type Regola = (typeof REGOLE)[number];
 export const VARIAZIONI = ["tintsShades", "warmCool", "vividMuted"] as const;
 export type Variazione = (typeof VARIAZIONI)[number];
 
-/// Le scelte della guida, per la pagina aperta. `documento` limita la guida ai colori del
-/// documento (`limitTo: "document"`); le librerie di colori non ci sono ancora.
+/// Il limite della guida che vuole i campioni del documento (`limitTo: "document"`).
+export const LIMITE_DOCUMENTO = "document";
+
+/// Le scelte della guida, per la pagina aperta. `limite` è `null` (nessun limite), `LIMITE_DOCUMENTO`,
+/// o l'id di una libreria di base del motore.
 export interface StatoGuida {
   readonly regola: Regola;
   readonly passi: number;
   readonly variazione: Variazione;
   readonly ampiezza: number;
-  readonly documento: boolean;
+  readonly limite: string | null;
 }
 
-/// I valori di serie del motore: quattro passi, ampiezza 50, tinte e ombre.
+/// I valori di serie del motore: quattro passi, ampiezza 50, tinte e ombre, nessun limite.
 export const GUIDA_DI_SERIE: StatoGuida = {
   regola: "complementary",
   passi: 4,
   variazione: "tintsShades",
   ampiezza: 50,
-  documento: false,
+  limite: null,
 };
 
 const ETICHETTA_REGOLA: Readonly<Record<Regola, DrawKey>> = {
@@ -87,6 +92,23 @@ const ETICHETTA_VARIAZIONE: Readonly<Record<Variazione, DrawKey>> = {
   vividMuted: "draw.guida.variazione.vividMuted",
 };
 
+/// Le librerie di colori di base del motore (categoria «builtIn» di `swatch.library.list`) che Fub
+/// sa nominare: un id che non è qui non si offre. Il nome in italiano è la chiave.
+const NOME_LIBRERIA: Readonly<Record<string, DrawKey>> = {
+  "web-safe-216": "draw.guida.libreria.web-safe-216",
+  "grays-neutrals": "draw.guida.libreria.grays-neutrals",
+  "earth-tones": "draw.guida.libreria.earth-tones",
+  "skin-tone-ramps": "draw.guida.libreria.skin-tone-ramps",
+  pastels: "draw.guida.libreria.pastels",
+  brights: "draw.guida.libreria.brights",
+  "metallic-gradients": "draw.guida.libreria.metallic-gradients",
+  "perceptual-scales": "draw.guida.libreria.perceptual-scales",
+  "harmony-sets": "draw.guida.libreria.harmony-sets",
+};
+
+/// I campioni che sono del sistema, non del documento: non contano per il limite ai campioni.
+const CAMPIONI_DI_SISTEMA = new Set(["[None]", "[Registration]"]);
+
 /// La regola che il motore conosce: la finestra dà solo quelle.
 export function regolaValida(testo: string): Regola | null {
   return (REGOLE as readonly string[]).includes(testo) ? (testo as Regola) : null;
@@ -102,6 +124,40 @@ export function nomeRegola(regola: Regola): string {
   return t(ETICHETTA_REGOLA[regola]);
 }
 
+/// Il nome italiano di una libreria di base, o `null` se Fub non la sa nominare.
+export function nomeLibreria(id: string): string | null {
+  const chiave = NOME_LIBRERIA[id];
+  return chiave === undefined ? null : t(chiave);
+}
+
+function isRecord(valore: unknown): valore is Readonly<Record<string, unknown>> {
+  return typeof valore === "object" && valore !== null && !Array.isArray(valore);
+}
+
+/// Le librerie di colori di base che la finestra offre, nell'ordine del motore: id e nome in
+/// italiano. `null` se il motore non ha risposto.
+export async function libreriePiuBase(deps: DipendenzeComando): Promise<readonly { readonly id: string; readonly nome: string }[] | null> {
+  const esito = await chiama(deps, "disegno.swatch.library.list", {}, false).catch(() => null);
+  if (esito === null || esito.refused !== null || !isRecord(esito.reading) || !Array.isArray(esito.reading.libraries)) return null;
+  const librerie: { id: string; nome: string }[] = [];
+  for (const libreria of esito.reading.libraries) {
+    if (!isRecord(libreria) || libreria.category !== "builtIn" || typeof libreria.id !== "string") continue;
+    const nome = nomeLibreria(libreria.id);
+    if (nome !== null) librerie.push({ id: libreria.id, nome });
+  }
+  return librerie;
+}
+
+/// Vero se il documento ha campioni di colore pieno suoi (non quelli di sistema); `null` se il motore
+/// non ha risposto. È il controllo che la famiglia fa anche prima del motore.
+export async function campioniDelDocumento(deps: DipendenzeComando): Promise<boolean | null> {
+  const esito = await chiama(deps, "disegno.swatch.list", {}, false).catch(() => null);
+  if (esito === null || esito.refused !== null || !isRecord(esito.reading) || !Array.isArray(esito.reading.swatches)) return null;
+  return esito.reading.swatches.some(
+    (campione) => isRecord(campione) && campione.kind === "color" && typeof campione.name === "string" && !CAMPIONI_DI_SISTEMA.has(campione.name),
+  );
+}
+
 function problemaDelNumero(problema: QuantityProblem | "mixed"): string {
   const chiavi: Readonly<Record<QuantityProblem, DrawKey>> = {
     empty: "draw.properties.problem.empty",
@@ -114,7 +170,14 @@ function problemaDelNumero(problema: QuantityProblem | "mixed"): string {
 }
 
 /// Il campo di un numero della guida: fuori dai limiti non si prende e dice perché.
-function campoNumero(etichetta: string, valore: number, min: number, max: number, unita: string | undefined, onValidity: (valido: boolean) => void, vita: Lifetime): FormNumber {
+function campoNumero(
+  etichetta: string,
+  valore: number,
+  min: number,
+  max: number,
+  unita: string | undefined,
+  vita: Lifetime,
+): FormNumber {
   return formNumber({
     label: etichetta,
     value: valore,
@@ -125,13 +188,12 @@ function campoNumero(etichetta: string, valore: number, min: number, max: number
     outOfRange: (minimo, massimo) => t("draw.recolor.fuori", { min: String(minimo ?? min), max: String(massimo ?? max) }),
     problem: problemaDelNumero,
     onChange: () => undefined,
-    onValidity,
     lifetime: vita,
   });
 }
 
 /// Apre una finestra della guida con il suo corpo e Annulla/Applica. Risolve lo stato nuovo con
-/// Applica, `null` altrimenti. `ok` dice se il pulsante di Applica è acceso.
+/// Applica, `null` altrimenti. Applica si accende solo se i numeri sono validi.
 function finestraGuida(
   titolo: string,
   descrizione: string,
@@ -160,8 +222,10 @@ function finestraGuida(
       if (ok !== null) ok.disabled = !valido();
     };
     aggiorna();
+    // Un numero si conferma con Invio o alla perdita del fuoco: ricontrolla dopo ogni passo di scrittura.
     corpo.addEventListener("input", aggiorna);
-    corpo.addEventListener("change", aggiorna);
+    corpo.addEventListener("keydown", aggiorna);
+    corpo.addEventListener("focusout", aggiorna);
     handle.result.then((scelta) => {
       liberaDalDisegno();
       own.close();
@@ -174,9 +238,6 @@ function finestraGuida(
 export function apriOpzioniGuida(stato: StatoGuida, vita: Lifetime): Promise<StatoGuida | null> {
   let regola: Regola = stato.regola;
   let variazione: Variazione = stato.variazione;
-  let passi = stato.passi;
-  let ampiezza = stato.ampiezza;
-  const validi = new Map<string, boolean>();
   const voci = document.createElement("select");
   voci.className = "draw-guide-rule";
   voci.setAttribute("aria-label", t("draw.guida.regola"));
@@ -199,13 +260,13 @@ export function apriOpzioniGuida(stato: StatoGuida, vita: Lifetime): Promise<Sta
     },
     lifetime: vita,
   });
-  const campoPassi = campoNumero(t("draw.guida.passi"), passi, 1, 20, undefined, (v) => validi.set("passi", v), vita);
-  const campoAmpiezza = campoNumero(t("draw.guida.ampiezza"), ampiezza, 0, 100, "%", (v) => validi.set("ampiezza", v), vita);
+  const campoPassi = campoNumero(t("draw.guida.passi"), stato.passi, 1, 20, undefined, vita);
+  const campoAmpiezza = campoNumero(t("draw.guida.ampiezza"), stato.ampiezza, 0, 100, "%", vita);
   const etichettaRegola = document.createElement("label");
   etichettaRegola.className = "draw-guide-field";
-  const nomeRegola = document.createElement("span");
-  nomeRegola.textContent = t("draw.guida.regola");
-  etichettaRegola.append(nomeRegola, voci);
+  const nomeCampo = document.createElement("span");
+  nomeCampo.textContent = t("draw.guida.regola");
+  etichettaRegola.append(nomeCampo, voci);
   const corpo = formBody([etichettaRegola, variazioni.element, formRow(campoPassi.element), formRow(campoAmpiezza.element)]);
   // I numeri si leggono a Applica, quando sono validi.
   return finestraGuida(
@@ -213,32 +274,57 @@ export function apriOpzioniGuida(stato: StatoGuida, vita: Lifetime): Promise<Sta
     t("draw.guida.opzioni.descrizione"),
     corpo,
     vita,
-    () => [...validi.values()].every((v) => v !== false),
-    () => {
-      passi = campoPassi.value();
-      ampiezza = campoAmpiezza.value();
-      return { regola, passi, variazione, ampiezza, documento: stato.documento };
-    },
+    () => campoPassi.valid() && campoAmpiezza.valid(),
+    () => ({
+      regola,
+      passi: campoPassi.value(),
+      variazione,
+      ampiezza: campoAmpiezza.value(),
+      limite: stato.limite,
+    }),
   );
 }
 
-/// La finestra «Limita guida colori»: solo i colori del documento. Le librerie non ci sono ancora.
-export function apriLimiteGuida(stato: StatoGuida, vita: Lifetime): Promise<StatoGuida | null> {
-  let documento = stato.documento;
-  const casella = formCheck({
-    label: t("draw.guida.limite.documento"),
-    checked: documento,
-    onChange: (valore) => {
-      documento = valore;
-    },
-    lifetime: vita,
+/// La finestra «Limita guida colori»: nessun limite, una libreria di base, o i campioni del documento.
+/// I campioni del documento si offrono solo se il documento ne ha; altrimenti la frase lo dice.
+export function apriLimiteGuida(stato: StatoGuida, vita: Lifetime, deps: DipendenzeComando): Promise<StatoGuida | null> {
+  let limite: string | null = stato.limite;
+  const scelta = document.createElement("select");
+  scelta.className = "draw-guide-rule";
+  scelta.setAttribute("aria-label", t("draw.guida.limite.titolo"));
+  const nota = formNote(t("draw.guida.caricamento"));
+  const aggiungi = (valore: string, nome: string, disabilitata = false): void => {
+    const voce = document.createElement("option");
+    voce.value = valore;
+    voce.textContent = nome;
+    voce.selected = valore === (limite ?? "");
+    voce.disabled = disabilitata;
+    scelta.append(voce);
+  };
+  aggiungi("", t("draw.guida.limite.nessuno"));
+  scelta.addEventListener("change", () => {
+    limite = scelta.value === "" ? null : scelta.value;
   });
+  const corpo = formBody([scelta, nota]);
+  const pronta = async (): Promise<void> => {
+    const [librerie, campioni] = await Promise.all([libreriePiuBase(deps), campioniDelDocumento(deps)]);
+    if (librerie === null || campioni === null) {
+      nota.textContent = t("draw.guida.limite.libreria.errore");
+      return;
+    }
+    for (const libreria of librerie) aggiungi(libreria.id, libreria.nome);
+    aggiungi(LIMITE_DOCUMENTO, t("draw.guida.limite.documento"), !campioni);
+    nota.textContent = campioni ? "" : t("draw.guida.limite.senza.campioni");
+    nota.hidden = campioni;
+    scelta.value = limite ?? "";
+  };
+  void pronta();
   return finestraGuida(
     t("draw.guida.limite.titolo"),
-    "",
-    formBody([casella.element, formNote(t("draw.guida.limite.libreria"))]),
+    t("draw.guida.limite.descrizione"),
+    corpo,
     vita,
     () => true,
-    () => ({ ...stato, documento }),
+    () => ({ ...stato, limite }),
   );
 }

@@ -44,6 +44,8 @@ export const DRAW: PartAnatomy = {
         "draw-properties-menu", "draw-properties-contrast",
         "draw-resources-swatches", "draw-resources-corpo", "draw-point-place", "draw-point-coord", "draw-contagocce-copia", "kit-number", "kit-number-box",
         "draw-recolor-list", "draw-recolor-row", "draw-recolor-current", "draw-recolor-chip", "draw-recolor-code", "draw-recolor-arrow",
+        "draw-guide-head", "draw-guide-rule-name", "draw-guide-note", "draw-guide-grid", "draw-guide-row", "draw-guide-swatch",
+        "draw-guide-field", "draw-guide-rule",
       ],
     },
     {

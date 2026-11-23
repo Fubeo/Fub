@@ -129,6 +129,16 @@
     },
     {
       "fonte": "interfaccia",
+      "id": "ui.colorGuideLimit",
+      "campi": []
+    },
+    {
+      "fonte": "interfaccia",
+      "id": "ui.colorGuideOptions",
+      "campi": []
+    },
+    {
+      "fonte": "interfaccia",
       "id": "ui.newSwatch",
       "campi": []
     },
