@@ -5758,8 +5758,11 @@ async function openMenuUguale(page) {
   await page.click('.draw-header button[aria-label="Disegno"]');
   await page.waitForSelector("#context-menu [role='menuitem']:has-text('Selezione')");
   await page.hover("#context-menu [role='menuitem']:has-text('Selezione')");
-  await page.waitForSelector(".context-submenu [role='menuitem']:has-text('Uguale')");
-  await page.hover(".context-submenu [role='menuitem']:has-text('Uguale')");
+  // La voce che si chiama «Uguale», non una che la nomina: il perché di «Riseleziona» spenta la cita,
+  // sta prima, e `:has-text` sceglieva lei.
+  const uguale = page.locator(".context-submenu [role='menuitem']").filter({ hasText: /^Uguale/ });
+  await uguale.waitFor();
+  await uguale.hover();
   await page.waitForSelector(".context-submenu [role='menuitem']:has-text('Colore tratto')");
   const scelta = await page.evaluate(() => {
     const voce = [...document.querySelectorAll(".context-submenu [role='menuitem']")].find((el) => el.textContent.includes("Colore tratto"));

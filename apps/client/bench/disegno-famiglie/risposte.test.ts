@@ -31,6 +31,9 @@ describe("le risposte delle famiglie del banco", () => {
     // `?elabora=1`, coi tracciati scritti a mano (archi al posto delle curve del motore).
     // La maschera di ritaglio (K6 T12, giro 6): Crea sulle stesse due forme, il cerchio davanti ritaglia
     // il rettangolo, com'è il motore vero (il clipPath in `fub-defs`, il `<g clip-path>`).
+    // Le letture che il Completo fa da sé all'apertura (la Guida colori e i Temi del Design:
+    // `paint.proxies`, `color.harmony`, `colorTheme.list`) e la rotazione della finestra «Ruota…»
+    // (`trasforma.json`): senza risposta la sessione del banco si darebbe per spenta.
     expect(RISPOSTE.map((r) => r.comando)).toEqual([
       "disegno.transparency.set",
       "disegno.stroke.set",
@@ -50,6 +53,9 @@ describe("le risposte delle famiglie del banco", () => {
       "disegno.paint.setGradientGeom",
       "disegno.paint.lastGradient",
       "disegno.paint.toggleActive",
+      "disegno.paint.proxies",
+      "disegno.color.harmony",
+      "disegno.colorTheme.list",
       "disegno.shape.rectangle",
       "disegno.object.compoundShape.make",
       "disegno.select.same.fillColor",
@@ -64,6 +70,7 @@ describe("le risposte delle famiglie del banco", () => {
       "disegno.object.pathfinder.unite",
       "disegno.object.pathfinder.minusFront",
       "disegno.object.clippingMask.make",
+      "disegno.object.rotate",
     ]);
     // Unione e Meno davanti (K6 T12, giro 5): le due forme sovrapposte di `?elabora=1` tolte, e il
     // tracciato al posto di quella davanti, in un passo solo.
