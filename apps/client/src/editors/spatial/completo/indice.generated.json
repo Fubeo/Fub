@@ -4673,6 +4673,44 @@
     },
     {
       "fonte": "interfaccia",
+      "id": "ui.simplifyAuto",
+      "chiamata": {
+        "comando": "disegno.object.path.simplify",
+        "valore": {
+          "auto": true
+        }
+      },
+      "etichetta": {
+        "it": "Semplifica automaticamente",
+        "en": "Auto-Simplify"
+      },
+      "posto": "menu/oggetto/tracciato",
+      "famiglia": "tracciati",
+      "tasto": null,
+      "effetto": "mostra",
+      "finestra": false
+    },
+    {
+      "fonte": "interfaccia",
+      "id": "ui.smoothAuto",
+      "chiamata": {
+        "comando": "disegno.object.path.smooth",
+        "valore": {
+          "auto": true
+        }
+      },
+      "etichetta": {
+        "it": "Smussa automaticamente",
+        "en": "Auto-Smooth"
+      },
+      "posto": "menu/oggetto/tracciato",
+      "famiglia": "tracciati",
+      "tasto": null,
+      "effetto": "mostra",
+      "finestra": false
+    },
+    {
+      "fonte": "interfaccia",
       "id": "ui.swatchOptions",
       "chiamata": {
         "client": "ui.swatchOptions"

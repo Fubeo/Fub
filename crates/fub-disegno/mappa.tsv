@@ -1190,8 +1190,8 @@ interfaccia	ui.spotColors	Spot Colors…		colore	F1	T14	da fare	finestra	famigli
 interfaccia	ui.menuDialog	Menu Dialog		fub	—	T2	fub	fub	—	la tavolozza e il menu del disegno	Finestra di dialogo menu
 interfaccia	ui.widthPointEdit	Width Point Edit…		pennelli	F2	T17	da fare	finestra	famiglia		Modifica punto di larghezza…
 interfaccia	ui.corners	Corners…		forme	F1	T13	da fare	finestra	famiglia	aspetta T27	Angoli…
-interfaccia	ui.simplifyAuto	Auto-Simplify		tracciati	F1	T12	da fare	finestra	famiglia	il cursore automatico: la finestra di Semplifica ha solo OK e Annulla, e l'anteprima non dà il livello che il motore sceglie con auto (T12 giro finestre)	Semplifica automaticamente
-interfaccia	ui.smoothAuto	Auto-Smooth		tracciati	F1	T12	da fare	finestra	famiglia	il cursore automatico di Smussa: la finestra ha solo OK e Annulla, e l'anteprima non dà il livello (T12 giro finestre)	Smussa automaticamente
+interfaccia	ui.simplifyAuto	Auto-Simplify		tracciati	F1	T12	fatto	menu/oggetto/tracciato	famiglia	senza finestra: il comando del motore con auto (T12 giro finestre)	Semplifica automaticamente
+interfaccia	ui.smoothAuto	Auto-Smooth		tracciati	F1	T12	fatto	menu/oggetto/tracciato	famiglia	senza finestra: il comando del motore con auto (T12 giro finestre)	Smussa automaticamente
 interfaccia	ui.simplifyMoreOptions	More Options		tracciati	F1	T12	da fare	finestra	famiglia	le altre opzioni chiedono tolleranza e angolo, e il catalogo ha una sola finestra per comando: serve una seconda finestra per object.path.simplify (T12 giro finestre)	Altre opzioni
 interfaccia	ui.dialogReset	Reset		fub	—	T2	fub	fub	—	le finestre di Fub non ricordano posizioni	Reimposta
 interfaccia	ui.justification	Justification…		testo	F2	T16	da fare	finestra	famiglia		Giustificazione…

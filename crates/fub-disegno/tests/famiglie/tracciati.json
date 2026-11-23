@@ -6940,6 +6940,133 @@
       "id": "ui.expandDialog",
       "fonte": "interfaccia",
       "prova": "apps/client/src/editors/spatial/completo/finestre-espandi.test.ts"
+    },
+    {
+      "id": "object.path.simplify",
+      "disegno": "zigzag.svg",
+      "selezione": [
+        "oz1z1z1z1"
+      ],
+      "argomenti": {
+        "auto": true
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oz1z1z1z1",
+            "attrs": {
+              "d": "M20 150 C37.85 150.93 57.05 149.55 75 149.71 C105.02 149.98 134.98 150.26 165 149.72 C181.37 149.43 198.64 150.59 215 150.28 C229.85 150 245.17 149.61 260 149.7 C277.85 149.81 297.3 150.94 315 149.91"
+            }
+          }
+        ]
+      },
+      "dopo": "tracciati-auto-semplifica.svg"
+    },
+    {
+      "id": "object.path.simplify",
+      "disegno": "base.svg",
+      "selezione": [
+        "op7a7a7a7"
+      ],
+      "argomenti": {
+        "auto": true
+      },
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "object.path.simplify",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {
+        "auto": true
+      },
+      "atteso": {
+        "rifiuto": "unmapped"
+      }
+    },
+    {
+      "id": "object.path.simplify",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "auto": true
+      },
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "object.path.simplify",
+      "disegno": "zigzag.svg",
+      "selezione": [
+        "oz1z1z1z1",
+        "oa1a1a1a1"
+      ],
+      "argomenti": {
+        "auto": true
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oz1z1z1z1",
+            "attrs": {
+              "d": "M20 150 C37.85 150.93 57.05 149.55 75 149.71 C105.02 149.98 134.98 150.26 165 149.72 C181.37 149.43 198.64 150.59 215 150.28 C229.85 150 245.17 149.61 260 149.7 C277.85 149.81 297.3 150.94 315 149.91"
+            }
+          }
+        ]
+      },
+      "dopo": "tracciati-auto-semplifica-misto.svg"
+    },
+    {
+      "id": "object.path.smooth",
+      "disegno": "zigzag.svg",
+      "selezione": [
+        "oz1z1z1z1"
+      ],
+      "argomenti": {
+        "auto": true
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oz1z1z1z1",
+            "attrs": {
+              "d": "M20 150 C106.44 154.49 228.8 154.91 315 149.91"
+            }
+          }
+        ]
+      },
+      "dopo": "tracciati-auto-smussa.svg"
+    },
+    {
+      "id": "object.path.simplify",
+      "disegno": "campioni.svg",
+      "selezione": [
+        "od4d4d4d4"
+      ],
+      "argomenti": {
+        "auto": true
+      },
+      "atteso": {
+        "rifiuto": "unsupported"
+      }
+    },
+    {
+      "id": "ui.simplifyAuto",
+      "fonte": "interfaccia",
+      "prova": "apps/client/src/editors/spatial/completo/comandi-automatici.test.ts"
+    },
+    {
+      "id": "ui.smoothAuto",
+      "fonte": "interfaccia",
+      "prova": "apps/client/src/editors/spatial/completo/comandi-automatici.test.ts"
     }
   ]
 }

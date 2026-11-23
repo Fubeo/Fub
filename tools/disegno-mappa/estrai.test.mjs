@@ -168,8 +168,10 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // T15 giro 7 porta a «fatto» Seleziona testo per font e Opzioni modifica globale (livelli); Avvia la
   // modifica globale resta «da fare», con la causa nella nota.
   // T12 finestre (Semplifica e Smussa): `ui.expandDialog` è «fatto», la stessa finestra di
-  // `object.expand` (la finestra di Espandi, con il suo test). Gli altri tre restano «da fare».
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1064, fub: 114, escluso: 12, fatto: 361 });
+  // `object.expand` (la finestra di Espandi, con il suo test). Altre opzioni resta «da fare».
+  // T12 finestre, giro senza finestra: `ui.simplifyAuto` e `ui.smoothAuto` (Semplifica e Smussa
+  // automaticamente) sono «fatto» come voci dirette del comando con `{auto: true}`: due in più.
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1062, fub: 114, escluso: 12, fatto: 363 });
 });
 
 // --- un motore finto ---------------------------------------------------------------
