@@ -28,7 +28,11 @@ fn apri(testo: &str) -> (Disegno, u64) {
     let disegni = common::disegni();
     disegni.filtra(fub_disegno::famiglie::Filtro::Tutte);
     let (d, aperto) = Disegno::apri_con(&disegni, testo).expect("il disegno si apre");
-    assert!(aperto.losses.is_empty(), "la riapertura non perde niente: {:?}", aperto.losses);
+    assert!(
+        aperto.losses.is_empty(),
+        "la riapertura non perde niente: {:?}",
+        aperto.losses
+    );
     (d, aperto.revision)
 }
 
@@ -39,11 +43,17 @@ fn dieci_spostamenti_di_fila_reggono_con_una_riapertura_a_ogni_passo() {
     for passo in 1..=10 {
         let (mut d, revisione) = apri(&testo);
         let esito = d
-            .comando(comando("disegno.object.nudge", &["oa1a1a1a1"], json!({ "dx": 1 }), revisione))
+            .comando(comando(
+                "disegno.object.nudge",
+                &["oa1a1a1a1"],
+                json!({ "dx": 1 }),
+                revisione,
+            ))
             .expect("il comando risponde");
         assert!(esito.refused.is_none(), "passo {passo}: nessun rifiuto");
-        let ops: Value = serde_json::from_str(esito.ops.as_deref().expect("il passo dà operazioni"))
-            .expect("le operazioni sono JSON");
+        let ops: Value =
+            serde_json::from_str(esito.ops.as_deref().expect("il passo dà operazioni"))
+                .expect("le operazioni sono JSON");
         let nuovo = common::applica::applica(&testo, &ops).expect("le operazioni si applicano");
         assert_ne!(nuovo, prima, "passo {passo}: il file cambia");
         prima = testo;
@@ -51,7 +61,8 @@ fn dieci_spostamenti_di_fila_reggono_con_una_riapertura_a_ogni_passo() {
     }
     // Dopo dieci passi l'oggetto è spostato di 10 pt nel piano della pagina, e il file si riapre.
     assert!(
-        testo.contains(r#"transform="matrix(1 0 0 1 10 0)""#) && testo.contains(r#"id="oa1a1a1a1""#),
+        testo.contains(r#"transform="matrix(1 0 0 1 10 0)""#)
+            && testo.contains(r#"id="oa1a1a1a1""#),
         "il rettangolo è spostato di 10: {testo}"
     );
     let (_, _) = apri(&testo);
