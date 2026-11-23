@@ -63,15 +63,25 @@ Semplice, un clic sulla voce dello zoom torna al 100%, come prima. Gli stessi
 comandi stanno in Ctrl+/ e nella ricerca dei comandi.
 
 Nel Disegno completo, ≡ › Visualizza ha la griglia («Mostra griglia» e
-«Aggancia alla griglia», le stesse impostazioni del Semplice), «Mostra griglia
-trasparenza», il contorno, i righelli del bordo del foglio («Mostra righelli»),
-«Nascondi bordi» e «Nascondi riquadro di delimitazione», e «Reimposta rotazione
-vista», che è spenta finché la vista non è girata. Le voci stanno in cinque
-file, separate da una riga: griglia e aggancio; trasparenza, contorno e
-righelli; bordi e riquadro; la croce di precisione; la rotazione. Le voci «Nascondi» hanno la
-spunta quando nascondono davvero. «Usa cursori di precisione» mette la croce al posto del cursore
-degli strumenti che disegnano (penna, matita, forme, pennelli e gomma dei punti di ancoraggio); la
-scelta resta su questa macchina, come la griglia.
+«Aggancia alla griglia», le stesse impostazioni del Semplice), «Aggancia ai
+pixel», «Mostra griglia trasparenza», il contorno, i righelli del bordo del foglio
+(«Mostra righelli»), «Nascondi bordi» e «Nascondi riquadro di delimitazione», e
+«Reimposta rotazione vista», che è spenta finché la vista non è girata. Le voci
+stanno in cinque file, separate da una riga: griglia e aggancio; trasparenza,
+contorno e righelli; bordi e riquadro; la croce di precisione; la rotazione. Le
+voci «Nascondi» hanno la spunta quando nascondono davvero. «Usa cursori di
+precisione» mette la croce al posto del cursore degli strumenti che disegnano
+(penna, matita, forme, pennelli e gomma dei punti di ancoraggio); la scelta resta
+su questa macchina, come la griglia.
+
+«Aggancia ai pixel» porta i punti di un rettangolo, di un tracciato, di uno
+spostamento e di una copia su interi della scena. Un pixel è un'unità del file,
+cioè un px CSS (1/96 di pollice): un pt vale 4/3 di pixel. Lo zoom non lo
+cambia: a 200% un pixel della scena sono due pixel dello schermo. Se la griglia
+aggancia anche lei, vince la griglia, come nel motore; le righe della griglia
+restano quelle che si vedono. Le frecce spostano la selezione fino al pixel
+seguente, e con Maiusc di cinque. Nel Semplice l'aggancio al pixel non agisce:
+il valore resta salvato con la griglia, e lì i punti non si arrotondano.
 
 La griglia di trasparenza mette la carta a scacchi, dove il foglio non ha un
 fondo suo: un PDF di sfondo, con la sua pagina, la copre. «Nascondi bordi»
@@ -81,12 +91,12 @@ maniglie non si ridimensiona né si gira la selezione con il mouse, ma la si
 sposta ancora trascinandola. I righelli stanno sul bordo in alto e a sinistra
 del foglio, con le tacche e i numeri nell'unità del documento; non spostano il
 disegno, e con la vista girata non si leggono. Lo stato dei righelli non si
-salva nel file. Gli interruttori della vista (trasparenza, bordi, riquadro) si
-ricordano come la griglia, nelle sue stesse impostazioni: non cambiano il file e
-non entrano nella cronologia. Le altre voci di Visualizza (la rotazione con un
-angolo, l'anteprima dei pixel, la modalità presentazione e lo schermo intero, le
-guide intelligenti, l'aggancio ai punti e ai pixel, il widget d'angolo, le viste
-salvate) non ci sono ancora: non compaiono nel menu.
+salva nel file. Gli interruttori della vista (trasparenza, bordi, riquadro,
+aggancio ai pixel) si ricordano come la griglia, nelle sue stesse impostazioni:
+non cambiano il file e non entrano nella cronologia. Le altre voci di Visualizza
+(l'anteprima dei pixel, la modalità presentazione e lo schermo intero, le guide
+intelligenti, l'aggancio ai punti, il widget d'angolo, le viste salvate) non ci
+sono ancora: non compaiono nel menu.
 
 Il navigatore si accende e si spegne dalla banda, con la voce «Navigatore» nel
 Disegno completo, o da Vista nel Semplice. La panoramica mostra tutto il

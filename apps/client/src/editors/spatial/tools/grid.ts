@@ -85,6 +85,10 @@ export interface Grid {
   /// selezione né maniglie, né misure, e nessuna maniglia si può prendere.
   /// Assente, si vedono.
   readonly hideBoundingBox?: boolean;
+  /// Aggancio al pixel (K6 T11): i punti cadono su interi di scena, come con
+  /// una griglia di un pixel che non si vede. La griglia, se aggancia, vince
+  /// (come nel motore). Assente, spento: è stato della vista, come `shown`.
+  readonly snapPixel?: boolean;
 }
 
 /// Che cosa resta di un tratto della Penna.
@@ -224,6 +228,24 @@ export function unitSteps(unit: LengthUnit): number[] {
 /// della scena.
 export function gridStep(grid: Grid, unit: LengthUnit): number {
   return unit === "px" ? grid.step : (grid.steps[unit] ?? UNIT_STEP[unit] * UNIT_SIZE[unit]);
+}
+
+/// Un pixel del file è un'unità di scena: un px CSS, 96 per pollice. Non
+/// dipende dallo zoom, come nel motore: a 200% un pixel di scena sono due
+/// pixel dello schermo, a 50% mezzo.
+export const PIXEL_STEP = 1;
+
+/// Vero se l'aggancio porta i punti da qualche parte: la griglia se aggancia,
+/// altrimenti il pixel, se è acceso e lo spazio lo vuole (`pixel`: il Completo).
+/// Nel Semplice il valore del pixel resta nella griglia salvata, ma non agisce.
+export function snapActive(grid: Grid, pixel: boolean): boolean {
+  return grid.snap || (pixel && grid.snapPixel === true);
+}
+
+/// Il passo a cui l'aggancio porta i punti, in unità della scena: quello della
+/// griglia se aggancia, anche col pixel acceso; altrimenti un pixel.
+export function snapStepOf(grid: Grid, unit: LengthUnit): number {
+  return grid.snap ? gridStep(grid, unit) : PIXEL_STEP;
 }
 
 /// `grid` col passo `step` per i documenti in `unit`.

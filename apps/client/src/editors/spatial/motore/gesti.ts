@@ -759,7 +759,7 @@ export function installGestiMotore(ctx: EditorContext): void {
             layer,
             selection: [...ctx.selection],
             zoom: ctx.camera.scale,
-            snap: { grid: ctx.gridOn() ? ctx.stepNow() : null, free: ctx.free },
+            snap: { grid: ctx.snapOn() ? ctx.snapStep() : null, free: ctx.free },
             style: shape ? { stroke: color, width, fill: null } : null,
             // Il Testo scrive la parola del testo nuovo, che poi si cambia
             // nel campo «Testo» dell'ispettore.

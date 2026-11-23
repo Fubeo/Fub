@@ -10,7 +10,7 @@ import type { LengthUnit } from "../../scene/rulers";
 import { plural, t } from "../../strings";
 import { pageRect, type Board, type Rect } from "../boards";
 import { directionCursor, type GripCursor } from "../frame";
-import { gridLines, gridStep } from "../grid";
+import { gridLines, gridStep, snapStepOf } from "../grid";
 import { unitSuffix } from "../guide-dialog";
 import { fieldMin, fieldText, fromUnit, toUnit, UNIT_PLACES } from "../rulers";
 import { fitView, placedAt, toScene, toScreen, turnTo, viewTransform, zoomAt, type View } from "../../view";
@@ -44,6 +44,7 @@ export interface ViewContext {
   hundredthsText: (value: number) => string;
   docUnit: () => LengthUnit;
   stepNow: () => number;
+  snapStep: () => number;
   coordText: (value: number) => string;
   lengthText: (value: number) => string;
   lengthSpoken: (value: number) => string;
@@ -305,6 +306,10 @@ export function installView(ctx: EditorContext): void {
   /// ogni unità ricorda il suo.
   const stepNow = (): number => gridStep(ctx.grid, docUnit());
   ctx.stepNow = stepNow;
+  /// Il passo a cui l'aggancio porta i punti: quello della griglia, o un pixel
+  /// se aggancia solo il pixel. Le righe disegnate restano sul passo di `stepNow`.
+  const snapStep = (): number => snapStepOf(ctx.grid, docUnit());
+  ctx.snapStep = snapStep;
 
   /// I formati dell'unità di adesso, nella lingua di adesso: il numero solo,
   /// e con l'unità scritta corta e per intero.

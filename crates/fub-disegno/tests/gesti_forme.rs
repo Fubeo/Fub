@@ -324,3 +324,68 @@ fn livello_trasformato_e_livelli_tutti_chiusi() {
     let esito = d.gesto(g).expect("il gesto");
     assert_eq!(esito.refused, Some(DrawingRefusal::Locked));
 }
+
+/// Un rettangolo tirato col passo della griglia del gesto (`None`: spenta).
+fn tirato_con_passo(
+    tool: &str,
+    zoom: f64,
+    passo: Option<f64>,
+    da: (f64, f64),
+    a: (f64, f64),
+) -> DrawingOutcome {
+    let (mut d, _) = apri(DISEGNO);
+    let mut g = richiesta(
+        tool,
+        zoom,
+        "commit",
+        vec![
+            evento("down", da.0, da.1),
+            evento("drag", a.0, a.1),
+            evento("up", a.0, a.1),
+        ],
+    );
+    g.snap.grid = passo;
+    d.gesto(g).expect("il gesto")
+}
+
+fn numero(elem: &Value, attributo: &str) -> f64 {
+    elem["attrs"][attributo]
+        .as_str()
+        .and_then(|testo| testo.parse().ok())
+        .unwrap_or_else(|| panic!("l'attributo {attributo} non è un numero in {elem}"))
+}
+
+#[test]
+fn aggancio_al_pixel_porta_il_rettangolo_su_interi_a_ogni_zoom() {
+    // Il client manda il passo di un pixel (un'unità di scena) come passo della
+    // griglia del gesto: da (10,4; 3,2) a (60,7; 40,4) il rettangolo cade su
+    // (10, 3) e (61, 40), a ogni zoom, perché lo zoom non cambia il passo.
+    for zoom in [0.5, 1.0, 2.0] {
+        let elem = elem_aggiunto(&tirato_con_passo(
+            "rect",
+            zoom,
+            Some(1.0),
+            (10.4, 3.2),
+            (60.7, 40.4),
+        ));
+        assert_eq!(
+            (numero(&elem, "x"), numero(&elem, "y")),
+            (10.0, 3.0),
+            "zoom {zoom}"
+        );
+        assert_eq!(
+            (numero(&elem, "width"), numero(&elem, "height")),
+            (51.0, 37.0),
+            "zoom {zoom}"
+        );
+    }
+    // Spento, niente arrotondamento: il rettangolo resta dove è stato tirato.
+    let spento = elem_aggiunto(&tirato_con_passo(
+        "rect",
+        1.0,
+        None,
+        (10.4, 3.2),
+        (60.7, 40.4),
+    ));
+    assert_eq!((numero(&spento, "x"), numero(&spento, "y")), (10.4, 3.2));
+}

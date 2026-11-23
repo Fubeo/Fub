@@ -185,7 +185,8 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // prova in vista.json; `view.rotateToSelection` resta «da fare»: il motore non ha la rotazione condivisa.
   // T11 cursori: «Usa cursori di precisione» è fatta; T12: «Unisci» (gesto) è fatta; livelli: «Sposta sul livello corrente» è fatta.
   // T11 modo di disegno: `view.drawMode` diventa «fatto» (Normale e Dietro; Dentro spenta con la sua frase).
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1044, fub: 114, escluso: 12, fatto: 381 });
+  // T11: «Aggancia ai pixel» è fatta.
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1043, fub: 114, escluso: 12, fatto: 382 });
 });
 
 // --- un motore finto ---------------------------------------------------------------

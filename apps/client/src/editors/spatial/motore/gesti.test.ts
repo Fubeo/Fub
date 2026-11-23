@@ -347,6 +347,25 @@ describe("i gesti sul motore", () => {
     expect(fake.atGate("drawingGesture")).toHaveLength(0);
   });
 
+  it("con l'aggancio al pixel (K6 T11) il gesto manda il passo di un pixel; con la griglia accesa vince lei, col suo passo", async () => {
+    const fake = createFakeHost({ drawing: replaying(VECTORS.find((vector) => vector.name === "rettangolo")!, new Map()) });
+    const editor = await mount(EMPTY, fake, null);
+    editor.setGrid({ ...DEFAULT_GRID, snapPixel: true });
+    editor.setTool("rect");
+    await drag(editor, [[10.4, 3.2], [60.7, 40.4]]);
+    await settle(16, 8);
+    const pixel = gestures(fake);
+    expect(pixel.length).toBeGreaterThan(0);
+    expect(pixel.map((gesto) => gesto.snap)).toEqual(pixel.map(() => ({ grid: 1, free: false })));
+
+    editor.setGrid({ ...DEFAULT_GRID, snap: true, step: 20, snapPixel: true });
+    await drag(editor, [[200, 40], [260, 70]]);
+    await settle(16, 8);
+    const griglia = gestures(fake).slice(pixel.length);
+    expect(griglia.length).toBeGreaterThan(0);
+    expect(griglia.map((gesto) => gesto.snap.grid)).toEqual(griglia.map(() => 20));
+  });
+
   it("aspetta il motore che si apre, poi manda il gesto", async () => {
     const fake = createFakeHost({ drawing: replaying(VECTORS.find((vector) => vector.name === "rettangolo")!, new Map()) });
     const session = await documentOn(EMPTY);

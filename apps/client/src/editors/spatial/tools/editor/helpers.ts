@@ -114,6 +114,7 @@ export function checkedGrid(next: Grid, before: Grid): Grid {
     ...(vistaAccesa(next.transparencyGrid, before.transparencyGrid) ? { transparencyGrid: true } : {}),
     ...(vistaAccesa(next.hideEdges, before.hideEdges) ? { hideEdges: true } : {}),
     ...(vistaAccesa(next.hideBoundingBox, before.hideBoundingBox) ? { hideBoundingBox: true } : {}),
+    ...(vistaAccesa(next.snapPixel, before.snapPixel) ? { snapPixel: true } : {}),
   };
 }
 

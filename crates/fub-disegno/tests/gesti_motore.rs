@@ -772,3 +772,50 @@ fn lo_strumento_sfumatura_trascina_gli_estremi_con_l_annotatore_in_un_passo() {
     assert!(testo.contains(r#""fill":"url(#"#), "{testo}");
     assert_eq!(fine.selection, vec!["oa1a1a1a1".to_string()], "{fine:?}");
 }
+
+/// Un passo della penna col passo `passo` della griglia del gesto (`None`: spenta).
+fn gesto_a_passo(
+    d: &mut Disegno,
+    phase: &str,
+    eventi: Vec<Value>,
+    ingressi: Vec<Value>,
+    passo: Option<f64>,
+) -> DrawingOutcome {
+    let mut g = richiesta("pen", phase, eventi, ingressi);
+    g.snap.grid = passo;
+    d.gesto(g).expect("il gesto")
+}
+
+/// K6 T11, aggancio al pixel: la penna riceve il passo di un pixel come le forme,
+/// e ogni clic va sul passo; il tracciato cade su interi. Spento, i clic restano
+/// dove sono stati presi.
+#[test]
+fn il_tracciato_con_il_passo_di_un_pixel_cade_su_interi() {
+    // I punti stanno lontani dalle guide intelligenti del motore (a 4 unità, e
+    // dai bordi del foglio e del rettangolo): una guida vicina li porterebbe via
+    // dal passo, e il test misurerebbe la guida, non l'aggancio.
+    for (passo, atteso) in [
+        (Some(1.0), "M10 33 L81 20 L120 70"),
+        (None, "M10.4 33.2 L80.6 20.2 L120.4 70.4"),
+    ] {
+        let (mut d, _) = apri(DISEGNO);
+        for (x, y) in [(10.4, 33.2), (80.6, 20.2), (120.4, 70.4)] {
+            let esito = gesto_a_passo(&mut d, "preview", clic(x, y), vec![], passo);
+            assert_eq!(esito.refused, None, "passo {passo:?}: {esito:?}");
+        }
+        let fine = gesto_a_passo(&mut d, "commit", vec![], vec![tasto("Enter")], passo);
+        assert_eq!(fine.refused, None, "passo {passo:?}: {fine:?}");
+        let ops = ops_di(&fine);
+        let aggiunte: Vec<&Value> = ops
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|o| o["op"] == "add")
+            .collect();
+        assert_eq!(aggiunte.len(), 1, "{ops}");
+        let dd = aggiunte[0]["elem"]["attrs"]["d"]
+            .as_str()
+            .unwrap_or_default();
+        assert_eq!(dd, atteso, "passo {passo:?}");
+    }
+}
