@@ -368,8 +368,11 @@ export default defineConfig({
           // Il pannello delle impostazioni, con la pagina dei componenti, le
           // informazioni e la rinomina del vault: cambia con le impostazioni,
           // non con l'editor o la ricerca, e da solo non pesa sul chunk che
-          // questi condividono.
-          if (/\/src\/panels\/(settings[^/]*|components-page|about|vault-rename)\.ts$/.test(id)) return "settings-panel";
+          // questi condividono. Con loro le parole delle preferenze del
+          // motore (`settings-motore.generated.json`), che legge soltanto la
+          // pagina del motore: senza la regola finivano nel chunk condiviso
+          // della shell, oltre la soglia.
+          if (/\/src\/panels\/((settings[^/]*|components-page|about|vault-rename)\.ts|settings-motore\.generated\.json)$/.test(id)) return "settings-panel";
           // Scrittura, il nucleo del testo ricco, con ProseMirror: la usano
           // i documenti e il testo dei disegni, che la carica dopo il
           // montaggio. Da sola non pesa sul primo disegno e resta in cache
@@ -564,6 +567,16 @@ export default defineConfig({
           // importa soltanto le stringhe, lo stato e l'aspetto del contenuto,
           // che stanno nei loro chunk, nessuno di `search`.
           if (/\/src\/state\/layout\.ts$/.test(id)) return "shell-layout";
+          // Ciò che la shell divide con le Impostazioni e la pagina dei
+          // componenti: la cartella dei temi, Marcuzzo, i profili e i permessi
+          // dei componenti, le preferenze della lavagna, la conferma col suo
+          // dialogo nativo e la ricerca sfocata. Senza un nome suo, da quando
+          // le Impostazioni aprono il Disegno completo con un `import()`,
+          // Rollup li fondeva nel chunk condiviso della shell (`search`),
+          // oltre la soglia. Chiusi verso il basso: importano soltanto
+          // moduli che stanno nei loro chunk (le stringhe, le icone, il
+          // tema, gli appunti, il ponte con l'ospite), nessuno di `search`.
+          if (/\/src\/(panels\/(theme-folder|component-profiles)|ui\/(marcuzzo|permissions|fuzzy)|rules\/canvas-settings|platform\/confirm|host\/dialog)\.ts$/.test(id)) return "shell-shared";
           if (/\/node_modules\/postcss\//.test(id)) return "theme-parser";
           if (/\/node_modules\/@tauri-apps\//.test(id)) return "host-bridge";
           if (/\/node_modules\/(d3-(selection|transition|shape|color|dispatch|ease|interpolate|timer|array|path)|dagre-d3-es|roughjs|dompurify|lodash-es|es-toolkit|marked|khroma)\//.test(id)) {
