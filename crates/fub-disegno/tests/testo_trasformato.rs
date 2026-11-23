@@ -101,7 +101,14 @@ fn dopo(
 }
 
 /// Il file riaperto: nessuna perdita, un testo nel disegno, e le parole ancora nel file.
-fn riaperto_come_testo(disegni: &Arc<Disegni>, originale: &str, svg: &str, id: &str, parole: &str) {
+fn riaperto_come_testo(
+    disegni: &Arc<Disegni>,
+    originale: &str,
+    svg: &str,
+    id: &str,
+    parole: &str,
+    comando: &str,
+) {
     // Le perdite che il file ha già aperto da solo (un tracciato in `defs`) non contano: conta che
     // la trasformazione non ne aggiunga.
     let (_, prima) = Disegno::apri_con(disegni, originale).expect("l'originale si apre");
@@ -120,6 +127,23 @@ fn riaperto_come_testo(disegni: &Arc<Disegni>, originale: &str, svg: &str, id: &
         });
     });
     assert_eq!(testi, 1, "il testo è un testo nel disegno riaperto");
+    // Il testo in area resta in area dopo la trasformazione: il file riaperto lo legge così.
+    if id == "oz1z1z1z1" && comando != "object.scale" {
+        let mut in_area = 0;
+        let _ = d.a_mano(|doc, _| {
+            doc.walk(|n| {
+                if let NodeKind::Text(t) = &n.kind {
+                    if matches!(t.kind, vectorcraft_doc::text::TextKind::Area { .. }) {
+                        in_area += 1;
+                    }
+                }
+            });
+        });
+        assert_eq!(
+            in_area, 1,
+            "il testo in area resta in area dopo la trasformazione"
+        );
+    }
     let tag = svg
         .split("<text ")
         .nth(1)
@@ -157,7 +181,7 @@ fn le_trasformazioni_su_un_testo_restano_testi_e_si_riaprono() {
             match dopo(&disegni, svg, id, comando_id, valore) {
                 Ok(nuovo) => {
                     assert!(!atteso_rifiuto, "{comando_id} su {id}: doveva rifiutarsi");
-                    riaperto_come_testo(&disegni, svg, &nuovo, id, parole);
+                    riaperto_come_testo(&disegni, svg, &nuovo, id, parole, comando_id);
                 }
                 Err(rifiuto) => {
                     assert!(
@@ -169,4 +193,36 @@ fn le_trasformazioni_su_un_testo_restano_testi_e_si_riaprono() {
             }
         }
     }
+}
+
+/// Scala sul testo in area: il file riscritto ha il testo con tre pezzi di stile (`uguali=false` in
+/// `apertura.rs`, `testi_in_area`), e il ponte lo riapre come testo di punto, con `fub:wrap="100"` ancora
+/// nel file. Il caso passa quando il testo riaperto resta in area. Da correggere nel ponte (o nella
+/// scrittura di Scala): il test è `#[ignore]` finché non passa.
+#[test]
+#[ignore = "Scala sul testo in area: il file riaperto è di punto (tre pezzi di stile): da correggere"]
+fn scala_sul_testo_in_area_resta_in_area_dopo_la_riapertura() {
+    use vectorcraft_doc::text::TextKind;
+    let disegni = disegni();
+    let svg = include_str!("famiglie/trasforma/t13-testo-in-area.svg");
+    let nuovo = dopo(
+        &disegni,
+        svg,
+        "oz1z1z1z1",
+        "object.scale",
+        json!({ "sx": 50 }),
+    )
+    .expect("Scala si fa");
+    let (mut d, _) = Disegno::apri_con(&disegni, &nuovo).expect("il file riaperto si apre");
+    let mut in_area = 0;
+    let _ = d.a_mano(|doc, _| {
+        doc.walk(|n| {
+            if let NodeKind::Text(t) = &n.kind {
+                if matches!(t.kind, TextKind::Area { .. }) {
+                    in_area += 1;
+                }
+            }
+        });
+    });
+    assert_eq!(in_area, 1, "dopo Scala il testo in area resta in area");
 }

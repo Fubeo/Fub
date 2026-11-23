@@ -21,7 +21,7 @@ motore	assets.list	Assets		web	F3	T22	da fare	interno	famiglia	lettura del motor
 motore	assets.export	Export Assets		web	F3	T22	da fare	ispettore/design/documento	famiglia		Esporta risorse
 motore	assets.settings.set	Asset Export Settings		web	F3	T22	da fare	ispettore/design/documento	famiglia		Impostazioni esportazione risorse
 motore	attributes.set	Attributes		dati	F4	T26	da fare	ispettore/design/documento	famiglia		Attributi
-motore	path.setFillRule	Fill Rule		tracciati	F1	T12	da fare	ispettore/design	famiglia	il motore tiene la regola, ma il formato della scena non ha ancora fill-rule (fub-scene, il pittore del client, §4)	Regola di riempimento
+motore	path.setFillRule	Fill Rule		tracciati	F1	T12	da fare	ispettore/design	famiglia	il motore tiene la regola, ma il formato della scena non ha fill-rule sui tracciati (scene-format.md: nessun attributo; clip-rule solo nelle risorse), e differenza.rs:93 rifiuta `fill-rule` come unsupported; aspetta il formato	Regola di riempimento
 motore	brush.libraries	Brush Libraries		pennelli	F2	T17	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Librerie pennelli
 motore	brush.library	Brush Library		pennelli	F2	T17	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Libreria pennelli
 motore	brush.addFromLibrary	Add to Brushes	Window › Brush Libraries	pennelli	F2	T17	da fare	ispettore/risorse	famiglia		Aggiungi ai pennelli
