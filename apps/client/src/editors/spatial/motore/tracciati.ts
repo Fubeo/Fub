@@ -16,6 +16,7 @@
 
 import type { DrawingOverlay, DrawingPoint } from "../../../host/contract";
 import type { Elem } from "../scene/serialize";
+import { t, type DrawKey } from "../strings";
 
 /// I ventuno strumenti di «disegnare» della famiglia `tracciati`, con l'id
 /// del motore.
@@ -61,6 +62,54 @@ const punto = (p: DrawingPoint): string => `${p[0]} ${p[1]}`;
 /// accanto al puntatore, le distanze fra due punti (con la loro linea), le
 /// righe evidenziate del testo e i campioni di colore. Il riquadro no: lo
 /// disegna il gesto (`gesti.ts`). `null` se non c'è niente da disegnare.
+/// Le parole delle guide intelligenti del motore (`guides.rs`), e la frase del
+/// Pupazzo fuori dal disegno, nella lingua dell'interfaccia.
+const PAROLE: Readonly<Record<string, DrawKey>> = {
+  anchor: "draw.engine.label.anchor",
+  center: "draw.engine.label.center",
+  path: "draw.engine.label.path",
+  artboard: "draw.engine.label.artboard",
+  bleed: "draw.engine.label.bleed",
+  guide: "draw.engine.label.guide",
+  glyph: "draw.engine.label.glyph",
+  intersect: "draw.engine.label.intersect",
+  align: "draw.engine.label.align",
+  perpendicular: "draw.engine.label.perpendicular",
+  tangent: "draw.engine.label.tangent",
+  "Pins go on the artwork": "draw.engine.label.offMesh",
+};
+
+/// I nomi delle misure del motore (`context.rs`: «W: …», «Angle: …»), prima dei due punti.
+const MISURE: Readonly<Record<string, DrawKey>> = {
+  W: "draw.engine.measure.W",
+  H: "draw.engine.measure.H",
+  L: "draw.engine.measure.L",
+  D: "draw.engine.measure.D",
+  Angle: "draw.engine.measure.Angle",
+  Radius: "draw.engine.measure.Radius",
+  R1: "draw.engine.measure.R1",
+  R2: "draw.engine.measure.R2",
+  dX: "draw.engine.measure.dX",
+  dY: "draw.engine.measure.dY",
+};
+
+const proprio = (tabella: object, chiave: string): boolean => Object.prototype.hasOwnProperty.call(tabella, chiave);
+
+/// Una scritta del motore tradotta riga per riga: una parola conosciuta diventa la
+/// sua, il nome di una misura prima dei due punti il suo; il resto (numeri, nomi
+/// delle tavole) resta com'è.
+export function scrittaDelMotore(testo: string): string {
+  return testo
+    .split("\n")
+    .map((riga) => {
+      if (proprio(PAROLE, riga)) return t(PAROLE[riga]!);
+      const due = riga.indexOf(": ");
+      const nome = due > 0 ? riga.slice(0, due) : "";
+      return nome !== "" && proprio(MISURE, nome) ? `${t(MISURE[nome]!)}${riga.slice(due)}` : riga;
+    })
+    .join("\n");
+}
+
 export function segniComeForma(segni: readonly DrawingOverlay[], scala: number): Elem | null {
   const k = scala > 0 && Number.isFinite(scala) ? 1 / scala : 1;
   const tratto = (width: number, dashed: boolean): Record<string, string> => ({
@@ -79,7 +128,7 @@ export function segniComeForma(segni: readonly DrawingOverlay[], scala: number):
   const scritta = (at: DrawingPoint, testo: string, classe: string): Elem => ({
     tag: "text",
     attrs: { x: String(at[0]), y: String(at[1]), "font-size": String(11 * k), class: classe },
-    children: testo.split("\n").map((riga, i) => ({
+    children: scrittaDelMotore(testo).split("\n").map((riga, i) => ({
       tag: "tspan",
       attrs: { x: String(at[0]), dy: i === 0 ? "0" : String(13 * k) },
       text: riga,
