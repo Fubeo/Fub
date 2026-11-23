@@ -1,5 +1,5 @@
 {
-  "$nota": "I casi della famiglia «tracciati» (piano K6, T12): la penna di Bézier (Esc, Invio e lo strumento cambiato, cioè il commit senza tasti, lasciano il tracciato aperto, in un passo; un Esc senza tracciato non fa niente), gli strumenti di «disegnare», l'inchiostro di Fub che gli strumenti e i comandi dei tracciati non toccano (`unmapped`), i comandi sui punti scelti con i loro `anchors`, e i comandi di Oggetto › Tracciato senza finestra. Un tracciato composto (un `<path>` di più sottotracciati, il buco fatto col verso) va e torna uguale: Inverti su `composto.svg` dà `composto-rovescio.svg`, e Inverti su quello ridà `composto.svg`; la regola `evenodd` non è un attributo della scena, e chi la tocca o la porta (`composto-pari.svg`) non cambia niente. Un risultato vuoto è `empty`. Le finestre (Semplifica, Smussa, Sposta tracciato, Espandi, Dividi in trattini) hanno i loro argomenti; Smussa vuole un tracciato seghettato (`seghettato.svg`), e su un tratto della penna di Fub anche Espandi è `unmapped`. Il disegno di partenza è di solito `tracciati/base.svg`. L'Elaborazione tracciati (giro 5) va su `elabora.svg`: due quadrati che si sovrappongono (oa1a1a1a1 sotto, blu; ob2b2b2b2 sopra, rosso con il bordo), un quadrato lontano, un testo, un oggetto bloccato, un gruppo, un'immagine e un tratto della penna. I due oggetti di prima spariscono e il risultato, con un id nuovo, prende il posto del più alto; fra due tracciati i metodi forma tengono lo stile di quello davanti (Meno davanti quello dietro), le operazioni lasciano un gruppo di pezzi. Con un oggetto solo, o un'intersezione che non lascia niente, è `empty` e niente sparisce; un oggetto bloccato è `locked`; un'immagine o l'inchiostro di Fub sono `unmapped`; un gruppo si espande. Un testo entra col contorno delle sue lettere: qui il motore non ha caratteri, il testo non ne ha, e sparirebbe senza entrare nel risultato, quindi è `unmapped`; con Inter entra (la prova `l_elaborazione_usa_le_lettere_di_un_testo` in famiglie.rs). Giro 6 (K6 T12): le maschere di ritaglio (tracciati/ritaglio*.svg: una fatta da Fub, una scritta da Inkscape con il clipPath in <defs>, una col clip-path sul tracciato come la scrive Illustrator) e Media, Media e unisci (tracciati/media.svg). T12 punti: i comandi su un punto nominato con `element` e il suo numero (sposta un punto o una maniglia, aggiungi, elimina, converti, chiudi, continua, dividi), con un elemento bloccato (`locked`), l'inchiostro (`unmapped`), un numero che il tracciato non ha o un `id` del motore nel valore (`bad_args`); Sposta ancoraggi ed Elimina punti di ancoraggio sui punti scelti (`anchors`). Giro angoli (K6 T12): Imposta angoli e Rimuovi angoli tagliano e tolgono gli angoli vivi di un tracciato, con la ricetta nel file. Un raggio fuori limiti, uno smusso che non c'è o un punto che il tracciato non ha è un errore degli argomenti in italiano, o `empty` quando non c'è nessun angolo da cambiare; Rimuovi angoli resta «da fare»: il file scrive il `metadata` della ricetta come primo figlio della radice, e la scena del client non conta quel figlio nei percorsi (si veda la mappa).",
+  "$nota": "I casi della famiglia «tracciati» (piano K6, T12): la penna di Bézier (Esc, Invio e lo strumento cambiato, cioè il commit senza tasti, lasciano il tracciato aperto, in un passo; un Esc senza tracciato non fa niente), gli strumenti di «disegnare», l'inchiostro di Fub che gli strumenti e i comandi dei tracciati non toccano (`unmapped`), i comandi sui punti scelti con i loro `anchors`, e i comandi di Oggetto › Tracciato senza finestra. Un tracciato composto (un `<path>` di più sottotracciati, il buco fatto col verso) va e torna uguale: Inverti su `composto.svg` dà `composto-rovescio.svg`, e Inverti su quello ridà `composto.svg`; la regola `evenodd` non è un attributo della scena, e chi la tocca o la porta (`composto-pari.svg`) non cambia niente. Un risultato vuoto è `empty`. Le finestre (Semplifica, Smussa, Sposta tracciato, Espandi, Dividi in trattini) hanno i loro argomenti; Smussa vuole un tracciato seghettato (`seghettato.svg`), e su un tratto della penna di Fub anche Espandi è `unmapped`. Il disegno di partenza è di solito `tracciati/base.svg`. L'Elaborazione tracciati (giro 5) va su `elabora.svg`: due quadrati che si sovrappongono (oa1a1a1a1 sotto, blu; ob2b2b2b2 sopra, rosso con il bordo), un quadrato lontano, un testo, un oggetto bloccato, un gruppo, un'immagine e un tratto della penna. I due oggetti di prima spariscono e il risultato, con un id nuovo, prende il posto del più alto; fra due tracciati i metodi forma tengono lo stile di quello davanti (Meno davanti quello dietro), le operazioni lasciano un gruppo di pezzi. Con un oggetto solo, o un'intersezione che non lascia niente, è `empty` e niente sparisce; un oggetto bloccato è `locked`; un'immagine o l'inchiostro di Fub sono `unmapped`; un gruppo si espande. Un testo entra col contorno delle sue lettere: qui il motore non ha caratteri, il testo non ne ha, e sparirebbe senza entrare nel risultato, quindi è `unmapped`; con Inter entra (la prova `l_elaborazione_usa_le_lettere_di_un_testo` in famiglie.rs). Giro 6 (K6 T12): le maschere di ritaglio (tracciati/ritaglio*.svg: una fatta da Fub, una scritta da Inkscape con il clipPath in <defs>, una col clip-path sul tracciato come la scrive Illustrator) e Media, Media e unisci (tracciati/media.svg). T12 punti: i comandi su un punto nominato con `element` e il suo numero (sposta un punto o una maniglia, aggiungi, elimina, converti, chiudi, continua, dividi), con un elemento bloccato (`locked`), l'inchiostro (`unmapped`), un numero che il tracciato non ha o un `id` del motore nel valore (`bad_args`); Sposta ancoraggi ed Elimina punti di ancoraggio sui punti scelti (`anchors`). Giro angoli (K6 T12): Imposta angoli e Rimuovi angoli tagliano e tolgono gli angoli vivi di un tracciato, con la ricetta nel file. Un raggio fuori limiti, uno smusso che non c'è o un punto che il tracciato non ha è un errore degli argomenti in italiano, o `empty` quando non c'è nessun angolo da cambiare; Rimuovi angoli riporta la forma viva: un tracciato tagliato torna con gli stessi punti, come `polygon` con la ricetta a raggi zero (non il byte di partenza); senza angoli tagliati non c'è niente da togliere (`empty`).",
   "casi": [
     {
       "id": "pen",
@@ -6008,6 +6008,113 @@
           1
         ]
       },
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "addon.pathtools.cornerRemove",
+      "disegno": "angoli-tondi.svg",
+      "selezione": [
+        "op7a7a7a7"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "op7a7a7a7"
+              },
+              {
+                "op": "remove",
+                "target": {
+                  "path": [
+                    1
+                  ],
+                  "tag": "metadata"
+                }
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "after": "of4f4f4f4"
+                },
+                "raw": "<polygon id=\"op7a7a7a7\" points=\"300,200 360,200 330,260\" fill=\"#cccccc\"/>"
+              },
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<metadata><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"op7a7a7a7\" hash=\"35d0bf7cf23c8f53\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjo3LCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MC44MDAwMDAwMTE5MjA5MjksImciOjAuODAwMDAwMDExOTIwOTI5LCJiIjowLjgwMDAwMDAxMTkyMDkyOX19fV19LCJraW5kIjp7InR5cGUiOiJwYXRoIiwicGF0aCI6eyJzdWJwYXRocyI6W3siYW5jaG9ycyI6W3sicCI6WzMwMC4wLDIwMC4wXX0seyJwIjpbMzYwLjAsMjAwLjBdfSx7InAiOlszMzAuMCwyNjAuMF19XSwiY2xvc2VkIjp0cnVlfV19fX19</vectorcraft:recipe></metadata>"
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "angoli-tolti-da-tagliato.svg"
+    },
+    {
+      "id": "addon.pathtools.cornerSet",
+      "disegno": "angoli-tondi.svg",
+      "selezione": [
+        "op7a7a7a7"
+      ],
+      "argomenti": {
+        "radius": 20
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "op7a7a7a7"
+              },
+              {
+                "op": "remove",
+                "target": {
+                  "path": [
+                    1
+                  ],
+                  "tag": "metadata"
+                }
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "after": "of4f4f4f4"
+                },
+                "raw": "<path id=\"op7a7a7a7\" d=\"M330 200 L330 200 C343.783 200 352.748 214.505 346.584 226.833 L345.528 228.944 C339.13 241.74 320.87 241.74 314.472 228.944 L313.416 226.833 C307.252 214.505 316.217 200 330 200 Z\" fill=\"#cccccc\"/>"
+              },
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<metadata><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"op7a7a7a7\" hash=\"acbab2fd7046ed46\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjo3LCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MC44MDAwMDAwMTE5MjA5MjksImciOjAuODAwMDAwMDExOTIwOTI5LCJiIjowLjgwMDAwMDAxMTkyMDkyOX19fV19LCJraW5kIjp7InR5cGUiOiJwYXRoIiwicGF0aCI6eyJzdWJwYXRocyI6W3siYW5jaG9ycyI6W3sicCI6WzMzMC4wLDIwMC4wXSwiaW4iOlszMTYuMjE2OTM5MzI5Nzg5OCwyMDAuMF19LHsicCI6WzMzMC4wLDIwMC4wXSwib3V0IjpbMzQzLjc4MzA2MDY3MDIxMDIsMjAwLjBdfSx7InAiOlszNDYuNTgzNTkyMTM1MDAxMjUsMjI2LjgzMjgxNTcyOTk5NzVdLCJpbiI6WzM1Mi43NDc1NjQyNTQzMiwyMTQuNTA0ODcxNDkxMzU5OTVdfSx7InAiOlszNDUuNTI3ODY0MDQ1MDAwNCwyMjguOTQ0MjcxOTA5OTk5MTVdLCJvdXQiOlszMzkuMTMwMDMyMjEwMDAxOTYsMjQxLjczOTkzNTU3OTk5NjA2XX0seyJwIjpbMzE0LjQ3MjEzNTk1NDk5OTYsMjI4Ljk0NDI3MTkwOTk5OTE1XSwiaW4iOlszMjAuODY5OTY3Nzg5OTk4MDQsMjQxLjczOTkzNTU3OTk5NjA2XX0seyJwIjpbMzEzLjQxNjQwNzg2NDk5ODc1LDIyNi44MzI4MTU3Mjk5OTc1XSwib3V0IjpbMzA3LjI1MjQzNTc0NTY4LDIxNC41MDQ4NzE0OTEzNTk5NV19XSwiY2xvc2VkIjp0cnVlfV19LCJsaXZlIjp7InNoYXBlIjoicGF0aCIsImJhc2UiOnsic3VicGF0aHMiOlt7ImFuY2hvcnMiOlt7InAiOlszMDAuMCwyMDAuMF19LHsicCI6WzM2MC4wLDIwMC4wXX0seyJwIjpbMzMwLjAsMjYwLjBdfV0sImNsb3NlZCI6dHJ1ZX1dfSwicmFkaWkiOlsyMC4wLDIwLjAsMjAuMF19fX19</vectorcraft:recipe></metadata>"
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "angoli-raggio-venti.svg"
+    },
+    {
+      "id": "addon.pathtools.cornerRemove",
+      "disegno": "base.svg",
+      "selezione": [
+        "op7a7a7a7"
+      ],
+      "argomenti": {},
       "atteso": {
         "rifiuto": "empty"
       }

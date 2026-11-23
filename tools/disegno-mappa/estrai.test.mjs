@@ -136,10 +136,9 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // T14 colori aggiunti (giro 9, punto 1): Seleziona per tipo di colore (con la sua finestra),
   // Trova e Applica il campione più vicino: tre in più. Le letture del colore e le tinte piatte
   // restano «da fare» in questo giro; stampa e filtro restano «da fare» con la causa.
-  // T12 angoli porta a «fatto» `addon.pathtools.cornerSet` («Imposta angoli», con la finestra del raggio).
-  // `addon.pathtools.cornerRemove` («Rimuovi angoli») resta «da fare»: la sua ricetta riscritta non si
-  // applica nella scena del client (il `metadata` primo figlio della radice, vedi la nota in mappa).
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1097, fub: 114, escluso: 12, fatto: 328 });
+  // T12 angoli porta a «fatto» `addon.pathtools.cornerSet` («Imposta angoli», con la finestra del raggio) e
+  // `addon.pathtools.cornerRemove` («Rimuovi angoli»): la ricetta riscritta si applica nella scena del client.
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1096, fub: 114, escluso: 12, fatto: 329 });
 });
 
 // --- un motore finto ---------------------------------------------------------------

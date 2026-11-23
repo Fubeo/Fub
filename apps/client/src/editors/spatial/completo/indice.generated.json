@@ -195,6 +195,22 @@
     },
     {
       "fonte": "motore",
+      "id": "addon.pathtools.cornerRemove",
+      "chiamata": {
+        "comando": "disegno.addon.pathtools.cornerRemove"
+      },
+      "etichetta": {
+        "it": "Rimuovi angoli",
+        "en": "Remove Corners"
+      },
+      "posto": "ispettore/design",
+      "famiglia": "tracciati",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "addon.pathtools.cornerSet",
       "chiamata": {
         "comando": "disegno.addon.pathtools.cornerSet"

@@ -35,7 +35,9 @@ describe("Imposta angoli (addon.pathtools.cornerSet)", () => {
     expect(raggio).toMatchObject({ tipo: "numero", minimo: 0, massimo: 1000000 });
   });
 
-  it("«Rimuovi angoli» non è ancora nell'indice: la sua riga è da fare", () => {
-    expect(indice.voci.some((v) => v.id === "addon.pathtools.cornerRemove")).toBe(false);
+  it("«Rimuovi angoli» manda disegno.addon.pathtools.cornerRemove, senza finestra", () => {
+    const rimuovi = indice.voci.find((v) => v.id === "addon.pathtools.cornerRemove");
+    expect(rimuovi?.chiamata).toEqual({ comando: "disegno.addon.pathtools.cornerRemove" });
+    expect(rimuovi?.finestra).toBe(false);
   });
 });

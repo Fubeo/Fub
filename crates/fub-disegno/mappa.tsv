@@ -747,7 +747,7 @@ motore	addon.cleanup.alignInPlace	Set Alignment, Keep Position	Object › Plug-i
 motore	addon.cleanup.resetTextTransform	Reset Text Transform	Object › Plug-ins › Artwork Cleanup	pulizia	F2	T17	da fare	menu/oggetto	famiglia		Reimposta trasformazione testo
 motore	addon.cleanup.replaceFonts	Replace Missing Fonts…	Object › Plug-ins › Artwork Cleanup	pulizia	F2	T17	da fare	menu/oggetto	famiglia	finestra	Sostituisci font mancanti…
 motore	addon.pathtools.cornerSet	Set Corners		tracciati	F1	T12	fatto	ispettore/design	famiglia	finestra	Imposta angoli
-motore	addon.pathtools.cornerRemove	Remove Corners		tracciati	F1	T12	da fare	ispettore/design	famiglia	Rimuovi angoli riscrive la ricetta: il suo `remove` del `metadata` (primo figlio della radice) non si applica nella scena del client, che non conta quel figlio nei percorsi, mentre il differ Rust sì (`ricetta.rs`, `remove` col percorso). Il contratto del percorso va deciso prima (DOMANDA del giro angoli)	Rimuovi angoli
+motore	addon.pathtools.cornerRemove	Remove Corners		tracciati	F1	T12	fatto	ispettore/design	famiglia		Rimuovi angoli
 motore	addon.pathtools.shape.create	Parametric Shape		tracciati	F1	T12	da fare	ispettore/design	famiglia		Forma parametrica
 motore	addon.pathtools.shape.set	Edit Parametric Shape		tracciati	F1	T12	da fare	ispettore/design	famiglia		Modifica forma parametrica
 motore	addon.pathtools.shape.convert	Convert to Parametric Shape	Object › Plug-ins › Path Precision Tools	tracciati	F1	T12	da fare	menu/oggetto/tracciato	famiglia	la forma viva non si scrive come tracciato semplice, aspetta T13 (le forme)	Converti in forma parametrica
