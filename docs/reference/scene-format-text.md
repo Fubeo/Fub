@@ -53,8 +53,9 @@ larghe, e la parola «pioggia» è blu, in grassetto e sottolineata.
   delle altre è l'interlinea. Una riga può scrivere gli stessi attributi di
   presentazione, e prende quelli del testo che non scrive.
 - **Fra le righe** il file può avere spazi e a capo, che non sono testo:
-  sono i nodi di soli spazi che il formato conserva. Il testo fuori dai
-  `tspan` rende estraneo il `text`.
+  sono i nodi di soli spazi che il formato conserva. Non entrano nelle
+  parole delle righe: chi apre il file non aggiunge uno spazio in fondo alla
+  riga prima. Il testo fuori dai `tspan` rende estraneo il `text`.
 - **Un testo su tracciato** non ha righe: al loro posto ha un solo
   `textPath` (§5).
 
@@ -136,7 +137,11 @@ secondo è «Fine.».
   un testo in area; altrove non dice niente, e resta scritto.
 - **Il paragrafo** sono le sue righe riunite: con `space` uno spazio fra
   l'una e l'altra, con `word` niente. Le righe tornano il paragrafo senza
-  perdere un carattere.
+  perdere un carattere, e gli spazi di fila restano quanti sono.
+- **Un paragrafo vuoto** è una riga sola il cui testo è uno spazio
+  indivisibile (U+00A0): un `tspan` vuoto non sposterebbe la riga dopo. Si
+  rilegge vuoto; un paragrafo vuoto in fondo, o un testo vuoto, ha la riga
+  vuota.
 - **Gli a capo** li rifà FubDraw quando cambiano il testo, il riquadro o il
   carattere di un pezzo, spaziatura compresa, e solo allora: il colore, le
   decorazioni e l'interlinea non li toccano. Ogni riga prende le parole che
