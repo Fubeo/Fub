@@ -119,23 +119,23 @@ nome, nascosto se lo è, così ci si può disegnare. Un documento che `fub_scene
 lo stesso, con una parte `Unsupported` di nome `svg`, e ogni gesto è
 `Unsupported`; un import che il motore rifiuta apre una copia vuota.
 
-L'import cuoce tutte le `transform` nella geometria del motore. La
-differenza (`crates/fub-disegno/src/differenza.rs`) le rimette: per ogni
-elemento conosce la sua `transform` T e la matrice G dal suo genitore al
-documento del motore (le `transform` degli antenati, il `viewBox` della
-radice e la scala delle unità, 0,75 per un file in unità fisiche). Un cambio
-di posto, misura o rotazione è una matrice M che si trova dai punti
-dell'oggetto e si **verifica**, muovendo l'oggetto di prima con M; l'elemento
-riceve `transform = G⁻¹·M·G·T`. Nella Selezione la ricevono gli oggetti scelti,
-come nel client; altrimenti un gruppo mosso tutto se ha più figli o uno
-estraneo, se no il figlio; un livello mai. I colori pieni e lo spessore
-diventano `fill`, `stroke` e `stroke-width`, un tracciato cambiato punto per
-punto `d`. Quando a cambiare sono i punti (uno strumento o un comando dei
-tracciati, la Selezione diretta) M vale solo se è uno spostamento: un punto
-spostato è sempre `d`, anche quando una matrice inclinata lo spiegherebbe; i nuovi sono `add` (`rect`, `ellipse`, `line` o `path`, geometria
-con due decimali), i tolti `remove` e l'ordine `move`, uno per ogni oggetto
-fuori dalla sottosequenza crescente più lunga dei fratelli. Ciò che non si
-scrive così è `Unsupported`; un oggetto fuori dalla mappa toccato è `Unmapped`.
+L'import cuoce tutte le `transform` nella geometria del motore. La differenza
+(`crates/fub-disegno/src/differenza.rs`) le rimette: per ogni elemento conosce
+la sua `transform` T e la matrice G dal suo genitore al documento del motore (le
+`transform` degli antenati, il `viewBox` della radice e la scala delle unità,
+0,75 per un file in unità fisiche). Un cambio di posto, misura o rotazione è una
+matrice M che si trova dai punti dell'oggetto e si **verifica**, muovendo
+l'oggetto di prima con M; l'elemento riceve `transform = G⁻¹·M·G·T`. Nella
+Selezione la ricevono gli oggetti scelti, come nel client; altrimenti un gruppo
+mosso tutto se ha più figli o uno estraneo, se no il figlio; un livello mai. I
+colori pieni e lo spessore diventano `fill`, `stroke` e `stroke-width`, un
+tracciato cambiato punto per punto `d`, e una forma deformata un `set` con `tag:
+"path"`. Se cambiano i punti (Selezione diretta, strumenti e comandi dei
+tracciati) M vale solo come spostamento. I nuovi sono `add` (`rect`, `ellipse`,
+`line` o `path`, geometria con due decimali), i tolti `remove` e l'ordine
+`move`, uno per ogni oggetto fuori dalla sottosequenza crescente più lunga dei
+fratelli. Il resto è `Unsupported`; un oggetto fuori dalla mappa toccato è
+`Unmapped`.
 
 Dopo ogni gesto la sessione del motore torna alla copia: lo stato vero è il
 file. Un panico del motore lo prende `vectorcraft_engine::guard::catch_panic`:
@@ -286,10 +286,6 @@ strumento li modifica, e un gesto sul loro oggetto del motore è rifiutato
 ## La ricetta
 
 Ciò che la scena non sa dire (un effetto dal vivo, un aspetto impilato, una forma dal vivo) torna uguale dopo un salvataggio grazie alla ricetta, la forma nativa dell'oggetto in un `<vectorcraft:recipe>` dentro `<metadata>`, accanto al corpo espanso, la grafica che il motore disegna scritta dalla sua esportazione (`crates/fub-disegno/src/espansa.rs`). La possiede il ponte, `crates/fub-disegno/src/ricetta.rs`, con la tabella dei costrutti (`Corpo`, `Scena`, `Ricetta`) che le famiglie leggono: l'apertura la applica dopo l'import, la mappa la tiene accanto agli id, la differenza la scrive. È l'unico caso in cui il motore riscrive un elemento intero: un oggetto che diventa ricco, o che ha la ricetta e cambia altrimenti che con la `transform`, `display` o `fub:locked`, si toglie e torna con lo stesso id come corpo espanso, con lo stato in un `set`. L'impronta è per elemento senza la sua `transform`, il suo `display` e il suo `fub:locked`: spostare, nascondere e bloccare tengono la ricetta, ogni altro cambio fuori dal motore la fa cadere con un avviso fra le parti. Il formato: [la ricetta di un oggetto](../reference/scene-format-recipe.md).
-
-## Il disegno completo
-
-Lo spazio Completo con tutte le funzioni del motore, e il disco che il motore non tocca: [Il disegno completo](disegno-completo.md), [il disco](disegno-completo.md#il-disco).
 
 ## Dove sta il codice
 
@@ -448,4 +444,4 @@ flowchart LR
     vtrace --> vgeom
 ```
 
-Per l'inchiostro e gli strumenti della superficie vedi [Inchiostro e strumenti](ink-and-tools.md); per le superfici e le sessioni dei documenti [Superfici dell'editor](editor-surfaces.md); per le operazioni che il motore restituisce [le operazioni sulla scena](../reference/scene-operations.md).
+Per l'inchiostro e gli strumenti della superficie vedi [Inchiostro e strumenti](ink-and-tools.md); per le superfici e le sessioni dei documenti [Superfici dell'editor](editor-surfaces.md); per le operazioni che il motore restituisce [le operazioni sulla scena](../reference/scene-operations.md); per lo spazio Completo, con tutte le funzioni del motore, e il disco che il motore non tocca [Il disegno completo](disegno-completo.md) e [il disco](disegno-completo.md#il-disco).
