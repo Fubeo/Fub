@@ -165,7 +165,9 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // Il pannello parla con i comandi già fatti (`colorTheme.list`, `save`, `delete`).
   // T12 tagli porta a «fatto» tre righe dei tracciati: `path.lineCut` (Taglio con linea), `path.rectCut`
   // (Taglio con rettangolo) e `path.mirrorCut` (Specchia e taglia). Casi in `tests/famiglie/tracciati.json`.
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1067, fub: 114, escluso: 12, fatto: 358 });
+  // T15 giro 7 porta a «fatto» Seleziona testo per font e Opzioni modifica globale (livelli); Avvia la
+  // modifica globale resta «da fare», con la causa nella nota.
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1065, fub: 114, escluso: 12, fatto: 360 });
 });
 
 // --- un motore finto ---------------------------------------------------------------

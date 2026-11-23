@@ -3123,6 +3123,38 @@
     },
     {
       "fonte": "motore",
+      "id": "select.font",
+      "chiamata": {
+        "comando": "disegno.select.font"
+      },
+      "etichetta": {
+        "it": "Seleziona testo per font",
+        "en": "Select Text by Font"
+      },
+      "posto": "ispettore/livelli",
+      "famiglia": "livelli",
+      "tasto": null,
+      "effetto": "mostra",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "select.globalEditOptions",
+      "chiamata": {
+        "comando": "disegno.select.globalEditOptions"
+      },
+      "etichetta": {
+        "it": "Opzioni modifica globale",
+        "en": "Global Edit Options"
+      },
+      "posto": "ispettore/livelli",
+      "famiglia": "livelli",
+      "tasto": null,
+      "effetto": "mostra",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "select.inverse",
       "chiamata": {
         "comando": "disegno.select.inverse"

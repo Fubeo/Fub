@@ -516,3 +516,24 @@ describe("eseguiVoce, Seleziona testo di punto e in area (K6 T15, seleziona tipo
     expect(azioni.seleziona).toHaveBeenCalledWith(["n1"]);
   });
 });
+
+describe("eseguiVoce, Seleziona testo per font e Opzioni modifica globale (K6 T15, giro 7)", () => {
+  it("select.font manda al motore disegno.select.font col carattere, e sceglie: nessun passo nella cronologia", async () => {
+    // Solo una scelta di testi: nessuna operazione, quindi nessun passo, e la scelta va alla selezione.
+    const { d, sessione, azioni } = dipendenze({ risposta: esito({ ops: null, selection: ["n1"] }), leggi: () => [] });
+    eseguiVoce(voce({ id: "select.font", famiglia: "livelli", etichetta: { it: "Seleziona testo per font", en: "Select Text by Font" }, chiamata: { comando: "disegno.select.font", valore: { family: "Inter" } } }), d);
+    await tick();
+    expect(sessione.comando).toHaveBeenCalledWith({ id: "disegno.select.font", selection: ["n1", "n2"], value: { family: "Inter" }, preview: false });
+    expect(azioni.commit).not.toHaveBeenCalled();
+    expect(azioni.seleziona).toHaveBeenCalledWith(["n1"]);
+  });
+
+  it("select.globalEditOptions manda al motore le sue opzioni, e la lettura non va alla cronologia", async () => {
+    // Le opzioni cambiano la sessione del motore e rispondono con una lettura: nessuna operazione.
+    const { d, sessione, azioni } = dipendenze({ risposta: esito({ ops: null, selection: ["n1", "n2"], reading: { count: 4 } }), leggi: () => [] });
+    eseguiVoce(voce({ id: "select.globalEditOptions", famiglia: "livelli", etichetta: { it: "Opzioni modifica globale", en: "Global Edit Options" }, chiamata: { comando: "disegno.select.globalEditOptions", valore: { size: true } } }), d);
+    await tick();
+    expect(sessione.comando).toHaveBeenCalledWith({ id: "disegno.select.globalEditOptions", selection: ["n1", "n2"], value: { size: true }, preview: false });
+    expect(azioni.commit).not.toHaveBeenCalled();
+  });
+});

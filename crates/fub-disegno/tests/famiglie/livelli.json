@@ -1,5 +1,5 @@
 {
-  "$nota": "I casi della famiglia livelli (piano K6, T15, giro 1): il menu ≡ › Selezione che si fa ora. Il disegno è livelli/base.svg: due rettangoli rossi (oa1a1a1a1, ob2b2b2b2), un blu (oc3c3c3c3) e un testo (ot4d4d4d4). Selezionare non cambia il documento: nessuna operazione, solo la selezione dopo. Giro 3 (K6 T15): i comandi di livello della scheda Livelli, con il livello scelto nella selezione; il livello bloccato si sblocca, non si rinomina; un livello non va dentro se stesso. Giro 3 (K6 T15): elimina, occhio e lucchetto del livello, con i loro rifiuti (livello bloccato, nessun livello, spostamento dentro se stesso). Giro 6 (K6 T12): «Maschere di ritaglio» sceglie i <g clip-path> del file (livelli/ritaglio-inkscape.svg). Giro 2 (K6 T15): layer.selectAll, layer.merge e layer.reverse. Unire vuole almeno due livelli e invertire almeno due righe dello stesso livello o gruppo, con il perché in italiano; un livello bloccato si rifiuta. Duplica e raccogli in un livello nuovo non sono ancora fatti: il livello nuovo nascerebbe dentro il livello radice del motore, che il file non scrive.",
+  "$nota": "I casi della famiglia livelli (piano K6, T15, giro 1): il menu ≡ › Selezione che si fa ora. Il disegno è livelli/base.svg: due rettangoli rossi (oa1a1a1a1, ob2b2b2b2), un blu (oc3c3c3c3) e un testo (ot4d4d4d4). Selezionare non cambia il documento: nessuna operazione, solo la selezione dopo. Giro 3 (K6 T15): i comandi di livello della scheda Livelli, con il livello scelto nella selezione; il livello bloccato si sblocca, non si rinomina; un livello non va dentro se stesso. Giro 3 (K6 T15): elimina, occhio e lucchetto del livello, con i loro rifiuti (livello bloccato, nessun livello, spostamento dentro se stesso). Giro 6 (K6 T12): «Maschere di ritaglio» sceglie i <g clip-path> del file (livelli/ritaglio-inkscape.svg). Giro 2 (K6 T15): layer.selectAll, layer.merge e layer.reverse. Unire vuole almeno due livelli e invertire almeno due righe dello stesso livello o gruppo, con il perché in italiano; un livello bloccato si rifiuta. Duplica e raccogli in un livello nuovo non sono ancora fatti: il livello nuovo nascerebbe dentro il livello radice del motore, che il file non scrive. Giro 7 (K6 T15): Seleziona testo per font (carattere.svg e i testi nascosti, bloccati o su un livello chiuso) e le opzioni della modifica globale, che rispondono con il conteggio di ciò che Avvia prenderebbe (uguali.svg); Avvia la modifica globale non è ancora fatto.",
   "casi": [
     {
       "id": "select.same.fillColor",
@@ -1362,6 +1362,191 @@
       "selezione": [],
       "argomenti": {},
       "atteso": { "rifiuto": "empty" }
+    },
+    {
+      "id": "select.font",
+      "disegno": "carattere.svg",
+      "selezione": [],
+      "argomenti": { "family": "Inter" },
+      "atteso": { "selezione": ["ot1a1a1a1", "ot3c3c3c3", "ot4d4d4d4"] }
+    },
+    {
+      "id": "select.font",
+      "disegno": "carattere.svg",
+      "selezione": [],
+      "argomenti": { "family": "Georgia" },
+      "atteso": { "selezione": ["ot2b2b2b2", "ot3c3c3c3"] }
+    },
+    {
+      "id": "select.font",
+      "disegno": "carattere.svg",
+      "selezione": ["oe7e7e7e7"],
+      "argomenti": { "family": "Georgia" },
+      "atteso": { "selezione": ["ot2b2b2b2", "ot3c3c3c3"] }
+    },
+    {
+      "id": "select.font",
+      "disegno": "carattere.svg",
+      "selezione": ["oi8b8b8b8"],
+      "argomenti": { "family": "Inter" },
+      "atteso": { "selezione": ["ot1a1a1a1", "ot3c3c3c3", "ot4d4d4d4"] }
+    },
+    {
+      "id": "select.font",
+      "disegno": "carattere.svg",
+      "prima": [{ "id": "select.font", "argomenti": { "family": "Inter" } }],
+      "selezione": [],
+      "argomenti": { "family": "Inter" },
+      "atteso": { "selezione": ["ot1a1a1a1", "ot3c3c3c3", "ot4d4d4d4"] }
+    },
+    {
+      "id": "select.font",
+      "disegno": "carattere.svg",
+      "selezione": [],
+      "argomenti": { "family": "Courier New" },
+      "atteso": { "errore": "bad_args" }
+    },
+    {
+      "id": "select.font",
+      "disegno": "carattere.svg",
+      "selezione": [],
+      "argomenti": { "family": "Inter", "style": "Italic" },
+      "atteso": { "errore": "bad_args" }
+    },
+    {
+      "id": "select.font",
+      "disegno": "testi.svg",
+      "selezione": [],
+      "argomenti": { "family": "Inter", "style": "Italic" },
+      "atteso": { "selezione": ["ot3c3c3c3"] }
+    },
+    {
+      "id": "select.font",
+      "disegno": "testi.svg",
+      "selezione": [],
+      "argomenti": { "family": "Georgia" },
+      "atteso": { "selezione": ["ot5e5e5e5"] }
+    },
+    {
+      "id": "select.font",
+      "disegno": "sel-testi.svg",
+      "selezione": [],
+      "argomenti": { "family": "Inter" },
+      "atteso": { "selezione": ["ot1t1t1t1", "ot2t2t2t2", "ot3t3t3t3"] }
+    },
+    {
+      "id": "select.font",
+      "disegno": "sel-livello-bloccato.svg",
+      "selezione": [],
+      "argomenti": { "family": "Inter" },
+      "atteso": { "errore": "bad_args" }
+    },
+    {
+      "id": "select.font",
+      "disegno": "sel-livello-nascosto.svg",
+      "selezione": [],
+      "argomenti": { "family": "Inter" },
+      "atteso": { "errore": "bad_args" }
+    },
+    {
+      "id": "select.globalEditOptions",
+      "disegno": "uguali.svg",
+      "selezione": ["oa1a1a1a1"],
+      "argomenti": {},
+      "atteso": { "lettura": { "appearance": false, "size": false, "artboards": "all", "includeCanvas": true, "count": 5 } }
+    },
+    {
+      "id": "select.globalEditOptions",
+      "disegno": "uguali.svg",
+      "selezione": ["oa1a1a1a1"],
+      "argomenti": { "size": true },
+      "atteso": { "lettura": { "appearance": false, "size": true, "artboards": "all", "includeCanvas": true, "count": 4 } }
+    },
+    {
+      "id": "select.globalEditOptions",
+      "disegno": "uguali.svg",
+      "selezione": ["oa1a1a1a1"],
+      "argomenti": { "appearance": true },
+      "atteso": { "lettura": { "appearance": true, "size": false, "artboards": "all", "includeCanvas": true, "count": 4 } }
+    },
+    {
+      "id": "select.globalEditOptions",
+      "disegno": "uguali.svg",
+      "selezione": ["oa1a1a1a1"],
+      "argomenti": { "includeCanvas": false },
+      "atteso": { "lettura": { "appearance": false, "size": false, "artboards": "all", "includeCanvas": false, "count": 4 } }
+    },
+    {
+      "id": "select.globalEditOptions",
+      "disegno": "uguali.svg",
+      "selezione": ["oa1a1a1a1"],
+      "argomenti": { "size": true, "appearance": true, "includeCanvas": false },
+      "atteso": { "lettura": { "appearance": true, "size": true, "artboards": "all", "includeCanvas": false, "count": 3 } }
+    },
+    {
+      "id": "select.globalEditOptions",
+      "disegno": "uguali.svg",
+      "selezione": ["oa1a1a1a1"],
+      "prima": [{ "id": "select.globalEditOptions", "argomenti": { "size": true } }],
+      "argomenti": {},
+      "atteso": { "lettura": { "appearance": false, "size": true, "artboards": "all", "includeCanvas": true, "count": 4 } }
+    },
+    {
+      "id": "select.globalEditOptions",
+      "disegno": "uguali.svg",
+      "selezione": ["oa1a1a1a1"],
+      "prima": [{ "id": "select.globalEditOptions", "argomenti": { "size": true } }],
+      "argomenti": { "size": true },
+      "atteso": { "lettura": { "appearance": false, "size": true, "artboards": "all", "includeCanvas": true, "count": 4 } }
+    },
+    {
+      "id": "select.globalEditOptions",
+      "disegno": "uguali.svg",
+      "selezione": ["oa1a1a1a1"],
+      "argomenti": { "artboards": "1" },
+      "atteso": { "lettura": { "appearance": false, "size": false, "artboards": "1", "includeCanvas": true, "count": 5 } }
+    },
+    {
+      "id": "select.globalEditOptions",
+      "disegno": "uguali.svg",
+      "selezione": ["oa1a1a1a1"],
+      "argomenti": { "artboards": "x" },
+      "atteso": { "errore": "bad_args" }
+    },
+    {
+      "id": "select.globalEditOptions",
+      "disegno": "uguali.svg",
+      "selezione": ["oa1a1a1a1"],
+      "argomenti": { "size": "si" },
+      "atteso": { "errore": "bad_args" }
+    },
+    {
+      "id": "select.globalEditOptions",
+      "disegno": "uguali.svg",
+      "selezione": ["od4d4d4d4"],
+      "argomenti": {},
+      "atteso": { "lettura": { "appearance": false, "size": false, "artboards": "all", "includeCanvas": true, "count": 1 } }
+    },
+    {
+      "id": "select.globalEditOptions",
+      "disegno": "base.svg",
+      "selezione": ["oa1a1a1a1"],
+      "argomenti": {},
+      "atteso": { "lettura": { "appearance": false, "size": false, "artboards": "all", "includeCanvas": true, "count": 1 } }
+    },
+    {
+      "id": "select.globalEditOptions",
+      "disegno": "uguali.svg",
+      "selezione": ["oa1a1a1a1", "ob2b2b2b2"],
+      "argomenti": {},
+      "atteso": { "lettura": { "appearance": false, "size": false, "artboards": "all", "includeCanvas": true, "count": 0 } }
+    },
+    {
+      "id": "select.globalEditOptions",
+      "disegno": "uguali.svg",
+      "selezione": ["ot6f6f6f6"],
+      "argomenti": {},
+      "atteso": { "lettura": { "appearance": false, "size": false, "artboards": "all", "includeCanvas": true, "count": 0 } }
     }
   ]
 }

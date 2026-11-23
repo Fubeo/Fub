@@ -386,3 +386,89 @@ fn i_livelli_scritti_si_rileggono_uguali() {
         "solo {provati} casi dei livelli con operazioni"
     );
 }
+
+/// Le frasi di «Seleziona testo per font» e delle opzioni della modifica globale (K6 T15, giro 7): un
+/// argomento che non va, o un carattere che nel disegno non c'è, dice il perché in italiano, prima del
+/// motore.
+#[test]
+fn seleziona_per_font_e_opzioni_dicono_il_perche_in_italiano() {
+    let disegni = disegni_di_prova();
+    let disegno_di = |nome: &str| {
+        let svg = std::fs::read_to_string(cartella_famiglie().join("livelli").join(nome))
+            .expect("il disegno di prova");
+        fub_disegno::motore::Disegno::apri_con(&disegni, &svg)
+            .expect("si apre")
+            .0
+    };
+    let perche = |disegno: &mut fub_disegno::motore::Disegno,
+                  id: &str,
+                  selezione: &[&str],
+                  valore: serde_json::Value|
+     -> String {
+        let richiesta = fub_abi::DrawingCommandRequest {
+            revision: disegno.revisione(),
+            id: format!("disegno.{id}"),
+            selection: selezione.iter().map(|s| s.to_string()).collect(),
+            value: valore,
+            preview: false,
+        };
+        match disegno.comando(richiesta) {
+            Err(fub_abi::PluginError::BadArgs(testo)) => {
+                testo.as_literal().expect("un testo letterale").to_string()
+            }
+            altro => panic!("atteso un BadArgs, non {altro:?}"),
+        }
+    };
+    let mut carattere = disegno_di("carattere.svg");
+    assert_eq!(
+        perche(&mut carattere, "select.font", &[], json!({})),
+        "Scegli il carattere da cercare."
+    );
+    assert_eq!(
+        perche(
+            &mut carattere,
+            "select.font",
+            &[],
+            json!({"family": "Courier New"})
+        ),
+        "Nel disegno non ci sono testi con il carattere «Courier New»."
+    );
+    assert_eq!(
+        perche(
+            &mut carattere,
+            "select.font",
+            &[],
+            json!({"family": "Inter", "style": "Italic"})
+        ),
+        "Nel disegno non ci sono testi con il carattere «Inter» nello stile «Italic»."
+    );
+    let mut bloccato = disegno_di("sel-livello-bloccato.svg");
+    assert_eq!(
+        perche(
+            &mut bloccato,
+            "select.font",
+            &[],
+            json!({"family": "Inter"})
+        ),
+        "I testi con il carattere «Inter» sono nascosti o bloccati: il motore non li sceglie."
+    );
+    let mut uguali = disegno_di("uguali.svg");
+    assert_eq!(
+        perche(
+            &mut uguali,
+            "select.globalEditOptions",
+            &["oa1a1a1a1"],
+            json!({"size": "si"})
+        ),
+        "«size» dev'essere vero o falso."
+    );
+    assert_eq!(
+        perche(
+            &mut uguali,
+            "select.globalEditOptions",
+            &["oa1a1a1a1"],
+            json!({"artboards": "x"})
+        ),
+        "Le tavole vanno indicate con «all» o con un intervallo, per esempio 1, 3-5."
+    );
+}
