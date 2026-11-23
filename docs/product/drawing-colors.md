@@ -134,6 +134,11 @@ griglia scorre dentro la scheda.
   scelti, o di tutto il disegno senza niente di scelto.
 - **Togli i non usati** elimina in un passo i campioni che nessun oggetto,
   gruppo o altra risorsa usa; spento se sono usati tutti.
+- **Librerie di campioni**: il motore sa l'elenco delle librerie di base e
+  i loro campioni, con il loro conto; la finestra che li mostra e il
+  comando che ne aggiunge al disegno non ci sono ancora. Aggiungere campioni
+  di una libreria rifiuterebbe comunque: le librerie di base hanno campioni
+  non globali e gruppi, che il formato del disegno non scrive.
 
 Le stesse finestre si aprono dal menu ≡ e da Ctrl+/: «Nuovo campione…» e
 «Opzioni campione…», spenta finché non c'è un campione scelto.

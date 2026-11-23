@@ -113,7 +113,10 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // T12 curvatura porta a «fatto» undici righe: `path.curvature`, `.curvatureEdit`, `.reshape`,
   // `.reshapeSegment`, `.setAnchors` e le sei `addon.pen.*` (append, close, segment, removePoint,
   // togglePoint, reshape), come comandi su un punto con `element` (la Curvatura crea o sostituisce).
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1119, fub: 114, escluso: 12, fatto: 306 });
+  // T14 librerie porta a «fatto» le due letture delle librerie di base, `swatch.library.list` e
+  // `swatch.library.get` (con casi in `tests/famiglie/colore.json`). Aggiungere campioni da una
+  // libreria (`swatch.library.add`) e le finestre restano «da fare», con la causa nella nota.
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1117, fub: 114, escluso: 12, fatto: 308 });
 });
 
 // --- un motore finto ---------------------------------------------------------------
