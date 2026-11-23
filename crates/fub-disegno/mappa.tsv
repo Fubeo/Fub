@@ -1342,7 +1342,7 @@ strumento	perspectiveSelection	Perspective Selection Tool		prospettiva	F4	T25	da
 strumento	mesh	Mesh Tool		trame	F2	T21	da fare	colonna/colore	famiglia	riquadro «mesh»	Strumento Trama
 strumento	gradient	Gradient Tool		colore	F1	T14	fatto	colonna/colore	famiglia	riquadro «gradient»; trascinare sull'oggetto scelto ne mette l'inizio e la fine della sfumatura, con l'annotatore del motore (barra, maniglie, un campione per punto) mentre si trascina; il rilascio è un passo di Annulla	Strumento Sfumatura
 strumento	eyedropper	Eyedropper Tool		colore	F1	T14	fatto	colonna/colore	famiglia	riquadro «eyedropper»	Strumento Contagocce
-strumento	measure	Measure Tool		tavole	F2	T19	da fare	colonna/misura	famiglia	riquadro «eyedropper»	Strumento Misura
+strumento	measure	Measure Tool		tavole	F2	T19	fatto	colonna/misura	famiglia	riquadro «eyedropper»; trascinato misura distanza, angolo, dX e dY; la misura resta sul foglio fino alla misura dopo (la tiene il client: la sessione rimette lo strumento a capo dopo il commit); Esc a metà riporta quella di prima	Strumento Misura
 strumento	blend	Blend Tool		dinamici	F2	T21	da fare	colonna/oggetti	famiglia	riquadro «blend»	Strumento Fusione
 strumento	objectsOnPath	Objects on Path Tool		dinamici	F2	T21	da fare	colonna/oggetti	famiglia	riquadro «blend»	Strumento Oggetti su tracciato
 strumento	dimension	Dimension Tool		tavole	F2	T19	da fare	colonna/misura	famiglia	riquadro «dimension»	Strumento Quota

@@ -581,6 +581,14 @@ export function installGestiMotore(ctx: EditorContext): void {
       });
     },
   });
+  /// I segni dell'ultima Misura (la linea e le sue misure), in coordinate di
+  /// scena: restano sul foglio fino alla misura dopo, come in VectorCraft
+  /// (`xform/measure.rs`), e tornano se quella si annulla con Esc. Li toglie
+  /// lo strumento cambiato.
+  let misura: readonly DrawingOverlay[] | null = null;
+  const mostraMisura = (): void => {
+    if (misura !== null && ctx.motoreTool === "measure") ctx.showShape(segniComeForma(misura, ctx.camera.scale), IDENTITY);
+  };
   const ingressi: DrawingInput[] = [];
   let fotogrammaScrittura: number | null = null;
   let scritturaInVolo = false;
@@ -620,6 +628,10 @@ export function installGestiMotore(ctx: EditorContext): void {
     chiudiAperto([]);
     ctx.cancelGesture();
     ctx.motoreSopra(null);
+    if (misura !== null) {
+      misura = null;
+      ctx.showShape(null, IDENTITY);
+    }
     if (id === null) {
       ctx.motoreTool = null;
       ctx.surface.style.cursor = "";
@@ -1139,6 +1151,31 @@ export function installGestiMotore(ctx: EditorContext): void {
     ctx.painter.setDraft(null);
   };
 
+  /// Il rilascio della Misura: gli ultimi eventi come anteprima, i cui segni
+  /// restano sul foglio, poi il `commit`, che non cambia il disegno. La
+  /// sessione rimette lo strumento a capo dopo il `commit`: i segni li tiene
+  /// il client.
+  const misuraFinita = (g: MotoreGesture, eventi: DrawingPointer[]): void => {
+    const ultimi = send(g, "preview", eventi);
+    const done = ultimi.then((anteprima) => {
+      if (ctx.disposed) return;
+      if (anteprima !== null && anteprima.refused === null) {
+        const segni = anteprima.preview?.overlays ?? [];
+        misura = segni.length > 0 ? segni : null;
+      }
+      const outcome = send(g, "commit", []);
+      void outcome.finally(() => lasciaComandi(g));
+      return outcome.then((esito) => {
+        if (ctx.disposed) return;
+        if (esito === null) clearPreview(g);
+        else applyOutcome(g, esito, tapOf(g));
+        mostraMisura();
+        ctx.showHandles();
+      });
+    });
+    ultimo = done;
+  };
+
   const motoreEnd = (g: MotoreGesture): void => {
     if (g.ended) return;
     g.ended = true;
@@ -1151,6 +1188,10 @@ export function installGestiMotore(ctx: EditorContext): void {
     for (const pezzo of pezzi.slice(0, -1)) void send(g, "preview", pezzo);
     if (typeof g.tool === "object" && (A_PIU_CLIC.has(g.tool.engine.id) || STRUMENTI_CHE_SCRIVONO.has(g.tool.engine.id))) {
       tieniAperto(g, pezzi[pezzi.length - 1] ?? []);
+      return;
+    }
+    if (typeof g.tool === "object" && g.tool.engine.id === "measure") {
+      misuraFinita(g, pezzi[pezzi.length - 1] ?? []);
       return;
     }
     const outcome = send(g, "commit", pezzi[pezzi.length - 1] ?? []);
@@ -1504,6 +1545,9 @@ export function installGestiMotore(ctx: EditorContext): void {
       lasciaComandi(g);
     }
     clearPreview(g);
+    // La misura di prima torna dopo che chi annulla ha pulito le anteprime
+    // (`clearPreviews` in `curvature-tool.ts`).
+    if (typeof g.tool === "object" && g.tool.engine.id === "measure") queueMicrotask(mostraMisura);
     if (g.before.join("\n") !== ctx.selection.join("\n")) ctx.select(g.before);
   };
   ctx.motoreCancel = motoreCancel;

@@ -37,6 +37,18 @@ Nell'unità del documento ci sono:
 Lo spessore del contorno, la dimensione del testo e gli angoli restano nelle
 loro unità.
 
+## Lo strumento Misura
+
+Nel Completo, nella casella del Contagocce, c'è la **Misura**, come in
+VectorCraft: si trascina da un punto a un altro e accanto alla fine si
+leggono la distanza, l'angolo e gli spostamenti in orizzontale e in
+verticale; con Maiusc la linea va a passi di 45°, e senza si aggancia come
+gli altri strumenti. Il disegno non cambia e non c'è un passo di annulla. La
+linea e le misure restano sul foglio fino alla misura dopo; Esc a metà
+trascinamento la annulla e riporta quella di prima, e un altro strumento le
+toglie. Con «Etichette delle misure» spenta resta solo la linea. Le scritte
+non si rifanno a uno zoom fatto dopo.
+
 ## Nel file
 
 Le guide e l'unità sono attributi della radice: `fub:guides="x 120; y 340.5

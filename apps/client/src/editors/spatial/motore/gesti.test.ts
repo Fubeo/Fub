@@ -1187,6 +1187,69 @@ async function tasto(key: string): Promise<void> {
   await settle(16, 8);
 }
 
+/// La Misura finta: all'anteprima la linea dal primo punto all'ultimo e la
+/// scritta con la distanza; al rilascio niente cambia.
+function misuraFinta(): DrawingFake {
+  const stato = (busy: boolean) => ({ busy, transforming: false, wants_text: false, composing: false, cursor: "measure", options: null });
+  let primo: [number, number] | null = null;
+  return {
+    comando: statoDiSerie,
+    gesto: (gesture) => {
+      const base: DrawingOutcome = { revision: gesture.revision, preview: null, ops: null, selection: gesture.selection, losses: [], refused: null, frame: null, reading: null };
+      const giu = gesture.events.find((each) => each.kind === "down");
+      if (giu !== undefined) primo = [giu.x, giu.y];
+      if (gesture.phase === "preview") {
+        const ultimo = gesture.events[gesture.events.length - 1];
+        if (primo === null || ultimo === undefined) return { ...base, preview: { shape: null, matrix: null, marquee: null, overlays: [] }, state: stato(true) };
+        const fine: [number, number] = [ultimo.x, ultimo.y];
+        const distanza = Math.hypot(fine[0] - primo[0], fine[1] - primo[1]).toFixed(2);
+        const overlays = [
+          { kind: "line" as const, a: primo, b: fine, role: "guide" as const, dashed: false },
+          { kind: "measure" as const, at: fine, text: `D: ${distanza} pt` },
+        ];
+        return { ...base, preview: { shape: null, matrix: null, marquee: null, overlays }, state: stato(ultimo.kind !== "up") };
+      }
+      return { ...base, state: stato(false) };
+    },
+  } as DrawingFake;
+}
+
+const scritteSulFoglio = (): string[] => [...host.querySelectorAll(".draw-engine-text")].map((each) => each.textContent ?? "");
+
+describe("la Misura del motore: la misura resta sul foglio", () => {
+  it("dopo il rilascio la linea e la distanza restano, il disegno non cambia; la misura dopo la sostituisce; Esc riporta quella di prima; un altro strumento la toglie", async () => {
+    const fake = createFakeHost({ drawing: misuraFinta() });
+    const editor = await montaConPreparazione(EMPTY, fake);
+    editor.setEngineTool("measure");
+    await drag(editor, [[100, 100], [130, 100], [130, 140]]);
+    await settle(16, 8);
+    expect(gestures(fake).filter((each) => each.phase === "commit")).toHaveLength(1);
+    expect(editor.engine.text).toBe(EMPTY);
+    expect(editor.canUndo).toBe(false);
+    const prima = scritteSulFoglio();
+    expect(prima).toHaveLength(1);
+    expect(host.querySelector(".draw-engine-marks")).not.toBeNull();
+    // La misura dopo prende il suo posto.
+    await drag(editor, [[200, 200], [260, 200]]);
+    await settle(16, 8);
+    const seconda = scritteSulFoglio();
+    expect(seconda).toHaveLength(1);
+    expect(seconda).not.toEqual(prima);
+    // Una misura annullata con Esc a metà: torna quella di prima.
+    dispatch(editor, point("down", 300, 300));
+    await settle();
+    dispatch(editor, point("drag", 340, 300));
+    await settle();
+    await tasto("Escape");
+    await settle(16, 8);
+    expect(scritteSulFoglio()).toEqual(seconda);
+    // Un altro strumento la toglie.
+    editor.setEngineTool("selection");
+    await settle(16, 8);
+    expect(scritteSulFoglio()).toEqual([]);
+  });
+});
+
 describe("la penna del motore: il tracciato aperto (K6 T12)", () => {
   it("i clic lasciano il tracciato aperto, coi suoi punti sul foglio; Invio lo chiude come il motore, in un passo", async () => {
     const fake = createFakeHost({ drawing: pennaFinta() });

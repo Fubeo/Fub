@@ -6007,6 +6007,22 @@
     },
     {
       "fonte": "strumento",
+      "id": "measure",
+      "chiamata": {
+        "strumento": "measure"
+      },
+      "etichetta": {
+        "it": "Strumento Misura",
+        "en": "Measure Tool"
+      },
+      "posto": "colonna/misura",
+      "famiglia": "tavole",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "strumento",
       "id": "mirrorCut",
       "chiamata": {
         "strumento": "mirrorCut"

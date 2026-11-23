@@ -137,8 +137,10 @@ export const MOTORE_PRONTO: ReadonlySet<string> = new Set([
   "typeOnPath",
   // T15 giro 6: lo strumento Sfumatura, con il suo annotatore.
   "gradient",
-  // T14 giro 6: il Contagocce (la casella «colore»; la Misura aspetta T19).
+  // T14 giro 6: il Contagocce (la casella «colore»).
   "eyedropper",
+  // La Misura: la linea e le misure restano sul foglio fino alla misura dopo.
+  "measure",
 ]);
 
 /// L'icona di uno strumento del motore nella colonna e nel cassetto: quella
@@ -157,6 +159,7 @@ export const ICONE_MOTORE: Readonly<Record<string, string>> = {
   rotateView: "draw-rotate",
   // Le trasformazioni (T13 giro 5): Inclina ha il parallelogramma del catalogo.
   eyedropper: "draw-eyedropper",
+  measure: "draw-measure",
   rotate: "draw-rotate",
   reflect: "draw-flip-h",
   scale: "draw-scale",

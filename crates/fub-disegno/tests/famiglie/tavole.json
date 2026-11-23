@@ -1,3 +1,56 @@
 {
-  "casi": []
+  "casi": [
+    {
+      "id": "measure",
+      "fonte": "strumento",
+      "disegno": "base.svg",
+      "selezione": [
+        "ob2b2b2b2"
+      ],
+      "gesto": [
+        {
+          "phase": "preview",
+          "events": [
+            {
+              "kind": "down",
+              "x": 100,
+              "y": 100,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 130,
+              "y": 140,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ]
+        },
+        {
+          "phase": "commit",
+          "events": [
+            {
+              "kind": "up",
+              "x": 130,
+              "y": 140,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ]
+        }
+      ],
+      "atteso": {
+        "selezione": [
+          "ob2b2b2b2"
+        ]
+      }
+    }
+  ]
 }
