@@ -335,12 +335,16 @@ jobs:
       # solo 26 minuti. `rust-lld` collega più in fretta del linker di MSVC, e
       # le sole righe nel debug alleggeriscono i PDB senza togliere file e riga
       # ai backtrace. Prima della cache, perché ne cambia la chiave.
-      - name: su Windows, rust-lld e il debug delle sole righe
+      - name: su Windows, rust-lld
         if: runner.os == 'Windows'
         shell: bash
-        run: |
-          echo "CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER=rust-lld.exe" >> "$GITHUB_ENV"
-          echo "CARGO_PROFILE_DEV_DEBUG=line-tables-only" >> "$GITHUB_ENV"
+        run: echo "CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER=rust-lld.exe" >> "$GITHUB_ENV"
+      # Su Linux, con il motore del disegno, il debug completo dei circa 200
+      # eseguibili di prova riempiva il disco del runner al collegamento
+      # (2026-11-23, «No space left on device»): le sole righe anche qui.
+      - name: il debug delle sole righe
+        shell: bash
+        run: echo "CARGO_PROFILE_DEV_DEBUG=line-tables-only" >> "$GITHUB_ENV"
       # Il budget delle cache è di 10 GB per tutto il repository, e quando si
       # sfora se ne va la più vecchia: i job che compilano un sottoinsieme di
       # questo leggono la cache dei test di Linux (`shared-key: test`) invece
