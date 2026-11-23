@@ -27,6 +27,7 @@ import { registraElaborazione } from "./elaborazione";
 import { registraTrasforma } from "./trasforma-sezione";
 import { registraColore, type LatoAttivo } from "./colore-sezione";
 import { registraCampioni } from "./campioni-sezione";
+import { apriRicolora, motivoRicolora, VOCE_RICOLORA } from "./ricolora";
 import { registraContorno } from "./contorno-sezione";
 import { registraSfumatura } from "./sfumatura-sezione";
 import { creaPortaPreimpostate } from "./sfumature-preimpostate";
@@ -407,6 +408,9 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila" | "e
       if (ultimaElaborazione !== null) void eseguiPerId(ultimaElaborazione, {}, { senzaFinestra: true });
     },
   });
+  // Ricolora grafica (K6 T14): la voce di Modifica › Modifica colori apre la sua finestra. Il suo
+  // stato è quello del comando che la finestra scrive (`conVociClient`).
+  vociDelCompleto.set(VOCE_RICOLORA, { stato: () => null, esegui: () => void apriRicolora(dipendenze) });
   registraColore(sezioni, (id, valori) => void eseguiPerId(id, valori, { senzaFinestra: true }), ctx.life, latoAttivo);
   // La sezione «Campioni» di Risorse (K6 T14, giro 2): la griglia, la scelta, le finestre del kit.
   registraCampioni(sezioni, (id, valori) => void eseguiPerId(id, valori, { senzaFinestra: true }), ctx.life, latoAttivo, vociDelCompleto);
@@ -564,6 +568,7 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila" | "e
   const conVociClient = (stato: StatoComandi): StatoComandi => ({
     ...stato,
     clientVoce: (id) => {
+      if (id === VOCE_RICOLORA) return motivoRicolora(stato);
       const propria = vociDelCompleto.get(id);
       return propria !== undefined ? propria.stato() : opzioni.clientVoce?.(id);
     },

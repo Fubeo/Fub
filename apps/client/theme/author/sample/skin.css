@@ -19995,6 +19995,46 @@ button.draw-isolation-crumb:hover {
   gap: var(--space-3);
 }
 
+/* Ricolora grafica (K6 T14, giro 3): una riga per colore della scelta, il colore attuale a sinistra e
+   il colore nuovo (il selettore del kit) a destra. La lista scorre se i colori sono tanti. */
+.draw-recolor-list {
+  display: grid;
+  gap: var(--space-1);
+  max-height: 40vh;
+  overflow-y: auto;
+  padding: var(--space-1);
+  border: 1px solid var(--border);
+}
+.draw-recolor-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--space-2);
+}
+.draw-recolor-current {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+}
+.draw-recolor-chip {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+}
+.draw-recolor-code {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.85em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.draw-recolor-arrow {
+  color: var(--muted);
+}
+
 /* ── skin/media.css ─────────────────────────────────────────────────────── */
 
 /* Immagini, zoom, lightbox, SVG. */

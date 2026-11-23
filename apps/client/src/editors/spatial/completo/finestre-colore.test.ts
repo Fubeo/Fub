@@ -124,7 +124,8 @@ describe("le finestre di Modifica colori dal Completo", () => {
 
   it("con un oggetto bloccato o un tratto dell'Inchiostro le voci di Modifica colori sono spente e dicono perché", () => {
     const indice = indiceDi(indiceGenerato as never);
-    const voci = indice.voci.filter((voce) => voce.posto === "menu/modifica/colori");
+    // Le dieci voci dei comandi `edit.colors.*`: Ricolora grafica (K6 T14) è una voce del client in quella fila.
+    const voci = indice.voci.filter((voce) => voce.posto === "menu/modifica/colori" && voce.id.startsWith("edit.colors."));
     expect(voci).toHaveLength(10);
     for (const motivo of ["read_only", "fub_ink"] as const) {
       const stato: StatoComandi = {

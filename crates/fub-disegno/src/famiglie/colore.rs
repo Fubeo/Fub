@@ -112,6 +112,16 @@ pub(crate) const DAGLI_OGGETTI_AGGIUNTI: [&str; 2] = [
     "addon.color.nearestSwatch",
 ];
 
+/// Ricolora la grafica (T14): la scrittura che la finestra `ui.recolorDialog` manda dopo le
+/// anteprime. Vale sugli oggetti scelti; senza scelta il motore chiede la scelta o un gruppo di
+/// colori (che Fub non ha ancora, T30), e la voce è spenta.
+pub(crate) const RICOLORA: &str = "recolor.apply";
+
+/// Le letture di Ricolora che guardano la scelta (i suoi colori, e le proposte di riduzione e
+/// casuali): sono spente come la scrittura quando la scelta non va (niente, bloccata, Inchiostro,
+/// non mappata), perché la finestra non si apre su una scelta che non si può ricolorare.
+pub(crate) const LETTURE_DELLA_SCELTA: [&str; 3] = ["recolor.colors", "recolor.reduce", "recolor.randomize"];
+
 /// Le voci di Modifica › Modifica colori.
 pub(crate) const MODIFICA_COLORI: [&str; 10] = [
     "edit.colors.invert",
@@ -244,6 +254,8 @@ fn sugli_scelti(id: &str) -> bool {
         || MODIFICA_COLORI.contains(&id)
         || SFUMATURE.contains(&id)
         || DAGLI_OGGETTI_AGGIUNTI.contains(&id)
+        || id == RICOLORA
+        || LETTURE_DELLA_SCELTA.contains(&id)
 }
 
 /// Gli argomenti di una sfumatura chiedono ciò che la scena non scrive: una
@@ -300,7 +312,9 @@ impl StatoFamiglia for Stato {
     }
 
     fn legge(&self, id: &str) -> bool {
-        LETTURE.contains(&id)
+        // Le letture del colore e quelle di Ricolora (i colori della scelta, le proposte di
+        // riduzione e casuali) non cambiano il file; `recolor.apply` sì.
+        LETTURE.contains(&id) || LETTURE_DELLA_SCELTA.contains(&id)
     }
 
     /// Un campione nuovo, cambiato o fatto dai colori usati è globale;

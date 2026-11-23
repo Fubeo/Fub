@@ -134,6 +134,11 @@
     },
     {
       "fonte": "interfaccia",
+      "id": "ui.recolorDialog",
+      "campi": []
+    },
+    {
+      "fonte": "interfaccia",
       "id": "ui.saturateDialog",
       "campi": []
     },

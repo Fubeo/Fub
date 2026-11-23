@@ -187,6 +187,26 @@ le parole delle finestre nella famiglia `colore`
 motore (`crates/fub-disegno/src/famiglie/colore.rs`), i campioni del file in
 `crates/fub-disegno/src/campioni.rs`.
 
+### Ricolora grafica
+
+**Modifica › Modifica colori › Ricolora grafica…** apre una riga per ogni
+colore degli oggetti scelti: a sinistra il colore attuale, a destra il colore
+nuovo, col selettore del kit. **Riduci colori** e **Colori casuali** riempiono
+le righe con le proposte del motore: con lo stesso seme la proposta è sempre
+la stessa, con un seme diverso un'altra. Ogni cambio mostra l'anteprima sul
+foglio senza passi nella cronologia; **OK** scrive un solo passo, **Annulla**
+ed Esc non lasciano niente.
+
+- Senza niente di scelto, con un oggetto bloccato o con un tratto
+  dell'Inchiostro di Fub la voce è spenta, col perché.
+- Un testo cambia il colore del testo; un'immagine non ha colori da cambiare
+  e viene rifiutata.
+- Un oggetto legato a un campione globale prende il suo colore pieno: il
+  campione resta com'era, e gli altri oggetti che lo usano non cambiano.
+- Una sfumatura cambia il colore delle sue fermate, e resta una sfumatura.
+- Lo stesso colore su riempimento e contorno cambia su tutti e due.
+- Un gruppo scelto cambia i colori dei suoi oggetti.
+
 ## Chi monta l'editor
 
 I recenti arrivano con `colors`, dal più recente, e ogni scelta li manda a
