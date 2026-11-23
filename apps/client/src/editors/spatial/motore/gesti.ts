@@ -1177,6 +1177,13 @@ export function installGestiMotore(ctx: EditorContext): void {
     const apart = Math.hypot(tap.at[0] - previous.at[0], tap.at[1] - previous.at[1]) * ctx.camera.scale;
     if (apart > DOUBLE_TAP_PX[g.pointer]) return false;
     const unit = ctx.currentIndex().get(tap.key);
+    // Il doppio clic su un testo ci entra (K6 T16): le parole si cambiano nel
+    // campo «Testo» dell'ispettore, e la conferma è un passo solo.
+    if (unit !== null && unit.role === "text") {
+      ctx.lastTap = null;
+      ctx.showHandles();
+      return ctx.focusWords();
+    }
     if (unit === null || !ctx.isolable(unit) || !ctx.isolate(unit, tap.at, g.pointer)) return false;
     ctx.lastTap = null;
     return true;
