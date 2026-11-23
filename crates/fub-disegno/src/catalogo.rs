@@ -821,6 +821,12 @@ pub const FINESTRE_SCRITTE: &[FinestraScritta] = &[
         limiti: &[],
     },
     FinestraScritta {
+        id: "addon.color.select",
+        schema: "{kind: spotColors|colorEffects|rgbImages|cmykImages|grayImages}",
+        predefiniti: &[("kind", "spotColors")],
+        limiti: &[],
+    },
+    FinestraScritta {
         id: "object.compoundShape.setMode",
         schema: "{mode: add|subtract|intersect|exclude}",
         predefiniti: &[("mode", "add")],

@@ -113,7 +113,10 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // T12 curvatura porta a «fatto» undici righe: `path.curvature`, `.curvatureEdit`, `.reshape`,
   // `.reshapeSegment`, `.setAnchors` e le sei `addon.pen.*` (append, close, segment, removePoint,
   // togglePoint, reshape), come comandi su un punto con `element` (la Curvatura crea o sostituisce).
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1119, fub: 114, escluso: 12, fatto: 306 });
+  // T14 colori aggiunti (giro 9, punto 1): Seleziona per tipo di colore (con la sua finestra),
+  // Trova e Applica il campione più vicino: tre in più. Le letture del colore e le tinte piatte
+  // restano «da fare» in questo giro; stampa e filtro restano «da fare» con la causa.
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1116, fub: 114, escluso: 12, fatto: 309 });
 });
 
 // --- un motore finto ---------------------------------------------------------------

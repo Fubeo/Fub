@@ -11,6 +11,18 @@ export const TESTI: Readonly<Record<string, { readonly it: string; readonly en: 
     en: "Brighter or duller colors in the chosen objects. A negative number moves them toward grey.",
   },
   "azione:edit.colors.saturate": { it: "Satura", en: "Saturate" },
+  // Seleziona per tipo di colore (T14, giro 9): la scelta del tipo che il motore conta.
+  "azione:addon.color.select": { it: "Seleziona", en: "Select" },
+  "descrizione:addon.color.select": {
+    it: "Sceglie gli oggetti che usano un certo tipo di colore: tinte piatte, effetti di colore o immagini RGB, CMYK o in grigio. Gli oggetti bloccati e nascosti restano fuori.",
+    en: "Chooses the objects that use a kind of colour: spot colours, colour effects, or RGB, CMYK or grayscale images. Locked and hidden objects stay out.",
+  },
+  "campo:kind": { it: "Tipo di colore", en: "Colour kind" },
+  "scelta:kind:spotColors": { it: "Tinte piatte", en: "Spot colours" },
+  "scelta:kind:colorEffects": { it: "Effetti di colore", en: "Colour effects" },
+  "scelta:kind:rgbImages": { it: "Immagini RGB", en: "RGB images" },
+  "scelta:kind:cmykImages": { it: "Immagini CMYK", en: "CMYK images" },
+  "scelta:kind:grayImages": { it: "Immagini in scala di grigi", en: "Grayscale images" },
   "campo:intensity": { it: "Intensità", en: "Intensity" },
   "unita:intensity": { it: "%", en: "%" },
 

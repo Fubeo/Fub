@@ -288,6 +288,8 @@ fn una_selezione_con_un_elemento_non_mappato_non_cambia_niente() {
         "disegno.view.transparencyGrid",
         // Seleziona grafica (K6 T15, giro 2) prende il livello dal valore (`id`), non dalla scelta.
         "disegno.layer.selectAll",
+        // Seleziona per tipo di colore (K6 T14 giro 9) sceglie fra tutti gli oggetti, non guarda la scelta.
+        "disegno.addon.color.select",
     ];
     let comandi = d.comandi(&["oa1a1a1a1".into(), "onessuno1".into()]);
     let accesi: Vec<&str> = comandi

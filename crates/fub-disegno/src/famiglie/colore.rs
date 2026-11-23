@@ -87,6 +87,13 @@ pub(crate) const SFUMATURE: [&str; 3] = ["paint.editGradient", "paint.setGradien
 /// Il comando che porta davanti il riempimento o il tratto: una lettura.
 pub(crate) const ALTERNA: &str = "paint.toggleActive";
 
+/// Il campione più vicino (T14 giro 9): Applica lo dà ai colori degli oggetti scelti, e
+/// Trova li cerca nei loro colori (o in un colore dato): sono sugli oggetti scelti.
+pub(crate) const DAGLI_OGGETTI_AGGIUNTI: [&str; 2] = [
+    "addon.color.applyNearestSwatch",
+    "addon.color.nearestSwatch",
+];
+
 /// Le voci di Modifica › Modifica colori.
 pub(crate) const MODIFICA_COLORI: [&str; 10] = [
     "edit.colors.invert",
@@ -156,7 +163,10 @@ const RIEMPIMENTI_DELLE_FUSIONI: usize = 3;
 
 /// Il comando cambia i colori degli oggetti scelti.
 fn sugli_scelti(id: &str) -> bool {
-    SUL_COLORE_ATTIVO.contains(&id) || MODIFICA_COLORI.contains(&id) || SFUMATURE.contains(&id)
+    SUL_COLORE_ATTIVO.contains(&id)
+        || MODIFICA_COLORI.contains(&id)
+        || SFUMATURE.contains(&id)
+        || DAGLI_OGGETTI_AGGIUNTI.contains(&id)
 }
 
 /// Gli argomenti di una sfumatura chiedono ciò che la scena non scrive: una

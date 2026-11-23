@@ -4,6 +4,26 @@
   "finestre": [
     {
       "fonte": "motore",
+      "id": "addon.color.select",
+      "campi": [
+        {
+          "nome": "kind",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "spotColors",
+            "colorEffects",
+            "rgbImages",
+            "cmykImages",
+            "grayImages"
+          ],
+          "aperta": false,
+          "predefinito": "spotColors"
+        }
+      ]
+    },
+    {
+      "fonte": "motore",
       "id": "edit.colors.adjustBalance",
       "campi": [
         {

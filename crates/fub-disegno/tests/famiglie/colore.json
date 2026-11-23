@@ -2790,6 +2790,257 @@
           ]
         }
       }
+    },
+    {
+      "id": "addon.color.nearestSwatch",
+      "disegno": "campioni.svg",
+      "selezione": [
+        "ob2b2b2b2"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "lettura": {
+          "library": "document",
+          "colors": [
+            {
+              "values": "R=255 G=0 B=0",
+              "hex": "#ff0000",
+              "matches": [
+                {
+                  "name": "Viola",
+                  "values": "R=204 G=121 B=167",
+                  "hex": "#cc79a7",
+                  "spot": false,
+                  "deltaE": 32.48
+                },
+                {
+                  "name": "Arancio",
+                  "values": "R=230 G=159 B=0",
+                  "hex": "#e69f00",
+                  "spot": false,
+                  "deltaE": 32.57
+                },
+                {
+                  "name": "Blu",
+                  "values": "R=0 G=114 B=178",
+                  "hex": "#0072b2",
+                  "spot": false,
+                  "deltaE": 55.86
+                }
+              ]
+            },
+            {
+              "values": "R=0 G=170 B=0",
+              "hex": "#00aa00",
+              "matches": [
+                {
+                  "name": "Arancio",
+                  "values": "R=230 G=159 B=0",
+                  "hex": "#e69f00",
+                  "spot": false,
+                  "deltaE": 41.69
+                },
+                {
+                  "name": "Blu",
+                  "values": "R=0 G=114 B=178",
+                  "hex": "#0072b2",
+                  "spot": false,
+                  "deltaE": 57.75
+                },
+                {
+                  "name": "Viola",
+                  "values": "R=204 G=121 B=167",
+                  "hex": "#cc79a7",
+                  "spot": false,
+                  "deltaE": 71.38
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "addon.color.applyNearestSwatch",
+      "disegno": "campioni.svg",
+      "selezione": [
+        "ob2b2b2b2"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "ob2b2b2b2",
+            "attrs": {
+              "fill": "url(#r3c3c3c3c) #cc79a7",
+              "stroke": "url(#r2b2b2b2b) #e69f00"
+            }
+          }
+        ]
+      },
+      "dopo": "colore-campione-piu-vicino.svg"
+    },
+    {
+      "id": "addon.color.applyNearestSwatch",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "addon.color.select",
+      "disegno": "campioni.svg",
+      "selezione": [],
+      "argomenti": {
+        "kind": "spotColors"
+      },
+      "atteso": {
+        "selezione": []
+      }
+    },
+    {
+      "id": "addon.color.select",
+      "disegno": "campioni.svg",
+      "selezione": [],
+      "argomenti": {
+        "kind": "tinteInventate"
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "addon.color.nearestSwatch",
+      "disegno": "campioni.svg",
+      "selezione": [
+        "ob2b2b2b2"
+      ],
+      "argomenti": {
+        "count": 0
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "addon.color.nearestSwatch",
+      "disegno": "campioni.svg",
+      "selezione": [],
+      "argomenti": {
+        "color": "#0072b2"
+      },
+      "atteso": {
+        "lettura": {
+          "library": "document",
+          "colors": [
+            {
+              "values": "R=0 G=114 B=178",
+              "hex": "#0072b2",
+              "matches": [
+                {
+                  "name": "Blu",
+                  "values": "R=0 G=114 B=178",
+                  "hex": "#0072b2",
+                  "spot": false,
+                  "deltaE": 0.0
+                },
+                {
+                  "name": "Viola",
+                  "values": "R=204 G=121 B=167",
+                  "hex": "#cc79a7",
+                  "spot": false,
+                  "deltaE": 46.78
+                },
+                {
+                  "name": "Arancio",
+                  "values": "R=230 G=159 B=0",
+                  "hex": "#e69f00",
+                  "spot": false,
+                  "deltaE": 56.03
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "addon.color.applyNearestSwatch",
+      "disegno": "campioni.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oa1a1a1a1",
+            "attrs": {
+              "stroke": "url(#r1a1a1a1a) #0072b2"
+            }
+          }
+        ]
+      },
+      "dopo": "colore-campione-piu-vicino-contorno.svg"
+    },
+    {
+      "id": "addon.color.applyNearestSwatch",
+      "disegno": "campioni.svg",
+      "selezione": [
+        "oc3c3c3c3"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "rifiuto": "locked"
+      }
+    },
+    {
+      "id": "addon.color.applyNearestSwatch",
+      "disegno": "immagine.svg",
+      "selezione": [
+        "om1m1m1m1"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "addon.color.applyNearestSwatch",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "addon.color.applyNearestSwatch",
+      "disegno": "campioni.svg",
+      "selezione": [
+        "onessuno1"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "rifiuto": "unmapped"
+      }
+    },
+    {
+      "id": "addon.color.applyNearestSwatch",
+      "disegno": "campioni.svg",
+      "selezione": [
+        "od4d4d4d4"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "rifiuto": "empty"
+      }
     }
   ]
 }

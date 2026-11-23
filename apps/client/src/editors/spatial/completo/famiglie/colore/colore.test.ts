@@ -24,8 +24,8 @@ describe("le parole della famiglia colore", () => {
     expect(typeof famiglia.registra).toBe("function");
   });
 
-  it("le finestre sono Satura, Regola bilanciamento colore e Sovrastampa nero; Nuovo campione e Opzioni campione sono del client", () => {
-    expect(finestre.map((f) => f.id).sort()).toEqual(["edit.colors.adjustBalance", "edit.colors.overprintBlack", "edit.colors.saturate"]);
+  it("le finestre sono Satura, Regola bilanciamento colore, Sovrastampa nero e Seleziona per tipo di colore; Nuovo campione e Opzioni campione sono del client", () => {
+    expect(finestre.map((f) => f.id).sort()).toEqual(["addon.color.select", "edit.colors.adjustBalance", "edit.colors.overprintBlack", "edit.colors.saturate"]);
     expect(tutte.filter((f) => f.fonte === "interfaccia").map((f) => f.id).sort()).toEqual(["ui.colorBalanceDialog", "ui.newSwatch", "ui.saturateDialog", "ui.swatchOptions"]);
   });
 
