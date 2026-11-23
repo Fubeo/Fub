@@ -225,6 +225,24 @@
 .draw-engine-handle {
   fill: var(--accent);
 }
+/* Le scritte del motore (misure accanto al puntatore, etichette delle guide,
+   distanze): il testo del tema. Le etichette delle guide nel colore d'accento. */
+.draw-engine-text {
+  fill: var(--fg);
+  font-family: var(--font-ui);
+}
+.draw-engine-label {
+  fill: var(--accent);
+}
+.draw-engine-highlight {
+  fill: color-mix(in oklch, var(--accent) 30%, transparent);
+}
+.draw-engine-swatch {
+  stroke: var(--fg);
+}
+.draw-engine-swatch-scelto {
+  stroke: var(--accent);
+}
 .draw-zoom-box {
   border: 1px dashed var(--accent);
   background: color-mix(in oklch, var(--accent) 8%, transparent);

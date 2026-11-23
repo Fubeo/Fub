@@ -57,8 +57,10 @@ const punto = (p: DrawingPoint): string => `${p[0]} ${p[1]}`;
 /// I segni geometrici del motore (contorni, linee, punti, maniglie) come un
 /// gruppo dello strato dell'anteprima, in coordinate di scena: gli spessori
 /// e le misure sono pixel dello schermo, quindi si dividono per lo zoom
-/// `scala`. Le etichette e le misure scritte non si disegnano qui. `null` se
-/// non c'è niente da disegnare.
+/// `scala`. Anche le scritte del motore: le etichette delle guide, le misure
+/// accanto al puntatore, le distanze fra due punti (con la loro linea), le
+/// righe evidenziate del testo e i campioni di colore. Il riquadro no: lo
+/// disegna il gesto (`gesti.ts`). `null` se non c'è niente da disegnare.
 export function segniComeForma(segni: readonly DrawingOverlay[], scala: number): Elem | null {
   const k = scala > 0 && Number.isFinite(scala) ? 1 / scala : 1;
   const tratto = (width: number, dashed: boolean): Record<string, string> => ({
@@ -69,6 +71,20 @@ export function segniComeForma(segni: readonly DrawingOverlay[], scala: number):
   });
   const punti: Elem[] = [];
   const linee: Elem[] = [];
+  const fondi: Elem[] = [];
+  const scritte: Elem[] = [];
+  // Una scritta in pixel dello schermo, col primo carattere su `at`. Il motore
+  // va a capo con `\n` («W: …» sopra «H: …»): ogni riga è un `tspan` sotto
+  // l'altra, perché un `text` SVG non va a capo da solo.
+  const scritta = (at: DrawingPoint, testo: string, classe: string): Elem => ({
+    tag: "text",
+    attrs: { x: String(at[0]), y: String(at[1]), "font-size": String(11 * k), class: classe },
+    children: testo.split("\n").map((riga, i) => ({
+      tag: "tspan",
+      attrs: { x: String(at[0]), dy: i === 0 ? "0" : String(13 * k) },
+      text: riga,
+    })),
+  });
   for (const segno of segni) {
     switch (segno.kind) {
       case "path":
@@ -112,11 +128,42 @@ export function segniComeForma(segni: readonly DrawingOverlay[], scala: number):
           attrs: { cx: String(segno.at[0]), cy: String(segno.at[1]), r: String(3 * k), class: "draw-engine-handle" },
         });
         break;
+      case "label":
+        scritte.push(scritta(segno.at, segno.text, "draw-engine-text draw-engine-label"));
+        break;
+      case "measure":
+        scritte.push(scritta(segno.at, segno.text, "draw-engine-text"));
+        break;
+      case "distance":
+        linee.push({ tag: "path", attrs: { d: `M${punto(segno.a)} L${punto(segno.b)}`, ...tratto(1, false) } });
+        scritte.push(scritta([(segno.a[0] + segno.b[0]) / 2, (segno.a[1] + segno.b[1]) / 2], segno.text, "draw-engine-text draw-engine-label"));
+        break;
+      case "highlight":
+        fondi.push({ tag: "path", attrs: { d: `M${segno.quad.map(punto).join(" L")} Z`, class: "draw-engine-highlight" } });
+        break;
+      case "swatch": {
+        const lato = (segno.selected ? 12 : 10) * k;
+        punti.push({
+          tag: "rect",
+          attrs: {
+            x: String(segno.at[0] - lato / 2),
+            y: String(segno.at[1] - lato / 2),
+            width: String(lato),
+            height: String(lato),
+            // Il colore è il dato del campione, non del tema.
+            fill: segno.color,
+            class: segno.selected ? "draw-engine-swatch draw-engine-swatch-scelto" : "draw-engine-swatch",
+            "stroke-width": segno.selected ? "2" : "1",
+            "vector-effect": "non-scaling-stroke",
+          },
+        });
+        break;
+      }
       default:
         break;
     }
   }
-  if (linee.length === 0 && punti.length === 0) return null;
-  // I punti sopra le linee, come li disegna il motore.
-  return { tag: "g", attrs: { class: "draw-engine-marks" }, children: [...linee, ...punti] };
+  if (fondi.length === 0 && linee.length === 0 && punti.length === 0 && scritte.length === 0) return null;
+  // Le evidenziazioni sotto, poi le linee, i punti e sopra tutto le scritte.
+  return { tag: "g", attrs: { class: "draw-engine-marks" }, children: [...fondi, ...linee, ...punti, ...scritte] };
 }
