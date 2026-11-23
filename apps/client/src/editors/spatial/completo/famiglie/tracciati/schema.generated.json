@@ -4,6 +4,20 @@
   "finestre": [
     {
       "fonte": "motore",
+      "id": "addon.pathtools.cornerSet",
+      "campi": [
+        {
+          "nome": "radius",
+          "tipo": "numero",
+          "facoltativo": false,
+          "minimo": 0.0,
+          "massimo": 1000000.0,
+          "predefinito": 10.0
+        }
+      ]
+    },
+    {
+      "fonte": "motore",
       "id": "addon.pathtools.divideDashes",
       "campi": [
         {

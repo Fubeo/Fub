@@ -195,6 +195,22 @@
     },
     {
       "fonte": "motore",
+      "id": "addon.pathtools.cornerSet",
+      "chiamata": {
+        "comando": "disegno.addon.pathtools.cornerSet"
+      },
+      "etichetta": {
+        "it": "Imposta angoli",
+        "en": "Set Corners"
+      },
+      "posto": "ispettore/design",
+      "famiglia": "tracciati",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "motore",
       "id": "addon.pathtools.crossings",
       "chiamata": {
         "comando": "disegno.addon.pathtools.crossings"

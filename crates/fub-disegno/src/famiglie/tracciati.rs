@@ -68,6 +68,9 @@ mod mano;
 #[path = "tracciati_curva.rs"]
 mod curva;
 
+#[path = "tracciati_angoli.rs"]
+mod angoli;
+
 /// I comandi che lavorano sui punti di ancoraggio scelti.
 pub(crate) const SUI_PUNTI: [&str; 9] = [
     "path.moveAnchors",
@@ -91,7 +94,7 @@ const SOLO_COI_PUNTI: [&str; 4] = [
 ];
 
 /// I comandi di Oggetto › Tracciato senza finestra, sui tracciati scelti.
-const SUGLI_OGGETTI: [&str; 13] = [
+const SUGLI_OGGETTI: [&str; 15] = [
     "path.reverse",
     "object.path.outlineStroke",
     "object.path.addAnchorPoints",
@@ -105,6 +108,8 @@ const SUGLI_OGGETTI: [&str; 13] = [
     "addon.pathtools.crossings",
     "addon.pathtools.expandDashes",
     "addon.pen.closeJoin",
+    "addon.pathtools.cornerSet",
+    "addon.pathtools.cornerRemove",
 ];
 
 /// I comandi di Oggetto › Tracciato con una finestra (T12, giro 3), sui
@@ -358,6 +363,9 @@ impl StatoFamiglia for Stato {
         if curva::CURVA.contains(&id) {
             return curva::rifiuto_valore(copia, valore);
         }
+        if angoli::ANGOLI.contains(&id) {
+            return angoli::rifiuto(copia, selezione, valore);
+        }
         if SU_UN_PUNTO.contains(&id) {
             return punto_rifiutato(id, copia, valore);
         }
@@ -379,6 +387,9 @@ impl StatoFamiglia for Stato {
         }
         if curva::CURVA.contains(&id) {
             return curva::argomenti(id, copia, valore);
+        }
+        if angoli::ANGOLI.contains(&id) {
+            return angoli::argomenti(id, valore);
         }
         argomenti_del_punto(id, copia, valore)
     }

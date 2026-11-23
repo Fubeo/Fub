@@ -1,5 +1,5 @@
 {
-  "$nota": "I casi della famiglia «tracciati» (piano K6, T12): la penna di Bézier (Esc, Invio e lo strumento cambiato, cioè il commit senza tasti, lasciano il tracciato aperto, in un passo; un Esc senza tracciato non fa niente), gli strumenti di «disegnare», l'inchiostro di Fub che gli strumenti e i comandi dei tracciati non toccano (`unmapped`), i comandi sui punti scelti con i loro `anchors`, e i comandi di Oggetto › Tracciato senza finestra. Un tracciato composto (un `<path>` di più sottotracciati, il buco fatto col verso) va e torna uguale: Inverti su `composto.svg` dà `composto-rovescio.svg`, e Inverti su quello ridà `composto.svg`; la regola `evenodd` non è un attributo della scena, e chi la tocca o la porta (`composto-pari.svg`) non cambia niente. Un risultato vuoto è `empty`. Le finestre (Semplifica, Smussa, Sposta tracciato, Espandi, Dividi in trattini) hanno i loro argomenti; Smussa vuole un tracciato seghettato (`seghettato.svg`), e su un tratto della penna di Fub anche Espandi è `unmapped`. Il disegno di partenza è di solito `tracciati/base.svg`. L'Elaborazione tracciati (giro 5) va su `elabora.svg`: due quadrati che si sovrappongono (oa1a1a1a1 sotto, blu; ob2b2b2b2 sopra, rosso con il bordo), un quadrato lontano, un testo, un oggetto bloccato, un gruppo, un'immagine e un tratto della penna. I due oggetti di prima spariscono e il risultato, con un id nuovo, prende il posto del più alto; fra due tracciati i metodi forma tengono lo stile di quello davanti (Meno davanti quello dietro), le operazioni lasciano un gruppo di pezzi. Con un oggetto solo, o un'intersezione che non lascia niente, è `empty` e niente sparisce; un oggetto bloccato è `locked`; un'immagine o l'inchiostro di Fub sono `unmapped`; un gruppo si espande. Un testo entra col contorno delle sue lettere: qui il motore non ha caratteri, il testo non ne ha, e sparirebbe senza entrare nel risultato, quindi è `unmapped`; con Inter entra (la prova `l_elaborazione_usa_le_lettere_di_un_testo` in famiglie.rs). Giro 6 (K6 T12): le maschere di ritaglio (tracciati/ritaglio*.svg: una fatta da Fub, una scritta da Inkscape con il clipPath in <defs>, una col clip-path sul tracciato come la scrive Illustrator) e Media, Media e unisci (tracciati/media.svg). T12 punti: i comandi su un punto nominato con `element` e il suo numero (sposta un punto o una maniglia, aggiungi, elimina, converti, chiudi, continua, dividi), con un elemento bloccato (`locked`), l'inchiostro (`unmapped`), un numero che il tracciato non ha o un `id` del motore nel valore (`bad_args`); Sposta ancoraggi ed Elimina punti di ancoraggio sui punti scelti (`anchors`).",
+  "$nota": "I casi della famiglia «tracciati» (piano K6, T12): la penna di Bézier (Esc, Invio e lo strumento cambiato, cioè il commit senza tasti, lasciano il tracciato aperto, in un passo; un Esc senza tracciato non fa niente), gli strumenti di «disegnare», l'inchiostro di Fub che gli strumenti e i comandi dei tracciati non toccano (`unmapped`), i comandi sui punti scelti con i loro `anchors`, e i comandi di Oggetto › Tracciato senza finestra. Un tracciato composto (un `<path>` di più sottotracciati, il buco fatto col verso) va e torna uguale: Inverti su `composto.svg` dà `composto-rovescio.svg`, e Inverti su quello ridà `composto.svg`; la regola `evenodd` non è un attributo della scena, e chi la tocca o la porta (`composto-pari.svg`) non cambia niente. Un risultato vuoto è `empty`. Le finestre (Semplifica, Smussa, Sposta tracciato, Espandi, Dividi in trattini) hanno i loro argomenti; Smussa vuole un tracciato seghettato (`seghettato.svg`), e su un tratto della penna di Fub anche Espandi è `unmapped`. Il disegno di partenza è di solito `tracciati/base.svg`. L'Elaborazione tracciati (giro 5) va su `elabora.svg`: due quadrati che si sovrappongono (oa1a1a1a1 sotto, blu; ob2b2b2b2 sopra, rosso con il bordo), un quadrato lontano, un testo, un oggetto bloccato, un gruppo, un'immagine e un tratto della penna. I due oggetti di prima spariscono e il risultato, con un id nuovo, prende il posto del più alto; fra due tracciati i metodi forma tengono lo stile di quello davanti (Meno davanti quello dietro), le operazioni lasciano un gruppo di pezzi. Con un oggetto solo, o un'intersezione che non lascia niente, è `empty` e niente sparisce; un oggetto bloccato è `locked`; un'immagine o l'inchiostro di Fub sono `unmapped`; un gruppo si espande. Un testo entra col contorno delle sue lettere: qui il motore non ha caratteri, il testo non ne ha, e sparirebbe senza entrare nel risultato, quindi è `unmapped`; con Inter entra (la prova `l_elaborazione_usa_le_lettere_di_un_testo` in famiglie.rs). Giro 6 (K6 T12): le maschere di ritaglio (tracciati/ritaglio*.svg: una fatta da Fub, una scritta da Inkscape con il clipPath in <defs>, una col clip-path sul tracciato come la scrive Illustrator) e Media, Media e unisci (tracciati/media.svg). T12 punti: i comandi su un punto nominato con `element` e il suo numero (sposta un punto o una maniglia, aggiungi, elimina, converti, chiudi, continua, dividi), con un elemento bloccato (`locked`), l'inchiostro (`unmapped`), un numero che il tracciato non ha o un `id` del motore nel valore (`bad_args`); Sposta ancoraggi ed Elimina punti di ancoraggio sui punti scelti (`anchors`). Giro angoli (K6 T12): Imposta angoli e Rimuovi angoli tagliano e tolgono gli angoli vivi di un tracciato, con la ricetta nel file. Un raggio fuori limiti, uno smusso che non c'è o un punto che il tracciato non ha è un errore degli argomenti in italiano, o `empty` quando non c'è nessun angolo da cambiare; Rimuovi angoli resta «da fare»: il file scrive il `metadata` della ricetta come primo figlio della radice, e la scena del client non conta quel figlio nei percorsi (si veda la mappa).",
   "casi": [
     {
       "id": "pen",
@@ -5625,6 +5625,391 @@
       },
       "atteso": {
         "errore": "bad_args"
+      }
+    },
+    {
+      "id": "addon.pathtools.cornerSet",
+      "disegno": "base.svg",
+      "selezione": [
+        "op7a7a7a7"
+      ],
+      "argomenti": {
+        "radius": 10
+      },
+      "dopo": "angoli-tondi.svg",
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "op7a7a7a7"
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "after": "of4f4f4f4"
+                },
+                "raw": "<path id=\"op7a7a7a7\" d=\"M316.18 200 L343.82 200 C351.253 200 356.088 207.823 352.764 214.472 L338.944 242.111 C335.259 249.482 324.741 249.482 321.056 242.111 L307.236 214.472 C303.912 207.823 308.747 200 316.18 200 Z\" fill=\"#cccccc\"/>"
+              },
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<metadata><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"op7a7a7a7\" hash=\"245c8ca1961b0abd\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjo3LCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MC44MDAwMDAwMTE5MjA5MjksImciOjAuODAwMDAwMDExOTIwOTI5LCJiIjowLjgwMDAwMDAxMTkyMDkyOX19fV19LCJraW5kIjp7InR5cGUiOiJwYXRoIiwicGF0aCI6eyJzdWJwYXRocyI6W3siYW5jaG9ycyI6W3sicCI6WzMxNi4xODAzMzk4ODc0OTg5LDIwMC4wXSwiaW4iOlszMDguNzQ2NTE5Njc2MzY0ODcsMjAwLjBdfSx7InAiOlszNDMuODE5NjYwMTEyNTAxMSwyMDAuMF0sIm91dCI6WzM1MS4yNTM0ODAzMjM2MzUxMywyMDAuMF19LHsicCI6WzM1Mi43NjM5MzIwMjI1MDAyLDIxNC40NzIxMzU5NTQ5OTk1N10sImluIjpbMzU2LjA4ODQzNzQ4NzQyMTc0LDIwNy44MjMxMjUwMjUxNTY1N119LHsicCI6WzMzOC45NDQyNzE5MDk5OTkxNSwyNDIuMTExNDU2MTgwMDAxNjhdLCJvdXQiOlszMzUuMjU5MDI5MjEzMzMyMiwyNDkuNDgxOTQxNTczMzM1NThdfSx7InAiOlszMjEuMDU1NzI4MDkwMDAwODUsMjQyLjExMTQ1NjE4MDAwMTY4XSwiaW4iOlszMjQuNzQwOTcwNzg2NjY3OCwyNDkuNDgxOTQxNTczMzM1NThdfSx7InAiOlszMDcuMjM2MDY3OTc3NDk5OCwyMTQuNDcyMTM1OTU0OTk5NTddLCJvdXQiOlszMDMuOTExNTYyNTEyNTc4MjYsMjA3LjgyMzEyNTAyNTE1NjU3XX1dLCJjbG9zZWQiOnRydWV9XX0sImxpdmUiOnsic2hhcGUiOiJwYXRoIiwiYmFzZSI6eyJzdWJwYXRocyI6W3siYW5jaG9ycyI6W3sicCI6WzMwMC4wLDIwMC4wXX0seyJwIjpbMzYwLjAsMjAwLjBdfSx7InAiOlszMzAuMCwyNjAuMF19XSwiY2xvc2VkIjp0cnVlfV19LCJyYWRpaSI6WzEwLjAsMTAuMCwxMC4wXX19fX0=</vectorcraft:recipe></metadata>"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "addon.pathtools.cornerSet",
+      "disegno": "base.svg",
+      "selezione": [
+        "op7a7a7a7"
+      ],
+      "argomenti": {
+        "radius": 10,
+        "anchors": [
+          0
+        ]
+      },
+      "dopo": "angolo-primo-tondo.svg",
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "op7a7a7a7"
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "after": "of4f4f4f4"
+                },
+                "raw": "<path id=\"op7a7a7a7\" d=\"M316.18 200 L360 200 L330 260 L307.236 214.472 C303.912 207.823 308.747 200 316.18 200 Z\" fill=\"#cccccc\"/>"
+              },
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<metadata><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"op7a7a7a7\" hash=\"f893e372fd7ac724\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjo3LCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MC44MDAwMDAwMTE5MjA5MjksImciOjAuODAwMDAwMDExOTIwOTI5LCJiIjowLjgwMDAwMDAxMTkyMDkyOX19fV19LCJraW5kIjp7InR5cGUiOiJwYXRoIiwicGF0aCI6eyJzdWJwYXRocyI6W3siYW5jaG9ycyI6W3sicCI6WzMxNi4xODAzMzk4ODc0OTg5LDIwMC4wXSwiaW4iOlszMDguNzQ2NTE5Njc2MzY0ODcsMjAwLjBdfSx7InAiOlszNjAuMCwyMDAuMF19LHsicCI6WzMzMC4wLDI2MC4wXX0seyJwIjpbMzA3LjIzNjA2Nzk3NzQ5OTgsMjE0LjQ3MjEzNTk1NDk5OTU3XSwib3V0IjpbMzAzLjkxMTU2MjUxMjU3ODI2LDIwNy44MjMxMjUwMjUxNTY1N119XSwiY2xvc2VkIjp0cnVlfV19LCJsaXZlIjp7InNoYXBlIjoicGF0aCIsImJhc2UiOnsic3VicGF0aHMiOlt7ImFuY2hvcnMiOlt7InAiOlszMDAuMCwyMDAuMF19LHsicCI6WzM2MC4wLDIwMC4wXX0seyJwIjpbMzMwLjAsMjYwLjBdfV0sImNsb3NlZCI6dHJ1ZX1dfSwicmFkaWkiOlsxMC4wLDAuMCwwLjBdfX19fQ==</vectorcraft:recipe></metadata>"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "addon.pathtools.cornerSet",
+      "disegno": "base.svg",
+      "selezione": [
+        "op7a7a7a7"
+      ],
+      "argomenti": {
+        "radius": 1000
+      },
+      "dopo": "angoli-limitati.svg",
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "op7a7a7a7"
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "after": "of4f4f4f4"
+                },
+                "raw": "<path id=\"op7a7a7a7\" d=\"M330 200 L330 200 C343.783 200 352.748 214.505 346.584 226.833 L345 230 C338.82 242.361 321.18 242.361 315 230 L313.416 226.833 C307.252 214.505 316.217 200 330 200 Z\" fill=\"#cccccc\"/>"
+              },
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<metadata><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"op7a7a7a7\" hash=\"0f4b9ab537f74a5f\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjo3LCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MC44MDAwMDAwMTE5MjA5MjksImciOjAuODAwMDAwMDExOTIwOTI5LCJiIjowLjgwMDAwMDAxMTkyMDkyOX19fV19LCJraW5kIjp7InR5cGUiOiJwYXRoIiwicGF0aCI6eyJzdWJwYXRocyI6W3siYW5jaG9ycyI6W3sicCI6WzMzMC4wLDIwMC4wXSwiaW4iOlszMTYuMjE2OTM5MzI5Nzg5OCwyMDAuMF19LHsicCI6WzMzMC4wLDIwMC4wXSwib3V0IjpbMzQzLjc4MzA2MDY3MDIxMDIsMjAwLjBdfSx7InAiOlszNDYuNTgzNTkyMTM1MDAxMjUsMjI2LjgzMjgxNTcyOTk5NzVdLCJpbiI6WzM1Mi43NDc1NjQyNTQzMiwyMTQuNTA0ODcxNDkxMzU5OTVdfSx7InAiOlszNDUuMCwyMzAuMF0sIm91dCI6WzMzOC44MTk2NjAxMTI1MDEsMjQyLjM2MDY3OTc3NDk5NzldfSx7InAiOlszMTUuMCwyMzAuMF0sImluIjpbMzIxLjE4MDMzOTg4NzQ5OSwyNDIuMzYwNjc5Nzc0OTk3OV19LHsicCI6WzMxMy40MTY0MDc4NjQ5OTg3NSwyMjYuODMyODE1NzI5OTk3NV0sIm91dCI6WzMwNy4yNTI0MzU3NDU2OCwyMTQuNTA0ODcxNDkxMzU5OTVdfV0sImNsb3NlZCI6dHJ1ZX1dfSwibGl2ZSI6eyJzaGFwZSI6InBhdGgiLCJiYXNlIjp7InN1YnBhdGhzIjpbeyJhbmNob3JzIjpbeyJwIjpbMzAwLjAsMjAwLjBdfSx7InAiOlszNjAuMCwyMDAuMF19LHsicCI6WzMzMC4wLDI2MC4wXX1dLCJjbG9zZWQiOnRydWV9XX0sInJhZGlpIjpbMTAwMC4wLDEwMDAuMCwxMDAwLjBdfX19fQ==</vectorcraft:recipe></metadata>"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "addon.pathtools.cornerSet",
+      "disegno": "base.svg",
+      "selezione": [
+        "oc1c1c1c1"
+      ],
+      "argomenti": {
+        "radius": 10,
+        "anchors": [
+          2
+        ]
+      },
+      "dopo": "angolo-aperto-tondo.svg",
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "oc1c1c1c1"
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<path id=\"oc1c1c1c1\" d=\"M40 60 L100 60 L150 60 C155.523 60 160 64.477 160 70 L160 120\" fill=\"none\" stroke=\"#000000\" stroke-width=\"2\"/>"
+              },
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<metadata><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"oc1c1c1c1\" hash=\"6803f1a26b84aac8\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjozLCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoic3Ryb2tlIiwicGFpbnQiOnsidHlwZSI6InNvbGlkIiwiY29sb3IiOnsibW9kZWwiOiJyZ2IiLCJyIjowLjAsImciOjAuMCwiYiI6MC4wfX0sIndpZHRoIjoyLjAsIm1pdGVyX2xpbWl0Ijo0LjB9XX0sImtpbmQiOnsidHlwZSI6InBhdGgiLCJwYXRoIjp7InN1YnBhdGhzIjpbeyJhbmNob3JzIjpbeyJwIjpbNDAuMCw2MC4wXX0seyJwIjpbMTAwLjAsNjAuMF19LHsicCI6WzE1MC4wLDYwLjBdLCJvdXQiOlsxNTUuNTIyODQ3NDk4MzA3OTMsNjAuMF19LHsicCI6WzE2MC4wLDcwLjBdLCJpbiI6WzE2MC4wLDY0LjQ3NzE1MjUwMTY5MjA2XX0seyJwIjpbMTYwLjAsMTIwLjBdfV0sImNsb3NlZCI6ZmFsc2V9XX0sImxpdmUiOnsic2hhcGUiOiJwYXRoIiwiYmFzZSI6eyJzdWJwYXRocyI6W3siYW5jaG9ycyI6W3sicCI6WzQwLjAsNjAuMF19LHsicCI6WzEwMC4wLDYwLjBdfSx7InAiOlsxNjAuMCw2MC4wXX0seyJwIjpbMTYwLjAsMTIwLjBdfV0sImNsb3NlZCI6ZmFsc2V9XX0sInJhZGlpIjpbMC4wLDAuMCwxMC4wLDAuMF19fX19</vectorcraft:recipe></metadata>"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "addon.pathtools.cornerSet",
+      "disegno": "base.svg",
+      "selezione": [
+        "oc1c1c1c1"
+      ],
+      "argomenti": {
+        "radius": 10,
+        "anchors": [
+          1
+        ]
+      },
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "addon.pathtools.cornerSet",
+      "disegno": "base.svg",
+      "selezione": [
+        "oc1c1c1c1"
+      ],
+      "argomenti": {
+        "radius": 10,
+        "anchors": [
+          3
+        ]
+      },
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "addon.pathtools.cornerSet",
+      "disegno": "base.svg",
+      "selezione": [
+        "op7a7a7a7"
+      ],
+      "argomenti": {
+        "radius": 0
+      },
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "addon.pathtools.cornerSet",
+      "disegno": "base.svg",
+      "selezione": [
+        "op7a7a7a7"
+      ],
+      "argomenti": {
+        "radius": -1
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "addon.pathtools.cornerSet",
+      "disegno": "base.svg",
+      "selezione": [
+        "op7a7a7a7"
+      ],
+      "argomenti": {
+        "radius": "abc"
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "addon.pathtools.cornerSet",
+      "disegno": "base.svg",
+      "selezione": [
+        "op7a7a7a7"
+      ],
+      "argomenti": {
+        "radius": 2000000
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "addon.pathtools.cornerSet",
+      "disegno": "base.svg",
+      "selezione": [
+        "op7a7a7a7"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "addon.pathtools.cornerSet",
+      "disegno": "base.svg",
+      "selezione": [
+        "op7a7a7a7"
+      ],
+      "argomenti": {
+        "radius": 10,
+        "anchors": [
+          9
+        ]
+      },
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "addon.pathtools.cornerSet",
+      "disegno": "base.svg",
+      "selezione": [
+        "op7a7a7a7"
+      ],
+      "argomenti": {
+        "radius": 10,
+        "kind": "nope"
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "addon.pathtools.cornerSet",
+      "disegno": "elabora.svg",
+      "selezione": [
+        "od4d4d4d4"
+      ],
+      "argomenti": {
+        "radius": 10
+      },
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "addon.pathtools.cornerSet",
+      "disegno": "elabora.svg",
+      "selezione": [
+        "oe5e5e5e5"
+      ],
+      "argomenti": {
+        "radius": 10
+      },
+      "atteso": {
+        "rifiuto": "locked"
+      }
+    },
+    {
+      "id": "addon.pathtools.cornerSet",
+      "disegno": "angoli-livello-bloccato.svg",
+      "selezione": [
+        "op7a7a7a7"
+      ],
+      "argomenti": {
+        "radius": 10
+      },
+      "atteso": {
+        "rifiuto": "locked"
+      }
+    },
+    {
+      "id": "addon.pathtools.cornerSet",
+      "disegno": "base.svg",
+      "selezione": [
+        "nonce"
+      ],
+      "argomenti": {
+        "radius": 10
+      },
+      "atteso": {
+        "rifiuto": "unmapped"
+      }
+    },
+    {
+      "id": "addon.pathtools.cornerSet",
+      "disegno": "base.svg",
+      "selezione": [
+        "oi8b8b8b8"
+      ],
+      "argomenti": {
+        "radius": 10
+      },
+      "atteso": {
+        "rifiuto": "unmapped"
+      }
+    },
+    {
+      "id": "addon.pathtools.cornerSet",
+      "disegno": "angoli-tondi.svg",
+      "selezione": [
+        "op7a7a7a7"
+      ],
+      "argomenti": {
+        "radius": 10
+      },
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "addon.pathtools.cornerSet",
+      "disegno": "curvo.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {
+        "radius": 10,
+        "anchors": [
+          1
+        ]
+      },
+      "atteso": {
+        "rifiuto": "empty"
       }
     }
   ]

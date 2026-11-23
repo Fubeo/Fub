@@ -680,6 +680,14 @@ pub const FINESTRE_SCRITTE: &[FinestraScritta] = &[
         predefiniti: &[("object", "true"), ("fill", "true"), ("stroke", "true")],
         limiti: &[],
     },
+    // Imposta angoli (K6 T12, giro angoli) chiede il raggio, da 0 a 1000000 punti: il motore lo
+    // disegna non più grande di quanto entra nei due segmenti vicini. Rimuovi angoli non chiede niente.
+    FinestraScritta {
+        id: "addon.pathtools.cornerSet",
+        schema: "{radius}",
+        predefiniti: &[("radius", "10")],
+        limiti: &[("radius", Some(0.0), Some(1000000.0))],
+    },
     FinestraScritta {
         id: "addon.pathtools.divideDashes",
         schema: "{dash, gap, fit, removeGaps}",

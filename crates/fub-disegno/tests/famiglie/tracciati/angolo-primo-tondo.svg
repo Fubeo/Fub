@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:fub="https://fubeo.github.io/ns/scene/1" fub:version="1" viewBox="0 0 400 300" width="400" height="300">
+  <rect id="fub-paper" fub:role="paper" x="0" y="0" width="400" height="300" fill="#ffffff"/>
+  <metadata><vectorcraft:recipe xmlns:vectorcraft="urn:vectorcraft:editing" for="op7a7a7a7" hash="f893e372fd7ac724" v="1">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjo3LCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MC44MDAwMDAwMTE5MjA5MjksImciOjAuODAwMDAwMDExOTIwOTI5LCJiIjowLjgwMDAwMDAxMTkyMDkyOX19fV19LCJraW5kIjp7InR5cGUiOiJwYXRoIiwicGF0aCI6eyJzdWJwYXRocyI6W3siYW5jaG9ycyI6W3sicCI6WzMxNi4xODAzMzk4ODc0OTg5LDIwMC4wXSwiaW4iOlszMDguNzQ2NTE5Njc2MzY0ODcsMjAwLjBdfSx7InAiOlszNjAuMCwyMDAuMF19LHsicCI6WzMzMC4wLDI2MC4wXX0seyJwIjpbMzA3LjIzNjA2Nzk3NzQ5OTgsMjE0LjQ3MjEzNTk1NDk5OTU3XSwib3V0IjpbMzAzLjkxMTU2MjUxMjU3ODI2LDIwNy44MjMxMjUwMjUxNTY1N119XSwiY2xvc2VkIjp0cnVlfV19LCJsaXZlIjp7InNoYXBlIjoicGF0aCIsImJhc2UiOnsic3VicGF0aHMiOlt7ImFuY2hvcnMiOlt7InAiOlszMDAuMCwyMDAuMF19LHsicCI6WzM2MC4wLDIwMC4wXX0seyJwIjpbMzMwLjAsMjYwLjBdfV0sImNsb3NlZCI6dHJ1ZX1dfSwicmFkaWkiOlsxMC4wLDAuMCwwLjBdfX19fQ==</vectorcraft:recipe></metadata>
+  <g id="l1a2b3c4d" fub:layer="Livello 1">
+    <path id="oc1c1c1c1" d="M40 60 L100 60 L160 60 L160 120" fill="none" stroke="#000000" stroke-width="2"/>
+    <path id="od2d2d2d2" d="M166 124 L230 124" fill="none" stroke="#000000" stroke-width="2"/>
+    <path id="oe3e3e3e3" d="M220 20 L280 20 L284 50 L280 80 L220 80 Z" fill="#88aaff"/>
+    <path id="of4f4f4f4" d="M280 20 L340 20 L340 80 L280 80 Z" fill="#ffaa88"/>
+    <path id="op7a7a7a7" d="M316.18 200 L360 200 L330 260 L307.236 214.472 C303.912 207.823 308.747 200 316.18 200 Z" fill="#cccccc"/>
+    <path id="oi8b8b8b8" fub:tool="pen" fub:brush="pf1 size=4 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0" d="M120 220 L160 220 L160 240 L120 240 Z" fill="#d55e00" fub:ink="1 s100 cxypt 12050,23020,128,0 25,-3,2,8 31,-5,0,8"/>
+  </g>
+</svg>
