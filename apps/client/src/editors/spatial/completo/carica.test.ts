@@ -179,7 +179,9 @@ describe("famiglia(id)", () => {
     const carica = caricatore({ ctx: contesto(), prepara: () => Promise.resolve("pronta") });
     const stati = await Promise.all(DRAWING_FAMILIES.map((id) => carica.famiglia(id)));
     expect(stati.every((s) => s.kind === "pronta")).toBe(true);
-  });
+    // Importa e trasforma tutti i chunk delle famiglie insieme: da sola ci mette meno di un secondo, ma
+    // con la macchina carica (prova completa e altri lavori) passava i 5 s di serie.
+  }, 30_000);
 });
 
 describe("preparaNelMotore", () => {
