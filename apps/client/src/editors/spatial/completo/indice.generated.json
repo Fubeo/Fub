@@ -843,7 +843,7 @@
         "it": "Crea quota",
         "en": "Create Dimension"
       },
-      "posto": "ispettore/design/documento",
+      "posto": "interno",
       "famiglia": "tavole",
       "tasto": null,
       "effetto": "cambia",
@@ -6434,6 +6434,22 @@
       "posto": "colonna/disegna",
       "famiglia": "tracciati",
       "tasto": "-",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "strumento",
+      "id": "dimension",
+      "chiamata": {
+        "strumento": "dimension"
+      },
+      "etichetta": {
+        "it": "Strumento Quota",
+        "en": "Dimension Tool"
+      },
+      "posto": "colonna/misura",
+      "famiglia": "tavole",
+      "tasto": null,
       "effetto": "cambia",
       "finestra": false
     },

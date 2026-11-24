@@ -33,7 +33,7 @@ export interface CompletoMotore {
   fila(
     strumento: string,
     opzioni: unknown,
-    cambia: (chiave: string, valore: boolean | number | string) => void,
+    cambia: (chiave: string, valore: unknown) => void,
     vita: Lifetime,
     ambiente?: { readonly stato: DrawingToolState | null; readonly rileggi: () => void },
   ): FilaOpzioni | null;

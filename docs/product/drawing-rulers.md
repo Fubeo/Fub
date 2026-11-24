@@ -3,7 +3,8 @@
 > **Per chi:** chi disegna su misura, in millimetri per la stampa o in pixel
 > per lo schermo, e chi apre un disegno con le guide.
 > **Risultato:** sapere come l'unità del documento cambia ciò che si legge e
-> si scrive, e che cosa succede alle guide che un disegno porta.
+> si scrive, che cosa succede alle guide che un disegno porta, e come si
+> misura e si quota.
 
 Il [disegno](drawing.md) ha la sua unità di misura, che vale per i campi e
 per ciò che l'editor dice. Le **guide del documento**, linee orizzontali e
@@ -48,6 +49,34 @@ linea e le misure restano sul foglio fino alla misura dopo; Esc a metà
 trascinamento la annulla e riporta quella di prima, e un altro strumento le
 toglie. Con «Etichette delle misure» spenta resta solo la linea. Le scritte
 non si rifanno a uno zoom fatto dopo.
+
+## Lo strumento Quota
+
+Nella stessa casella c'è la **Quota**, come in VectorCraft: lascia nel
+disegno la misura di un lato, di un angolo o di un cerchio, con le linee di
+estensione, le frecce e il numero.
+
+- **Col trascinamento.** Sopra un lato (lineare), un angolo (angolare) o un
+  cerchio o un arco (radiale) si trascina verso l'esterno; il rilascio posa
+  la quota.
+- **Coi clic.** Due punti (lineare) o due lati diritti (angolare), poi un
+  clic posa la quota; un clic su un cerchio ne dà il raggio. Esc annulla
+  senza lasciare niente.
+- **La fila dello strumento** sceglie il tipo (Lineare, Angolare, Radiale) e
+  apre «Opzioni quota…», lo stile delle quote nuove: unità, decimali, scala
+  «disegno:reale» (1:10 scrive 10 per ogni unità del foglio), linea, frecce,
+  linee di estensione e testo. La finestra non manda un valore fuori dai
+  limiti e spegne OK con una scala sbagliata.
+- **La sezione «Quota» del Design** c'è quando ogni oggetto scelto è una
+  quota: cambia la distanza della linea dall'oggetto misurato, apre le
+  opzioni della prima quota (OK le manda a tutte le scelte) e «Applica a
+  tutti» copia lo stile della prima su ogni quota del disegno. Ogni cambio è
+  un passo di annulla.
+
+Nel file una quota è un gruppo di linee, tracciati e testo, con la sua
+ricetta nei metadati: si riapre come quota, con le sue opzioni. Il legame
+con l'oggetto misurato non si scrive nel file: una quota riaperta non segue
+l'oggetto quando cambia.
 
 ## Nel file
 

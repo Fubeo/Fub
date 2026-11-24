@@ -53,6 +53,95 @@
       }
     },
     {
+      "id": "dimension",
+      "fonte": "strumento",
+      "disegno": "base.svg",
+      "selezione": [],
+      "gesto": [
+        {
+          "phase": "preview",
+          "events": [
+            {
+              "kind": "move",
+              "x": 150,
+              "y": 150,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "down",
+              "x": 150,
+              "y": 150,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 150,
+              "y": 170,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 150,
+              "y": 185,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ]
+        },
+        {
+          "phase": "commit",
+          "events": [
+            {
+              "kind": "up",
+              "x": 150,
+              "y": 185,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ]
+        }
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "last": true
+                },
+                "raw": "<g id=\"oqutax11s\"><line id=\"oyie0xyhz\" x1=\"200\" y1=\"154\" x2=\"200\" y2=\"191\" fill=\"none\" stroke=\"#000000\" stroke-width=\"0.5\" stroke-miterlimit=\"10\"/><line id=\"o80mfecde\" x1=\"100\" y1=\"154\" x2=\"100\" y2=\"191\" fill=\"none\" stroke=\"#000000\" stroke-width=\"0.5\" stroke-miterlimit=\"10\"/><g id=\"om45xwxdr\"><g id=\"ovcz8yhde\"><path id=\"omahsy6ty\" d=\"M199 185.25 L101 185.25 L101 184.75 L199 184.75 Z\" fill=\"#000000\"/><path id=\"o51lofm7k\" d=\"M200 185 L198 186 L198 184 Z\" fill=\"#000000\"/><path id=\"oyn0j2hyn\" d=\"M100 185 L102 184 L102 186 Z\" fill=\"#000000\"/></g></g><g id=\"ovqsbdgj1\"><g id=\"opbxzbjei\"></g><path id=\"oi9njg2n4\" d=\"\" fill=\"#000000\"/></g></g>"
+              },
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<metadata><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"oqutax11s\" hash=\"f4ac77b2069c30a7\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjoxMSwia2luZCI6eyJ0eXBlIjoiZ3JvdXAiLCJjaGlsZHJlbiI6W3siaWQiOjEyLCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJub25lIn19LHsia2luZCI6InN0cm9rZSIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MC4wLCJnIjowLjAsImIiOjAuMH19LCJ3aWR0aCI6MC41fV19LCJraW5kIjp7InR5cGUiOiJwYXRoIiwicGF0aCI6eyJzdWJwYXRocyI6W3siYW5jaG9ycyI6W3sicCI6WzIwMC4wLDE1NC4wXX0seyJwIjpbMjAwLjAsMTkxLjBdfV0sImNsb3NlZCI6ZmFsc2V9XX19fSx7ImlkIjoxMywiYXBwZWFyYW5jZSI6eyJpdGVtcyI6W3sia2luZCI6ImZpbGwiLCJwYWludCI6eyJ0eXBlIjoibm9uZSJ9fSx7ImtpbmQiOiJzdHJva2UiLCJwYWludCI6eyJ0eXBlIjoic29saWQiLCJjb2xvciI6eyJtb2RlbCI6InJnYiIsInIiOjAuMCwiZyI6MC4wLCJiIjowLjB9fSwid2lkdGgiOjAuNX1dfSwia2luZCI6eyJ0eXBlIjoicGF0aCIsInBhdGgiOnsic3VicGF0aHMiOlt7ImFuY2hvcnMiOlt7InAiOlsxMDAuMCwxNTQuMF19LHsicCI6WzEwMC4wLDE5MS4wXX1dLCJjbG9zZWQiOmZhbHNlfV19fX0seyJpZCI6MTQsImFwcGVhcmFuY2UiOnsiaXRlbXMiOlt7ImtpbmQiOiJmaWxsIiwicGFpbnQiOnsidHlwZSI6Im5vbmUifX0seyJraW5kIjoic3Ryb2tlIiwicGFpbnQiOnsidHlwZSI6InNvbGlkIiwiY29sb3IiOnsibW9kZWwiOiJyZ2IiLCJyIjowLjAsImciOjAuMCwiYiI6MC4wfX0sIndpZHRoIjowLjUsInN0YXJ0X2Fycm93IjoiVHJpYW5nbGUiLCJlbmRfYXJyb3ciOiJUcmlhbmdsZSIsImFycm93X2FsaWduIjoiVGlwIn1dfSwia2luZCI6eyJ0eXBlIjoicGF0aCIsInBhdGgiOnsic3VicGF0aHMiOlt7ImFuY2hvcnMiOlt7InAiOlsyMDAuMCwxODUuMF19LHsicCI6WzEwMC4wLDE4NS4wXX1dLCJjbG9zZWQiOmZhbHNlfV19fX0seyJpZCI6MTUsImFwcGVhcmFuY2UiOnsiaXRlbXMiOlt7ImtpbmQiOiJmaWxsIiwicGFpbnQiOnsidHlwZSI6InNvbGlkIiwiY29sb3IiOnsibW9kZWwiOiJyZ2IiLCJyIjowLjAsImciOjAuMCwiYiI6MC4wfX19LHsia2luZCI6InN0cm9rZSIsInBhaW50Ijp7InR5cGUiOiJub25lIn0sIndpZHRoIjowLjB9XX0sImtpbmQiOnsidHlwZSI6InRleHQiLCJraW5kIjp7ImtpbmQiOiJwb2ludCJ9LCJ4ZiI6WzEuMCwtMi40NDkyOTM1OTgyOTQ3MDY0ZS0xNiwyLjQ0OTI5MzU5ODI5NDcwNjRlLTE2LDEuMCwxNTAuMCwxOTguNl0sInJ1bnMiOlt7InRleHQiOiIxMDAuMDAgcHQiLCJzdHlsZSI6eyJmb250X2ZhbWlseSI6IlNvdXJjZSBTYW5zIDMiLCJmb250X3N0eWxlIjoiUmVndWxhciIsInNpemUiOjEyLjAsInRyYWNraW5nIjowLjAsImJhc2VsaW5lX3NoaWZ0IjowLjAsImhfc2NhbGUiOjEwMC4wLCJ2X3NjYWxlIjoxMDAuMCwicm90YXRpb24iOjAuMCwiZmlsbCI6eyJ0eXBlIjoic29saWQiLCJjb2xvciI6eyJtb2RlbCI6InJnYiIsInIiOjAuMCwiZyI6MC4wLCJiIjowLjB9fSwic3Ryb2tlIjp7InR5cGUiOiJub25lIn0sInN0cm9rZV93aWR0aCI6MC4wLCJ1bmRlcmxpbmUiOmZhbHNlLCJzdHJpa2V0aHJvdWdoIjpmYWxzZSwiYWxsX2NhcHMiOmZhbHNlfX1dLCJwYXJhIjp7Imp1c3RpZnkiOiJDZW50ZXIiLCJsZWZ0X2luZGVudCI6MC4wLCJyaWdodF9pbmRlbnQiOjAuMCwiZmlyc3RfbGluZV9pbmRlbnQiOjAuMCwic3BhY2VfYmVmb3JlIjowLjAsInNwYWNlX2FmdGVyIjowLjAsImh5cGhlbmF0ZSI6ZmFsc2V9fX1dLCJjbGlwIjpmYWxzZX0sImRpbWVuc2lvbiI6eyJtb2RlIjoibGluZWFyIiwiYSI6eyJ4IjoyMDAuMCwieSI6MTUwLjB9LCJiIjp7IngiOjEwMC4wLCJ5IjoxNTAuMH0sInZlcnRleCI6eyJ4IjowLjAsInkiOjAuMH0sIm9mZnNldCI6LTM1LjAsImxlbmd0aCI6MTAwLjAsIm9wdGlvbnMiOnsidW5pdHMiOiJwdCIsInByZWNpc2lvbiI6Miwic2NhbGUiOiIxOjEiLCJoaWRlVW5pdHMiOmZhbHNlLCJsaW5lV2VpZ2h0IjowLjUsImxpbmVUeXBlIjoic29saWQiLCJsaW5lQ29sb3IiOlswLDAsMF0sImFycm93U3R5bGUiOiJmaWxsZWQiLCJhcnJvd1NjYWxlIjoxMDAuMCwiZXh0ZW5zaW9uV2VpZ2h0IjowLjUsImV4dGVuc2lvblR5cGUiOiJzb2xpZCIsImV4dGVuc2lvbkNvbG9yIjpbMCwwLDBdLCJleHRlbnNpb25PZmZzZXQiOjQuMCwiZXh0ZW5zaW9uTGVuZ3RoIjo2LjAsImhpZGVFeHRlbnNpb25zIjpmYWxzZSwiZm9udEZhbWlseSI6IlNvdXJjZSBTYW5zIDMiLCJmb250U3R5bGUiOiJSZWd1bGFyIiwiZm9udFNpemUiOjEyLjAsInRleHRDb2xvciI6WzAsMCwwXSwidGV4dFBvc2l0aW9uIjoiYXdheSIsInRleHRBbGlnbm1lbnQiOiJjZW50ZXIiLCJ0ZXh0T2Zmc2V0Ijo0LjB9LCJzb3VyY2UiOm51bGx9fX0=</vectorcraft:recipe></metadata>"
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "quota-strumento.svg"
+    },
+    {
       "id": "artboard",
       "fonte": "strumento",
       "disegno": "base.svg",

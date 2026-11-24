@@ -131,7 +131,7 @@ motore	css.export	Export CSS		web	F3	T22	da fare	ispettore/design/documento	fami
 motore	path.mirrorCut	Mirror & Cut		tracciati	F1	T12	fatto	ispettore/design	famiglia		Specchia e taglia
 motore	path.lineCut	Line Cut		tracciati	F1	T12	fatto	ispettore/design	famiglia		Taglio linea
 motore	path.rectCut	Rectangle Cut		tracciati	F1	T12	fatto	ispettore/design	famiglia		Taglio rettangolare
-motore	dimension.create	Create Dimension		tavole	F2	T19	fatto	ispettore/design/documento	famiglia		Crea quota
+motore	dimension.create	Create Dimension		tavole	F2	T19	fatto	interno	famiglia	la crea lo strumento Quota col suo clic (i punti e il tipo arrivano dal gesto): fuori dalla ricerca	Crea quota
 motore	dimension.update	Update Dimensions		tavole	F2	T19	fatto	ispettore/design/documento	famiglia		Aggiorna quote
 motore	dimension.applyToAll	Apply to All		tavole	F2	T19	fatto	ispettore/design/documento	famiglia		Applica a tutti
 motore	stroke.widthPoint.set	Width Point		aspetto	F1	T15	da fare	ispettore/design	famiglia	lo strumento Larghezza scrive il profilo nella ricetta del file (letto alla riapertura); manca la voce nell'ispettore	Punto di larghezza
@@ -1345,7 +1345,7 @@ strumento	eyedropper	Eyedropper Tool		colore	F1	T14	fatto	colonna/colore	famigli
 strumento	measure	Measure Tool		tavole	F2	T19	fatto	colonna/misura	famiglia	riquadro «eyedropper»; trascinato misura distanza, angolo, dX e dY; la misura resta sul foglio fino alla misura dopo (la tiene il client: la sessione rimette lo strumento a capo dopo il commit); Esc a metà riporta quella di prima	Strumento Misura
 strumento	blend	Blend Tool		dinamici	F2	T21	fatto	colonna/oggetti	famiglia	riquadro «blend»; due clic su due oggetti fanno una fusione; un clic su un altro oggetto con la fusione scelta la allunga; Alt-clic o doppio clic aprono le Opzioni fusione	Strumento Fusione
 strumento	objectsOnPath	Objects on Path Tool		dinamici	F2	T21	fatto	colonna/oggetti	famiglia	un clic su un tracciato attacca gli oggetti scelti; la barra dello strumento dà il punto di aggancio e la rotazione	Strumento Oggetti su tracciato
-strumento	dimension	Dimension Tool		tavole	F2	T19	da fare	colonna/misura	famiglia	riquadro «dimension»	Strumento Quota
+strumento	dimension	Dimension Tool		tavole	F2	T19	fatto	colonna/misura	famiglia	riquadro «eyedropper»; sopra un lato (lineare), un angolo (angolare) o un cerchio (radiale) si trascina fuori e il rilascio la posa; coi clic si scelgono due punti o due lati, poi un clic la posa; un clic su un cerchio dà il raggio; Esc annulla; la fila sceglie il tipo e apre «Opzioni quota…» per lo stile delle quote nuove; la sezione «Quota» del Design cambia la distanza e lo stile delle quote scelte e li applica a tutte	Strumento Quota
 strumento	symbolSprayer	Symbol Sprayer Tool		simboli	F3	T22	da fare	colonna/oggetti	famiglia	riquadro «symbolSprayer»	Strumento Spruzzo simboli
 strumento	symbolShifter	Symbol Shifter Tool		simboli	F3	T22	da fare	colonna/oggetti	famiglia	riquadro «symbolSprayer»	Strumento Spostamento simboli
 strumento	symbolScruncher	Symbol Scruncher Tool		simboli	F3	T22	da fare	colonna/oggetti	famiglia	riquadro «symbolSprayer»	Strumento Addensamento simboli

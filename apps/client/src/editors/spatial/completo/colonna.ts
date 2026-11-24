@@ -46,7 +46,7 @@ export const CASELLE: readonly Casella[] = [
   { id: "width", gruppo: "modify", strumenti: ["motore:width", "motore:warp", "motore:twirl", "motore:pucker", "motore:bloat", "motore:scallop", "motore:crystallize", "motore:wrinkle"] },
   { id: "shapeBuilder", gruppo: "modify", strumenti: ["motore:shapeBuilder", "motore:livePaintBucket", "motore:livePaintSelection", "motore:blend", "motore:objectsOnPath"] },
   { id: "gradient", gruppo: "color", strumenti: ["motore:gradient", "motore:mesh"] },
-  { id: "eyedropper", gruppo: "color", strumenti: ["motore:eyedropper", "motore:measure"] },
+  { id: "eyedropper", gruppo: "color", strumenti: ["motore:eyedropper", "motore:measure", "motore:dimension"] },
   { id: "hand", gruppo: "view", strumenti: ["motore:hand", "motore:zoom", "motore:rotateView", "motore:printTiling", "hand", "zoom"] },
 ];
 
@@ -159,6 +159,8 @@ export const MOTORE_PRONTO: ReadonlySet<string> = new Set([
   "eyedropper",
   // La Misura: la linea e le misure restano sul foglio fino alla misura dopo.
   "measure",
+  // La Quota (tavole): la fila del tipo e delle opzioni, la sezione del Design.
+  "dimension",
   // La Tavola: crea, sposta (coi disegni dentro) e ridimensiona le tavole.
   "artboard",
   // La Forma parametrica: una forma viva, coi suoi numeri nella ricetta del file.
@@ -185,6 +187,7 @@ export const ICONE_MOTORE: Readonly<Record<string, string>> = {
   // Le trasformazioni (T13 giro 5): Inclina ha il parallelogramma del catalogo.
   eyedropper: "draw-eyedropper",
   measure: "draw-measure",
+  dimension: "draw-dimension",
   artboard: "draw-artboard",
   parametricShape: "draw-parametric",
   shaper: "draw-to-shape",

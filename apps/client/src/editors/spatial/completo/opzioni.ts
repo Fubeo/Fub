@@ -111,8 +111,9 @@ export interface AzioniFila {
   leggi(id: string, valore: unknown): Promise<unknown>;
   annuncia(testo: string): void;
   /// Cambia un'opzione dello strumento della fila (`disegno.strumento.opzione`), come la
-  /// fila generica: il modo della Trasformazione libera, che è un testo e non una scelta.
-  opzione(chiave: string, valore: boolean | number | string): void;
+  /// fila generica: il modo della Trasformazione libera, che è un testo e non una scelta, o lo stile intero
+  /// delle quote nuove (un oggetto).
+  opzione(chiave: string, valore: unknown): void;
 }
 
 /// Una fila che una famiglia monta da sé per uno strumento (anche di un'altra

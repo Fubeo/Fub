@@ -28,6 +28,8 @@ import { registraElaborazione } from "./elaborazione";
 import { infoDaLettura, registraFusione, COMANDI_FUSIONE } from "./fusione-sezione";
 import { eGruppoSulTracciato, registraOggettiSulTracciato, STRUMENTO_OGGETTI_SUL_TRACCIATO } from "./oggetti-sul-tracciato-sezione";
 import { registraTrasforma } from "./trasforma-sezione";
+// La Quota (K6, tavole): la sezione del Design delle quote scelte.
+import { eQuota, registraQuota } from "./quota";
 import { registraColore, type ColoriVisti, type LatoAttivo } from "./colore-sezione";
 // «Selettore colore…» (K6 T14, selettore): il selettore del pozzo da una voce del menu e della ricerca.
 import { VOCE_SELETTORE_COLORE, voceSelettoreColore } from "./selettore-colore";
@@ -149,7 +151,7 @@ export interface Completo {
   fila(
     strumento: string,
     opzioni: unknown,
-    cambia: (chiave: string, valore: boolean | number | string) => void,
+    cambia: (chiave: string, valore: unknown) => void,
     vita: Lifetime,
     ambiente?: AmbienteFila,
   ): FilaOpzioni | null;
@@ -480,6 +482,22 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila" | "e
       // non c'è, e gli altri non si chiedono.
       const primo = ids.length === 0 ? null : await nodo(ids[0]!);
       if (!eGruppoSulTracciato(primo)) return null;
+      const altri = await Promise.all(ids.slice(1).map(nodo));
+      return { ids, nodi: [primo, ...altri] };
+    },
+  });
+  registraQuota(sezioni, {
+    esegui: (id, valori) => eseguiPerId(id, valori, { senzaFinestra: true }),
+    leggi: async () => {
+      const ids = [...dipendenze.selezione()];
+      const nodo = async (id: string): Promise<unknown> => {
+        const esito = await chiama(dipendenze, "disegno.document.node", { id }, false).catch(() => null);
+        return esito === null || esito.refused !== null ? null : esito.reading;
+      };
+      // Il primo oggetto prima: se non è una quota (il caso di quasi ogni selezione) la sezione
+      // non c'è, e gli altri non si chiedono.
+      const primo = ids.length === 0 ? null : await nodo(ids[0]!);
+      if (!eQuota(primo)) return null;
       const altri = await Promise.all(ids.slice(1).map(nodo));
       return { ids, nodi: [primo, ...altri] };
     },
