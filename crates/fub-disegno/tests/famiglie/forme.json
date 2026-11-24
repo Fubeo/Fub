@@ -2430,6 +2430,61 @@
       "dopo": "espandi-forma.svg"
     },
     {
+      "id": "object.setLiveShape",
+      "disegno": "roundedrectangle-4.svg",
+      "selezione": [
+        "o5qgdpjl6"
+      ],
+      "argomenti": {
+        "radius": 6,
+        "kind": "chamfer"
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "o5qgdpjl6"
+              },
+              {
+                "op": "remove",
+                "target": {
+                  "path": [
+                    1
+                  ],
+                  "tag": "metadata"
+                }
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "last": true
+                },
+                "raw": "<polygon id=\"o5qgdpjl6\" points=\"266,70 334,70 340,76 340,104 334,110 266,110 260,104 260,76\" fill=\"none\" stroke=\"#000000\" stroke-width=\"2\" stroke-miterlimit=\"10\"/>"
+              },
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<metadata><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"o5qgdpjl6\" hash=\"66cb78d343c99107\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjo5LCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJub25lIn19LHsia2luZCI6InN0cm9rZSIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MC4wLCJnIjowLjAsImIiOjAuMH19LCJ3aWR0aCI6Mi4wfV19LCJraW5kIjp7InR5cGUiOiJwYXRoIiwicGF0aCI6eyJzdWJwYXRocyI6W3siYW5jaG9ycyI6W3sicCI6WzI2Ni4wLDcwLjBdfSx7InAiOlszMzQuMCw3MC4wXX0seyJwIjpbMzQwLjAsNzYuMF19LHsicCI6WzM0MC4wLDEwNC4wXX0seyJwIjpbMzM0LjAsMTEwLjBdfSx7InAiOlsyNjYuMCwxMTAuMF19LHsicCI6WzI2MC4wLDEwNC4wXX0seyJwIjpbMjYwLjAsNzYuMF19XSwiY2xvc2VkIjp0cnVlfV19LCJsaXZlIjp7InNoYXBlIjoicmVjdGFuZ2xlIiwidyI6ODAuMCwiaCI6NDAuMCwicmFkaWkiOls2LjAsNi4wLDYuMCw2LjBdLCJraW5kcyI6WyJjaGFtZmVyIiwiY2hhbWZlciIsImNoYW1mZXIiLCJjaGFtZmVyIl0sInhmIjpbMS4wLDAuMCwwLjAsMS4wLDI2MC4wLDcwLjBdfX19fQ==</vectorcraft:recipe></metadata>"
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "angoli-smussati.svg"
+    },
+    {
+      "id": "ui.corners",
+      "fonte": "interfaccia",
+      "prova": "apps/client/src/editors/spatial/completo/forma-viva.test.ts"
+    },
+    {
       "id": "object.expandShape",
       "disegno": "composte.svg",
       "selezione": [

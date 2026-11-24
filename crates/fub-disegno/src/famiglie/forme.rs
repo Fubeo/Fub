@@ -32,7 +32,7 @@
 use std::collections::HashSet;
 use std::sync::Arc;
 
-use fub_abi::{DrawingDisabledReason, DrawingRefusal};
+use fub_abi::{DrawingDisabledReason, DrawingRefusal, PluginError};
 use fub_motori::{ErroreMotore, Servizi};
 use fub_scene::Role;
 use serde_json::Value;
@@ -59,6 +59,29 @@ const METODO_FORMA: &str = "object.compoundShape.setMode";
 
 /// Espandi forma: le forme dal vivo scelte diventano tracciati.
 const ESPANDI_FORMA: &str = "object.expandShape";
+
+/// Le proprietà della forma viva (`object.setLiveShape`): gli angoli di un tracciato, i lati del
+/// poligono, lo spicchio dell'ellisse.
+const PROPRIETA_FORMA: &str = "object.setLiveShape";
+
+/// Le lunghezze di [`PROPRIETA_FORMA`], dalla scena al documento del motore: la radice è una scala
+/// e uno spostamento, e una lunghezza prende solo la scala. Un valore che non è un numero resta
+/// com'è (il motore lo rifiuta).
+fn lunghezze_nel_motore(radice: vectorcraft_geom::Affine, mut valore: Value) -> Value {
+    let scala = radice.determinant().abs().sqrt();
+    if !(scala.is_finite() && scala > 0.0) || (scala - 1.0).abs() < 1e-12 {
+        return valore;
+    }
+    if let Some(campi) = valore.as_object_mut() {
+        for chiave in ["radius", "polygonRadius", "sideLength"] {
+            if let Some(n) = campi.get(chiave).and_then(Value::as_f64) {
+                let n = serde_json::Number::from_f64(n * scala).map_or(Value::Null, Value::Number);
+                campi.insert(chiave.into(), n);
+            }
+        }
+    }
+    valore
+}
 
 /// Il Generatore forme (T13 giro 7): il comando che unisce o toglie le regioni
 /// (`shapeBuilder.merge`), che lo strumento del motore `shapeBuilder` manda al
@@ -298,6 +321,16 @@ impl StatoFamiglia for Stato {
             .flat_map(|figli| figli.iter().map(|c| c.id))
             .collect();
         Some(membri)
+    }
+
+    /// Le lunghezze delle proprietà della forma (raggio degli angoli, raggio e lato del poligono)
+    /// arrivano nella scena, come le legge Ispeziona documento (`nucleo::forma_della_selezione`):
+    /// vanno al documento del motore con la scala della radice.
+    fn argomenti_della_copia(id: &str, copia: &Copia, _selezione: &[String], valore: Value) -> Result<Value, PluginError> {
+        if id != PROPRIETA_FORMA {
+            return Ok(valore);
+        }
+        Ok(lunghezze_nel_motore(copia.radice, valore))
     }
 
     /// Espandi forma composta che non lascia niente: `empty`.

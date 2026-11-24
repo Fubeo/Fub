@@ -382,6 +382,11 @@
           "predefinito": 5.0
         }
       ]
+    },
+    {
+      "fonte": "interfaccia",
+      "id": "ui.corners",
+      "campi": []
     }
   ]
 }

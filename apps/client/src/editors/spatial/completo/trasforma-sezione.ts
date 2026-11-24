@@ -10,7 +10,9 @@
 //   valore inclina di tanto (`object.shear`, sotto i 90°); ognuna ha i suoi angoli pronti;
 // - Alt+Invio applica a una copia (`copy`);
 // - Rifletti in orizzontale e in verticale (`object.reflect`), Reimposta riquadro;
-// - le caselle Scala angoli e Scala tratti ed effetti (`scaleCorners`, `scaleStrokes`).
+// - le caselle Scala angoli e Scala tratti ed effetti (`scaleCorners`, `scaleStrokes`);
+// - le proprietà della forma viva scelta (rettangolo, poligono, ellisse, angoli di un tracciato:
+//   `forma-viva.ts`), che mandano `object.setLiveShape`.
 // Il riquadro lo dà il motore (`document.inspect`, la sua `transformBox` nella scena, ruotata con
 // gli oggetti ruotati, senza il contorno se «Usa i contorni di anteprima» è spento): finché la
 // lettura non arriva, o senza motore, i campi mostrano le misure della vista. I valori sono
@@ -20,6 +22,7 @@ import { numberField, type NumberField } from "../../../kit/number-field";
 import { formCheck } from "../../../kit/form";
 import { referencePoint } from "../../../kit/reference-point";
 import { t, type DrawKey } from "../strings";
+import { formaDa, righeForma, type FormaViva } from "./forma-viva";
 import { nomiDelPerno } from "./oggetti-sul-tracciato-sezione";
 import { registraSezione, type ContestoSezione, type MisuraSelezione, type MisureSelezione, type Sezione, type Sezioni } from "./sezioni";
 
@@ -43,10 +46,12 @@ export interface PreferenzeTrasforma {
   readonly proporzioni: boolean;
   readonly scalaAngoli: boolean;
   readonly scalaTratti: boolean;
+  /// Un raggio per tutti gli angoli del rettangolo (`singleCornerRadius`).
+  readonly angoloUnico: boolean;
 }
 
 /// Le preferenze di serie del motore, finché la lettura non arriva.
-const PREFERENZE_DI_SERIE: PreferenzeTrasforma = { proporzioni: false, scalaAngoli: false, scalaTratti: false };
+const PREFERENZE_DI_SERIE: PreferenzeTrasforma = { proporzioni: false, scalaAngoli: false, scalaTratti: false, angoloUnico: true };
 
 /// Il punto di riferimento condiviso dal Completo aperto (da 0 a 8, di serie il centro).
 export interface RiferimentoTrasforma {
@@ -109,6 +114,7 @@ export function preferenzeDa(lettura: unknown): PreferenzeTrasforma | null {
     proporzioni: si("constrainProportions", PREFERENZE_DI_SERIE.proporzioni),
     scalaAngoli: si("scaleCorners", PREFERENZE_DI_SERIE.scalaAngoli),
     scalaTratti: si("scaleStrokes", PREFERENZE_DI_SERIE.scalaTratti),
+    angoloUnico: si("singleCornerRadius", PREFERENZE_DI_SERIE.angoloUnico),
   };
 }
 
@@ -134,10 +140,11 @@ function passaggio(misura: MisuraSelezione | undefined, unita: string): Passaggi
   };
 }
 
-/// Lo stato di una sezione disegnata: il riquadro del motore (`undefined` finché non è letto) e
-/// le preferenze.
+/// Lo stato di una sezione disegnata: il riquadro del motore (`undefined` finché non è letto), la
+/// forma viva scelta e le preferenze.
 interface Stato {
   readonly riquadro: RiquadroTrasforma | null | undefined;
+  readonly forma: FormaViva | null;
   readonly preferenze: PreferenzeTrasforma;
 }
 
@@ -250,7 +257,7 @@ function disegnaCorpo(contesto: ContestoSezione, azioni: AzioniTrasforma, riferi
     onChange: (indice) => {
       riferimento.indice = indice;
       corpo.replaceChildren();
-      disegnaCorpo(contesto, azioni, riferimento, { riquadro: stato.riquadro, preferenze });
+      disegnaCorpo(contesto, azioni, riferimento, { riquadro: stato.riquadro, forma: stato.forma, preferenze });
       corpo.querySelector<HTMLElement>(".kit-reference-point [aria-checked='true']")?.focus();
     },
     lifetime: vita,
@@ -379,6 +386,30 @@ function disegnaCorpo(contesto: ContestoSezione, azioni: AzioniTrasforma, riferi
   for (const numero of campi) numero.setDisabled(spenta);
   for (const elemento of [prontiRotazione, prontiInclinazione, orizzontale, verticale, reimposta]) elemento.disabled = spenta;
   corpo.append(misureRiga, angoli, azioniRiga);
+
+  // Le proprietà della forma viva scelta: le lunghezze nell'unità della larghezza.
+  const imposta = azioni.imposta;
+  const forma =
+    spenta || stato.forma === null
+      ? null
+      : righeForma(vita, stato.forma, pw, {
+          esegui: (valori) => esegui("object.setLiveShape", valori, { senzaFinestra: true }),
+          ...(imposta === undefined
+            ? {}
+            : {
+                angoloUnico: {
+                  acceso: preferenze.angoloUnico,
+                  cambia: (acceso: boolean) => {
+                    preferenze = { ...preferenze, angoloUnico: acceso };
+                    imposta("singleCornerRadius", acceso);
+                    corpo.replaceChildren();
+                    disegnaCorpo(contesto, azioni, riferimento, { riquadro: stato.riquadro, forma: stato.forma, preferenze });
+                    corpo.querySelector<HTMLElement>(".draw-shape-link")?.focus();
+                  },
+                },
+              }),
+        });
+  if (forma !== null) corpo.append(forma);
   if (opzioni.childElementCount > 0) corpo.append(opzioni);
 }
 
@@ -387,16 +418,18 @@ function disegnaCorpo(contesto: ContestoSezione, azioni: AzioniTrasforma, riferi
 /// il fuoco esce.
 function disegnaTrasforma(contesto: ContestoSezione, azioni: AzioniTrasforma, riferimento: RiferimentoTrasforma): () => void {
   const { corpo, vita } = contesto;
-  disegnaCorpo(contesto, azioni, riferimento, { riquadro: undefined, preferenze: PREFERENZE_DI_SERIE });
+  disegnaCorpo(contesto, azioni, riferimento, { riquadro: undefined, forma: null, preferenze: PREFERENZE_DI_SERIE });
   if (contesto.motore !== null && (azioni.leggi !== undefined || azioni.preferenze !== undefined)) {
-    const riquadro = contesto.sel.numero === 0 || azioni.leggi === undefined ? Promise.resolve(undefined) : azioni.leggi().then(riquadroDa, () => undefined);
+    const lettura = contesto.sel.numero === 0 || azioni.leggi === undefined ? Promise.resolve(undefined) : azioni.leggi().catch(() => undefined);
     const preferenze = azioni.preferenze === undefined ? Promise.resolve(null) : azioni.preferenze().then(preferenzeDa, () => null);
-    void Promise.all([riquadro, preferenze]).then(([r, p]) => {
+    void Promise.all([lettura, preferenze]).then(([l, p]) => {
+      const r = l === undefined ? undefined : riquadroDa(l);
+      const forma = l === undefined ? null : formaDa(l);
       // Una risposta di un giro passato si butta.
       if (vita.closed || (r === undefined && p === null)) return;
       const rifai = (): void => {
         corpo.replaceChildren();
-        disegnaCorpo(contesto, azioni, riferimento, { riquadro: r, preferenze: p ?? PREFERENZE_DI_SERIE });
+        disegnaCorpo(contesto, azioni, riferimento, { riquadro: r, forma, preferenze: p ?? PREFERENZE_DI_SERIE });
       };
       if (!corpo.contains(document.activeElement)) {
         rifai();

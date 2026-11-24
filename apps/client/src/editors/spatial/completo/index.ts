@@ -39,6 +39,7 @@ import { VOCE_NUOVO_GRUPPO, voceNuovoGruppo } from "./nuovo-gruppo";
 import { registraCampioni } from "./campioni-sezione";
 import { apriModoDisegno, type ModoDisegno, type PortaModoDisegno } from "./modo-disegno";
 import { apriRicolora, motivoRicolora, VOCE_RICOLORA } from "./ricolora";
+import { chiediAngoli, formaDa, VOCE_ANGOLI } from "./forma-viva";
 import { registraGuidaColori } from "./guida-colori-sezione";
 import { registraContorno } from "./contorno-sezione";
 import { registraSfumatura } from "./sfumatura-sezione";
@@ -710,6 +711,26 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila" | "e
   // Ricolora grafica (K6 T14): la voce di Modifica › Modifica colori apre la sua finestra. Il suo
   // stato è quello del comando che la finestra scrive (`conVociClient`).
   vociDelCompleto.set(VOCE_RICOLORA, { stato: () => null, esegui: () => void apriRicolora(dipendenze) });
+  // Angoli… (`ui.corners`, VectorCraft: Corners…): tipo e raggio degli angoli del primo tracciato
+  // scelto, letti dal motore; OK manda `object.setLiveShape` su tutti gli angoli. Lo stato è quello
+  // del comando: spento senza un tracciato con angoli.
+  vociDelCompleto.set(VOCE_ANGOLI, {
+    comando: "disegno.object.setLiveShape",
+    stato: () => null,
+    esegui: () =>
+      void chiama(dipendenze, "disegno.document.inspect", { depth: 0 }, false).then(async (esito) => {
+        if (esito === null || esito.refused !== null || dipendenze.vita.closed) return;
+        const angoli = formaDa(esito.reading)?.angoli ?? null;
+        if (angoli === null) {
+          dipendenze.annuncia(t("draw.forma.finestra.senzaAngoli"));
+          return;
+        }
+        const scena = { unita: "px", decimali: 2, allaScena: (v: number) => v, dallaScena: (v: number) => v };
+        const scelta = await chiediAngoli(angoli, scena);
+        if (scelta === null || dipendenze.vita.closed) return;
+        await eseguiPerId("object.setLiveShape", { kind: scelta.tipo, radius: scelta.raggio }, { senzaFinestra: true });
+      }),
+  });
   registraColore(sezioni, (id, valori) => void eseguiPerId(id, valori, { senzaFinestra: true }), ctx.life, latoAttivo, coloriVisti);
   // La «Guida colori» del Design (K6 T14, giro 3): le armonie del lato attivo, lette dal motore.
   registraGuidaColori(sezioni, (id, valori) => void eseguiPerId(id, valori, { senzaFinestra: true }), () => dipendenze, ctx.life, latoAttivo);

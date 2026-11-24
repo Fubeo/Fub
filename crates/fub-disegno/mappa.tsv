@@ -880,7 +880,7 @@ motore	object.distribute	Distribute	Window › Align	trasforma	F1	T13	fatto	ispe
 motore	object.distributeSpacing	Distribute Spacing	Window › Align	trasforma	F1	T13	fatto	ispettore/design/allinea	famiglia		Distribuisci spaziatura
 motore	object.setBounds	Set Bounds		trasforma	F1	T13	fatto	ispettore/design	famiglia		Imposta limiti
 motore	object.expandShape	Expand Shape	Object › Shape	forme	F1	T13	fatto	menu/oggetto	famiglia		Espandi forma
-motore	object.setLiveShape	Live Shape Properties		forme	F1	T13	da fare	ispettore/design	famiglia	aspetta T27	Proprietà forma dinamica
+motore	object.setLiveShape	Live Shape Properties		forme	F1	T13	fatto	ispettore/design	famiglia	le Proprietà della forma nella sezione Trasforma (raggio e tipo degli angoli, uno per angolo del rettangolo; lati, angolo, raggio e lato del poligono, Rendi i lati uguali; spicchio dell'ellisse e Inverti) e la finestra Angoli; la forma viva va nella ricetta, le lunghezze sono della scena. Senza la Selezione diretta degli angoli di VectorCraft, gli angoli sono tutti o quelli che la finestra sceglie	Proprietà forma dinamica
 interfaccia	addon.pathtools.cornerTool	Corner Tool		tracciati	F1	T12	da fare	ispettore/design	famiglia		Strumento Angoli
 interfaccia	addon.pathtools.sharedEdgeTool	Shared Edge Merge Tool		tracciati	F1	T12	da fare	ispettore/design	famiglia		Strumento Fondi bordo condiviso
 interfaccia	addon.arrange.zoomSelection	Zoom to Selection		vista	F1	T11	fatto	ispettore/design	famiglia	è una vista: lo zoom sulla scelta è l'editor (tools/editor/view.ts, fitSelection), chiamato dal Completo (chrome/status.ts); niente file, niente cronologia; senza scelta è spento con «Scegli prima degli oggetti.»	Zoom sulla selezione
@@ -1189,7 +1189,7 @@ interfaccia	ui.javascriptFilesDialog	Link JavaScript Files…		automazione	F4	T2
 interfaccia	ui.spotColors	Spot Colors…		colore	F1	T14	da fare	finestra	famiglia	la finestra delle tinte piatte non ha il formato dove salvarle: le tinte piatte mancano (T14)	Colori spot…
 interfaccia	ui.menuDialog	Menu Dialog		fub	—	T2	fub	fub	—	la tavolozza e il menu del disegno	Finestra di dialogo menu
 interfaccia	ui.widthPointEdit	Width Point Edit…		pennelli	F2	T17	da fare	finestra	famiglia		Modifica punto di larghezza…
-interfaccia	ui.corners	Corners…		forme	F1	T13	da fare	finestra	famiglia	aspetta T27	Angoli…
+interfaccia	ui.corners	Corners…		forme	F1	T13	fatto	finestra	famiglia	tipo e raggio di tutti gli angoli del primo tracciato scelto (senza la Selezione diretta degli angoli); OK manda object.setLiveShape	Angoli…
 interfaccia	ui.simplifyAuto	Auto-Simplify		tracciati	F1	T12	fatto	menu/oggetto/tracciato	famiglia	senza finestra: il comando del motore con auto (T12 giro finestre)	Semplifica automaticamente
 interfaccia	ui.smoothAuto	Auto-Smooth		tracciati	F1	T12	fatto	menu/oggetto/tracciato	famiglia	senza finestra: il comando del motore con auto (T12 giro finestre)	Smussa automaticamente
 interfaccia	ui.simplifyMoreOptions	More Options		tracciati	F1	T12	da fare	finestra	famiglia	le altre opzioni chiedono tolleranza e angolo, e il catalogo ha una sola finestra per comando: serve una seconda finestra per object.path.simplify (T12 giro finestre)	Altre opzioni

@@ -212,3 +212,60 @@ fn l_inclinazione_attorno_al_punto_della_scena_lo_tiene_fermo() {
         .max(r["points"][8][0].as_f64().expect("x"));
     assert!((destra - (200.0 + spinta)).abs() < 1e-2, "{r}");
 }
+
+/// La lettura della forma scelta (`liveShape`): gli angoli nella scena, anche con la radice scalata.
+fn forma(d: &mut fub_disegno::motore::Disegno, scelti: &[&str]) -> Value {
+    let lettura = comando(d, "document.inspect", scelti, json!({"depth": 0}))
+        .reading
+        .expect("c'è una lettura");
+    lettura.get("liveShape").cloned().unwrap_or(Value::Null)
+}
+
+#[test]
+fn gli_angoli_tondi_stanno_nella_scena_e_si_riaprono() {
+    let (mut d, _) = apri(SCALATO);
+    let prima = forma(&mut d, &["oa1a1a1a1"]);
+    assert_eq!(prima["shape"], Value::Null, "{prima}");
+    assert!(vicino(&prima["corners"]["radius"], 0.0), "{prima}");
+    // Il raggio 10 è della scena: nel documento del motore (scala 2) è 20.
+    let ops = ops_di(&comando(
+        &mut d,
+        "object.setLiveShape",
+        &["oa1a1a1a1"],
+        json!({"radius": 10}),
+    ));
+    let testo = common::applica::applica(SCALATO, &ops).expect("la scena accetta");
+    assert!(testo.contains("vectorcraft:recipe"), "{testo}");
+    assert!(testo.contains("M110 100 L190 100"), "{testo}");
+    let (mut d, aperto) = apri(&testo);
+    assert!(aperto.losses.is_empty(), "{:?}", aperto.losses);
+    let dopo = forma(&mut d, &["oa1a1a1a1"]);
+    assert_eq!(dopo["shape"], "path", "{dopo}");
+    assert!(vicino(&dopo["corners"]["radius"], 10.0), "{dopo}");
+    assert_eq!(dopo["corners"]["kind"], "round", "{dopo}");
+    assert_eq!(
+        dopo["corners"]["radii"].as_array().map(Vec::len),
+        Some(4),
+        "{dopo}"
+    );
+    // Un angolo solo, smussato.
+    let ops = ops_di(&comando(
+        &mut d,
+        "object.setLiveShape",
+        &["oa1a1a1a1"],
+        json!({"radius": 5, "kind": "chamfer", "corners": [0]}),
+    ));
+    let testo = common::applica::applica(&testo, &ops).expect("la scena accetta");
+    let (mut d, _) = apri(&testo);
+    let dopo = forma(&mut d, &["oa1a1a1a1"]);
+    assert_eq!(dopo["corners"]["radius"], Value::Null, "{dopo}");
+    assert!(vicino(&dopo["corners"]["radii"][0], 5.0), "{dopo}");
+    assert_eq!(dopo["corners"]["kinds"][0], "chamfer", "{dopo}");
+    assert_eq!(dopo["corners"]["kinds"][1], "round", "{dopo}");
+}
+
+#[test]
+fn senza_un_tracciato_non_c_e_forma() {
+    let (mut d, _) = apri(SCALATO);
+    assert_eq!(forma(&mut d, &[]), Value::Null);
+}

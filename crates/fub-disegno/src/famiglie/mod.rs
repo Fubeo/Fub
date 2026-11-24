@@ -1318,7 +1318,8 @@ pub(crate) fn esegui(
         return Ok(rifiuta(motivo));
     }
     // Ispeziona documento porta anche il riquadro della selezione del pannello Trasforma, che
-    // il motore sa con le sue preferenze (`nucleo::riquadro_della_selezione`).
+    // il motore sa con le sue preferenze (`nucleo::riquadro_della_selezione`), e le proprietà
+    // della forma scelta (`nucleo::forma_della_selezione`).
     let mut risultato = risultato;
     if riga.id == nucleo::ISPEZIONA_DOCUMENTO {
         if let (Some(campi), Some(riquadro)) = (
@@ -1326,6 +1327,12 @@ pub(crate) fn esegui(
             nucleo::riquadro_della_selezione(&banco.sessione, &selezione, copia.radice),
         ) {
             campi.insert("transformBox".into(), riquadro);
+        }
+        if let (Some(campi), Some(forma)) = (
+            risultato.as_object_mut(),
+            nucleo::forma_della_selezione(&banco.sessione, &selezione, copia.radice),
+        ) {
+            campi.insert("liveShape".into(), forma);
         }
     }
     // I comandi dei tracciati spostano punti: una matrice li spiega solo se

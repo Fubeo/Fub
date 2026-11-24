@@ -43,9 +43,22 @@ ed Ellisse esistono anche nel Semplice, e nella stessa tendina portano
 Le griglie rettangolare e polare (T13 giro 7) stanno nello stesso gruppo: un
 trascinamento crea un gruppo di tracciati e di linee, con i divisori come linee
 normali; la finestra chiede i divisori orizzontali e verticali (o circolari e
-radiali), le inclinazioni in per cento e la cornice esterna. Le forme dal vivo,
-cioè con angoli e lati che si cambiano dopo, aspettano ancora la ricetta del
-disegno (T27).
+radiali), le inclinazioni in per cento e la cornice esterna.
+
+Le forme restano vive, come in VectorCraft: angoli e lati si cambiano anche
+dopo, dalla sezione Trasforma (`object.setLiveShape`). Un rettangolo ha il
+raggio degli angoli, uno per tutti col collegamento acceso (la preferenza
+`singleCornerRadius`, di serie accesa) o uno per angolo; un poligono ha i lati,
+l'angolo, il tipo e il raggio degli angoli, il raggio, la lunghezza del lato e
+«Rendi i lati uguali» (acceso quando una scala diversa in larghezza e altezza li
+ha resi diversi); un'ellisse ha l'inizio e la fine dello spicchio e «Inverti
+spicchio». Un tracciato con angoli, per esempio un rettangolo di un altro
+programma, mostra il tipo (arrotondato, arrotondato inverso, smussato) e il
+raggio degli angoli; la voce Angoli… della ricerca dei comandi (`ui.corners`) apre la stessa scelta
+in una finestra. I parametri vanno nella ricetta del disegno, accanto al
+tracciato, e tornano alla riapertura; le misure sono quelle della scena anche
+quando la radice del file è scalata. La Selezione diretta dei singoli angoli di
+VectorCraft non c'è: si cambiano tutti, o uno per volta nel rettangolo.
 
 La Forma parametrica (`parametricShape`, un'aggiunta di VectorCraft) sta nello
 stesso gruppo ed è una forma viva: un trascinamento dal centro la disegna,

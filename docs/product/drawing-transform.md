@@ -151,7 +151,9 @@ antiorario, e parte solo se cambia; l'inclinazione si scrive di quanto
 inclinare, da 0 (fra -90° e 90°, esclusi). Ci sono gli angoli pronti (rotazione
 ogni 45°, inclinazione ogni 15° fino a 60°), Rifletti in orizzontale e in
 verticale, Reimposta riquadro e le caselle Scala angoli e Scala tratti, che
-cambiano le preferenze del motore. Senza una selezione i comandi sono spenti;
+cambiano le preferenze del motore. Sotto ci sono le proprietà della forma viva
+scelta (rettangolo, poligono, ellisse, angoli di un tracciato: vedi
+`drawing-shapes.md`), lette da Ispeziona documento (`liveShape`). Senza una selezione i comandi sono spenti;
 il lucchetto e le caselle no. Senza motore i campi mostrano le misure della
 vista, nell'unità del pannello. Nel Disegno completo «Posizione e misure» e i
 gruppi Distribuisci non ci sono: li dà questa sezione e la sezione Allinea.

@@ -138,7 +138,8 @@ impl StatoFamiglia for Stato {
     }
 }
 
-/// Ispeziona documento, la lettura a cui [`riquadro_della_selezione`] aggiunge `transformBox`.
+/// Ispeziona documento, la lettura a cui [`riquadro_della_selezione`] aggiunge `transformBox` e
+/// [`forma_della_selezione`] `liveShape`.
 pub(super) const ISPEZIONA_DOCUMENTO: &str = "document.inspect";
 
 /// Il riquadro della selezione `scelti` come lo mostra il pannello Trasforma di VectorCraft
@@ -171,6 +172,70 @@ pub(super) fn riquadro_della_selezione(sessione: &Session, scelti: &[NodeId], ra
         "height": numero(riquadro.rect.height() / scala),
         "points": punti,
     }))
+}
+
+/// Le proprietà della forma del primo oggetto scelto, come le mostra il pannello Trasforma di
+/// VectorCraft (`live_shape_rows`) e la finestra Angoli: `shape` (`rectangle`, `polygon`,
+/// `ellipse`, `line`, `path` per un tracciato con gli angoli tagliati, `null` per un tracciato
+/// qualunque); `corners` se il tracciato ha angoli (`radius` e `kind` comuni a tutti, `null` se
+/// diversi; `radii` e `kinds` uno per angolo, nell'ordine di `object.setLiveShape`; `relative` se i
+/// raggi sono frazioni); per il poligono `sides`, `angle` (antiorario), `radius`, `sideLength` e
+/// `sidesEqual`; per l'ellisse `pie` (inizio e fine in gradi). Le lunghezze tornano alla scena con
+/// la scala della radice, come il riquadro. `None` senza un tracciato scelto.
+pub(super) fn forma_della_selezione(sessione: &Session, scelti: &[NodeId], radice: Affine) -> Option<Value> {
+    use vectorcraft_doc::{LiveCorners, LiveShape};
+    let primo = *scelti.first()?;
+    let nodo = sessione.doc().ok()?.doc.node(primo)?;
+    let NodeKind::Path { live, .. } = &nodo.kind else { return None };
+    let scala = radice.determinant().abs().sqrt();
+    if !(scala.is_finite() && scala > 0.0) {
+        return None;
+    }
+    let numero = |x: f64| serde_json::Number::from_f64(x).map_or(Value::Null, Value::Number);
+    let tipo = |k: vectorcraft_geom::shapes::CornerKind| serde_json::to_value(k).unwrap_or(Value::Null);
+    let mut forma = serde_json::Map::new();
+    let nome = match live.as_deref() {
+        None => Value::Null,
+        Some(LiveShape::Rectangle { .. }) => "rectangle".into(),
+        Some(LiveShape::Polygon { .. }) => "polygon".into(),
+        Some(LiveShape::Ellipse { .. }) => "ellipse".into(),
+        Some(LiveShape::Line { .. }) => "line".into(),
+        Some(LiveShape::Path { .. }) => "path".into(),
+    };
+    forma.insert("shape".into(), nome);
+    if let Some(angoli) = LiveCorners::of(nodo) {
+        let relativi = angoli.radii_relative();
+        // Un raggio relativo è una frazione: resta com'è.
+        let lunghezza = |r: f64| numero(if relativi { r } else { r / scala });
+        let tutti = angoli.all();
+        let (raggio, specie) = angoli.style(&tutti);
+        forma.insert(
+            "corners".into(),
+            serde_json::json!({
+                "radius": raggio.map_or(Value::Null, lunghezza),
+                "kind": specie.map_or(Value::Null, tipo),
+                "radii": tutti.iter().map(|k| lunghezza(angoli.radius(*k))).collect::<Vec<_>>(),
+                "kinds": tutti.iter().map(|k| tipo(angoli.kind(*k))).collect::<Vec<_>>(),
+                "relative": relativi,
+            }),
+        );
+    }
+    match live.as_deref() {
+        Some(l @ LiveShape::Polygon { sides, .. }) => {
+            let raggio = l.polygon_radius();
+            let lato = raggio.map(|r| 2.0 * r * (std::f64::consts::PI / f64::from((*sides).max(3))).sin());
+            forma.insert("sides".into(), Value::from(*sides));
+            forma.insert("angle".into(), l.polygon_angle().map_or(Value::Null, numero));
+            forma.insert("radius".into(), raggio.map_or(Value::Null, |r| numero(r / scala)));
+            forma.insert("sideLength".into(), lato.map_or(Value::Null, |r| numero(r / scala)));
+            forma.insert("sidesEqual".into(), Value::Bool(l.polygon_sides_equal()));
+        }
+        Some(LiveShape::Ellipse { pie, .. }) => {
+            forma.insert("pie".into(), Value::Array(vec![numero(pie.0), numero(pie.1)]));
+        }
+        _ => {}
+    }
+    Some(Value::Object(forma))
 }
 
 /// Il tratto di `n` si allinea dentro o fuori: come `stroke_mixed` di VectorCraft, guarda le forme

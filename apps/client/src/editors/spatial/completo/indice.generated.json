@@ -3427,6 +3427,22 @@
     },
     {
       "fonte": "motore",
+      "id": "object.setLiveShape",
+      "chiamata": {
+        "comando": "disegno.object.setLiveShape"
+      },
+      "etichetta": {
+        "it": "Proprietà forma dinamica",
+        "en": "Live Shape Properties"
+      },
+      "posto": "ispettore/design",
+      "famiglia": "forme",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "object.setProps",
       "chiamata": {
         "comando": "disegno.object.setProps"
@@ -6859,6 +6875,22 @@
       },
       "posto": "menu/modifica/colori",
       "famiglia": "colore",
+      "tasto": null,
+      "effetto": "mostra",
+      "finestra": true
+    },
+    {
+      "fonte": "interfaccia",
+      "id": "ui.corners",
+      "chiamata": {
+        "client": "ui.corners"
+      },
+      "etichetta": {
+        "it": "Angoli…",
+        "en": "Corners…"
+      },
+      "posto": "finestra",
+      "famiglia": "forme",
       "tasto": null,
       "effetto": "mostra",
       "finestra": true
