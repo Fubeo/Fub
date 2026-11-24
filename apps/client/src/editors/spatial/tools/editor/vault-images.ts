@@ -383,7 +383,7 @@ export function installVaultImages(ctx: EditorContext): void {
     }
     // Col Completo aperto e il motore presente i tasti di una lettera sono quelli di
     // VectorCraft: le lettere, le cifre e i riflessi degli strumenti di Fub non valgono.
-    const strumentoDelMotore = completo?.strumentoDelTasto?.(`${event.shiftKey ? "Shift-" : ""}${event.key.toLowerCase()}`) ?? null;
+    const strumentoDelMotore = completo?.strumentoDelTasto?.(event) ?? null;
     if (comeVectorCraft) {
       // Come `shortcuts.rs` di VectorCraft: Esc e Invio vanno prima allo strumento,
       // Canc toglie i punti scelti, la lettera di uno strumento lo sceglie. Ogni altro

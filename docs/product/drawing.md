@@ -178,7 +178,8 @@ comando è un passo di annulla, e la selezione segue ciò che ha fatto.
   (`Ctrl+]`), indietro di un posto (`Ctrl+[`) o in secondo piano
   (`Ctrl+Maiusc+[`), nel livello di ciascun oggetto. Sul foglio fanno lo
   stesso `PagSu` e `PagGiù`, con `Maiusc` agli estremi. Le parentesi valgono
-  per posizione: su una tastiera italiana sono `è` e `+`. Il menu spegne la
+  per posizione: su una tastiera italiana sono `è` e `+`, e il menu le scrive
+  così ([tasti del motore](drawing-keys.md)). Il menu spegne la
   voce che non cambierebbe niente.
 - **Allinea e distribuisci** allinea i bordi o i centri della selezione al
   suo riquadro, o alla pagina se l'oggetto è uno solo; distribuire lascia

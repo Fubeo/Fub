@@ -12,7 +12,8 @@ import { composingKey } from "../../../kit/ime";
 import { isWritingField } from "../../../ui/field-history";
 import type { Lifetime } from "../../../ui/lifetime";
 import type { Indice, VoceIndice } from "./indice";
-import { decidiTasto, risolviTasti, tastoStrumento, TASTI_DELLA_FINESTRA, type ModificheTasti, type Piattaforma, type RegolaTasti } from "./tasti";
+import { decidiTasto, risolviTasti, tastiPremuti, tastoStrumento, TASTI_DELLA_FINESTRA, type ModificheTasti, type Piattaforma, type RegolaTasti } from "./tasti";
+import { impara } from "./tastiera";
 
 export interface OpzioniMontaggioTasti {
   /// La radice dell'editor: i tasti si ascoltano lì. `null` senza editor: la
@@ -56,15 +57,14 @@ function tastoDiStrumento(voce: VoceIndice): boolean {
   return "strumento" in voce.chiamata && STRUMENTI_CON_TASTO.has(voce.id);
 }
 
-/// Il tasto senza Ctrl, Cmd o Alt di un evento nella forma di `tastoStrumento`
-/// (`d`, `Shift-x`, `/`), o `null` con un modificatore. Maiusc conta solo su una
-/// lettera: `/` si scrive con Maiusc su una tastiera italiana.
-function tastoNudo(event: KeyboardEvent): string | null {
-  if (event.ctrlKey || event.metaKey || event.altKey) return null;
-  if (event.key === "Delete" || event.key === "Backspace") return "Delete";
-  if ([...event.key].length !== 1) return null;
-  const lettera = /^[a-z]$/i.test(event.key);
-  return `${lettera && event.shiftKey ? "Shift-" : ""}${event.key.toLowerCase()}`;
+/// I tasti senza Ctrl, Cmd o Alt di un evento nella forma di `tastoStrumento`
+/// (`d`, `Shift-x`, `/`), da cercare in ordine: il carattere, poi il segno del
+/// tasto fisico (`tastiPremuti`: `/` è il tasto del meno della tastiera italiana).
+/// Vuoto con un modificatore.
+function tastiNudi(event: KeyboardEvent): string[] {
+  if (event.ctrlKey || event.metaKey || event.altKey) return [];
+  if (event.key === "Delete" || event.key === "Backspace") return ["Delete"];
+  return tastiPremuti(event);
 }
 
 /// I comandi del motore con un tasto di un solo carattere nell'indice (`D`, `X`,
@@ -121,6 +121,7 @@ export function montaTasti(opzioni: OpzioniMontaggioTasti): MontaggioTasti {
   chiedi();
 
   const alTasto = (event: KeyboardEvent): void => {
+    impara(event);
     if (event.defaultPrevented || opzioni.attivo?.() === false) return;
     if (comandi === null || regola === null) {
       // Senza indice il tasto non parte: lo chiede di nuovo, e il tasto dopo parte.
@@ -138,12 +139,14 @@ export function montaTasti(opzioni: OpzioniMontaggioTasti): MontaggioTasti {
       },
       opzioni.piattaforma,
     );
-    const nudo = tastoNudo(event);
+    const libero = !stato.vuoleTesto && !stato.componendo && !composingKey(event) && !isWritingField(event.target);
     const comando =
       decisione.tipo === "esegue"
         ? decisione.comando
-        : nudo !== null && !stato.vuoleTesto && !stato.componendo && !composingKey(event) && !isWritingField(event.target)
-          ? (nudi.get(nudo) ?? null)
+        : libero
+          ? (tastiNudi(event)
+              .map((nudo) => nudi.get(nudo))
+              .find((id) => id !== undefined) ?? null)
           : null;
     if (comando === null) return;
     const voce = comandi.get(comando);

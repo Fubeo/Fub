@@ -52,12 +52,18 @@ Un tasto **non parte** mentre si scrive: in un campo di testo, mentre un IME
 compone, e con una lettera, una cifra o un segno quando lo strumento vuole il
 testo. Un tasto con `Ctrl`, `⌘` o `Alt` parte anche allora.
 
-Un tasto con `Maiusc` su un segno o una cifra si riconosce dalla sua
-posizione, come la tastiera americana su cui VectorCraft lo scrive:
-`Ctrl+Maiusc+.` (Ingrandisci il testo) è il tasto del punto anche se con
-Maiusc dà `:`, e `Ctrl+Maiusc+]` (Porta in primo piano) è, sulla tastiera
-italiana, il tasto `+`. Il menu scrive ancora il segno americano. Su macOS `Ctrl` e `⌘` restano quelli di
-sempre: `⌘` è il tasto di Fub, `Ctrl` è Control.
+Un tasto con un segno vale anche per la sua **posizione**, quella della
+tastiera americana su cui VectorCraft lo scrive, con o senza `Maiusc`. Prima
+conta il carattere che il tasto scrive, poi la posizione. Sulla tastiera
+italiana `Ctrl+[` (Indietro di un posto) è `Ctrl+È`, `Ctrl+]` è `Ctrl++`,
+`Ctrl+/` (Aggiungi riempimento) è `Ctrl+-`, `Ctrl+Maiusc+.` è il tasto del
+punto anche se con Maiusc dà `:`, Segmento (`\`) è `Ù`, `/` (Nessun colore) è
+il tasto del meno; `+` (Aggiungi punto) resta il tasto `+`, perché lo scrive.
+Il menu ≡ e la ricerca dei comandi scrivono il segno che il tasto porta sulla
+tastiera di chi disegna: lo impara da ogni tasto premuto, o lo chiede al
+sistema dove la WebView lo dice; prima, per la lingua italiana, usa la
+tastiera italiana, e per le altre lingue il segno americano. Su macOS `Ctrl`
+e `⌘` restano quelli di sempre: `⌘` è il tasto di Fub, `Ctrl` è Control.
 
 Il menu ≡ e la ricerca dei comandi mostrano il tasto che fa partire il comando, cioè lo
 stesso di questa regola: un comando il cui tasto è di Fub, o che ha perso un

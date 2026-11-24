@@ -16,6 +16,7 @@
 import type { OptionItem } from "../../../../../kit/options-bar";
 import { openLifetime, type Lifetime, type Teardown } from "../../../../../ui/lifetime";
 import type { DrawingToolState } from "../../../../../host/contract";
+import type { KeyChord } from "../../../../../ui/commands";
 import type { FilaOpzioni } from "../../../completo/opzioni";
 import type { EditorContext } from "../context";
 
@@ -24,8 +25,9 @@ export interface CompletoMotore {
   preparaStrumento(strumento: string): Promise<boolean>;
   /// Canc coi punti scelti: li toglie, e dice `true`; senza punti `false`.
   cancellaPunti?(): boolean;
-  /// Lo strumento di VectorCraft che un tasto di strumento sceglie (`v`, `Shift-b`); `null` se nessuno.
-  strumentoDelTasto?(premuto: string): string | null;
+  /// Lo strumento di VectorCraft che il tasto premuto sceglie (`v`, `Shift-b`, un segno per il
+  /// suo tasto fisico); `null` se nessuno.
+  strumentoDelTasto?(evento: KeyChord): string | null;
   /// Il motore c'è e il suo indice è arrivato: i tasti e gli strumenti sono quelli di VectorCraft.
   conMotore?(): boolean;
   /// Fa partire il comando del motore `id` coi suoi valori, senza la sua finestra (le frecce: `object.nudge`).

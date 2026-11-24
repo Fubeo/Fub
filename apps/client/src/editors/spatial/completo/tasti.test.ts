@@ -356,8 +356,9 @@ describe("i tasti degli strumenti di VectorCraft nel Completo", () => {
     expect(tastoStrumento("Shift+B")).toBe("Shift-b");
     expect(tastoStrumento("+")).toBe("+");
     expect(tastoStrumento("\\")).toBe("\\");
-    // Maiusc con un segno dipende dalla tastiera; con Ctrl o Alt è un comando, non uno strumento.
-    expect(tastoStrumento("Shift+~")).toBeNull();
+    // Maiusc con un segno vale per il tasto fisico (`tastiera.ts`); con Ctrl o Alt è un
+    // comando, non uno strumento.
+    expect(tastoStrumento("Shift+~")).toBe("Shift-`");
     expect(tastoStrumento("Cmd+K")).toBeNull();
     expect(tastoStrumento("Alt+V")).toBeNull();
     expect(tastoStrumento(null)).toBeNull();

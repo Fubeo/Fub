@@ -18,6 +18,7 @@
 import { matchesBinding, parseChords, splitAlternatives, type KeyChord } from "../../../ui/commands";
 import { SHELL_KEYS } from "../../../ui/shell-keys.generated";
 import { COPY_STYLE_BINDING, IMAGE_BINDING, PASTE_STYLE_BINDING } from "../tools/editor/constants";
+import { postoDelSegno, segnoAmericano } from "./tastiera";
 
 /// Il sistema per cui si confrontano i tasti: su `mac` Cmd e Control sono due
 /// tasti, altrove `Ctrl` e `Mod` sono lo stesso (come `onPlatform` della shell).
@@ -261,46 +262,61 @@ export function decidiTasto(
 ): DecisioneTasto {
   if (stato.inCampo || stato.componendo) return { tipo: "passa" };
   if (stato.vuoleTesto && scrive(evento)) return { tipo: "passa" };
-  const fisico = segnoFisico(evento);
+  // Prima il carattere, poi la posizione: un tasto che scrive il segno di un comando lo fa
+  // partire anche se per posizione sarebbe un altro.
   for (const [comando, tasto] of regola.tasti) {
     if (matchesBinding(evento, tasto, piattaforma)) return { tipo: "esegue", comando };
-    if (fisico !== null && matchesBinding(fisico, tasto, piattaforma)) return { tipo: "esegue", comando };
+  }
+  const fisico = segnoFisico(evento);
+  if (fisico === null) return { tipo: "passa" };
+  for (const [comando, tasto] of regola.tasti) {
+    if (matchesBinding(fisico, tasto, piattaforma)) return { tipo: "esegue", comando };
   }
   return { tipo: "passa" };
 }
 
-/// Il segno di ogni tasto fisico (`KeyboardEvent.code`) sulla tastiera
-/// americana, quella su cui VectorCraft scrive i suoi tasti.
-const SEGNI_DEI_TASTI: Readonly<Record<string, string>> = {
-  Digit0: "0", Digit1: "1", Digit2: "2", Digit3: "3", Digit4: "4",
-  Digit5: "5", Digit6: "6", Digit7: "7", Digit8: "8", Digit9: "9",
-  Minus: "-", Equal: "=", BracketLeft: "[", BracketRight: "]", Backslash: "\\",
-  Semicolon: ";", Quote: "'", Backquote: "`", Comma: ",", Period: ".", Slash: "/",
-};
-
-/// Il tasto premuto con Maiusc come lo scrive il motore: il segno del tasto
-/// fisico senza Maiusc (Ctrl+Maiusc+. dà `>` sulla tastiera americana e `:` su
-/// quella italiana, ma è sempre il tasto del punto). `null` senza Maiusc, o su
-/// un tasto che non è un segno: lì vale il carattere, come per la shell.
+/// Il tasto premuto letto per posizione, come lo scrive il motore: il segno americano del tasto
+/// fisico (`tastiera.ts`), col Maiusc com'è (Ctrl+Maiusc+. dà `>` sulla tastiera americana e `:`
+/// su quella italiana, ma è sempre il tasto del punto; Ctrl+È è Ctrl+[). `null` su un tasto che
+/// non è un segno, o che dà già il segno americano: lì vale il carattere, come per la shell.
 function segnoFisico(evento: KeyChord): KeyChord | null {
-  if (!evento.shiftKey || evento.code === undefined) return null;
-  const segno = SEGNI_DEI_TASTI[evento.code];
-  return segno === undefined || segno === evento.key ? null : { ...evento, key: segno };
+  const segno = segnoAmericano(evento);
+  return segno === null || segno === evento.key ? null : { ...evento, key: segno };
 }
 
 /// Il tasto di uno strumento del motore nella forma dei tasti degli strumenti di
 /// Fub (`toolForKey`): una lettera o un segno, con o senza Maiusc (`v`, `Shift-b`,
 /// `+`, `\`). Il catalogo di VectorCraft scrive `V`, `Shift+B`. Un tasto con Ctrl,
-/// Cmd o Alt non è un tasto di strumento: `null`. Con Maiusc vale solo una
-/// lettera (Maiusc+~ dipende dalla tastiera), come in `tastoFub`.
+/// Cmd o Alt non è un tasto di strumento: `null`. Un segno vale per il suo tasto
+/// fisico con Maiusc (`Shift+~` è `Shift-\``); con Maiusc, oltre ai segni, vale solo una
+/// lettera.
 export function tastoStrumento(tastoMotore: string | null | undefined): string | null {
   const testo = (tastoMotore ?? "").trim();
   if (testo === "" || /\s/.test(testo)) return null;
   const maiuscolo = /^Shift\+(?=.)/.test(testo);
-  const resto = maiuscolo ? testo.slice("Shift+".length) : testo;
+  let resto = maiuscolo ? testo.slice("Shift+".length) : testo;
   if ([...resto].length !== 1) return null;
-  if (maiuscolo && !/[A-Za-z]/.test(resto)) return null;
+  // Con Maiusc un segno vale per il suo tasto fisico: Maiusc+~ è Maiusc sul tasto di `` ` ``.
+  // Senza, il segno è il carattere (`+`, `\`), che `tastiPremuti` cerca prima della posizione.
+  const posto = maiuscolo && !/[A-Za-z]/.test(resto) ? postoDelSegno(resto) : null;
+  if (posto !== null) resto = posto.segno;
+  else if (maiuscolo && !/[A-Za-z]/.test(resto)) return null;
   return `${maiuscolo ? "Shift-" : ""}${resto.toLowerCase()}`;
+}
+
+/// I tasti premuti senza Ctrl, Cmd o Alt nella forma di `tastoStrumento`, da cercare in
+/// quest'ordine: prima il carattere (una lettera col suo Maiusc, ogni altro carattere com'è:
+/// il `+` della tastiera italiana), poi il segno del tasto fisico col suo Maiusc (`tastiera.ts`:
+/// il tasto del meno della tastiera italiana è `/`, Maiusc sul tasto di `` ` `` è `Shift-\``).
+/// Vuoto con un modificatore o su un tasto che non scrive.
+export function tastiPremuti(evento: KeyChord): string[] {
+  if (evento.ctrlKey || evento.metaKey || evento.altKey) return [];
+  if ([...evento.key].length !== 1) return [];
+  const lettera = /^[a-z]$/i.test(evento.key);
+  const carattere = `${lettera && evento.shiftKey ? "Shift-" : ""}${evento.key.toLowerCase()}`;
+  const segno = lettera ? null : segnoAmericano(evento);
+  const fisico = segno === null ? null : `${evento.shiftKey ? "Shift-" : ""}${segno}`;
+  return fisico === null || fisico === carattere ? [carattere] : [carattere, fisico];
 }
 
 /// Uno strumento del motore come lo dà l'indice: il suo id e il tasto del catalogo.

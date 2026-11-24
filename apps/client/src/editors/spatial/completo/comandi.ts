@@ -13,7 +13,8 @@
 
 import type { DrawingCommandInfo, DrawingDisabledReason } from "../../../host/contract";
 import { resolvedLanguage } from "../../../i18n/strings";
-import { displayBinding } from "../../../ui/commands";
+import { displayBinding, keyboardPlatform } from "../../../ui/commands";
+import { scrittaDelTasto } from "./tastiera";
 import type { MenuItem } from "../../../ui/menu";
 import { t, type DrawKey } from "../strings";
 import { FILE_VISUALIZZA } from "../tools/editor/chrome/visualizza";
@@ -194,10 +195,11 @@ export function percorsoPosto(posto: string): string {
 /// Il tasto che una riga mostra: quello che fa partire il comando, come lo dà la
 /// regola dei tasti (`tasti.ts`), scritto come gli altri tasti di Fub. Nessuno
 /// finché la regola non c'è (l'indice non è arrivato), o se il tasto dell'indice
-/// è coperto da un tasto di Fub o perso in un conflitto: la riga non lo promette.
+/// è coperto da un tasto di Fub o perso in un conflitto: la riga non lo promette. Un segno si
+/// legge come lo porta il suo tasto fisico sulla tastiera di chi scrive (`tastiera.ts`).
 export function tastoMostrato(regola: RegolaTasti | null, id: string): string | undefined {
   const tasto = regola === null ? null : tastoDelComando(regola, id);
-  return tasto === null ? undefined : displayBinding(tasto);
+  return tasto === null ? undefined : scrittaDelTasto(displayBinding(tasto), keyboardPlatform(globalThis.navigator?.platform ?? "") === "mac");
 }
 
 /// Le file di ≡ › Selezione › Uguale (K6 T15, giro 6): prima gli oggetti, nell'ordine dell'indice, poi il testo
