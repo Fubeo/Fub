@@ -3620,6 +3620,7 @@
       },
       "dopo": "pila-espandi.svg"
     },
+    {"id": "effect.dialog", "fonte": "interfaccia", "prova": "apps/client/src/editors/spatial/completo/famiglie/effetti/dialogo.test.ts"},
     {
       "id": "effect.applyLast",
       "fonte": "interfaccia",

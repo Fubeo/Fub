@@ -6369,6 +6369,22 @@
     },
     {
       "fonte": "interfaccia",
+      "id": "effect.dialog",
+      "chiamata": {
+        "client": "effect.dialog"
+      },
+      "etichetta": {
+        "it": "Effetto…",
+        "en": "Effect…"
+      },
+      "posto": "menu/effetto",
+      "famiglia": "effetti",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "interfaccia",
       "id": "effect.last",
       "chiamata": {
         "client": "effect.last"

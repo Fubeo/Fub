@@ -208,6 +208,15 @@ spostamento è spento, come in VectorCraft. In fondo, **Espandi aspetto** (anche
 nel menu Oggetto) rende gli effetti grafica normale e toglie la ricetta.
 Ogni comando è un passo solo di Annulla.
 
+## Un effetto già applicato
+
+Se il primo oggetto scelto ha già nella sua pila l'effetto scelto dal menu,
+Fub chiede prima che cosa fare: **Modifica** apre la finestra di quell'effetto
+con i valori che ha, e OK li cambia al loro posto (con più oggetti scelti, in
+ognuno che ha l'effetto nello stesso posto); **Aggiungi nuovo** apre la finestra
+con i valori di serie e ne aggiunge un altro. Un effetto di un
+riempimento o di un contorno si cambia dalla sezione Aspetto.
+
 ## Ultimo effetto
 
 Nel menu Effetto, **Applica ultimo effetto** rifà l'ultimo effetto applicato

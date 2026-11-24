@@ -23,6 +23,11 @@
     },
     {
       "fonte": "interfaccia",
+      "id": "effect.dialog",
+      "campi": []
+    },
+    {
+      "fonte": "interfaccia",
       "id": "effect.last",
       "campi": []
     },

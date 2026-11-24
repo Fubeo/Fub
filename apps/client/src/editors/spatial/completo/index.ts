@@ -51,6 +51,7 @@ import { registraSimboli, simboloCorrente as nuovoSimboloCorrente, type SimboloC
 import { registraTesto } from "./testo-sezioni";
 import type { Teardown } from "../../../ui/lifetime";
 import { languageCurrent } from "../../../i18n/strings";
+import { confirm } from "../../../platform/confirm";
 import type { ToolSpec } from "../tools/registry";
 import { openLifetime, type Lifetime } from "../../../ui/lifetime";
 import type { CassettoOptions } from "../tools/editor/chrome/drawer";
@@ -441,6 +442,23 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila" | "e
     };
     apriFinestraDatiGrafico(creaPortaDatiGrafico(dipendenze, parola("dati:titolo")), parola, ctx.life);
   };
+  // Le opzioni di un effetto già applicato: la sua finestra coi valori che ha, e OK manda
+  // `effect.setParams` coi soli valori cambiati (la finestra non legge ogni valore, un colore, e
+  // uno che non tocca resta com'è). La usano la sezione Aspetto e la domanda di «Effetto…».
+  const modificaEffetto = (voce: VoceIndice, posto: Readonly<Record<string, unknown>>, params: Readonly<Record<string, unknown>>): Promise<boolean> => {
+    if (chiuso) return Promise.resolve(false);
+    const iniziali = Object.fromEntries(
+      Object.entries(params).filter((coppia): coppia is [string, string | number | boolean] => ["string", "number", "boolean"].includes(typeof coppia[1])),
+    );
+    return eseguiVoce(voce, dipendenze, {
+      id: "disegno.effect.setParams",
+      iniziali,
+      valore: (valori, partenza) => ({
+        ...posto,
+        params: Object.fromEntries(Object.entries(valori).filter(([nome, valore]) => valore !== partenza[nome])),
+      }),
+    });
+  };
   const lancia = async (scelta: VoceIndice): Promise<void> => {
     let voce = scelta;
     // «Modalità di disegno» (K6 T11): la voce senza modo apre la scelta; il comando parte col modo scelto.
@@ -465,6 +483,30 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila" | "e
         return;
       }
       voce = { ...voce, chiamata: { ...voce.chiamata, valore: posto } } as VoceIndice;
+    }
+    // Effetto… (`effect.dialog` di VectorCraft): un effetto che la pila del primo oggetto scelto ha
+    // già chiede prima se modificarlo (la sua finestra coi valori che ha, `effect.setParams`, su
+    // ogni oggetto che lo ha nello stesso posto) o aggiungerne un altro (la finestra coi valori di
+    // serie). Rifare l'ultimo effetto non chiede: rifà.
+    if (voce.fonte === "effetto" && voce.finestra && !rifacendo) {
+      const esito = await chiama(dipendenze, "disegno.effect.list", {}, false).catch(() => null);
+      const pile = esito === null || esito.refused !== null ? null : pileDaLettura(esito.reading);
+      const prima = pile?.[0];
+      const index = prima === undefined ? -1 : prima.effetti.findIndex((effetto) => effetto.id === voce.id);
+      if (chiuso) return;
+      if (prima !== undefined && index >= 0) {
+        const effetto = etichettaDi(voce).replace(/…$/u, "");
+        const modifica = await confirm(t("draw.effectExists.question", { effetto }), {
+          title: t("draw.effectExists.title"),
+          okLabel: t("draw.effectExists.edit"),
+          cancelLabel: t("draw.effectExists.addNew"),
+        });
+        if (chiuso) return;
+        if (modifica) {
+          await modificaEffetto(voce, { index, item: null, ...((pile?.length ?? 0) > 1 ? { aligned: true } : {}) }, prima.effetti[index]!.params);
+          return;
+        }
+      }
     }
     const chiave = JSON.stringify([voce.id, voce.chiamata, dipendenze.selezione()]);
     if (inVolo.has(chiave)) return;
@@ -536,18 +578,7 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila" | "e
     haOpzioni: (id) => effettiDellIndice.get(id)?.finestra === true,
     opzioni: (id, posto, params) => {
       const voce = effettiDellIndice.get(id);
-      if (voce === undefined || chiuso) return;
-      const iniziali = Object.fromEntries(
-        Object.entries(params).filter((coppia): coppia is [string, string | number | boolean] => ["string", "number", "boolean"].includes(typeof coppia[1])),
-      );
-      void eseguiVoce(voce, dipendenze, {
-        id: "disegno.effect.setParams",
-        iniziali,
-        valore: (valori, partenza) => ({
-          ...posto,
-          params: Object.fromEntries(Object.entries(valori).filter(([nome, valore]) => valore !== partenza[nome])),
-        }),
-      });
+      if (voce !== undefined) void modificaEffetto(voce, posto, params);
     },
   });
   // La sezione «Oggetti sul tracciato»: perno e rotazione dei gruppi scelti, letti col record di
