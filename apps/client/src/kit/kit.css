@@ -124,6 +124,16 @@
   cursor: default;
 }
 
+/* ── Punto di riferimento ─────────────────────────────────────────────────── */
+
+/* Nove quadratini in tre righe: la griglia è della primitiva, la misura dei
+   quadratini della pelle. */
+.kit-reference-point {
+  display: inline-grid;
+  grid-template-columns: repeat(3, auto);
+  flex: none;
+}
+
 /* ── Selettore del colore ────────────────────────────────────────────────── */
 
 /* Il quadrato: la tinta pura sotto (in linea, da `picker.ts`), il bianco da

@@ -218,6 +218,8 @@
     "kit-number-unit",
     "kit-number-error",
     "scrubbing",
+    "kit-reference-point",
+    "kit-reference-point-cell",
     "kit-color",
     "kit-color-group",
     "kit-color-group-title",
@@ -2754,6 +2756,8 @@
     "kit-number-unit": "cornice",
     "kit-number-error": "cornice",
     "scrubbing": "cornice",
+    "kit-reference-point": "cornice",
+    "kit-reference-point-cell": "cornice",
     "kit-color": "cornice",
     "kit-color-group": "cornice",
     "kit-color-group-title": "cornice",
@@ -5553,6 +5557,22 @@
         "hover",
         "focused",
         "disabled"
+      ]
+    },
+    {
+      "name": "kit-reference-point",
+      "part": "kit",
+      "hooks": [
+        "kit-reference-point",
+        "kit-reference-point-cell"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused",
+        "disabled",
+        "selected"
       ]
     },
     {
@@ -13064,10 +13084,10 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 73,
-    "hooks": 2534,
+    "hooks": 2536,
     "state_names": 7,
-    "assigned_states": 1128,
-    "components": 332,
+    "assigned_states": 1134,
+    "components": 333,
     "preference_tokens": 196
   }
 }

@@ -22,6 +22,9 @@ export type { TextField, TextFieldOptions } from "./field";
 export { numberField, numberText, roundTo, SCRUB_PX, stepFactor } from "./number-field";
 export type { NumberField, NumberFieldOptions } from "./number-field";
 
+export { referencePoint, referencePointStep } from "./reference-point";
+export type { ReferencePoint, ReferencePointOptions } from "./reference-point";
+
 export { evaluate } from "./quantity";
 export type { Measure, Quantity, QuantityProblem } from "./quantity";
 

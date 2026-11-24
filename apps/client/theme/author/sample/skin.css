@@ -2476,6 +2476,36 @@ kbd,
   background: transparent;
 }
 
+/* Il punto di riferimento: nove quadratini, lo scelto pieno dell'accento. */
+.kit-reference-point {
+  gap: 2px;
+  padding: 2px;
+}
+.kit-reference-point-cell {
+  width: 10px;
+  height: 10px;
+  padding: 0;
+  border: 1px solid var(--muted);
+  border-radius: 1px;
+  background: transparent;
+  cursor: pointer;
+}
+.kit-reference-point-cell:hover {
+  border-color: var(--text);
+}
+.kit-reference-point-cell[aria-checked="true"] {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+.kit-reference-point-cell:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 1px;
+}
+.kit-reference-point-cell:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
 /* ── skin/frame.css ─────────────────────────────────────────────────────── */
 
 /* La cornice: barra del titolo, binario, banda di stato. */

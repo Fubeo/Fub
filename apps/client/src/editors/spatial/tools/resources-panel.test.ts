@@ -153,6 +153,25 @@ describe("le sezioni del registro", () => {
     expect(idMontati(panel.element)).toEqual(["documento", "pennelli"]);
   });
 
+  it("una sezione nascosta all'inizio si mostra e si nasconde da sola; dopo il giro non può più", () => {
+    const sezioni = creaSezioni();
+    let contesto: ContestoSezione | null = null;
+    sezioni.registra(sezione("sul-tracciato", { nascostaAllInizio: true, disegna: (c) => void (contesto = c) }));
+    const panel = pannello();
+    panel.collega(sezioni, null);
+    fotogramma();
+    const radice = (): HTMLElement => panel.element.querySelector<HTMLElement>('[data-section="sul-tracciato"]')!;
+    expect(radice().hidden).toBe(true);
+    contesto!.mostra!(true);
+    expect(radice().hidden).toBe(false);
+    contesto!.mostra!(false);
+    expect(radice().hidden).toBe(true);
+    const vecchio = contesto!;
+    vecchio.vita.close();
+    vecchio.mostra!(true);
+    expect(radice().hidden).toBe(true);
+  });
+
   it("staccato il Completo, le sue sezioni si smontano e i loro disposer si chiamano", () => {
     const sezioni = creaSezioni();
     const fine = vi.fn();

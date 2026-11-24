@@ -203,6 +203,10 @@ export interface ContestoSezione {
   /// smonta. Una risposta che arriva dopo (un comando del motore) si scarta
   /// se la vita è chiusa.
   readonly vita: Lifetime;
+  /// Mostra o nasconde la sezione intera (intestazione compresa): una sezione che sa se vale
+  /// solo dopo una lettura del motore (`nascostaAllInizio`) lo dice così. Manca dove la sezione
+  /// non si può nascondere.
+  readonly mostra?: (visibile: boolean) => void;
 }
 
 /// Una sezione dell'ispettore, come la registra una famiglia.
@@ -219,6 +223,9 @@ export interface Sezione {
   readonly ordine?: number;
   /// Se la sezione vale per la selezione di adesso; di serie sempre.
   readonly quando?: (sel: Selezione) => boolean;
+  /// Vero se la sezione nasce nascosta e si mostra da sé (`ContestoSezione.mostra`) quando sa
+  /// che vale: la selezione da sola non basta a dirlo (gli Oggetti sul tracciato).
+  readonly nascostaAllInizio?: boolean;
   /// Disegna il corpo; torna il disposer che lo smonta.
   readonly disegna: (ctx: ContestoSezione) => Teardown | void;
 }

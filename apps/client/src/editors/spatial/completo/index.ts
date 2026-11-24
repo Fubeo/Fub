@@ -26,6 +26,7 @@ import { COMANDO_DEL_CLIC, iconaMotore, layoutCompleto, MOTORE_PRONTO, type Grup
 import { registraAllinea } from "./allinea";
 import { registraElaborazione } from "./elaborazione";
 import { infoDaLettura, registraFusione, COMANDI_FUSIONE } from "./fusione-sezione";
+import { eGruppoSulTracciato, registraOggettiSulTracciato, STRUMENTO_OGGETTI_SUL_TRACCIATO } from "./oggetti-sul-tracciato-sezione";
 import { registraTrasforma } from "./trasforma-sezione";
 import { registraColore, type ColoriVisti, type LatoAttivo } from "./colore-sezione";
 // «Selettore colore…» (K6 T14, selettore): il selettore del pozzo da una voce del menu e della ricerca.
@@ -465,6 +466,24 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila" | "e
       return { info, accesi };
     },
   });
+  // La sezione «Oggetti sul tracciato»: perno e rotazione dei gruppi scelti, letti col record di
+  // ogni oggetto (`document.node`, con l'id del file); c'è solo se ogni oggetto scelto è un gruppo.
+  registraOggettiSulTracciato(sezioni, {
+    esegui: (id, valori) => eseguiPerId(id, valori, { senzaFinestra: true }),
+    leggi: async () => {
+      const ids = [...dipendenze.selezione()];
+      const nodo = async (id: string): Promise<unknown> => {
+        const esito = await chiama(dipendenze, "disegno.document.node", { id }, false).catch(() => null);
+        return esito === null || esito.refused !== null ? null : esito.reading;
+      };
+      // Il primo oggetto prima: se non è un gruppo (il caso di quasi ogni selezione) la sezione
+      // non c'è, e gli altri non si chiedono.
+      const primo = ids.length === 0 ? null : await nodo(ids[0]!);
+      if (!eGruppoSulTracciato(primo)) return null;
+      const altri = await Promise.all(ids.slice(1).map(nodo));
+      return { ids, nodi: [primo, ...altri] };
+    },
+  });
   // La sezione «Trasforma» (K6 T13, giro 3): posizione, misura, rotazione e inclinazione.
   registraTrasforma(sezioni, eseguiPerId);
   // La sezione «Colore» (K6 T14, giro 1): riempimento e contorno, scambia, nessuno e di serie.
@@ -657,6 +676,12 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila" | "e
     // ricerca sceglie lo strumento Pennello tondo (K6 T12, giro 2).
     if (voce.id === "path.blob") {
       azioni.strumento(STRUMENTO_PENNELLO);
+      return;
+    }
+    // Attacca degli Oggetti sul tracciato senza un tracciato sceglie lo strumento, il cui clic su un
+    // tracciato vi attacca gli oggetti scelti (come `attach` senza `path` in VectorCraft).
+    if (voce.id === "object.objectsOnPath.attach") {
+      azioni.strumento(STRUMENTO_OGGETTI_SUL_TRACCIATO);
       return;
     }
     const chiamata = voce.chiamata;

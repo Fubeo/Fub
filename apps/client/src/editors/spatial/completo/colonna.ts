@@ -44,7 +44,7 @@ export const CASELLE: readonly Casella[] = [
   { id: "type", gruppo: "shape", strumenti: ["motore:type", "motore:areaType", "motore:typeOnPath", "motore:verticalType", "motore:verticalAreaType", "motore:verticalTypeOnPath", "motore:touchType", "text"] },
   { id: "rotate", gruppo: "modify", strumenti: ["motore:rotate", "motore:reflect", "motore:scale", "motore:shear", "motore:reshape", "motore:freeTransform", "motore:puppetWarp"] },
   { id: "width", gruppo: "modify", strumenti: ["motore:width", "motore:warp", "motore:twirl", "motore:pucker", "motore:bloat", "motore:scallop", "motore:crystallize", "motore:wrinkle"] },
-  { id: "shapeBuilder", gruppo: "modify", strumenti: ["motore:shapeBuilder", "motore:livePaintBucket", "motore:livePaintSelection", "motore:blend"] },
+  { id: "shapeBuilder", gruppo: "modify", strumenti: ["motore:shapeBuilder", "motore:livePaintBucket", "motore:livePaintSelection", "motore:blend", "motore:objectsOnPath"] },
   { id: "gradient", gruppo: "color", strumenti: ["motore:gradient", "motore:mesh"] },
   { id: "eyedropper", gruppo: "color", strumenti: ["motore:eyedropper", "motore:measure"] },
   { id: "hand", gruppo: "view", strumenti: ["motore:hand", "motore:zoom", "motore:rotateView", "motore:printTiling", "hand", "zoom"] },
@@ -134,6 +134,9 @@ export const MOTORE_PRONTO: ReadonlySet<string> = new Set([
   // aggiunge un oggetto alla stessa fusione; la fusione va nel file con la
   // ricetta. Il doppio clic (o Alt+clic) apre le Opzioni fusione.
   "blend",
+  // Gli Oggetti sul tracciato: il clic su un tracciato vi attacca gli oggetti
+  // scelti, distribuiti lungo la linea; il gruppo va nel file con la ricetta.
+  "objectsOnPath",
   // La Trama sfumatura: il clic su un oggetto ne fa una trama, sulla trama
   // aggiunge una linea; i punti scelti prendono il colore e la trasparenza.
   "mesh",
@@ -193,6 +196,7 @@ export const ICONE_MOTORE: Readonly<Record<string, string>> = {
   width: "draw-width-tool",
   livePaintBucket: "draw-live-paint-bucket",
   blend: "draw-blend",
+  objectsOnPath: "draw-objects-on-path",
   livePaintSelection: "draw-live-paint-selection",
   mesh: "draw-mesh",
   warp: "draw-warp",

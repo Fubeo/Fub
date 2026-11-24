@@ -513,6 +513,20 @@ export const COMPLETO_IT = {
   "draw.fusione.rilascia": "Rilascia",
   "draw.fusione.nuove": "Senza una fusione scelta, le opzioni valgono per le fusioni nuove.",
   "draw.fusione.nessun.disegno": "Il motore del disegno non è pronto.",
+  // Gli Oggetti sul tracciato (Design e fila dello strumento): perno e rotazione come in VectorCraft.
+  "draw.oggettiTracciato.titolo": "Oggetti sul tracciato",
+  "draw.oggettiTracciato.perno": "Perno",
+  "draw.oggettiTracciato.rotazione": "Rotazione",
+  "draw.oggettiTracciato.punto.0": "In alto a sinistra",
+  "draw.oggettiTracciato.punto.1": "In alto al centro",
+  "draw.oggettiTracciato.punto.2": "In alto a destra",
+  "draw.oggettiTracciato.punto.3": "Al centro a sinistra",
+  "draw.oggettiTracciato.punto.4": "Al centro",
+  "draw.oggettiTracciato.punto.5": "Al centro a destra",
+  "draw.oggettiTracciato.punto.6": "In basso a sinistra",
+  "draw.oggettiTracciato.punto.7": "In basso al centro",
+  "draw.oggettiTracciato.punto.8": "In basso a destra",
+  "draw.oggettiTracciato.opzione": "Opzione degli oggetti sul tracciato",
 } as const;
 
 /// Chiave del catalogo del disegno: la stessa forma di `COMPLETO_IT`.
@@ -1017,6 +1031,19 @@ export const COMPLETO_EN: Record<CompletoKey, string> = {
   "draw.fusione.rilascia": "Release",
   "draw.fusione.nuove": "With no blend selected, the options apply to new blends.",
   "draw.fusione.nessun.disegno": "The drawing engine is not ready.",
+  "draw.oggettiTracciato.titolo": "Objects on Path Options",
+  "draw.oggettiTracciato.perno": "Pivot",
+  "draw.oggettiTracciato.rotazione": "Rotate",
+  "draw.oggettiTracciato.punto.0": "Top left",
+  "draw.oggettiTracciato.punto.1": "Top center",
+  "draw.oggettiTracciato.punto.2": "Top right",
+  "draw.oggettiTracciato.punto.3": "Middle left",
+  "draw.oggettiTracciato.punto.4": "Center",
+  "draw.oggettiTracciato.punto.5": "Middle right",
+  "draw.oggettiTracciato.punto.6": "Bottom left",
+  "draw.oggettiTracciato.punto.7": "Bottom center",
+  "draw.oggettiTracciato.punto.8": "Bottom right",
+  "draw.oggettiTracciato.opzione": "Objects on Path option",
 };
 
 /// La scheda Risorse dell'ispettore (K6 T10): il suo titolo, i campioni del
@@ -1271,6 +1298,7 @@ export const COLONNA_IT = {
   "draw.engine.name.livePaintBucket": "Secchiello pittura dinamica",
   "draw.engine.name.livePaintSelection": "Selezione pittura dinamica",
   "draw.engine.name.blend": "Fusione",
+  "draw.engine.name.objectsOnPath": "Oggetti sul tracciato",
   "draw.engine.name.mesh": "Trama sfumatura",
   "draw.engine.name.warp": "Altera",
   "draw.engine.name.twirl": "Vortice",
@@ -1392,6 +1420,7 @@ export const COLONNA_EN: Record<keyof typeof COLONNA_IT, string> = {
   "draw.engine.name.livePaintBucket": "Live Paint Bucket",
   "draw.engine.name.livePaintSelection": "Live Paint Selection",
   "draw.engine.name.blend": "Blend",
+  "draw.engine.name.objectsOnPath": "Objects on Path",
   "draw.engine.name.mesh": "Mesh",
   "draw.engine.name.warp": "Warp",
   "draw.engine.name.twirl": "Twirl",

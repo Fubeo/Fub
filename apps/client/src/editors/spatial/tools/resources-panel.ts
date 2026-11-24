@@ -242,6 +242,7 @@ export function createSezioniList(host: HTMLElement, life: Lifetime, opzioni: Op
     avvolgi.append(errore, riprova, corpo);
     body.append(avvolgi);
     root.append(heading, body);
+    root.hidden = sezione.nascostaAllInizio === true;
     const m: Montata = { sezione, root, toggle, body, errore, riprova, corpo, vita, fine: null, giro: null };
     vita.listen(toggle, "click", () => {
       const aperta = toggle.getAttribute("aria-expanded") !== "true";
@@ -286,6 +287,9 @@ export function createSezioniList(host: HTMLElement, life: Lifetime, opzioni: Op
       aggiorna: () => pianifica(),
       rileggi: () => opzioni.rileggi?.(),
       vita: giro,
+      mostra: (visibile) => {
+        if (!giro.closed) m.root.hidden = !visibile;
+      },
     };
     try {
       const fine = m.sezione.disegna(ctx);

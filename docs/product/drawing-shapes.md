@@ -155,6 +155,23 @@ della cronologia e manda solo il valore cambiato. Inverti davanti/dietro,
 Inverti dorsale, Sostituisci dorsale, Espandi e Rilascia sono accesi quando lo
 è il loro comando del menu.
 
+Gli Oggetti sul tracciato funzionano come in VectorCraft. Lo strumento
+(`objectsOnPath`) sta nella casella del Generatore forme, dopo la Fusione:
+- un clic su un tracciato vi attacca gli oggetti scelti: il tracciato va sotto,
+  gli oggetti si spargono lungo il tracciato e lo seguono;
+- la fila delle opzioni dello strumento ha il Perno (nove quadratini, il punto
+  di ogni oggetto che tocca il tracciato) e la Rotazione (da −360° a 360°):
+  valgono per gli oggetti attaccati dopo.
+
+Il menu Oggetto › Oggetti sul tracciato offre Attacca (senza un tracciato
+sceglie lo strumento), Opzioni ed Espandi; Opzioni ed Espandi vogliono un
+gruppo fra gli oggetti scelti o attorno a uno. Il gruppo va nel file con la
+ricetta: modificando il tracciato gli oggetti lo seguono, anche dopo la
+riapertura. La sezione «Oggetti sul tracciato», nella scheda Design, c'è solo
+quando ogni oggetto scelto è un gruppo: Perno e Rotazione sono quelli dei
+gruppi, vuoti dove differiscono, e ogni cambio vale per tutti i gruppi scelti
+in un solo passo della cronologia.
+
 La sezione «Allinea», nella scheda Design dell'ispettore, offre gli allineamenti
 e le distribuzioni del motore. Alla selezione servono due oggetti; con «alla
 tavola» ne basta uno per allineare. Un pulsante spento dice perché. La famiglia

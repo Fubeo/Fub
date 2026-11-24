@@ -1,8 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" xmlns:fub="https://fubeo.github.io/ns/scene/1" fub:version="1" viewBox="0 0 400 300" width="400" height="300">
   <rect id="fub-paper" fub:role="paper" x="0" y="0" width="400" height="300" fill="#ffffff"/>
   <g id="l1a2b3c4d" fub:layer="Livello 1">
-    
-    
-    
-  <g id="o44ukzs5q"><path id="o3p5kqwgj" d="M75 250 C150 200 250 200 325 250" fill="none" stroke="#000000"/><polygon id="o08wply9y" points="40.546,242.068 82.932,215.546 109.454,257.932 67.068,284.454" fill="#ff0000"/><polygon id="o0ps6f9ax" points="317.068,215.546 359.454,242.068 332.932,284.454 290.546,257.932" fill="#0000ff"/></g></g>
+    <g id="o44ukzs5q"><path id="o3p5kqwgj" d="M75 250 C150 200 250 200 325 250" fill="none" stroke="#000000"/><polygon id="o08wply9y" points="40.546,242.068 82.932,215.546 109.454,257.932 67.068,284.454" fill="#ff0000"/><polygon id="o0ps6f9ax" points="317.068,215.546 359.454,242.068 332.932,284.454 290.546,257.932" fill="#0000ff"/></g>
+  </g>
 </svg>

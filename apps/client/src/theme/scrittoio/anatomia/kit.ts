@@ -50,6 +50,8 @@ export const KIT: PartAnatomy = {
       states: [S("rest"), S("hover"), S("focused"), S("disabled")],
       hooks: ["kit-number", "kit-number-label", "kit-number-box", "kit-number-input", "kit-number-unit", "kit-number-error", "scrubbing"],
     },
+    // Il punto di riferimento: nove quadratini, `selected` è quello scelto (`aria-checked`).
+    { name: "kit-reference-point", states: SELECTABLE, hooks: ["kit-reference-point", "kit-reference-point-cell"] },
     {
       name: "kit-color",
       states: [S("rest"), S("hover"), S("focused"), S("selected")],
