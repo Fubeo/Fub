@@ -122,7 +122,7 @@ motore	shape.spiral	Spiral		forme	F1	T13	fatto	finestra	famiglia		Spirale
 motore	shape.arc	Arc		forme	F1	T13	fatto	finestra	famiglia		Arco
 motore	shape.rectangularGrid	Rectangular Grid		forme	F1	T13	fatto	finestra	famiglia		Griglia rettangolare
 motore	shape.polarGrid	Polar Grid		forme	F1	T13	fatto	finestra	famiglia		Griglia polare
-motore	path.create	Create Path		tracciati	F1	T12	da fare	ispettore/design	famiglia		Crea tracciato
+motore	path.create	Create Path		tracciati	F1	T12	fatto	interno	famiglia	comando degli script: in VectorCraft non ha voce né tasto, i tracciati si disegnano con la Penna; crea il tracciato da `d` o dai punti (con le maniglie e `closed`) col colore attuale, e un tracciato aperto senza colore prende il contorno nero	Crea tracciato
 motore	view.drawMode	Drawing Mode		vista	F1	T11	fatto	menu/visualizza	famiglia	Dentro spenta: il motore crea un gruppo di ritaglio che la differenza del file rifiuta (unsupported); test tests/modo_di_disegno.rs	Modalità di disegno
 motore	text.create	Create Text		testo	F2	T16	da fare	ispettore/design	famiglia		Crea testo
 motore	css.selection	CSS Properties		web	F3	T22	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Proprietà CSS

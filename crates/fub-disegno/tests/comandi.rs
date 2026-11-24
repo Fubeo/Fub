@@ -385,6 +385,8 @@ fn una_selezione_con_un_elemento_non_mappato_non_cambia_niente() {
         "disegno.view.snapToGlyph.options",
         // Sostituisci carattere nomina i caratteri nel valore, e senza `selectionOnly` vale su tutto il disegno.
         "disegno.text.replaceFont",
+        // Crea tracciato aggiunge un tracciato nuovo dai suoi argomenti, senza usare la selezione.
+        "disegno.path.create",
     ];
     let comandi = d.comandi(&["oa1a1a1a1".into(), "onessuno1".into()]);
     let accesi: Vec<&str> = comandi
