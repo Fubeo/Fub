@@ -410,6 +410,8 @@ export function installVaultImages(ctx: EditorContext): void {
         ctx.pannelliTab(event.shiftKey);
       } else if (onSurface && event.key === "Enter" && ctx.current === null && ctx.motoreTasto?.("Enter") === true) {
         // Chiuso dal motore.
+      } else if ((event.key === "Delete" || event.key === "Backspace") && ctx.current === null && ctx.motoreTasto?.(event.key) === true) {
+        // Preso dallo strumento del motore (la Larghezza toglie i suoi punti scelti).
       } else if ((event.key === "Delete" || event.key === "Backspace") && ctx.current === null && completo?.cancellaPunti?.() === true) {
         // Tolti i punti scelti dalla Selezione diretta.
       } else if (strumentoDelMotore !== null && editable()) {
@@ -462,6 +464,11 @@ export function installVaultImages(ctx: EditorContext): void {
     } else if (event.key === "Delete" || event.key === "Backspace") {
       // Coi punti scelti dalla Selezione diretta Canc toglie quei punti, non
       // l'oggetto (il Completo, K6 T12).
+      if (ctx.current === null && ctx.motoreTasto?.(event.key) === true) {
+        // Preso dallo strumento del motore (la Larghezza toglie i suoi punti scelti).
+        event.preventDefault();
+        return;
+      }
       if (ctx.current === null && ctx.completoMotore?.()?.cancellaPunti?.() === true) {
         event.preventDefault();
         return;

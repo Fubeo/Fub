@@ -1012,6 +1012,13 @@ pub struct DrawingToolState {
     /// testo passa al Testo). Il client lo sceglie se lo conosce. Può mancare.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub switch_tool: Option<String>,
+    /// I tasti che lo strumento prende prima delle scorciatoie
+    /// (`Tool::claims_key`), fra [`DRAWING_CLAIMABLE_KEYS`]: la Larghezza con
+    /// dei punti scelti prende Canc, Backspace ed Esc, che altrimenti
+    /// cancellerebbero gli oggetti o toglierebbero la selezione. Il client li
+    /// manda allo strumento come tasti del gesto. Può mancare (vale nessuno).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub claims_keys: Vec<String>,
 }
 
 /// Un punto di ancoraggio scelto: l'elemento del disegno, il suo sottotracciato
@@ -1040,9 +1047,23 @@ impl DrawingToolState {
                 "`state.switch_tool` is empty or longer than {MAX_DRAWING_TOOL_ID_BYTES} bytes"
             )));
         }
+        if self.claims_keys.len() > DRAWING_CLAIMABLE_KEYS.len()
+            || self
+                .claims_keys
+                .iter()
+                .any(|k| !DRAWING_CLAIMABLE_KEYS.contains(&k.as_str()))
+        {
+            return Err(bad(format!(
+                "`state.claims_keys` has a key outside {DRAWING_CLAIMABLE_KEYS:?}"
+            )));
+        }
         anchors("state.anchors", &self.anchors)
     }
 }
+
+/// I tasti che uno strumento del motore può prendere prima delle scorciatoie
+/// ([`DrawingToolState::claims_keys`]), coi nomi di `KeyboardEvent.key`.
+pub const DRAWING_CLAIMABLE_KEYS: [&str; 4] = ["Delete", "Backspace", "Escape", "Enter"];
 
 /// I punti di ancoraggio del campo `field`: al più [`MAX_DRAWING_ANCHORS`],
 /// ognuno su un elemento con un id e in un punto finito.

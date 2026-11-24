@@ -200,7 +200,7 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // `snap.points`, `snap.glyphs`) alla vista del motore. Tre righe in più.
   // Il Sagomatore (`shaper`) e i suoi `shaper.scribble` e `shaper.select` diventano «fatto»: il gruppo
   // Shaper va nel file con la ricetta. Tre righe in più.
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1000, fub: 114, escluso: 12, fatto: 425 });
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 999, fub: 114, escluso: 12, fatto: 426 });
 });
 
 // --- un motore finto ---------------------------------------------------------------

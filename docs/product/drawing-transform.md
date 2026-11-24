@@ -121,7 +121,14 @@ Smerla, Cristallizza e Grinza lo increspano. Con una selezione cambiano solo
 gli oggetti scelti; senza, tutto ciò che il pennello tocca. Il tiro intero è un
 passo di annulla, e `Esc` lo lascia com'era. Un tiro che non tocca niente non
 cambia niente, e un tratto della penna di Fub non si deforma: lo si dice.
-Larghezza, la prima della casella, non c'è ancora.
+
+La prima della casella è la **Larghezza**, come in VectorCraft: trascinata dal
+contorno di una linea la allarga (o la stringe) in quel punto, e la linea
+cambia spessore lungo il percorso; con `Alt` si muove un lato solo. Un clic
+sul centro di un punto lo sceglie, `Maiusc` ne aggiunge altri; `Canc` (o
+Backspace) toglie i punti scelti e `Esc` toglie la scelta. I punti restano
+scelti da un gesto all'altro. Il file tiene la linea come contorno pieno e il
+profilo nella ricetta, che si riapre e si modifica ancora.
 
 Come in VectorCraft, rettangoli, ellissi, cerchi e poligoni si comportano da
 tracciati: con la Selezione diretta se ne spostano i punti, e la

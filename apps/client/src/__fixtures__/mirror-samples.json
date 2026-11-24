@@ -3934,7 +3934,10 @@
             "end": true
           }
         ],
-        "switch_tool": "type"
+        "switch_tool": "type",
+        "claims_keys": [
+          "Delete"
+        ]
       },
       "reading": {
         "bounds": [
@@ -4300,7 +4303,10 @@
           "end": true
         }
       ],
-      "switch_tool": "type"
+      "switch_tool": "type",
+      "claims_keys": [
+        "Delete"
+      ]
     }
   ],
   "DrawingCommandRequest": [

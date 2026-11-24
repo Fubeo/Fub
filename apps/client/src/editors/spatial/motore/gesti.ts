@@ -131,6 +131,11 @@ export interface MotoreAperto extends MotoreDelDisegno {
 /// Ciò che `motoreDa` tiene: la sessione, l'apertura in corso, il perché
 /// manca, o il disegno finito (chiuso da chi l'ha aperto, o dalla
 /// `DocumentSession` che non c'è più).
+/// I tasti che vanno a uno strumento del motore fuori da un gesto: Invio ed Esc
+/// chiudono il tracciato aperto, e tutti vanno allo strumento che li prende
+/// (`DrawingToolState.claims_keys`).
+export type TastoDelloStrumento = "Enter" | "Escape" | "Delete" | "Backspace";
+
 type StatoMotore = SessioneMotore | "apertura" | MotoreAssente | "finito";
 
 /// Il motore che `apri` apre (`apriSessione` di `sessione.ts`), riaperto con
@@ -494,7 +499,7 @@ export interface GestiMotoreContext {
   /// della penna (il tasto va al motore, che lo chiude a modo suo); senza
   /// tracciato aperto, Esc con uno strumento dei tracciati torna alla
   /// Selezione. `true` se il tasto è servito.
-  motoreTasto: (tasto: "Enter" | "Escape") => boolean;
+  motoreTasto: (tasto: TastoDelloStrumento) => boolean;
   /// Una freccia durante il trascinamento di uno strumento del motore: va
   /// allo strumento, nell'anteprima del gesto, come in VectorCraft (la Forma
   /// parametrica e le forme ne cambiano i numeri mentre si trascina; uno
@@ -644,6 +649,13 @@ export function installGestiMotore(ctx: EditorContext): void {
       return;
     }
     const precedente = ctx.motoreTool;
+    // Lo strumento lasciato perde i suoi punti scelti (il motore ne prepara uno
+    // nuovo): i tasti che prendeva tornano alle scorciatoie.
+    const lasciato = precedente === null ? null : stati.stato(precedente);
+    if (precedente !== null && lasciato !== null && lasciato.claims_keys !== undefined) {
+      const { claims_keys: _, ...senza } = lasciato;
+      stati.registra(precedente, senza, false);
+    }
     ctx.motoreTool = id;
     applyToolCursor();
     const pronta = ctx.preparaStrumento(id);
@@ -1397,8 +1409,35 @@ export function installGestiMotore(ctx: EditorContext): void {
     return true;
   };
 
+  /// Il tasto `tasto` allo strumento del motore scelto, se lui lo prende
+  /// prima delle scorciatoie (`DrawingToolState.claims_keys`, come
+  /// `Tool::claims_key` di VectorCraft: la Larghezza con dei punti scelti
+  /// prende Canc ed Esc): un gesto senza puntatore, col solo tasto, che si
+  /// chiude in un passo. `false` se non lo prende, o se un gesto è in corso.
+  const tastoPreso = (tasto: TastoDelloStrumento): boolean => {
+    const motore = ctx.motoreTool;
+    if (motore === null || ctx.current !== null || ctx.disposed) return false;
+    if (!(stati.stato(motore)?.claims_keys ?? []).includes(tasto)) return false;
+    const g = motoreBegin({ stroke: 0, pointer: "mouse", page: null });
+    if (g === null) return false;
+    g.ended = true;
+    const esito = send(g, "commit", [], [{ kind: "key", key: tasto, code: tasto, pressed: true }]);
+    void esito.finally(() => lasciaComandi(g));
+    ultimo = esito.then((e) => {
+      if (ctx.disposed) return;
+      if (e === null) {
+        clearPreview(g);
+        ctx.showHandles();
+        return;
+      }
+      applyOutcome(g, e, null);
+    });
+    return true;
+  };
+
   ctx.motoreTasto = (tasto) => {
     if (aperto !== null) return chiudiAperto([{ kind: "key", key: tasto, code: tasto, pressed: true }]);
+    if (tastoPreso(tasto)) return true;
     if (tasto === "Escape" && ctx.motoreTool !== null && STRUMENTI_DEI_TRACCIATI.has(ctx.motoreTool)) {
       ctx.tornaAllaSelezione();
       return true;

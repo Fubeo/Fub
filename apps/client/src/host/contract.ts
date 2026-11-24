@@ -1980,6 +1980,9 @@ export interface DrawingToolState {
   /** Lo strumento a cui il gesto chiede di passare (il doppio clic su un testo
    *  passa al Testo); manca se nessuno. */
   switch_tool?: string;
+  /** I tasti (`Delete`, `Backspace`, `Escape`, `Enter`) che lo strumento prende
+   *  prima delle scorciatoie: vanno a lui come tasti del gesto; manca se nessuno. */
+  claims_keys?: string[];
 }
 
 /** Un punto di ancoraggio scelto, in coordinate di scena: torna nel `value`

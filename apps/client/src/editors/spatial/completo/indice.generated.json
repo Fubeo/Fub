@@ -6631,6 +6631,22 @@
     },
     {
       "fonte": "strumento",
+      "id": "width",
+      "chiamata": {
+        "strumento": "width"
+      },
+      "etichetta": {
+        "it": "Strumento Larghezza",
+        "en": "Width Tool"
+      },
+      "posto": "colonna/disegna",
+      "famiglia": "pennelli",
+      "tasto": "Shift+W",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "strumento",
       "id": "wrinkle",
       "chiamata": {
         "strumento": "wrinkle"

@@ -73,6 +73,11 @@ strumento del motore (stesso strumento e puntatore, entro `DOUBLE_TAP_MS` e
 suo (la penna sul tracciato aperto, gli altri col `commit`), o nell'anteprima
 del testo che si sta scrivendo, che resta aperto. Lo strumento che il motore
 chiede (`DrawingToolState.switch_tool`) si sceglie come dalla colonna.
+I tasti che lo strumento prende (`DrawingToolState.claims_keys`) vanno a
+lui prima delle scorciatoie: `gesti.ts` (`tastoPreso`) li manda in un `commit`
+senza puntatore. I punti scelti della Larghezza passano da una revisione
+all'altra nel ponte (`Banco::scelti_dello_strumento`), che li riprende col
+clic di VectorCraft quando rimette a capo lo strumento.
 Il motore disegna i segni dei punti solo nell'anteprima di un gesto: a gesto
 fermo `tools/editor/marks.ts` mette sul foglio i punti dei tracciati scelti e
 di quelli dei punti scelti (`motore/punti-diretti.ts`, dal `d`, dai `points`

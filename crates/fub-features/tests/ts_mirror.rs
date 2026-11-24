@@ -1908,6 +1908,7 @@ fn drawing_samples() -> Value {
             end: true,
         }],
         switch_tool: Some("type".into()),
+        claims_keys: vec!["Delete".into()],
     };
     let reasons: Vec<Value> = [
         DrawingDisabledReason::NoSelection,

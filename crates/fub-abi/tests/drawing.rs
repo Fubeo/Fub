@@ -769,6 +769,7 @@ fn the_tool_state_and_the_disabled_reason_have_their_shape() {
         options: json!({"rubber_band": true}),
         anchors: Vec::new(),
         switch_tool: None,
+        claims_keys: Vec::new(),
     });
     o.reading = Some(json!({"w": 1}));
     o.validate().unwrap();
@@ -791,6 +792,15 @@ fn the_tool_state_and_the_disabled_reason_have_their_shape() {
         passa.state.as_mut().unwrap().switch_tool = Some(cattivo);
         assert!(passa.validate().is_err());
     }
+    // I tasti presi dallo strumento: senza non si scrivono, e solo quelli noti.
+    assert!(v["state"].get("claims_keys").is_none());
+    let mut prende = o.clone();
+    prende.state.as_mut().unwrap().claims_keys = vec!["Delete".into(), "Escape".into()];
+    prende.validate().unwrap();
+    let v = serde_json::to_value(&prende).unwrap();
+    assert_eq!(v["state"]["claims_keys"], json!(["Delete", "Escape"]));
+    prende.state.as_mut().unwrap().claims_keys = vec!["a".into()];
+    assert!(prende.validate().is_err());
     let punto = DrawingAnchor {
         element: "p1".into(),
         subpath: 0,

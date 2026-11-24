@@ -1000,6 +1000,44 @@ describe("lo strumento del motore nei gesti (K6 T8)", () => {
     expect(gestures(fake).filter((g) => g.events.some((e) => e.kind === "double_click"))).toHaveLength(1);
   });
 
+  it("Canc ed Esc vanno allo strumento che li prende (`claims_keys`), e tornano alle scorciatoie quando smette o si cambia strumento", async () => {
+    // La Larghezza finta: dopo un gesto ha un punto scelto e prende Canc ed Esc;
+    // il tasto lo toglie e lo strumento non li prende più.
+    let scelto = false;
+    const fake = createFakeHost({
+      drawing: {
+        comando: statoDiSerie,
+        gesto: (gesture) => {
+          const tasti = (gesture.inputs ?? []).flatMap((i) => (i.kind === "key" ? [i.key] : []));
+          if (tasti.length > 0) scelto = false;
+          else if (gesture.phase === "commit") scelto = true;
+          const state = { busy: false, transforming: false, wants_text: false, composing: false, cursor: "width", options: null, ...(scelto ? { claims_keys: ["Delete", "Backspace", "Escape"] } : {}) };
+          return { revision: gesture.revision, preview: null, ops: null, selection: [], losses: [], refused: null, frame: null, state, reading: null };
+        },
+      } as DrawingFake,
+    });
+    const editor = await montaConPreparazione(EMPTY, fake);
+    editor.setEngineTool("width");
+    await settle();
+    await drag(editor, [[100, 100], [100, 120]]);
+    const prima = gestures(fake).length;
+    await tasto("Delete");
+    const conTasto = gestures(fake).slice(prima);
+    expect(conTasto.map((g) => [g.phase, g.events.length, (g.inputs ?? []).map((i) => (i.kind === "key" ? i.key : ""))])).toEqual([["commit", 0, ["Delete"]]]);
+    // Senza punti scelti Canc non va più allo strumento.
+    await tasto("Delete");
+    expect(gestures(fake).length).toBe(prima + 1);
+    // Scelto di nuovo, poi un altro strumento: Esc non va alla Larghezza.
+    await drag(editor, [[100, 100], [100, 130]]);
+    editor.setEngineTool("pencil");
+    await settle();
+    const dopo = gestures(fake).length;
+    editor.setEngineTool("width");
+    await settle();
+    await tasto("Escape");
+    expect(gestures(fake).slice(dopo).filter((g) => (g.inputs ?? []).length > 0)).toEqual([]);
+  });
+
   it("uno strumento del motore manda `DrawingTool::Engine` col suo id, e il cursore del foglio segue il suo stato", async () => {
     const fake = createFakeHost({ drawing: { comando: statoDiSerie } as DrawingFake });
     const editor = await montaConPreparazione(EMPTY, fake);

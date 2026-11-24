@@ -122,6 +122,9 @@ export const MOTORE_PRONTO: ReadonlySet<string> = new Set([
   "freeTransform",
   // La Marionetta: gli spilli restano nel documento fra un gesto e l'altro.
   "puppetWarp",
+  // La Larghezza: trascinata dal contorno allarga una linea in un punto; il
+  // profilo dello spessore va nel file con la ricetta.
+  "width",
   // I pennelli che deformano (la casella «Larghezza»): un comando, `object.liquify`.
   "warp",
   "twirl",
@@ -175,6 +178,7 @@ export const ICONE_MOTORE: Readonly<Record<string, string>> = {
   scale: "draw-scale",
   shear: "draw-shear",
   reshape: "draw-reshape",
+  width: "draw-width-tool",
   warp: "draw-warp",
   twirl: "draw-twirl",
   pucker: "draw-pucker",

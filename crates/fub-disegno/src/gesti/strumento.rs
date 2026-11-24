@@ -191,6 +191,17 @@ pub(crate) fn gesto(
                 return rifiuta(banco, esito, DrawingRefusal::Unsupported);
             }
         }
+        // I punti che lo strumento aveva scelti al commit di prima tornano scelti,
+        // prima che il gesto cominci (e prima di `inizio`, così non contano come
+        // un cambio).
+        let scelti = banco.scelti_dello_strumento.take();
+        if let Some((strumento, punti)) = scelti.filter(|(s, _)| s == id) {
+            let sessione = &mut banco.sessione;
+            let _ = vectorcraft_engine::guard::catch_panic(|| {
+                rimetti_i_scelti(sessione, &punti, cx.vista)
+            });
+            banco.scelti_dello_strumento = Some((strumento, punti));
+        }
         let al_motore = forme::destinazione(&cx)
             .map(|d| d.al_motore)
             .unwrap_or(copia.radice);
@@ -299,6 +310,11 @@ pub(crate) fn gesto(
         s.busy = sessione.tool_busy();
         s
     });
+    let scelti =
+        vectorcraft_engine::guard::catch_panic(|| scelti_da_tenere(sessione, id, cx.vista))
+            .ok()
+            .flatten();
+    banco.scelti_dello_strumento = scelti.map(|p| (id.to_string(), p));
     banco.ripristina(copia);
     let differenza = match differenza {
         Ok(Ok(d)) => d,
@@ -771,6 +787,59 @@ fn scegli(
     esito
 }
 
+/// Lo spessore del rombo di un punto di larghezza scelto nei segni della
+/// Larghezza (`distort/width.rs`, `overlays`: 2,5 scelto, 1 no, 2 quello
+/// trascinato).
+const ROMBO_SCELTO: f32 = 2.5;
+
+/// I punti che lo strumento `id` ha scelti alla fine del commit, nel documento
+/// del motore, da scegliere di nuovo al gesto dopo: per la Larghezza i centri
+/// dei punti di larghezza scelti, che lo strumento tiene per sé e mostra come
+/// rombi spessi. Canc li toglie e Maiusc ne aggiunge altri anche dopo che il
+/// disegno è cambiato, come in VectorCraft, dove lo strumento resta vivo.
+/// `None` se non ne ha.
+fn scelti_da_tenere(sessione: &mut Session, id: &str, vista: ViewInfo) -> Option<Vec<Point>> {
+    if id != "width" {
+        return None;
+    }
+    let punti: Vec<Point> = sessione
+        .overlays(vista)
+        .into_iter()
+        .filter_map(|o| match o {
+            Overlay::Path { path, width, .. } if width == ROMBO_SCELTO => {
+                let r = vectorcraft_geom::Shape::bounding_box(&path);
+                Some(r.center())
+            }
+            _ => None,
+        })
+        .collect();
+    (!punti.is_empty()).then_some(punti)
+}
+
+/// Sceglie di nuovo i punti `punti` nello strumento appena preparato: un clic
+/// senza spostamento sul primo, e con Maiusc sugli altri, come li sceglie chi
+/// usa lo strumento. Un clic fermo non cambia il disegno.
+fn rimetti_i_scelti(
+    sessione: &mut Session,
+    punti: &[Point],
+    vista: ViewInfo,
+) -> Result<(), EngineError> {
+    for (i, p) in punti.iter().enumerate() {
+        let mods = Mods {
+            shift: i > 0,
+            ..Mods::default()
+        };
+        for kind in [
+            vectorcraft_engine::tools::PointerKind::Down,
+            vectorcraft_engine::tools::PointerKind::Up,
+        ] {
+            let ev = vectorcraft_engine::tools::PointerEvent::new(kind, p.x, p.y).with_mods(mods);
+            sessione.pointer(&ev, vista)?;
+        }
+    }
+    Ok(())
+}
+
 /// Prima del primo evento: le preferenze del motore come all'apertura (gli
 /// strumenti di K5 ne cambiano alcune), lo strumento, lo stile, il livello e
 /// la selezione di Fub.
@@ -1009,6 +1078,11 @@ fn stato(
             .cambia
             .clone()
             .filter(|t| !t.is_empty() && t.len() <= fub_abi::MAX_DRAWING_TOOL_ID_BYTES),
+        claims_keys: fub_abi::DRAWING_CLAIMABLE_KEYS
+            .iter()
+            .filter(|k| tasto(k, k).is_some_and(|t| sessione.tool_claims_key(t, vista)))
+            .map(|k| k.to_string())
+            .collect(),
     }
 }
 

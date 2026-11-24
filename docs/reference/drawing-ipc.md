@@ -228,6 +228,12 @@ leggono come prima.
   chiede di passare dopo il gesto (`UiRequest::SwitchTool` di VectorCraft: il
   doppio clic della Selezione su un testo chiede `type`), non vuoto e al più
   `MAX_DRAWING_TOOL_ID_BYTES` byte; il client lo sceglie come dalla colonna.
+  `claims_keys` (può mancare: nessuno) sono i tasti che lo strumento prende
+  adesso prima delle scorciatoie (`Session::tool_claims_key` di VectorCraft),
+  solo fra `Delete`, `Backspace`, `Escape` ed `Enter`
+  (`DRAWING_CLAIMABLE_KEYS`): la Larghezza coi punti scelti prende Canc,
+  Backspace ed Esc. Il client manda quel tasto allo strumento in un `commit`
+  senza puntatore, invece di cancellare la selezione.
 - **La lettura** (`DrawingOutcome.reading`) è il JSON di un comando che legge
   e non cambia niente, per i pannelli; `null` per gli altri.
 - **Perché un comando è spento** (`DrawingCommandInfo.disabled_reason`,

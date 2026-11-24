@@ -195,6 +195,12 @@ pub(crate) struct Banco {
     /// (`ripristina`), quindi il ricordo sta qui fra un comando e l'altro.
     /// [`Banco::installa`] lo toglie, perché il documento è un altro.
     pub(crate) ultimo_di_selezione: Option<(String, serde_json::Value, Vec<NodeId>)>,
+    /// I punti che lo strumento del motore aveva scelti alla fine dell'ultimo
+    /// commit, col suo id (i punti di larghezza della Larghezza): `ripristina`
+    /// rimette lo strumento a capo, e il gesto dopo li sceglie di nuovo con
+    /// dei clic ([`strumento::rimetti_i_scelti`]). Resta fra una revisione e
+    /// l'altra, perché è il commit stesso a cambiare la revisione.
+    pub(crate) scelti_dello_strumento: Option<(String, Vec<vectorcraft_geom::Point>)>,
 }
 
 impl Banco {
@@ -226,6 +232,7 @@ impl Banco {
                 prefs,
                 ponte: strumento::Ponte::default(),
                 ultimo_di_selezione: None,
+                scelti_dello_strumento: None,
             })
         })
     }
