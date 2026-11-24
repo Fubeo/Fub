@@ -270,16 +270,16 @@ motore	object.intertwine.edit	Edit	Object › Intertwine	dinamici	F2	T21	da fare
 motore	object.intertwine.release	Release	Object › Intertwine	dinamici	F2	T21	da fare	menu/oggetto	famiglia		Rilascia
 motore	object.intertwine.arrange	Arrange Intertwine Area		dinamici	F2	T21	da fare	menu/oggetto	famiglia		Disponi area intrecciata
 motore	layer.new	New Layer…	Window › Layers	livelli	F1	T15	fatto	ispettore/livelli	famiglia	finestra	Nuovo livello…
-motore	layer.newSublayer	New Sublayer…	Window › Layers	livelli	F1	T15	da fare	ispettore/livelli	famiglia	finestra	Nuovo sottolivello…
+motore	layer.newSublayer	New Sublayer…	Window › Layers	livelli	F1	T15	da fare	ispettore/livelli	famiglia	un sottolivello è un livello dentro un livello, e il formato della scena ha livelli solo sotto la radice (fub-scene `builder.rs`, `under_root`): il differ lo rifiuta (`livello_nuovo`). Serve un sottolivello nel formato, ADR	Nuovo sottolivello…
 motore	layer.delete	Delete Selection	Window › Layers	livelli	F1	T15	fatto	ispettore/livelli	famiglia		Elimina selezione
-motore	layer.duplicate	Duplicate Selection	Window › Layers	livelli	F1	T15	da fare	ispettore/livelli	famiglia	la copia di un livello nasce dentro il livello radice del motore, come sottolivello, e il differ non scrive un livello dentro un livello: lo rifiuta come «un oggetto nuovo che non è un tracciato» (`differenza.rs`, `elem`). Serve dire dove va nel file, DOMANDA del giro 2	Duplica selezione
-motore	layer.setCurrent	Set Current Layer		livelli	F1	T15	da fare	ispettore/livelli	famiglia	il livello corrente sta nella sessione del documento del client (opzione (a), `livello-corrente.ts`), non in quella del motore: sceglierlo dal pannello Livelli lo cambia già; resta da decidere se la voce del motore diventa quella del client	Imposta livello corrente
+motore	layer.duplicate	Duplicate Selection	Window › Layers	livelli	F1	T15	fatto	ispettore/livelli	famiglia	la copia di un livello va subito sopra di lui, come livello del file (`differenza.rs`, `livello_nuovo`), col nome «… copia»; anche un livello bloccato si copia, e la copia resta bloccata. Senza righe non parte	Duplica selezione
+motore	layer.setCurrent	Set Current Layer		livelli	F1	T15	da fare	ispettore/livelli	famiglia	il livello corrente sta nella sessione del documento del client (`livello-corrente.ts`), non in quella del motore: sceglierlo dal pannello Livelli lo cambia già, e la voce del motore cambierebbe solo la sua sessione	Imposta livello corrente
 motore	layer.highlight	Highlight Rows		livelli	F1	T15	da fare	ispettore/livelli	famiglia		Evidenzia righe
 motore	layer.setProps	Layer Options…	Window › Layers	livelli	F1	T15	fatto	ispettore/livelli	famiglia	finestra	Opzioni livello…
-motore	layer.collectInNew	Collect in New Layer	Window › Layers	livelli	F1	T15	da fare	ispettore/livelli	famiglia	il livello nuovo nasce dentro il livello radice del motore, come sottolivello, e il differ non scrive un livello dentro un livello (rifiuto «un oggetto nuovo che non è un tracciato»). Serve dire dove va nel file, DOMANDA del giro 2	Raccogli in un nuovo livello
+motore	layer.collectInNew	Collect in New Layer	Window › Layers	livelli	F1	T15	da fare	ispettore/livelli	famiglia	il livello nuovo nasce accanto agli oggetti, dentro il loro livello: è un sottolivello, che il formato della scena non ha (vedi Nuovo sottolivello)	Raccogli in un nuovo livello
 motore	layer.selectAll	Select Art		livelli	F1	T15	fatto	ispettore/livelli	famiglia		Seleziona grafica
-motore	layer.move	Move Rows		livelli	F1	T15	da fare	ispettore/livelli	famiglia		Sposta righe
-motore	node.move	Reorder		livelli	F1	T15	da fare	ispettore/livelli	famiglia	aspetta T15, decisione: il motore lo dà disabilitato come id	Riordina
+motore	layer.move	Move Rows		livelli	F1	T15	fatto	ispettore/livelli	famiglia	le righe vanno dentro, sopra o sotto il bersaglio; un livello o un gruppo bloccato non prende niente, una riga bloccata non si sposta (la sua copia, con `copy`, sì), una riga non va dentro se stessa	Sposta righe
+motore	node.move	Reorder		livelli	F1	T15	fatto	ispettore/livelli	famiglia	sposta una riga in un genitore e a un indice; una riga bloccata non si sposta, una riga non va dentro se stessa	Riordina
 motore	artboard.new	New Artboard	Window › Artboards	tavole	F2	T19	fatto	ispettore/design/documento	famiglia	pulsante «Nuova tavola» della sezione Tavole del Design (senza oggetti scelti): una tavola nuova accanto all'ultima, che il file scrive come <svg> di tavola col suo foglio	Nuova tavola da disegno
 motore	artboard.delete	Delete Artboard	Window › Artboards	tavole	F2	T19	fatto	ispettore/design/documento	famiglia	pulsante «Elimina tavola» della sezione Tavole: toglie la tavola scelta nell'elenco; spento con una tavola sola («Una tavola resta sempre.»)	Elimina tavola da disegno
 motore	artboard.deleteEmpty	Delete Empty Artboards	Window › Artboards	tavole	F2	T19	fatto	ispettore/design/documento	famiglia	pulsante «Elimina le tavole vuote» della sezione Tavole: toglie in un passo le tavole senza disegno	Elimina tavole da disegno vuote
@@ -290,7 +290,7 @@ motore	layer.clippingMask.toggle	Make/Release Clipping Mask	Window › Layers	li
 motore	layer.target	Target		livelli	F1	T15	da fare	ispettore/livelli	famiglia		Destinazione
 motore	layer.pasteRemembersLayers	Paste Remembers Layers	Window › Layers	livelli	F1	T15	da fare	ispettore/livelli	famiglia		Incolla nei livelli originali
 motore	layer.merge	Merge Selected	Window › Layers	livelli	F1	T15	fatto	ispettore/livelli	famiglia		Unisci selezionati
-motore	layer.flatten	Flatten Artwork	Window › Layers	livelli	F1	T15	da fare	ispettore/livelli	famiglia		Appiattisci grafica
+motore	layer.flatten	Flatten Artwork	Window › Layers	livelli	F1	T15	fatto	ispettore/livelli	famiglia	tutto nel livello della riga data, i livelli nascosti si scartano; un livello nascosto non prende niente, un livello bloccato ferma il comando	Appiattisci grafica
 motore	layer.releaseToLayers	Release to Layers (Sequence)	Window › Layers	livelli	F1	T15	da fare	ispettore/livelli	famiglia		Rilascia su livelli (sequenza)
 motore	layer.releaseToLayersBuild	Release to Layers (Build)	Window › Layers	livelli	F1	T15	da fare	ispettore/livelli	famiglia		Rilascia su livelli (accumulo)
 motore	layer.reverse	Reverse Order	Window › Layers	livelli	F1	T15	fatto	ispettore/livelli	famiglia		Inverti ordine
@@ -301,7 +301,7 @@ motore	layer.outlineOthers	Outline Others	Window › Layers	livelli	F1	T15	da fa
 motore	layer.previewAll	Preview All Layers	Window › Layers	livelli	F1	T15	da fare	ispettore/livelli	famiglia		Anteprima di tutti i livelli
 motore	layer.lockOthers	Lock Others	Window › Layers	livelli	F1	T15	fatto	ispettore/livelli	famiglia	blocca i livelli di primo livello che non tengono la selezione (Fub dà gli `ids`, livelli.rs); senza scelta il menu dice perché e il comando rifiuta `empty`; la carta resta fuori dal motore, così i livelli di Fub sono livelli del motore (casi su `livelli/doppio.svg` e `tre-livelli*.svg`, test livelli_carta)	Blocca altri
 motore	layer.unlockAll	Unlock All Layers	Window › Layers	livelli	F1	T15	fatto	ispettore/livelli	famiglia		Sblocca tutti i livelli
-motore	layer.locate	Locate Object	Window › Layers	livelli	F1	T15	da fare	ispettore/livelli	famiglia		Individua oggetto
+motore	layer.locate	Locate Object	Window › Layers	livelli	F1	T15	da fare	ispettore/livelli	famiglia	scorre e apre la riga dell’oggetto scelto nel pannello Livelli del motore: è vista del client, non cambia il file; il pannello di Fub la farà da sé	Individua oggetto
 motore	library.list	Libraries		simboli	F3	T22	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Librerie
 motore	library.get	Library		simboli	F3	T22	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Libreria
 motore	library.setCurrent	Show Library		simboli	F3	T22	da fare	ispettore/risorse	famiglia		Mostra libreria
@@ -508,7 +508,7 @@ motore	select.key	Cancel Key Object		livelli	F1	T15	da fare	ispettore/livelli	fa
 motore	select.anchors	Select Anchors		livelli	F1	T15	da fare	ispettore/livelli	famiglia	non è una voce di menu: vuole un punto o un colore	Seleziona punti di ancoraggio
 motore	select.segments	Select Segments		livelli	F1	T15	da fare	ispettore/livelli	famiglia	non è una voce di menu: vuole un punto o un colore	Seleziona segmenti
 motore	select.anchorsMany	Select Anchors		livelli	F1	T15	da fare	ispettore/livelli	famiglia	non è una voce di menu: vuole un punto o un colore	Seleziona punti di ancoraggio
-motore	select.color	Select by Color		livelli	F1	T15	da fare	ispettore/livelli	famiglia	non è una voce di menu: vuole un punto o un colore	Seleziona per colore
+motore	select.color	Select by Color		livelli	F1	T15	fatto	ispettore/livelli	famiglia	non è una voce di menu: vuole un colore di riempimento o di contorno, che si controlla in italiano prima del motore	Seleziona per colore
 motore	select.same.fillColor	Fill Color	Select › Same	livelli	F1	T15	fatto	menu/selezione/uguale	famiglia		Colore riempimento
 motore	select.same.strokeColor	Stroke Color	Select › Same	livelli	F1	T15	fatto	menu/selezione/uguale	famiglia		Colore traccia
 motore	select.same.strokeWeight	Stroke Weight	Select › Same	livelli	F1	T15	fatto	menu/selezione/uguale	famiglia		Spessore traccia

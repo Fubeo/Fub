@@ -917,6 +917,14 @@ impl Lavoro<'_> {
         for (i, l) in dopo.layers.iter().enumerate() {
             if !prima.nodi.contains_key(&l.id) {
                 self.livello_nuovo(dopo, i)?;
+                // Il contenuto di un livello nuovo (Duplica livello): ogni
+                // oggetto dentro, dopo il `g`, con il suo `add`; il livello
+                // nuovo sta alla radice e non ha una transform.
+                if let Some(figli) = l.children().filter(|f| !f.is_empty()) {
+                    self.gruppi_nuovi.insert(l.id, None);
+                    let figli: Vec<&Arc<Node>> = figli.iter().collect();
+                    nuovi.extend((0..figli.len()).map(|j| (Some(l.id), figli.clone(), j)));
+                }
                 continue;
             }
             cerca(l, prima, &self.riscritti, &self.liberati, &mut nuovi);
@@ -1315,15 +1323,17 @@ impl Lavoro<'_> {
         else {
             return Err(no("il gesto crea in cima un oggetto che non è un livello"));
         };
-        if !children.is_empty() {
-            return Err(no("il gesto crea un livello con qualcosa dentro"));
+        if children.iter().any(|c| c.is_layer()) {
+            return Err(no(
+                "il gesto crea un livello dentro un livello, che il formato della scena non ha",
+            ));
         }
         if *clip || *template || !*printable || !*preview || dim_images.is_some() {
             return Err(no(
                 "il livello nuovo ha opzioni che il formato della scena non ha",
             ));
         }
-        let nome = l.name.clone().unwrap_or_default();
+        let nome = self.nome_della_copia(l.name.as_deref().unwrap_or_default());
         if let Some(perche) = crate::mappa::nome_di_livello_sbagliato(&nome) {
             return Err(no(perche));
         }
@@ -1371,7 +1381,14 @@ impl Lavoro<'_> {
         let mut attrs = Map::new();
         attrs.insert("id".into(), json!(id));
         attrs.insert("fub:layer".into(), json!(nome));
-        if l.locked {
+        // La scena non mette niente in un livello bloccato: la copia di un
+        // livello bloccato (Duplica livello) nasce sbloccata, prende i suoi
+        // oggetti e si blocca con un `set`, che va dopo tutti gli `add`.
+        let con_figli = !children.is_empty();
+        if l.locked && con_figli {
+            self.set
+                .push(json!({ "op": "set", "id": id, "attrs": { "fub:locked": "true" } }));
+        } else if l.locked {
             attrs.insert("fub:locked".into(), json!("true"));
         }
         if !l.visible {
@@ -1382,6 +1399,17 @@ impl Lavoro<'_> {
             "elem": { "tag": "g", "attrs": attrs, "children": [] },
         }));
         Ok(())
+    }
+
+    /// Il nome di un livello nuovo. Duplica livello nomina la copia «X copy»
+    /// col nome del livello nel motore, che per un livello di Fub è il suo
+    /// id: la copia prende il nome che si vede, `fub:layer`, con « copia».
+    fn nome_della_copia(&self, nome: &str) -> String {
+        let mappa = &self.copia.mappa;
+        nome.strip_suffix(" copy")
+            .and_then(|id| mappa.dell_id(id))
+            .and_then(|i| mappa.elementi()[i].livello.as_deref())
+            .map_or_else(|| nome.to_string(), |vero| format!("{vero} copia"))
     }
 
     /// Gli oggetti che ci sono prima e dopo, dall'alto: i `set`.

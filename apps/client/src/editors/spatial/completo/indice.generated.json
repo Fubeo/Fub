@@ -1827,6 +1827,38 @@
     },
     {
       "fonte": "motore",
+      "id": "layer.duplicate",
+      "chiamata": {
+        "comando": "disegno.layer.duplicate"
+      },
+      "etichetta": {
+        "it": "Duplica selezione",
+        "en": "Duplicate Selection"
+      },
+      "posto": "ispettore/livelli",
+      "famiglia": "livelli",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "layer.flatten",
+      "chiamata": {
+        "comando": "disegno.layer.flatten"
+      },
+      "etichetta": {
+        "it": "Appiattisci grafica",
+        "en": "Flatten Artwork"
+      },
+      "posto": "ispettore/livelli",
+      "famiglia": "livelli",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "layer.hideOthers",
       "chiamata": {
         "comando": "disegno.layer.hideOthers"
@@ -1866,6 +1898,22 @@
       "etichetta": {
         "it": "Unisci selezionati",
         "en": "Merge Selected"
+      },
+      "posto": "ispettore/livelli",
+      "famiglia": "livelli",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "layer.move",
+      "chiamata": {
+        "comando": "disegno.layer.move"
+      },
+      "etichetta": {
+        "it": "Sposta righe",
+        "en": "Move Rows"
       },
       "posto": "ispettore/livelli",
       "famiglia": "livelli",
@@ -2127,6 +2175,22 @@
       "famiglia": "livelli",
       "tasto": null,
       "effetto": "legge",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "node.move",
+      "chiamata": {
+        "comando": "disegno.node.move"
+      },
+      "etichetta": {
+        "it": "Riordina",
+        "en": "Reorder"
+      },
+      "posto": "ispettore/livelli",
+      "famiglia": "livelli",
+      "tasto": null,
+      "effetto": "cambia",
       "finestra": false
     },
     {
@@ -4446,6 +4510,22 @@
       "posto": "menu/selezione",
       "famiglia": "livelli",
       "tasto": "Cmd+Alt+A",
+      "effetto": "mostra",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "select.color",
+      "chiamata": {
+        "comando": "disegno.select.color"
+      },
+      "etichetta": {
+        "it": "Seleziona per colore",
+        "en": "Select by Color"
+      },
+      "posto": "ispettore/livelli",
+      "famiglia": "livelli",
+      "tasto": null,
       "effetto": "mostra",
       "finestra": false
     },

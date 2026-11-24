@@ -136,6 +136,10 @@ impl StatoFamiglia for Stato {
             opzioni_della_modifica_globale(copia, &valore)?;
             return Ok(valore);
         }
+        if id == "select.color" {
+            colori_da_cercare(&valore)?;
+            return Ok(valore);
+        }
         if ALTRI_LIVELLI.contains(&id) {
             return Ok(livelli_della_selezione(copia, selezione, valore));
         }
@@ -202,6 +206,12 @@ impl StatoFamiglia for Stato {
                 fuori_dal_formato(valore)
             }
             "layer.new" => fuori_dal_formato(valore),
+            // Duplica livello copia le righe che la scheda Livelli manda (anche un livello bloccato:
+            // la copia resta bloccata, come in VectorCraft); senza righe il motore copierebbe il
+            // livello corrente del motore, che non è quello del client.
+            "layer.duplicate" => livelli_del_valore(copia, valore).err(),
+            "layer.move" => righe_da_spostare(copia, valore),
+            "layer.flatten" => livello_da_appiattire(copia, valore),
             "node.move" => {
                 let Some(chi) = valore.get("id").and_then(Value::as_u64) else {
                     return Some(DrawingRefusal::Empty);
@@ -270,7 +280,7 @@ fn livelli_della_selezione(copia: &Copia, selezione: &[String], mut valore: Valu
 
 /// I comandi che cambiano il documento su un livello: la scheda Livelli li chiama con il suo livello.
 fn cambia_il_livello(id: &str) -> bool {
-    matches!(id, "layer.delete" | "layer.setProps" | "layer.merge" | "layer.reverse" | "node.move")
+    matches!(id, "layer.delete" | "layer.setProps" | "layer.merge" | "layer.reverse" | "node.move" | "layer.move" | "layer.flatten")
 }
 
 /// Unire e invertire (T15, giro 2): le righe del comando sono almeno due, e unire vuole dei livelli
@@ -305,9 +315,9 @@ fn righe_da_unire_o_invertire(id: &str, copia: &Copia, valore: &Value) -> Result
     Ok(())
 }
 
-/// Il nuovo livello non vuole un livello scelto, ma cambia il documento.
+/// Nuovo livello e Duplica livello non vogliono un oggetto scelto, ma cambiano il documento.
 fn crea_livello(id: &str) -> bool {
-    id == "layer.new"
+    matches!(id, "layer.new" | "layer.duplicate")
 }
 
 /// Le voci di Uguale che confrontano il testo scelto: vogliono un testo fra gli oggetti scelti.
@@ -540,6 +550,83 @@ fn c_e_una_maschera(copia: &Copia) -> bool {
             .and_then(|n| copia.documento.node(n))
             .is_some_and(|n| matches!(n.kind, vectorcraft_doc::NodeKind::Group { clip: true, .. }))
     })
+}
+
+/// Sposta righe (`layer.move`, il trascinamento nella scheda Livelli): le righe e il bersaglio sono
+/// nella mappa; senza righe o senza bersaglio non parte (`empty`). Come in VectorCraft un livello o un
+/// gruppo bloccato non prende niente, e una riga non va dentro se stessa; in più, come gli altri
+/// comandi delle righe di Fub, una riga bloccata non si sposta (la sua copia, con `copy`, sì).
+fn righe_da_spostare(copia: &Copia, valore: &Value) -> Option<DrawingRefusal> {
+    let righe = match livelli_del_valore(copia, valore) {
+        Ok(righe) => righe,
+        Err(motivo) => return Some(motivo),
+    };
+    let bersaglio = match valore.get("target") {
+        None | Some(Value::Null) => return Some(DrawingRefusal::Empty),
+        Some(t) => match t.as_u64().and_then(|n| copia.mappa.del_nodo(NodeId(n))) {
+            Some(b) => b,
+            None => return Some(DrawingRefusal::Unmapped),
+        },
+    };
+    if righe.iter().any(|&r| dentro_se_stesso(copia, r, bersaglio)) {
+        return Some(DrawingRefusal::Unsupported);
+    }
+    let copia_soltanto = valore.get("copy").and_then(Value::as_bool).unwrap_or(false);
+    if !copia_soltanto && righe.iter().any(|&r| bloccato_con_antenati(copia, r)) {
+        return Some(DrawingRefusal::Locked);
+    }
+    let dentro = matches!(valore.get("place").and_then(Value::as_str), None | Some("inside" | "into"));
+    let genitore = if dentro { Some(bersaglio) } else { copia.mappa.elemento(bersaglio).and_then(|e| e.genitore) };
+    genitore.is_some_and(|g| bloccato_con_antenati(copia, g)).then_some(DrawingRefusal::Locked)
+}
+
+/// Appiattisci (`layer.flatten`): tutto finisce nel livello della riga data, i livelli nascosti si
+/// scartano. Senza riga non parte (`empty`: il motore prenderebbe il suo livello corrente, che non è
+/// quello del client); un livello nascosto non prende niente (`hidden`, come in VectorCraft); e poiché
+/// ogni livello cambia, uno bloccato lo ferma (`locked`).
+fn livello_da_appiattire(copia: &Copia, valore: &Value) -> Option<DrawingRefusal> {
+    let riga = match valore.get("id") {
+        None | Some(Value::Null) => return Some(DrawingRefusal::Empty),
+        Some(v) => match v.as_u64().and_then(|n| copia.mappa.del_nodo(NodeId(n))) {
+            Some(r) => r,
+            None => return Some(DrawingRefusal::Unmapped),
+        },
+    };
+    let mut livello = riga;
+    while let Some(g) = copia.mappa.elemento(livello).and_then(|e| e.genitore) {
+        livello = g;
+    }
+    if nascosto_con_antenati(copia, livello) {
+        return Some(DrawingRefusal::Hidden);
+    }
+    copia
+        .mappa
+        .elementi()
+        .iter()
+        .any(|e| e.ruolo == Role::Layer && e.bloccato)
+        .then_some(DrawingRefusal::Locked)
+}
+
+/// Seleziona per colore (`select.color`): almeno uno fra `fill` e `stroke`, e ciascuno un colore che
+/// il motore legge; se no `BadArgs` in italiano, prima del motore (che lo direbbe in inglese).
+fn colori_da_cercare(valore: &Value) -> Result<(), PluginError> {
+    let mut uno = false;
+    for (chiave, nome) in [("fill", "riempimento"), ("stroke", "contorno")] {
+        match valore.get(chiave) {
+            None | Some(Value::Null) => {}
+            Some(v) => {
+                if vectorcraft_engine::cmd::color_value(v).is_none() {
+                    return Err(PluginError::BadArgs(format!("Il colore del {nome} non si legge: scrivilo come #rrggbb.").into()));
+                }
+                uno = true;
+            }
+        }
+    }
+    if uno {
+        Ok(())
+    } else {
+        Err(PluginError::BadArgs("Scegli un colore di riempimento, di contorno o tutti e due.".into()))
+    }
 }
 
 /// Il livello `i`, o un suo antenato, è bloccato nella mappa.

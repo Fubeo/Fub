@@ -36,8 +36,26 @@ l'arte visibile e sbloccata del livello, e con un livello bloccato non sceglie
 niente (`Empty`). Nascondi altri e Blocca altri (`layer.hideOthers`,
 `layer.lockOthers`) tengono i livelli di primo livello della selezione: Fub li
 calcola e li passa al motore come `ids`; senza scelta né righe la voce è spenta
-col suo perché e il comando rifiuta `Empty`. Duplica e raccogli in un livello
-nuovo restano «da fare»: il file non scrive un livello dentro un livello.
+col suo perché e il comando rifiuta `Empty`.
+
+Duplica livello (`layer.duplicate`) copia le righe di `ids`: la copia va subito
+sopra l'originale, come livello del file, col nome «… copia» e i suoi oggetti
+(`differenza.rs`, `livello_nuovo`). Anche un livello bloccato si copia: la copia
+nasce sbloccata, prende gli oggetti e si blocca con un `set` alla fine, perché
+la scena non mette niente in un livello bloccato. Sposta righe (`layer.move`,
+`ids`, `target`, `place` sopra, sotto o dentro, `copy`) e Riordina
+(`node.move`) spostano righe nella scena; come in VectorCraft un livello o un
+gruppo bloccato non prende niente e una riga non va dentro se stessa
+(`Unsupported`); in più una riga bloccata non si sposta, la sua copia sì.
+Appiattisci (`layer.flatten`, `id`) porta tutto nel livello della riga data e
+scarta i livelli nascosti; un livello nascosto non prende niente (`Hidden`) e un
+livello bloccato ferma il comando (`Locked`). Seleziona per colore
+(`select.color`) vuole `fill`, `stroke` o tutti e due, controllati in italiano
+prima del motore (`BadArgs`). Senza righe questi comandi non partono (`Empty`):
+il motore prenderebbe il suo livello corrente, che non è quello del client.
+Restano «da fare», con la causa nella mappa, Nuovo sottolivello e Raccogli in un
+nuovo livello (il formato non ha un livello dentro un livello), il livello che
+ritaglia, Imposta livello corrente e Individua oggetto (sono del client).
 
 Il livello corrente sta nel client, nella sessione del documento
 (`apps/client/src/editors/spatial/livello-corrente.ts`): una cella per
@@ -73,7 +91,8 @@ il nome, Nuovo livello ed Elimina livello chiedono a
 sempre. Quando la porta risponde `nativo` (motore assente, famiglia non pronta,
 livello che il motore non conosce) l'editor scrive le stesse operazioni da sé;
 un livello bloccato si ferma prima, col motivo `draw.livelli.bloccato`. Lo
-spostamento delle righe resta nativo, perché `node.move` non è nell'indice.
+spostamento delle righe della scheda resta nativo: `layer.move` e `node.move`
+sono comandi del motore, ma la scheda non li chiama ancora.
 L'albero si rifà dalla scena dopo ogni commit, quindi non serve un aggancio in
 più per sapere che il motore ha cambiato il documento.
 

@@ -300,6 +300,8 @@ fn una_selezione_con_un_elemento_non_mappato_non_cambia_niente() {
         // Le specie di Oggetto (K6 T15, giro 6) guardano il disegno, non la scelta.
         "disegno.select.object.strayPoints",
         "disegno.select.object.openPaths",
+        // Seleziona per colore cerca il colore negli argomenti, in tutto il disegno.
+        "disegno.select.color",
         "disegno.paint.toggleActive",
         "disegno.gradient.selectStop",
         "disegno.gradient.presets.list",
