@@ -530,7 +530,7 @@ export function installToolbar(ctx: EditorContext): void {
     closed: ctx.grid.closed as readonly SectionId[],
     onChange: (id, value) => ctx.changeField(id, value),
     onAction: (id) => ctx.runAction(id),
-    onExportSelection: () => options.onExport?.("selection"),
+    onExportSelection: () => options.onExport?.({ what: "selection" }),
     onSection: (id, open) => {
       const closed = ctx.grid.closed.filter((each) => each !== id);
       ctx.changeGrid({ ...ctx.grid, closed: open ? closed : [...closed, id] });

@@ -99,7 +99,7 @@ import { linkTarget, nodeOf } from "./tools/arrange";
 import { createDrawEditor, type DrawEditor, type DrawExport, type DrawImages, type DrawLinks, type DrawPlace, type SpazioSalvatoLayout } from "./tools/editor";
 import { cardChrome, inspectorChrome, type InspectorChrome } from "./tools/editor/chrome/hosts";
 import { exportDialog } from "./tools/export-dialog";
-import { asking } from "./tools/export-plan";
+import { asking, type ExportAsk } from "./tools/export-plan";
 import { featuresFor, type ToolId, type Workspace } from "./tools/registry";
 import { DISEGNO_COMPLETO } from "./tools/editor/chrome/workspace";
 import { imageDataUri, imageRefs, READ_IMAGE_BYTES, type ImageRef } from "./read-images";
@@ -326,7 +326,7 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
   let tabsOffered = false;
   /// Che cosa esportare, chiesto dall'editor per la prossima apertura della
   /// finestra «Esporta».
-  let exportAsked: "selection" | null = null;
+  let exportAsked: ExportAsk | null = null;
   const panelsChanged = (): void => {
     for (const listener of [...panelListeners]) listener();
   };
@@ -611,8 +611,8 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
       ...(options.onExport === undefined || compact
         ? {}
         : {
-            onExport: (what?: "selection") => {
-              exportAsked = what ?? null;
+            onExport: (ask?: ExportAsk) => {
+              exportAsked = ask ?? null;
               options.onExport!();
             },
           }),

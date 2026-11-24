@@ -171,13 +171,26 @@ export function initialState(scene: ExportScene, memory: ExportMemory | null): E
   };
 }
 
-/// Le scelte ricordate `memory`, con `what` chiesto da chi apre la finestra
-/// (la selezione, dall'ispettore): le altre restano quelle di sempre.
-export function asking(memory: ExportMemory | null, what: ExportWhat): ExportMemory {
+/// Ciò che chi apre la finestra chiede: che cosa esportare (la selezione,
+/// dall'ispettore o da File › Esporta selezione…) e il formato (File › Esporta
+/// come PNG…, come SVG…, Salva come PDF…).
+export interface ExportAsk {
+  readonly what?: ExportWhat;
+  readonly format?: ExportFormat;
+}
+
+/// Le scelte ricordate `memory`, con ciò che `ask` chiede: le altre restano
+/// quelle di sempre. Un formato chiesto senza `what` esporta ciò che si
+/// esportava, ma non la selezione: come in VectorCraft, «Esporta come» sono le
+/// tavole o il documento, e la selezione ha la sua voce.
+export function asking(memory: ExportMemory | null, ask: ExportAsk): ExportMemory {
+  // Le tavole, se non ce ne sono, diventano il disegno intero in `initialState`: è la sua
+  // scelta di partenza.
+  const what = ask.what ?? (memory === null || memory.what === "selection" ? "boards" : memory.what);
   return {
     what,
     off: memory?.off ?? [],
-    format: memory?.format ?? "png",
+    format: ask.format ?? memory?.format ?? "png",
     size: memory?.size ?? { scale: 2 },
     background: memory?.background ?? "paper",
     print: memory?.print ?? PLAIN_PRINT,

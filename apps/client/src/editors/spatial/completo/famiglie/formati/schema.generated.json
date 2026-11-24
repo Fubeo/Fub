@@ -9,6 +9,31 @@
     },
     {
       "fonte": "interfaccia",
+      "id": "file.export.pdf",
+      "campi": []
+    },
+    {
+      "fonte": "interfaccia",
+      "id": "file.export.png",
+      "campi": []
+    },
+    {
+      "fonte": "interfaccia",
+      "id": "file.export.svg",
+      "campi": []
+    },
+    {
+      "fonte": "interfaccia",
+      "id": "file.exportAs",
+      "campi": []
+    },
+    {
+      "fonte": "interfaccia",
+      "id": "file.exportSelection",
+      "campi": []
+    },
+    {
+      "fonte": "interfaccia",
       "id": "file.place",
       "campi": []
     }

@@ -99,6 +99,8 @@ export function voceClienteCompleto(ctx: EditorContext, id: string): string | nu
   if (id === CAMBIA_UNITA) return null;
   const immagini = voceImmagini(ctx, id);
   if (immagini !== undefined) return immagini;
+  const esporta = voceEsporta(ctx, id);
+  if (esporta !== undefined) return esporta;
   const visualizza = voceVisualizza(ctx, id);
   return visualizza !== undefined ? visualizza : voceClienteBanda(id);
 }
@@ -119,6 +121,26 @@ export function voceImmagini(ctx: EditorContext, id: string): string | null | un
   if (id === "file.place") return ctx.insertsImages(ctx.features) ? null : t("draw.place.off");
   if (ctx.croppingImage()) return null;
   return ctx.selectedUnits().some((unit) => unit.role === "image") ? null : t("draw.crop.none");
+}
+
+/// Le voci di File che esportano, come in VectorCraft: aprono la finestra «Esporta» di chi
+/// monta l'editor (`onExport`, `surface.ts`) già sul formato, o sulla selezione. Il file lo
+/// scrive l'host, che lo legge dal vault: si esporta anche in sola lettura.
+export const VOCI_ESPORTA: Readonly<Record<string, (ctx: EditorContext) => void>> = {
+  "file.exportAs": (ctx) => ctx.options.onExport?.(),
+  "file.export.png": (ctx) => ctx.options.onExport?.({ format: "png" }),
+  "file.export.svg": (ctx) => ctx.options.onExport?.({ format: "svg" }),
+  "file.export.pdf": (ctx) => ctx.options.onExport?.({ format: "pdf" }),
+  "file.exportSelection": (ctx) => ctx.options.onExport?.({ what: "selection" }),
+};
+
+/// Lo stato di una voce di `VOCI_ESPORTA`: `null` se si fa, il perché se è spenta,
+/// `undefined` se non è una di loro.
+export function voceEsporta(ctx: EditorContext, id: string): string | null | undefined {
+  if (VOCI_ESPORTA[id] === undefined) return undefined;
+  if (ctx.options.onExport === undefined || !ctx.has("export")) return t("draw.export.off");
+  if (id === "file.exportSelection" && ctx.selection.length === 0) return t("draw.export.noselection");
+  return null;
 }
 
 /// Lo stato con la spunta delle voci del Disegno completo, `undefined` se non ne hanno.

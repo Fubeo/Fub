@@ -7041,6 +7041,87 @@
     },
     {
       "fonte": "interfaccia",
+      "id": "file.export.pdf",
+      "chiamata": {
+        "client": "file.export.pdf"
+      },
+      "etichetta": {
+        "it": "Salva come PDF…",
+        "en": "Save as PDF…"
+      },
+      "posto": "menu/file",
+      "famiglia": "formati",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true,
+      "sotto": "disegno-formati"
+    },
+    {
+      "fonte": "interfaccia",
+      "id": "file.export.png",
+      "chiamata": {
+        "client": "file.export.png"
+      },
+      "etichetta": {
+        "it": "Esporta come PNG…",
+        "en": "Export As PNG…"
+      },
+      "posto": "menu/file",
+      "famiglia": "formati",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "interfaccia",
+      "id": "file.export.svg",
+      "chiamata": {
+        "client": "file.export.svg"
+      },
+      "etichetta": {
+        "it": "Esporta come SVG…",
+        "en": "Export As SVG…"
+      },
+      "posto": "menu/file",
+      "famiglia": "formati",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "interfaccia",
+      "id": "file.exportAs",
+      "chiamata": {
+        "client": "file.exportAs"
+      },
+      "etichetta": {
+        "it": "Esporta come…",
+        "en": "Export As…"
+      },
+      "posto": "menu/file",
+      "famiglia": "formati",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "interfaccia",
+      "id": "file.exportSelection",
+      "chiamata": {
+        "client": "file.exportSelection"
+      },
+      "etichetta": {
+        "it": "Esporta selezione…",
+        "en": "Export Selection…"
+      },
+      "posto": "menu/file",
+      "famiglia": "formati",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "interfaccia",
       "id": "file.place",
       "chiamata": {
         "client": "file.place"

@@ -124,7 +124,7 @@ import type { SectionId } from "./properties";
 import type { Grid } from "./grid";
 import { SceneIndex } from "./hit";
 import type { Suggested } from "./suggestions";
-import { exportBox, type ExportScene } from "./export-plan";
+import { exportBox, type ExportAsk, type ExportScene } from "./export-plan";
 import type { ImageCodec } from "./images";
 import { RECENT_COLORS } from "./palette";
 import type { Feature, ToolId, ToolProfile, Workspace } from "./registry";
@@ -353,10 +353,11 @@ export interface DrawEditorOptions {
   /// Un suggerimento è stato mostrato, o non serve più: quelli di adesso.
   readonly onSuggestedChange?: (seen: readonly string[]) => void;
   /// «Esporta» nella barra in alto e nel menu del disegno: chi monta
-  /// l'editor apre la sua finestra, già sulla selezione se `what` lo
-  /// chiede («Esporta la selezione» dell'ispettore). Senza, il pulsante non
-  /// c'è.
-  readonly onExport?: (what?: "selection") => void;
+  /// l'editor apre la sua finestra, già su ciò che `ask` chiede: la
+  /// selezione («Esporta la selezione» dell'ispettore, File › Esporta
+  /// selezione… del Completo) o un formato (File › Esporta come PNG…).
+  /// Senza, il pulsante non c'è.
+  readonly onExport?: (ask?: ExportAsk) => void;
   /// Mostra o nasconde l'ispettore di chi ospita l'editor (Tab del Completo).
   readonly onToggleInspector?: () => void;
   /// Il motore del disegno (K5): con lui Selezione, Rettangolo, Ellisse,
