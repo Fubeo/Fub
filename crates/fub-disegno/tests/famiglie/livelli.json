@@ -414,6 +414,260 @@
       }
     },
     {
+      "id": "layer.newSublayer",
+      "disegno": "tre-livelli.svg",
+      "selezione": [],
+      "argomenti": {
+        "parent": 5
+      },
+      "dopo": "sottolivello-dopo.svg",
+      "atteso": {
+        "ops": [
+          {
+            "op": "add",
+            "parent": "l2b2b2b2b",
+            "pos": {
+              "last": true
+            },
+            "elem": {
+              "tag": "g",
+              "attrs": {
+                "id": "l00000000",
+                "fub:layer": "Livello 4"
+              },
+              "children": []
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "layer.newSublayer",
+      "disegno": "tre-livelli.svg",
+      "selezione": [],
+      "argomenti": {
+        "parent": 7,
+        "bottom": true,
+        "name": "Schizzi"
+      },
+      "dopo": "sottolivello-sotto-dopo.svg",
+      "atteso": {
+        "ops": [
+          {
+            "op": "add",
+            "parent": "l3c3c3c3c",
+            "pos": {
+              "first": true
+            },
+            "elem": {
+              "tag": "g",
+              "attrs": {
+                "id": "l00000000",
+                "fub:layer": "Schizzi"
+              },
+              "children": []
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "layer.newSublayer",
+      "disegno": "tre-livelli.svg",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "layer.newSublayer",
+      "disegno": "tre-livelli.svg",
+      "selezione": [],
+      "argomenti": {
+        "parent": 4
+      },
+      "atteso": {
+        "rifiuto": "unsupported"
+      }
+    },
+    {
+      "id": "layer.newSublayer",
+      "disegno": "bloccato.svg",
+      "selezione": [],
+      "argomenti": {
+        "parent": 3
+      },
+      "atteso": {
+        "rifiuto": "locked"
+      }
+    },
+    {
+      "id": "layer.collectInNew",
+      "disegno": "tre-livelli.svg",
+      "selezione": [
+        "ob2b2b2b2"
+      ],
+      "argomenti": {},
+      "dopo": "raccogli-dopo.svg",
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "add",
+                "parent": "l2b2b2b2b",
+                "pos": {
+                  "last": true
+                },
+                "elem": {
+                  "tag": "g",
+                  "attrs": {
+                    "id": "l00000000",
+                    "fub:layer": "Livello 4"
+                  },
+                  "children": []
+                }
+              },
+              {
+                "op": "move",
+                "target": "ob2b2b2b2",
+                "parent": "l00000000",
+                "pos": {
+                  "first": true
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "layer.collectInNew",
+      "disegno": "tre-livelli.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "ob2b2b2b2"
+      ],
+      "argomenti": {},
+      "dopo": "raccogli-due-livelli-dopo.svg",
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "add",
+                "parent": "l2b2b2b2b",
+                "pos": {
+                  "last": true
+                },
+                "elem": {
+                  "tag": "g",
+                  "attrs": {
+                    "id": "l00000000",
+                    "fub:layer": "Livello 4"
+                  },
+                  "children": []
+                }
+              },
+              {
+                "op": "move",
+                "target": "oa1a1a1a1",
+                "parent": "l00000000",
+                "pos": {
+                  "first": true
+                }
+              },
+              {
+                "op": "move",
+                "target": "ob2b2b2b2",
+                "parent": "l00000000",
+                "pos": {
+                  "after": "oa1a1a1a1"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "layer.collectInNew",
+      "disegno": "tre-livelli.svg",
+      "selezione": [],
+      "argomenti": {
+        "ids": [
+          3,
+          5
+        ]
+      },
+      "dopo": "raccogli-livelli-dopo.svg",
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "after": "fub-paper"
+                },
+                "elem": {
+                  "tag": "g",
+                  "attrs": {
+                    "id": "l00000000",
+                    "fub:layer": "Livello 4"
+                  },
+                  "children": []
+                }
+              },
+              {
+                "op": "move",
+                "target": "l1a2b3c4d",
+                "parent": "l00000000",
+                "pos": {
+                  "first": true
+                }
+              },
+              {
+                "op": "move",
+                "target": "l2b2b2b2b",
+                "parent": "l00000000",
+                "pos": {
+                  "after": "l1a2b3c4d"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "layer.collectInNew",
+      "disegno": "tre-livelli.svg",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "layer.collectInNew",
+      "disegno": "bloccato.svg",
+      "selezione": [],
+      "argomenti": {
+        "ids": [
+          3
+        ]
+      },
+      "atteso": {
+        "rifiuto": "locked"
+      }
+    },
+    {
       "id": "layer.new",
       "disegno": "doppio.svg",
       "selezione": [],

@@ -14,7 +14,7 @@ import { opacityOf } from "../look";
 import { FRAME_PX } from "../frame";
 import { screenBox } from "../../view";
 import type { LayerInfo } from "../hit";
-import { inLayer } from "../layers";
+import { inLayer, rootLayers } from "../layers";
 import { ARRANGE_SHOWN, BAR_FEATURES } from "./constants";
 import type { EditorContext } from "./context";
 import { layerState, layerTitle, union } from "./helpers";
@@ -175,7 +175,7 @@ export function installControls(ctx: EditorContext): void {
   /// si vede e non è bloccato, o il più alto. `null` se il disegno non ha
   /// livelli.
   function currentLayer(): LayerInfo | null {
-    const layers = currentIndex().layers;
+    const layers = rootLayers(currentIndex().layers);
     const found = chosenIn(layers);
     if (found !== null) return found;
     for (let i = layers.length - 1; i >= 0; i--) if (!layers[i]!.locked && !layers[i]!.hidden) return layers[i]!;
@@ -183,8 +183,10 @@ export function installControls(ctx: EditorContext): void {
   }
   ctx.currentLayer = currentLayer;
 
-  /// `layer` diventa il livello corrente.
-  const choose = (layer: LayerInfo): void => {
+  /// `layer` diventa il livello corrente; per un sottolivello, il livello
+  /// della radice che lo contiene.
+  const choose = (chosen: LayerInfo): void => {
+    const layer = chosen.path.length === 1 ? chosen : (rootLayers(currentIndex().layers).find((each) => each.path[0] === chosen.path[0]) ?? chosen);
     ctx.chosen = { key: keyOf(layer), at: layer.path[0]! };
     syncLayers();
   };
@@ -197,7 +199,7 @@ export function installControls(ctx: EditorContext): void {
     const units = selectedUnits();
     const at = units[0]?.path[0];
     if (at === undefined || units.some((unit) => unit.path.length < 2 || unit.path[0] !== at)) return;
-    const layer = currentIndex().layers.find((other) => other.path[0] === at);
+    const layer = rootLayers(currentIndex().layers).find((other) => other.path[0] === at);
     if (layer !== undefined) choose(layer);
   }
   ctx.followSelection = followSelection;
@@ -390,7 +392,7 @@ export function installControls(ctx: EditorContext): void {
     nameArrange(openLinkButton, openLinkText(), "Alt-Enter");
     unlinkButton.hidden = !has("links") || !units.some(isLink);
     // Con un livello solo, che ha già tutto, non c'è dove spostare.
-    const layers = currentIndex().layers;
+    const layers = rootLayers(currentIndex().layers);
     intoButton.hidden = !has("layers") || layers.length === 0 || (layers.length === 1 && units.every((unit) => inLayer(unit, layers[0]!)));
     shapeButton.hidden = !has("recognize") || !units.some(ctx.holdsPenStroke);
     // L'opacità si scrive agli oggetti che la possono avere, e si legge
@@ -531,7 +533,7 @@ export function installControls(ctx: EditorContext): void {
     // Il livello scelto si ritrova anche se ha cambiato posto o chiave; se
     // non c'è più la scelta resta, e torna se il livello torna (annulla).
     if (ctx.chosen !== null) {
-      const layer = chosenIn(currentIndex().layers);
+      const layer = chosenIn(rootLayers(currentIndex().layers));
       if (layer !== null) ctx.chosen = { key: keyOf(layer), at: layer.path[0]! };
     }
     syncControls();

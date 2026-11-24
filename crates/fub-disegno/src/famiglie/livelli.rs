@@ -18,9 +18,9 @@ use fub_abi::{DrawingDisabledReason, DrawingRefusal, PluginError};
 use fub_motori::{ErroreMotore, Servizi};
 use fub_scene::Role;
 use serde_json::Value;
-use vectorcraft_doc::{Node, NodeId, NodeKind};
+use vectorcraft_doc::{Document, Node, NodeId, NodeKind};
 
-use super::{nodi_scelti, StatoFamiglia};
+use super::{nodi_scelti, StatoFamiglia, Tradotto};
 use crate::apertura::Copia;
 use crate::mappa::nome_di_livello_sbagliato;
 
@@ -110,6 +110,10 @@ impl StatoFamiglia for Stato {
         }
     }
 
+    fn traduci_dopo(id: &str, copia: &Copia, dopo: &Document) -> Result<Option<Tradotto>, PluginError> {
+        Ok(if id == "layer.collectInNew" { nome_della_raccolta(copia, dopo) } else { None })
+    }
+
     /// Il confronto del testo senza un testo fra gli oggetti scelti non parte: `empty`, come un comando
     /// che non tocca niente. Il motore lo direbbe con un errore in inglese («select a text object»).
     fn rifiuto(id: &str, copia: &Copia, selezione: &[String]) -> Option<DrawingRefusal> {
@@ -143,7 +147,7 @@ impl StatoFamiglia for Stato {
         if ALTRI_LIVELLI.contains(&id) {
             return Ok(livelli_della_selezione(copia, selezione, valore));
         }
-        if !matches!(id, "layer.new" | "layer.setProps") {
+        if !matches!(id, "layer.new" | "layer.newSublayer" | "layer.setProps") {
             return Ok(valore);
         }
         match valore.get("name") {
@@ -152,7 +156,7 @@ impl StatoFamiglia for Stato {
                     return Err(PluginError::BadArgs(perche.into()));
                 }
             }
-            Some(Value::Null) | None if id == "layer.new" => {
+            Some(Value::Null) | None if id != "layer.setProps" => {
                 if !valore.is_object() {
                     valore = Value::Object(serde_json::Map::new());
                 }
@@ -206,6 +210,16 @@ impl StatoFamiglia for Stato {
                 fuori_dal_formato(valore)
             }
             "layer.new" => fuori_dal_formato(valore),
+            "layer.newSublayer" => genitore_del_sottolivello(copia, valore).or_else(|| fuori_dal_formato(valore)),
+            // Raccogli in un nuovo livello: le righe date, o senza righe gli oggetti scelti (quelli
+            // bloccati li ha già rifiutati `esegui`). Toglierle da un livello bloccato lo cambia.
+            "layer.collectInNew" => match valore.get("ids") {
+                None | Some(Value::Null) => selezione.is_empty().then_some(DrawingRefusal::Empty),
+                Some(_) => match livelli_del_valore(copia, valore) {
+                    Ok(righe) => righe.iter().any(|&i| bloccato_con_antenati(copia, i)).then_some(DrawingRefusal::Locked),
+                    Err(motivo) => Some(motivo),
+                },
+            },
             // Duplica livello copia le righe che la scheda Livelli manda (anche un livello bloccato:
             // la copia resta bloccata, come in VectorCraft); senza righe il motore copierebbe il
             // livello corrente del motore, che non è quello del client.
@@ -315,9 +329,42 @@ fn righe_da_unire_o_invertire(id: &str, copia: &Copia, valore: &Value) -> Result
     Ok(())
 }
 
-/// Nuovo livello e Duplica livello non vogliono un oggetto scelto, ma cambiano il documento.
+/// Nuovo livello, Nuovo sottolivello, Duplica livello e Raccogli in un nuovo livello non vogliono
+/// un oggetto scelto, ma cambiano il documento.
 fn crea_livello(id: &str) -> bool {
-    matches!(id, "layer.new" | "layer.duplicate")
+    matches!(id, "layer.new" | "layer.newSublayer" | "layer.duplicate" | "layer.collectInNew")
+}
+
+/// Il genitore di Nuovo sottolivello (`parent`) è un livello della mappa e non è bloccato: senza
+/// genitore il motore prenderebbe il suo livello corrente, che non è quello della scheda Livelli
+/// (`empty`, come Duplica livello senza righe). Un oggetto o un gruppo non prende un sottolivello.
+fn genitore_del_sottolivello(copia: &Copia, valore: &Value) -> Option<DrawingRefusal> {
+    let genitore = match valore.get("parent") {
+        None | Some(Value::Null) => return Some(DrawingRefusal::Empty),
+        Some(v) => match v.as_u64().and_then(|n| copia.mappa.del_nodo(NodeId(n))) {
+            Some(g) => g,
+            None => return Some(DrawingRefusal::Unmapped),
+        },
+    };
+    if copia.mappa.elemento(genitore).is_none_or(|e| e.ruolo != Role::Layer) {
+        return Some(DrawingRefusal::Unsupported);
+    }
+    bloccato_con_antenati(copia, genitore).then_some(DrawingRefusal::Locked)
+}
+
+/// Il livello che Raccogli in un nuovo livello crea prende il primo «Livello N» libero, come Nuovo
+/// livello: il motore lo chiamerebbe «Layer N», e non ha un argomento per il nome.
+fn nome_della_raccolta(copia: &Copia, dopo: &Document) -> Option<Tradotto> {
+    let mut nuovi = Vec::new();
+    dopo.walk(|n| {
+        if n.is_layer() && copia.documento.node(n.id).is_none() {
+            nuovi.push(n.id);
+        }
+    });
+    let [nuovo] = nuovi[..] else { return None };
+    let mut documento = dopo.clone();
+    documento.node_mut(nuovo)?.name = Some(copia.mappa.nome_libero());
+    Some(Tradotto { documento, perdite: Vec::new() })
 }
 
 /// Le voci di Uguale che confrontano il testo scelto: vogliono un testo fra gli oggetti scelti.

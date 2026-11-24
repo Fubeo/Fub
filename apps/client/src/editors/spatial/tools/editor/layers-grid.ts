@@ -26,6 +26,7 @@ import {
   MAX_LAYER_NAME,
   removeLayerOps,
   renameLayerOps,
+  rootLayers,
   shiftLayerOps,
   type Shift,
 } from "../layers";
@@ -285,7 +286,7 @@ export function installLayersGrid(ctx: EditorContext): void {
   function shiftLayer(shift: Shift): void {
     const layer = layering();
     if (layer === null) return;
-    const layers = currentIndex().layers;
+    const layers = rootLayers(currentIndex().layers);
     const at = layers.findIndex((other) => other.path[0] === layer.path[0]);
     const other = layers[shift === "up" ? at + 1 : at - 1];
     const looked = keptLook(shiftLayerOps(ctx.engine.model!, layers, layer, shift, newIds()), { key: "draw.order.styled" });
@@ -300,7 +301,7 @@ export function installLayersGrid(ctx: EditorContext): void {
   function deleteLayer(): void {
     const layer = layering();
     if (layer === null) return;
-    const layers = currentIndex().layers;
+    const layers = rootLayers(currentIndex().layers);
     if (layers.length < 2 || layer.locked) return;
     const at = layers.findIndex((other) => other.path[0] === layer.path[0]);
     const next = layers[at - 1] ?? layers[at + 1]!;
@@ -334,6 +335,36 @@ export function installLayersGrid(ctx: EditorContext): void {
     });
   }
 
+  /// Nuovo sottolivello (solo col motore del Completo): un livello vuoto in cima al livello
+  /// corrente, come in VectorCraft (ADR 0251). Si continua a disegnare nel livello corrente; il
+  /// sottolivello si vede nell'albero degli oggetti.
+  function addSublayer(): void {
+    const layer = layering();
+    if (layer === null || !editable()) return;
+    cancelGesture();
+    const name = layerTitle(layer);
+    layerWrite({
+      label: "draw.livelli.azione.sottolivello",
+      request: { kind: "sottolivello", livello: layer.id ?? "" },
+      engineKey: () => layer.id,
+      said: () => t("draw.livelli.sottolivello.fatto", { name }),
+    });
+  }
+
+  /// Raccogli in un nuovo livello (solo col motore del Completo): gli oggetti scelti in un livello
+  /// nuovo accanto al più alto di loro; dentro un livello è un sottolivello.
+  function collectInNew(): void {
+    const scelti = [...ctx.selection];
+    if (scelti.length === 0 || !editable()) return;
+    cancelGesture();
+    layerWrite({
+      label: "draw.livelli.azione.raccogli",
+      request: { kind: "raccogli", oggetti: scelti },
+      engineKey: () => null,
+      said: () => t("draw.livelli.raccolto"),
+    });
+  }
+
   /// Appiattisci grafica (solo col motore del Completo): tutto il disegno nel livello corrente, i
   /// livelli nascosti si scartano, come in VectorCraft. Il livello corrente resta lui.
   function flattenLayer(): void {
@@ -352,7 +383,7 @@ export function installLayersGrid(ctx: EditorContext): void {
   /// Il menu dei livelli: i livelli dalla cima, per scegliere quello
   /// corrente, e i comandi su quello corrente.
   const layerItems = (): MenuItem[] => {
-    const layers = currentIndex().layers;
+    const layers = rootLayers(currentIndex().layers);
     const current = currentLayer();
     const items: MenuItem[] = [];
     for (let i = layers.length - 1; i >= 0; i--) {
@@ -389,6 +420,17 @@ export function installLayersGrid(ctx: EditorContext): void {
       const hiddenOthers = layers.some((other) => other.hidden && other.path[0] !== current.path[0]);
       items.push(
         { label: t("draw.livelli.duplica", { name }), run: () => duplicateLayer() },
+        {
+          label: t("draw.livelli.sottolivello", { name }),
+          ...(frozen === null ? {} : { disabled: true, description: t(frozen) }),
+          run: () => addSublayer(),
+        },
+        {
+          label: t("draw.livelli.raccogli"),
+          disabled: ctx.selection.length === 0,
+          ...(ctx.selection.length === 0 ? { description: t("draw.livelli.raccogli.niente") } : {}),
+          run: () => collectInNew(),
+        },
         {
           label: t("draw.livelli.appiattisci", { name }),
           disabled: lone || current.hidden,
@@ -593,7 +635,7 @@ export function installLayersGrid(ctx: EditorContext): void {
   /// già tutti gli oggetti scelti, e quello bloccato o nascosto, che lo dice.
   const intoItems = (): MenuItem[] => {
     const units = selectedUnits();
-    const layers = currentIndex().layers;
+    const layers = rootLayers(currentIndex().layers);
     const items: MenuItem[] = [];
     for (let i = layers.length - 1; i >= 0; i--) {
       const layer = layers[i]!;

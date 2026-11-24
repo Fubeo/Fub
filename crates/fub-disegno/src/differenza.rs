@@ -980,13 +980,17 @@ impl Lavoro<'_> {
         for (i, l) in dopo.layers.iter().enumerate() {
             if !prima.nodi.contains_key(&l.id) {
                 self.livello_nuovo(dopo, i)?;
-                // Il contenuto di un livello nuovo (Duplica livello): ogni
-                // oggetto dentro, dopo il `g`, con il suo `add`; il livello
-                // nuovo sta alla radice e non ha una transform.
+                // Il contenuto di un livello nuovo: gli oggetti nuovi
+                // (Duplica livello) dentro, dopo il `g`, ciascuno col suo
+                // `add`; quelli di prima (Raccogli in un nuovo livello) con un
+                // `move` ([`Lavoro::ordine`]). Il livello nuovo sta alla radice
+                // e non ha una transform.
                 if let Some(figli) = l.children().filter(|f| !f.is_empty()) {
                     self.gruppi_nuovi.insert(l.id, None);
                     let figli: Vec<&Arc<Node>> = figli.iter().collect();
-                    nuovi.extend((0..figli.len()).map(|j| (Some(l.id), figli.clone(), j)));
+                    if !self.figli_di_prima(&figli, prima)? {
+                        nuovi.extend((0..figli.len()).map(|j| (Some(l.id), figli.clone(), j)));
+                    }
                 }
                 continue;
             }
@@ -1009,6 +1013,29 @@ impl Lavoro<'_> {
             {
                 let pos = self.posto(genitore, &fratelli, i)?;
                 self.scrivi_ritaglio(nodo, genitore, parent, pos, locale)?;
+                continue;
+            }
+            // Un sottolivello nuovo (Nuovo sottolivello, Raccogli in un nuovo
+            // livello, ADR 0251): il `g` col suo `fub:layer`; gli oggetti che
+            // c'erano già ci vanno con un `move` ([`Lavoro::ordine`]), quelli
+            // nuovi dopo, ciascuno col suo `add`.
+            if !riscritto && nodo.is_layer() {
+                let figli: Vec<&Arc<Node>> = nodo
+                    .children()
+                    .map(|f| f.iter().collect())
+                    .unwrap_or_default();
+                let di_prima = self.figli_di_prima(&figli, prima)?;
+                let attrs = self.attributi_del_livello(nodo)?;
+                self.gruppi_nuovi.insert(nodo.id, genitore);
+                let pos = self.posto(genitore, &fratelli, i)?;
+                self.add.push(json!({
+                    "op": "add", "parent": parent, "pos": pos,
+                    "elem": { "tag": "g", "attrs": attrs, "children": [] },
+                }));
+                if !di_prima {
+                    let dentro = (0..figli.len()).map(|j| (Some(nodo.id), figli.clone(), j));
+                    nuovi.splice(k..k, dentro);
+                }
                 continue;
             }
             if !riscritto && gruppo_di_prima(nodo, prima, &self.riscritti) {
@@ -1408,39 +1435,12 @@ impl Lavoro<'_> {
     }
 
     /// Un livello nuovo del motore in cima al documento: un `<g>` figlio della
-    /// radice con un id di livello nuovo e `fub:layer` col nome del motore
-    /// (formato della scena §3), al suo posto fra i livelli. Si scrive solo un
-    /// livello vuoto, nascosto o bloccato al più: ciò che il formato non dice
-    /// (il modello, la stampa, l'anteprima, le immagini sbiadite, una
-    /// maschera) si rifiuta. Il colore del motore non si scrive: il formato
-    /// non lo ha, e il motore ne dà uno a ogni livello nuovo.
+    /// radice ([`Lavoro::attributi_del_livello`]), al suo posto fra i livelli.
+    /// I suoi oggetti e sottolivelli vengono dopo, ciascuno col suo `add`.
     fn livello_nuovo(&mut self, dopo: &Document, i: usize) -> Result<(), Rifiuto> {
         let l = &dopo.layers[i];
-        let NodeKind::Layer {
-            children,
-            clip,
-            template,
-            printable,
-            preview,
-            dim_images,
-            ..
-        } = &l.kind
-        else {
+        if !l.is_layer() {
             return Err(no("il gesto crea in cima un oggetto che non è un livello"));
-        };
-        if children.iter().any(|c| c.is_layer()) {
-            return Err(no(
-                "il gesto crea un livello dentro un livello, che il formato della scena non ha",
-            ));
-        }
-        if *clip || *template || !*printable || !*preview || dim_images.is_some() {
-            return Err(no(
-                "il livello nuovo ha opzioni che il formato della scena non ha",
-            ));
-        }
-        let nome = self.nome_della_copia(l.name.as_deref().unwrap_or_default());
-        if let Some(perche) = crate::mappa::nome_di_livello_sbagliato(&nome) {
-            return Err(no(perche));
         }
         // Il posto: dopo il livello che gli sta sotto; il primo dei livelli va
         // dopo l'elemento che precede il primo livello del file.
@@ -1481,6 +1481,65 @@ impl Lavoro<'_> {
                 }
             }
         };
+        let attrs = self.attributi_del_livello(l)?;
+        self.add.push(json!({
+            "op": "add", "parent": "#root", "pos": pos,
+            "elem": { "tag": "g", "attrs": attrs, "children": [] },
+        }));
+        Ok(())
+    }
+
+    /// Se i figli di un livello nuovo c'erano già tutti (Raccogli in un nuovo
+    /// livello: ci vanno con un `move`) o sono tutti nuovi (Duplica livello:
+    /// ciascuno col suo `add`). Un livello vuoto ha figli nuovi. Gli uni e gli
+    /// altri insieme si rifiutano: i `move` e gli `add` nello stesso `g`
+    /// nuovo non hanno un ordine sicuro.
+    fn figli_di_prima(&self, figli: &[&Arc<Node>], prima: &Posti<'_>) -> Result<bool, Rifiuto> {
+        let di_prima =
+            |c: &&Arc<Node>| prima.nodi.contains_key(&c.id) && !self.riscritti.contains(&c.id);
+        if !figli.is_empty() && figli.iter().all(di_prima) {
+            return Ok(true);
+        }
+        if figli
+            .iter()
+            .all(|c| !prima.nodi.contains_key(&c.id) && !ha_pezzi_di_prima(c, prima))
+        {
+            return Ok(false);
+        }
+        Err(no(
+            "un livello nuovo con oggetti di prima e oggetti nuovi insieme non si scrive",
+        ))
+    }
+
+    /// Gli attributi di un livello nuovo, anche di un sottolivello: un id di
+    /// livello nuovo e `fub:layer` col nome del motore (formato della scena
+    /// §3, ADR 0251). Si scrive solo un livello nascosto o bloccato al più:
+    /// ciò che il formato non dice (il modello, la stampa, l'anteprima, le
+    /// immagini sbiadite, una maschera) si rifiuta. Il colore del motore non
+    /// si scrive: il formato non lo ha, e il motore ne dà uno a ogni livello
+    /// nuovo.
+    fn attributi_del_livello(&mut self, l: &Node) -> Result<Map<String, Value>, Rifiuto> {
+        let NodeKind::Layer {
+            children,
+            clip,
+            template,
+            printable,
+            preview,
+            dim_images,
+            ..
+        } = &l.kind
+        else {
+            return Err(no("il livello nuovo non è un livello"));
+        };
+        if *clip || *template || !*printable || !*preview || dim_images.is_some() {
+            return Err(no(
+                "il livello nuovo ha opzioni che il formato della scena non ha",
+            ));
+        }
+        let nome = self.nome_della_copia(l.name.as_deref().unwrap_or_default());
+        if let Some(perche) = crate::mappa::nome_di_livello_sbagliato(&nome) {
+            return Err(no(perche));
+        }
         let id = self.id_nuovo(Specie::Livello)?;
         self.ids.insert(l.id, id.clone());
         let mut attrs = Map::new();
@@ -1499,11 +1558,7 @@ impl Lavoro<'_> {
         if !l.visible {
             attrs.insert("display".into(), json!("none"));
         }
-        self.add.push(json!({
-            "op": "add", "parent": "#root", "pos": pos,
-            "elem": { "tag": "g", "attrs": attrs, "children": [] },
-        }));
-        Ok(())
+        Ok(attrs)
     }
 
     /// Il nome di un livello nuovo. Duplica livello nomina la copia «X copy»

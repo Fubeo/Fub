@@ -27,6 +27,28 @@
     },
     {
       "fonte": "motore",
+      "id": "layer.newSublayer",
+      "campi": [
+        {
+          "nome": "parent",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "bottom",
+          "tipo": "sino",
+          "facoltativo": true
+        },
+        {
+          "nome": "name",
+          "tipo": "testo",
+          "facoltativo": true
+        }
+      ],
+      "aperto": true
+    },
+    {
+      "fonte": "motore",
       "id": "layer.setProps",
       "campi": [
         {

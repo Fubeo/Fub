@@ -38,7 +38,12 @@ export type RichiestaLivello =
   /// Duplica livello: la copia va subito sopra, col nome «… copia». Solo del motore.
   | { readonly kind: "duplica"; readonly livello: string }
   /// Appiattisci grafica: tutto nel livello, i livelli nascosti si scartano. Solo del motore.
-  | { readonly kind: "appiattisci"; readonly livello: string };
+  | { readonly kind: "appiattisci"; readonly livello: string }
+  /// Nuovo sottolivello: un livello vuoto in cima a `livello` (ADR 0251). Solo del motore.
+  | { readonly kind: "sottolivello"; readonly livello: string }
+  /// Raccogli in un nuovo livello: gli `oggetti` (id della scena) in un livello nuovo accanto al
+  /// più alto, un sottolivello se stanno in un livello. Solo del motore.
+  | { readonly kind: "raccogli"; readonly oggetti: readonly string[] };
 
 /// Com'è andato un comando di livello.
 /// - `fatto`: le operazioni da scrivere (vuote se non cambiava niente);
@@ -75,10 +80,19 @@ export function motivoDelLivello(esito: DrawingOutcome): DrawKey | null {
   return esito.refused === "locked" ? "draw.livelli.bloccato" : motivoDelRifiuto(esito.refused);
 }
 
-/// Il comando del motore e il suo valore per `richiesta`, coi numeri dei livelli; `null` se il
-/// livello non c'è fra quelli che il motore conosce.
-function chiamataDi(richiesta: RichiestaLivello, numeri: ReadonlyMap<string, number>): { readonly id: string; readonly value: unknown } | null {
+/// Il comando del motore, il suo valore e la selezione per `richiesta`, coi numeri dei livelli;
+/// `null` se il livello non c'è fra quelli che il motore conosce.
+function chiamataDi(
+  richiesta: RichiestaLivello,
+  numeri: ReadonlyMap<string, number>,
+): { readonly id: string; readonly value: unknown; readonly selection?: readonly string[] } | null {
   switch (richiesta.kind) {
+    case "sottolivello": {
+      const numero = numeri.get(richiesta.livello);
+      return numero === undefined ? null : { id: "disegno.layer.newSublayer", value: { parent: numero } };
+    }
+    case "raccogli":
+      return { id: "disegno.layer.collectInNew", value: {}, selection: richiesta.oggetti };
     case "nuovo":
       return { id: "disegno.layer.new", value: { name: richiesta.nome, visible: true, locked: false } };
     case "elimina": {
@@ -120,16 +134,16 @@ export function creaPortaLivelli(dipendenze: DipendenzePorta): PortaLivelli {
       if (dipendenze.vita.closed || stati.some((stato) => stato.kind !== "pronta")) return nativo;
       const sessione = await motore.pronta(ATTESA_MOTORE_MS);
       if (sessione === null || dipendenze.vita.closed) return nativo;
-      // Un livello nuovo non ha bisogno dei numeri: la lettura si salta.
+      // Un livello nuovo e una raccolta non hanno bisogno dei numeri: la lettura si salta.
       let numeri: ReadonlyMap<string, number> = new Map();
-      if (richiesta.kind !== "nuovo") {
+      if (richiesta.kind !== "nuovo" && richiesta.kind !== "raccogli") {
         const lettura = await sessione.comando({ id: "disegno.document.inspect", selection: [], value: {}, preview: false });
         if (lettura === null || "kind" in lettura || lettura.refused !== null || dipendenze.vita.closed) return nativo;
         numeri = numeriDeiLivelli(livelliDi(lettura.reading));
       }
       const chiamata = chiamataDi(richiesta, numeri);
       if (chiamata === null) return nativo;
-      const esito = await sessione.comando({ id: chiamata.id, selection: [], value: chiamata.value, preview: false });
+      const esito = await sessione.comando({ id: chiamata.id, selection: [...(chiamata.selection ?? [])], value: chiamata.value, preview: false });
       if (dipendenze.vita.closed) return nativo;
       if (esito !== null && "kind" in esito && esito.kind === "argomenti") return { kind: "argomenti", frase: esito.message };
       if (esito === null || "kind" in esito) return nativo;

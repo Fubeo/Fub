@@ -920,6 +920,10 @@ function livelliFinti(bloccato: boolean): { fake: DrawingFake; chiamate: { id: s
               },
             ]),
           });
+        case "disegno.layer.newSublayer":
+          return esito({
+            ops: JSON.stringify([{ op: "add", parent: "l1", pos: { last: true }, elem: { tag: "g", attrs: { id: "l00000000", "fub:layer": "Livello 2" }, children: [] } }]),
+          });
         default:
           return esito({ refused: "unsupported" });
       }
@@ -997,6 +1001,34 @@ describe("la scheda Livelli del Completo", () => {
     expect(written(host, "casa.svg")[0]).toMatch(/<g id="l00000000" fub:layer="Livello 1 copia">\s*<path id="o00000001" d="M60 60 L140 60 L140 120 L60 120 Z"\/>/);
     expect(chiamate.filter((c) => c.id === "disegno.layer.duplicate")).toEqual([{ id: "disegno.layer.duplicate", value: { ids: [3] } }]);
     await waitFor("la riga della copia", () => document.querySelector('.draw-object[data-key="l00000000"]') !== null);
+  });
+
+  it("Nuovo sottolivello passa dal motore: il livello nuovo sta nel livello corrente, che resta lui", async () => {
+    const { fake, chiamate } = livelliFinti(false);
+    const host = await start(createFakeHost({ file: VAULT, draw: true, settings: [drawWorkspace("full", "default")], drawing: fake }));
+    await open("casa.svg");
+    await waitFor("la colonna del Completo", () => tools().join(",") === COLUMN_TOOLS_COMPLETO.join(","));
+    const bottone = (): HTMLButtonElement | null => document.querySelector<HTMLButtonElement>(".draw-objects-menu:not([hidden])");
+    await schedaLivelli();
+    await waitFor("il bottone dei livelli", () => bottone() !== null);
+    const voci = (): HTMLButtonElement[] => {
+      const aperti = document.querySelectorAll<HTMLElement>(".context-menu");
+      return aperti.length === 0 ? [] : [...aperti[aperti.length - 1]!.querySelectorAll<HTMLButtonElement>("button")];
+    };
+    const voce = (frase: string): HTMLButtonElement | undefined => voci().find((each) => each.querySelector(".menu-label")?.textContent === frase);
+    bottone()!.click();
+    await waitFor("la voce Nuovo sottolivello", () => voce("Nuovo sottolivello in «Livello 1»") !== undefined);
+    // Senza oggetti scelti non c'è niente da raccogliere.
+    expect(voce("Raccogli in un nuovo livello")?.getAttribute("aria-disabled")).toBe("true");
+    voce("Nuovo sottolivello in «Livello 1»")!.click();
+    await waitFor("il sottolivello arriva al disco", () => written(host, "casa.svg").length === 1);
+    expect(written(host, "casa.svg")[0]).toMatch(/<g id="l1" fub:layer="Livello 1">[\s\S]*<g id="l00000000" fub:layer="Livello 2">\s*<\/g>\s*<\/g>/);
+    expect(chiamate.filter((c) => c.id === "disegno.layer.newSublayer")).toEqual([{ id: "disegno.layer.newSublayer", value: { parent: 3 } }]);
+    await waitFor("la riga del sottolivello", () => document.querySelector('.draw-object[data-key="l00000000"]') !== null);
+    // Il livello corrente resta quello della radice: il menu elenca i livelli della radice soli.
+    bottone()!.click();
+    await waitFor("il menu dei livelli", () => voce("Nuovo sottolivello in «Livello 1»") !== undefined);
+    expect(voci().filter((each) => each.getAttribute("role") === "menuitemradio").map((each) => each.querySelector(".menu-label")?.textContent)).toEqual(["Livello 1"]);
   });
 
   it("nel Semplice l'albero resta com'era: i livelli non si cambiano, e il motore non sente niente", async () => {

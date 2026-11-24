@@ -30,6 +30,13 @@ export type Shift = "up" | "down";
 /// I figli della radice che vengono prima dei livelli.
 const HEAD: ReadonlySet<string> = new Set(["title", "desc", "paper", "board"]);
 
+/// I livelli della radice fra `layers`, nello stesso ordine: quelli in cui si
+/// disegna e che i comandi del livello corrente spostano, tolgono e scelgono.
+/// I sottolivelli (formato della scena §3) stanno nell'albero degli oggetti.
+export function rootLayers(layers: readonly LayerInfo[]): readonly LayerInfo[] {
+  return layers.every((layer) => layer.path.length === 1) ? layers : layers.filter((layer) => layer.path.length === 1);
+}
+
 /// Il nodo del modello di un livello.
 function layerNode(model: DocumentModel, layer: LayerInfo): ContainerNode {
   return elementChildren(model.root)[layer.path[0]!] as ContainerNode;

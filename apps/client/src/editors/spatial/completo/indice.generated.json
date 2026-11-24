@@ -1939,6 +1939,22 @@
     },
     {
       "fonte": "motore",
+      "id": "layer.collectInNew",
+      "chiamata": {
+        "comando": "disegno.layer.collectInNew"
+      },
+      "etichetta": {
+        "it": "Raccogli in un nuovo livello",
+        "en": "Collect in New Layer"
+      },
+      "posto": "ispettore/livelli",
+      "famiglia": "livelli",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "layer.delete",
       "chiamata": {
         "comando": "disegno.layer.delete"
@@ -2078,6 +2094,22 @@
       "posto": "ispettore/livelli",
       "famiglia": "livelli",
       "tasto": "Cmd+L",
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "motore",
+      "id": "layer.newSublayer",
+      "chiamata": {
+        "comando": "disegno.layer.newSublayer"
+      },
+      "etichetta": {
+        "it": "Nuovo sottolivello…",
+        "en": "New Sublayer…"
+      },
+      "posto": "ispettore/livelli",
+      "famiglia": "livelli",
+      "tasto": null,
       "effetto": "cambia",
       "finestra": true
     },

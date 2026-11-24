@@ -53,9 +53,19 @@ livello bloccato ferma il comando (`Locked`). Seleziona per colore
 (`select.color`) vuole `fill`, `stroke` o tutti e due, controllati in italiano
 prima del motore (`BadArgs`). Senza righe questi comandi non partono (`Empty`):
 il motore prenderebbe il suo livello corrente, che non è quello del client.
-Restano «da fare», con la causa nella mappa, Nuovo sottolivello e Raccogli in un
-nuovo livello (il formato non ha un livello dentro un livello), il livello che
-ritaglia, Imposta livello corrente e Individua oggetto (sono del client).
+Nuovo sottolivello (`layer.newSublayer`, `parent`, `bottom`, `name`) mette un
+livello vuoto in cima al livello `parent` (in fondo con `bottom`), un
+sottolivello del formato (ADR 0251); senza `parent` il comando rifiuta `Empty`,
+un `parent` che non è un livello `Unsupported`, uno bloccato `Locked`. Raccogli
+in un nuovo livello (`layer.collectInNew`) prende le righe di `ids` o, senza,
+gli oggetti scelti, e le mette in un livello nuovo accanto alla più alta: alla
+radice se stanno alla radice, altrimenti un sottolivello del loro livello. Il
+nome libero «Livello N» lo dà la mappa (`famiglie/livelli.rs`,
+`nome_della_raccolta`); `differenza.rs` scrive il livello nuovo con un `add` e
+vi sposta gli oggetti di prima con `move`, e rifiuta un livello nuovo che mescola
+oggetti di prima e oggetti nuovi. Resta «da fare», con la causa nella mappa, il
+livello che ritaglia; Imposta livello corrente e Individua oggetto sono del
+client.
 
 Il livello corrente sta nel client, nella sessione del documento
 (`apps/client/src/editors/spatial/livello-corrente.ts`): una cella per
@@ -93,8 +103,13 @@ livello che il motore non conosce) l'editor scrive le stesse operazioni da sé;
 un livello bloccato si ferma prima, col motivo `draw.livelli.bloccato`.
 Col motore, la scheda ha in testa il bottone «Menu dei livelli» (il menu del
 pannello Livelli di VectorCraft: nel Completo la riga delle opzioni non ha il
-pulsante dei livelli), con due voci in più, Duplica e Appiattisci, che mandano
-`disegno.layer.duplicate` e `disegno.layer.flatten`. Non hanno una strada
+pulsante dei livelli), con quattro voci in più: Duplica, Nuovo sottolivello (nel
+livello corrente), Raccogli in un nuovo livello (gli oggetti scelti; spenta
+senza scelta) e Appiattisci, che mandano `disegno.layer.duplicate`,
+`newSublayer`, `collectInNew` e `flatten`. Il livello corrente resta un livello
+della radice (`rootLayers` in `tools/layers.ts`): i sottolivelli stanno
+nell'albero, e scegliere un oggetto in un sottolivello sceglie il livello della
+radice che lo contiene. Queste voci non hanno una strada
 nativa: senza motore non partono, e lo dicono (`draw.livelli.senzaMotore`). Lo
 spostamento delle righe della scheda resta nativo: `layer.move` e `node.move`
 sono comandi del motore, ma la scheda non li chiama ancora.

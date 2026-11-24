@@ -107,6 +107,16 @@ describe("creaPortaLivelli", () => {
     expect(appiattisci.chiamate[1]).toMatchObject({ id: "disegno.layer.flatten", value: { id: 7 } });
   });
 
+  it("il sottolivello va al motore col numero del genitore; la raccolta con gli oggetti scelti, senza leggere i numeri", async () => {
+    const sotto = prepara();
+    expect(await sotto.porta.comando({ kind: "sottolivello", livello: "l2" })).toEqual({ kind: "fatto", ops: SET });
+    expect(sotto.chiamate[1]).toMatchObject({ id: "disegno.layer.newSublayer", value: { parent: 7 }, selection: [] });
+    const raccogli = prepara();
+    await raccogli.porta.comando({ kind: "raccogli", oggetti: ["oa", "ob"] });
+    expect(raccogli.chiamate).toHaveLength(1);
+    expect(raccogli.chiamate[0]).toMatchObject({ id: "disegno.layer.collectInNew", value: {}, selection: ["oa", "ob"] });
+  });
+
   it("un livello bloccato rifiutato dal motore ha la sua frase, non quella della selezione", async () => {
     const { porta } = prepara({ risposta: esito({ refused: "locked", ops: null }) });
     expect(await porta.comando({ kind: "proprieta", livello: "l1", nome: "X" })).toEqual({ kind: "rifiuto", motivo: "draw.livelli.bloccato" });
