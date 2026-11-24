@@ -646,7 +646,7 @@ motore	type.smartPunctuation	Smart Punctuation…	Type	testo	F2	T16	da fare	menu
 motore	type.convertToAreaType	Convert To Area Type	Type	testo	F2	T16	fatto	menu/testo	famiglia		Converti in testo in area
 motore	type.convertToPointType	Convert To Point Type	Type	testo	F2	T16	fatto	menu/testo	famiglia		Converti in testo per punti
 motore	type.pathOptions	Type on a Path Options…	Type › Type on a Path	testo	F2	T16	da fare	menu/testo	famiglia	finestra	Opzioni testo su tracciato…
-motore	type.fillPlaceholder	Fill with Placeholder Text	Type	testo	F2	T16	da fare	menu/testo	famiglia		Riempi con testo segnaposto
+motore	type.fillPlaceholder	Fill with Placeholder Text	Type	testo	F2	T16	fatto	menu/testo	famiglia	la frase di VectorCraft nel primo stile dei testi scelti; il testo in area si riempie fino alla cornice	Riempi con testo segnaposto
 motore	type.insert	Insert Character	Type	testo	F2	T16	da fare	menu/testo	famiglia		Inserisci carattere
 motore	edit.findReplace	Find and Replace…	Edit	testo	F2	T16	fatto	menu/modifica	famiglia	finestra	Trova e sostituisci…
 motore	edit.findNext	Find Next	Edit	testo	F2	T16	fatto	menu/modifica	famiglia		Trova successivo

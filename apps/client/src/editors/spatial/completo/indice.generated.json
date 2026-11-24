@@ -5955,6 +5955,22 @@
     },
     {
       "fonte": "motore",
+      "id": "type.fillPlaceholder",
+      "chiamata": {
+        "comando": "disegno.type.fillPlaceholder"
+      },
+      "etichetta": {
+        "it": "Riempi con testo segnaposto",
+        "en": "Fill with Placeholder Text"
+      },
+      "posto": "menu/testo",
+      "famiglia": "testo",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "type.orientation.horizontal",
       "chiamata": {
         "comando": "disegno.type.orientation.horizontal"
