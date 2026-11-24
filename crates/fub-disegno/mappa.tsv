@@ -682,9 +682,9 @@ motore	view.saved.edit	Edit Views…	View	vista	F1	T11	da fare	menu/visualizza	f
 motore	view.saved.list	Saved Views		vista	F1	T11	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Viste salvate
 motore	view.transparencyGrid	Show Transparency Grid	View	vista	F1	T11	fatto	menu/visualizza	famiglia		Mostra griglia trasparenza
 motore	view.snapToGlyph.options	Snap to Glyph Options		testo	F2	T16	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Opzioni di aggancio a glifo
-motore	select.magicWand	Magic Wand		livelli	F1	T15	da fare	ispettore/livelli	famiglia	la bacchetta sta nello stato di sessione del motore (MenuState.wand, non salvato) e le sue opzioni non hanno un posto nelle preferenze del motore: niente voce finché non ce l’hanno (K6 T15 giro 2)	Bacchetta magica
-motore	magicWand.set	Magic Wand Options	Window › Magic Wand	livelli	F1	T15	da fare	ispettore/design	famiglia	la bacchetta sta nello stato di sessione del motore (MenuState.wand, non salvato) e le sue opzioni non hanno un posto nelle preferenze del motore: niente voce finché non ce l’hanno (K6 T15 giro 2)	Opzioni bacchetta magica
-motore	magicWand.options	Magic Wand Settings		livelli	F1	T15	da fare	interno	famiglia	la bacchetta sta nello stato di sessione del motore (MenuState.wand, non salvato) e le sue opzioni non hanno un posto nelle preferenze del motore: niente voce finché non ce l’hanno (K6 T15 giro 2)	Impostazioni bacchetta magica
+motore	select.magicWand	Magic Wand		livelli	F1	T15	fatto	ispettore/livelli	famiglia	il clic della Bacchetta magica; le opzioni sono della sessione del motore, come in VectorCraft (MenuState.wand): il client le ricorda per la corsa dell'app e le rimanda a ogni disegno aperto	Bacchetta magica
+motore	magicWand.set	Magic Wand Options	Window › Magic Wand	livelli	F1	T15	fatto	ispettore/design	famiglia	la fila della Bacchetta magica (testata): caselle e tolleranze, una lettura che non fa un passo di annulla	Opzioni bacchetta magica
+motore	magicWand.options	Magic Wand Settings		livelli	F1	T15	fatto	interno	famiglia	la fila della Bacchetta magica le legge	Impostazioni bacchetta magica
 motore	document.exportForWeb	Save for Web		web	F3	T22	da fare	ispettore/design/documento	famiglia		Salva per il web
 motore	document.exportForWeb.preview	Save for Web Preview		web	F3	T22	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Anteprima di Salva per il web
 motore	webExport.settings	Save for Web Settings		web	F3	T22	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Impostazioni di Salva per il web
@@ -1281,7 +1281,7 @@ interfaccia	ui.perspectivePlane	Perspective Plane Options…		prospettiva	F4	T25
 strumento	selection	Selection Tool		nucleo	F1	T11	fatto	colonna/scegli	nucleo	riquadro «selection»	Strumento Selezione
 strumento	directSelection	Direct Selection Tool		nucleo	F1	T11	fatto	colonna/scegli	nucleo	riquadro «directSelection»	Strumento Selezione diretta
 strumento	groupSelection	Group Selection Tool		nucleo	F1	T11	fatto	colonna/scegli	nucleo	riquadro «directSelection»	Strumento Selezione gruppo
-strumento	magicWand	Magic Wand Tool		livelli	F1	T15	da fare	colonna/scegli	famiglia	la bacchetta sta nello stato di sessione del motore (MenuState.wand, non salvato) e le sue opzioni non hanno un posto nelle preferenze del motore: niente voce finché non ce l’hanno (K6 T15 giro 2)	Strumento Bacchetta magica
+strumento	magicWand	Magic Wand Tool		livelli	F1	T15	fatto	colonna/scegli	famiglia	la Bacchetta magica (Y): un clic sceglie i simili, Maiusc aggiunge, Alt toglie, il vuoto toglie la selezione	Strumento Bacchetta magica
 strumento	lasso	Lasso Tool		nucleo	F1	T11	fatto	colonna/scegli	nucleo	riquadro «lasso»	Strumento Lazo
 strumento	pen	Pen Tool		tracciati	F1	T12	fatto	colonna/disegna	famiglia	riquadro «pen»	Strumento Penna
 strumento	addAnchor	Add Anchor Point Tool		tracciati	F1	T12	fatto	colonna/disegna	famiglia	riquadro «pen»	Strumento Aggiungi punto di ancoraggio
@@ -1533,7 +1533,7 @@ pannello	layers	Layers	Window	livelli	F1	T15	da fare	ispettore/livelli	famiglia	
 pannello	libraries	Libraries	Window	simboli	F3	T22	da fare	ispettore/risorse	famiglia		Librerie
 pannello	library_panel	Library Panel	Window	simboli	F3	T22	da fare	ispettore/risorse	famiglia		Library Panel
 pannello	links	Links	Window	immagini	F3	T20	da fare	ispettore/risorse	famiglia		Collegamenti
-pannello	magic_wand	Magic Wand	Window	livelli	F1	T15	da fare	testata	famiglia	la bacchetta sta nello stato di sessione del motore (MenuState.wand, non salvato) e le sue opzioni non hanno un posto nelle preferenze del motore: niente voce finché non ce l’hanno (K6 T15 giro 2)	Bacchetta magica
+pannello	magic_wand	Magic Wand	Window	livelli	F1	T15	fatto	testata	famiglia	la fila della Bacchetta magica nella testata, non un pannello: riempimento, contorno, spessore, opacità e fusione con le tolleranze	Bacchetta magica
 pannello	memo	Memo	Window	dati	F4	T26	da fare	ispettore/design/documento	famiglia		Memo
 pannello	navigator	Navigator	Window	vista	F1	T11	fatto	banda	famiglia		Navigatore
 pannello	opentype	Opentype	Window	testo	F2	T16	da fare	ispettore/design	famiglia		Opentype

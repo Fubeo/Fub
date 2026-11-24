@@ -34,7 +34,7 @@ quel tasto. Vale questo ordine:
 
 Gli strumenti del motore pronti nel Completo prendono la lettera di VectorCraft,
 anche dove nello Standard la stessa lettera sceglie uno strumento di Fub:
-Selezione (`V`), Selezione diretta (`A`), Lazo (`Q`), Penna (`P`), Aggiungi e
+Selezione (`V`), Selezione diretta (`A`), Lazo (`Q`), Bacchetta magica (`Y`), Penna (`P`), Aggiungi e
 Togli punto (`+` e `-`), Punto di ancoraggio (`Maiusc+C`), Testo (`T`), Segmento
 (`\`), Rettangolo (`M`), Ellisse (`L`), Pennello a macchia (`Maiusc+B`), Matita
 (`N`), Gomma (`Maiusc+E`), Forbici (`C`), Ruota (`R`), Rifletti (`O`), Scala

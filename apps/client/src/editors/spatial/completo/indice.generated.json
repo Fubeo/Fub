@@ -1699,6 +1699,38 @@
     },
     {
       "fonte": "motore",
+      "id": "magicWand.options",
+      "chiamata": {
+        "comando": "disegno.magicWand.options"
+      },
+      "etichetta": {
+        "it": "Impostazioni bacchetta magica",
+        "en": "Magic Wand Settings"
+      },
+      "posto": "interno",
+      "famiglia": "livelli",
+      "tasto": null,
+      "effetto": "legge",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "magicWand.set",
+      "chiamata": {
+        "comando": "disegno.magicWand.set"
+      },
+      "etichetta": {
+        "it": "Opzioni bacchetta magica",
+        "en": "Magic Wand Options"
+      },
+      "posto": "ispettore/design",
+      "famiglia": "livelli",
+      "tasto": null,
+      "effetto": "legge",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "object.align",
       "chiamata": {
         "comando": "disegno.object.align"
@@ -4029,6 +4061,22 @@
       },
       "posto": "menu/selezione",
       "famiglia": "nucleo",
+      "tasto": null,
+      "effetto": "mostra",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "select.magicWand",
+      "chiamata": {
+        "comando": "disegno.select.magicWand"
+      },
+      "etichetta": {
+        "it": "Bacchetta magica",
+        "en": "Magic Wand"
+      },
+      "posto": "ispettore/livelli",
+      "famiglia": "livelli",
       "tasto": null,
       "effetto": "mostra",
       "finestra": false
@@ -6743,6 +6791,22 @@
     },
     {
       "fonte": "strumento",
+      "id": "magicWand",
+      "chiamata": {
+        "strumento": "magicWand"
+      },
+      "etichetta": {
+        "it": "Strumento Bacchetta magica",
+        "en": "Magic Wand Tool"
+      },
+      "posto": "colonna/scegli",
+      "famiglia": "livelli",
+      "tasto": "Y",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "strumento",
       "id": "measure",
       "chiamata": {
         "strumento": "measure"
@@ -7553,6 +7617,22 @@
       },
       "posto": "banda",
       "famiglia": "vista",
+      "tasto": null,
+      "effetto": "mostra",
+      "finestra": false
+    },
+    {
+      "fonte": "pannello",
+      "id": "magic_wand",
+      "chiamata": {
+        "client": "magic_wand"
+      },
+      "etichetta": {
+        "it": "Bacchetta magica",
+        "en": "Magic Wand"
+      },
+      "posto": "testata",
+      "famiglia": "livelli",
       "tasto": null,
       "effetto": "mostra",
       "finestra": false

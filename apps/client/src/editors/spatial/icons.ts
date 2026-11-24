@@ -190,6 +190,8 @@ const COLUMN: Readonly<Record<string, readonly string[]>> = {
   "draw-graph": ["M4 20h16", "M6 20v-6", "M10 20V8", "M14 20v-9", "M18 20V5"],
   "draw-grid-polar": ["M3 12a9 9 0 1 0 18 0a9 9 0 1 0-18 0", "M7 12a5 5 0 1 0 10 0a5 5 0 1 0-10 0", "M12 3v18", "M3 12h18"],
   "draw-grid-rect": ["M4 4h16v16H4z", "M4 9.3h16", "M4 14.7h16", "M9.3 4v16", "M14.7 4v16"],
+  // La Bacchetta magica: il bastone in diagonale e le scintille in cima.
+  "draw-magic-wand": ["M4 20 14 10", "M15 4v2", "M15 12v2", "M11 8h2", "M17 8h2", "M18.5 4.5l-1 1", "M18.5 11.5l-1-1"],
   // Il Lazo: un riquadro a tratti.
   "draw-lasso": ["M4 7V4h3", "M10 4h4", "M17 4h3v3", "M20 10v4", "M20 17v3h-3", "M14 20h-4", "M7 20H4v-3", "M4 14v-4"],
   "draw-live-paint": ["M6 10l6-6 7 7-6 6z", "M6 10l-1 1a2 2 0 0 0 0 2.8l.2.2", "M19 15s2 2.3 2 3.5a2 2 0 0 1-4 0c0-1.2 2-3.5 2-3.5z"],

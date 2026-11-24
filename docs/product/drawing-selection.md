@@ -62,7 +62,7 @@ da soli.
 
 Nel Disegno completo la colonna ha anche gli strumenti del motore del disegno
 per scegliere e per la vista: **Selezione (Completo)**, **Selezione diretta** e
-**Selezione gruppo**, **Lazo** nel gruppo «Scegli»; **Mano (Completo)**, **Zoom (Completo)** e
+**Selezione gruppo**, **Lazo** e **Bacchetta magica** nel gruppo «Scegli»; **Mano (Completo)**, **Zoom (Completo)** e
 **Ruota vista** nel gruppo della vista. Ognuno ha il suo nome nella lingua
 dell'interfaccia e la sua icona, dopo gli strumenti di Fub della stessa
 casella. Il Semplice tiene solo gli strumenti di Fub.
@@ -84,6 +84,23 @@ non ne cambiano i punti. Scegliere uno strumento di Fub toglie quello del
 motore. Il codice: `apps/client/src/editors/spatial/completo/colonna.ts`,
 `apps/client/src/editors/spatial/tools/editor/chrome/rail.ts`,
 `apps/client/src/editors/spatial/motore/gesti.ts`.
+
+### La Bacchetta magica
+
+La **Bacchetta magica** (`Y`), nella casella del Lazo, sceglie gli oggetti
+simili, come in VectorCraft: un clic su un oggetto sceglie tutti quelli col
+riempimento vicino al suo; con `Maiusc` li aggiunge alla selezione, con `Alt`
+li toglie; un clic nel vuoto toglie la selezione. La fila dello strumento, in
+testata, dice che cosa conta: colore del riempimento, colore del contorno,
+spessore del contorno (in punti), opacità (in percentuale) e metodo di fusione,
+ognuno con la sua casella e, tranne il metodo di fusione, con la sua
+tolleranza (da 0 a 255 per i colori, fino a 1000 per lo spessore, fino a 100
+per l'opacità). Di serie conta solo il riempimento, con tolleranza 32.
+
+Le opzioni non vanno nel file e non sono un passo di annulla: valgono finché
+l'app resta aperta, uguali in ogni disegno, e alla riapertura tornano quelle
+di serie. Il codice:
+`apps/client/src/editors/spatial/completo/famiglie/livelli/fila-bacchetta.ts`.
 
 L'isolamento di un gruppo è di Fub anche nel Disegno completo: «Isola il
 gruppo» ed «Esci dal gruppo» stanno nel menu del tasto destro, `Esc` esce
