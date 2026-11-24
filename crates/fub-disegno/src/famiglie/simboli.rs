@@ -34,6 +34,12 @@ const LEGGONO_LA_SCELTA: [&str; 5] = [
     "symbol.adjust",
 ];
 
+/// Modifica simbolo ed Esci dalla modalità modifica simbolo: li fa il client, con la sua modalità
+/// di modifica dei simboli (`docs/product/drawing-symbols.md`). Il motore non tiene la modalità fra
+/// una richiesta e l'altra, e la sua scriverebbe nel file un livello col contenuto del simbolo: qui
+/// si rifiutano, e la voce resta accesa per il client.
+const DEL_CLIENT: [&str; 2] = ["symbol.edit", "symbol.exitEditing"];
+
 impl StatoFamiglia for Stato {
     fn nasce(_servizi: &Arc<Servizi>) -> Result<Self, ErroreMotore> {
         Ok(Stato)
@@ -45,6 +51,10 @@ impl StatoFamiglia for Stato {
 
     fn libera(&self) -> u64 {
         0
+    }
+
+    fn rifiuto(id: &str, _copia: &Copia, _selezione: &[String]) -> Option<DrawingRefusal> {
+        DEL_CLIENT.contains(&id).then_some(DrawingRefusal::Unsupported)
     }
 
     fn spento(id: &str, copia: &Copia, selezione: &[String]) -> Option<DrawingDisabledReason> {

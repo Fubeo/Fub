@@ -239,6 +239,10 @@ fn una_selezione_con_un_elemento_non_mappato_non_cambia_niente() {
     let sempre = [
         // Il modo di disegno (K6 T11) è della sessione: normale e dietro non leggono la scelta.
         "disegno.view.drawMode",
+        // La modalità di modifica dei simboli è del client: il motore li dà accesi, e il client
+        // entra ed esce da sé guardando ciò che è scelto.
+        "disegno.symbol.edit",
+        "disegno.symbol.exitEditing",
         // Le guide del righello sono della radice e dei livelli: nominano la guida per numero
         // nel valore, e Libera, Blocca e Cancella guide valgono per tutte.
         "disegno.view.guides.release",

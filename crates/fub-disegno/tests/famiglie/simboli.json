@@ -1624,6 +1624,28 @@
         ]
       },
       "dopo": "strumento-symbolScreener-dopo.svg"
+    },
+    {
+      "$nota": "Modifica simbolo la fa l'app, con la sua modalità di modifica dei simboli: il motore, che la sua la scriverebbe nel file come un livello, la rifiuta.",
+      "id": "symbol.edit",
+      "disegno": "base.svg",
+      "selezione": [
+        "o2n3p4q5r"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "rifiuto": "unsupported"
+      }
+    },
+    {
+      "$nota": "Esci dalla modalità modifica simbolo la fa l'app: il motore la rifiuta.",
+      "id": "symbol.exitEditing",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": {
+        "rifiuto": "unsupported"
+      }
     }
   ]
 }

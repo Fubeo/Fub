@@ -46,8 +46,8 @@ motore	symbol.new	New Symbol…		simboli	F3	T22	fatto	ispettore/risorse	famiglia
 motore	symbol.options	Symbol Options…		simboli	F3	T22	fatto	ispettore/risorse	famiglia	finestra	Opzioni simbolo…
 motore	symbol.place	Place Symbol Instance		simboli	F3	T22	fatto	ispettore/risorse	famiglia		Inserisci istanza simbolo
 motore	symbol.breakLink	Break Link to Symbol		simboli	F3	T22	fatto	ispettore/risorse	famiglia		Interrompi collegamento al simbolo
-motore	symbol.edit	Edit Symbol		simboli	F3	T22	da fare	ispettore/risorse	famiglia		Modifica simbolo
-motore	symbol.exitEditing	Exit Symbol Editing Mode		simboli	F3	T22	da fare	ispettore/risorse	famiglia		Esci dalla modalità modifica simbolo
+motore	symbol.edit	Edit Symbol		simboli	F3	T22	fatto	ispettore/risorse	famiglia	la modalità di modifica dei simboli di Fub (il motore non tiene lo stato fra le richieste): apre il simbolo dove l'istanza sta; anche Ctrl+Invio, due tocchi, il pulsante e il doppio clic della sezione Simboli	Modifica simbolo
+motore	symbol.exitEditing	Exit Symbol Editing Mode		simboli	F3	T22	fatto	ispettore/risorse	famiglia	la modalità di modifica dei simboli di Fub (il motore non tiene lo stato fra le richieste): esce dal simbolo; anche Esc e la barra dell'isolamento	Esci dalla modalità modifica simbolo
 motore	symbol.update	Redefine Symbol		simboli	F3	T22	fatto	ispettore/risorse	famiglia		Ridefinisci simbolo
 motore	symbol.delete	Delete Symbol		simboli	F3	T22	fatto	ispettore/risorse	famiglia		Elimina simbolo
 motore	symbol.duplicate	Duplicate Symbol		simboli	F3	T22	fatto	ispettore/risorse	famiglia		Duplica simbolo

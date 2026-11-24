@@ -94,6 +94,31 @@ describe("la sezione", () => {
     expect(p.esegui).toHaveBeenLastCalledWith("symbol.delete", { name: "Stella" });
   });
 
+  it("Modifica simbolo: il simbolo scelto passa dalle sue istanze, senza scelta valgono quelle del disegno", async () => {
+    const p = monta(1);
+    await vi.waitFor(() => expect(p.corpo.textContent).toContain("Stella"));
+    bottone(p.corpo, "Modifica simbolo").click();
+    expect(p.esegui).toHaveBeenLastCalledWith("symbol.edit", {});
+    bottone(p.corpo, "Stella").click();
+    bottone(p.corpo, "Modifica simbolo").click();
+    expect(p.esegui).toHaveBeenLastCalledWith("symbol.selectInstances", { name: "Stella" });
+    await vi.waitFor(() => expect(p.esegui).toHaveBeenLastCalledWith("symbol.edit", {}));
+    // Un simbolo senza istanze non si apre: il pulsante è spento e dice perché.
+    bottone(p.corpo, "Foglia").click();
+    expect(bottone(p.corpo, "Modifica simbolo").disabled).toBe(true);
+    expect(bottone(p.corpo, "Modifica simbolo").title).toContain("istanz");
+    // Due clic su un simbolo con istanze lo aprono.
+    p.esegui.mockClear();
+    bottone(p.corpo, "Stella").dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+    await vi.waitFor(() => expect(p.esegui.mock.calls).toEqual([["symbol.selectInstances", { name: "Stella" }], ["symbol.edit", {}]]));
+  });
+
+  it("Modifica simbolo senza oggetti né simbolo scelto è spento", async () => {
+    const p = monta(0);
+    await vi.waitFor(() => expect(p.corpo.textContent).toContain("Stella"));
+    expect(bottone(p.corpo, "Modifica simbolo").disabled).toBe(true);
+  });
+
   it("Nuovo simbolo manda il nome scritto; un nome già preso resta un errore sotto il campo", async () => {
     const p = monta(2);
     await vi.waitFor(() => expect(p.corpo.textContent).toContain("Stella"));

@@ -13,6 +13,7 @@ import { CAMBIA_UNITA } from "./unita";
 import { plural, t } from "../../../strings";
 import type { Point } from "../../../scene/matrix";
 import type { EditorContext } from "../context";
+import { editSymbol, exitSymbol } from "../symbol-mode";
 import { creaMenuZoom, isComandoVista, type ComandoVista } from "./zoom-menu";
 import { COMANDO_ZOOM_SCELTA, comandoVisualizza, isComandoVisualizza, statoVisualizza, voceVisualizza, type ComandoVisualizza } from "./visualizza";
 
@@ -114,6 +115,9 @@ const COMANDI_DI_FUB: Readonly<Record<string, (ctx: EditorContext) => void>> = {
   "disegno.object.showAll": (ctx) => ctx.unflagAll("hidden"),
   // Blocca guide è della vista, come in VectorCraft: le guide le prende il client (`guide-linee.ts`).
   "disegno.view.guides.lock": (ctx) => ctx.setGuidesLocked(!ctx.guidesLocked),
+  // Modificare un simbolo è la modalità di Fub, che il motore non tiene fra le richieste.
+  "disegno.symbol.edit": editSymbol,
+  "disegno.symbol.exitEditing": exitSymbol,
 };
 
 /// Fa il comando del motore `id` con la regola di Fub, se è uno di quelli

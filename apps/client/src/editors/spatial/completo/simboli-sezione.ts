@@ -172,6 +172,18 @@ export function sezioneSimboli(azioni: AzioniSimboli, corrente: SimboloCorrente)
         });
       };
 
+      /// Modifica simbolo: le istanze scelte, o con `nome` le istanze di quel simbolo, nella modalità
+      /// di modifica dell'app; si entra dalla prima.
+      const modifica = (nome: string | null): void => {
+        if (nome === null) {
+          void azioni.esegui("symbol.edit", {});
+          return;
+        }
+        void azioni.esegui("symbol.selectInstances", { name: nome }).then(() => {
+          if (!vita.closed) void azioni.esegui("symbol.edit", {});
+        });
+      };
+
       const costruisci = (): void => {
         corpo.replaceChildren();
         corpo.setAttribute("aria-label", t("draw.simboli.titolo"));
@@ -192,6 +204,10 @@ export function sezioneSimboli(azioni: AzioniSimboli, corrente: SimboloCorrente)
               kind: "normal",
               onPress: () => undefined,
               lifetime: vita,
+            });
+            // Due clic aprono il simbolo nella modalità di modifica, come il pannello di VectorCraft.
+            voce.addEventListener("dblclick", () => {
+              if (simbolo.istanze > 0) modifica(simbolo.nome);
             });
             voce.addEventListener("click", (evento) => {
               const gia = stato.scelti.includes(simbolo.nome);
@@ -263,6 +279,12 @@ export function sezioneSimboli(azioni: AzioniSimboli, corrente: SimboloCorrente)
           ),
           fila(
             pulsante("draw.simboli.istanze.scegli", senzaUno, () => manda("symbol.selectInstances", { name: uno })),
+            // Il simbolo scelto nella lista, se ha istanze; senza scelta, le istanze scelte nel disegno.
+            pulsante(
+              "draw.simboli.modifica",
+              (uno === null ? conOggetti : (simboli.find((s) => s.nome === uno)?.istanze ?? 0) > 0) ? null : "draw.simboli.perche.modifica",
+              () => modifica(uno),
+            ),
             pulsante("draw.simboli.nonUsati", simboli.length === 0 ? "draw.simboli.perche.vuoto" : null, () => {
               void azioni.leggi("symbol.unused", {}).then((letto) => {
                 if (vita.closed) return;

@@ -5747,6 +5747,38 @@
     },
     {
       "fonte": "motore",
+      "id": "symbol.edit",
+      "chiamata": {
+        "comando": "disegno.symbol.edit"
+      },
+      "etichetta": {
+        "it": "Modifica simbolo",
+        "en": "Edit Symbol"
+      },
+      "posto": "ispettore/risorse",
+      "famiglia": "simboli",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "symbol.exitEditing",
+      "chiamata": {
+        "comando": "disegno.symbol.exitEditing"
+      },
+      "etichetta": {
+        "it": "Esci dalla modalità modifica simbolo",
+        "en": "Exit Symbol Editing Mode"
+      },
+      "posto": "ispettore/risorse",
+      "famiglia": "simboli",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "symbol.libraries",
       "chiamata": {
         "comando": "disegno.symbol.libraries"

@@ -78,6 +78,13 @@ dà il nome al simbolo nuovo e a quello da rinominare.
   simbolo.
 - **Duplica simbolo**, **Opzioni simbolo** (il nome) ed **Elimina
   simbolo**, che scollega o toglie le istanze che lo usano.
+- **Modifica simbolo** apre il simbolo come in [Modificare un
+  simbolo](#modificare-un-simbolo): dalle istanze del simbolo scelto nella
+  lista, o senza scelta dalle istanze scelte nel disegno (di un solo
+  simbolo); anche due clic su un simbolo della lista lo aprono. Uno senza
+  istanze non si apre: il pulsante è spento e lo dice. **Esci dalla
+  modalità modifica simbolo**, nella ricerca dei comandi, esce dal
+  simbolo anche da un suo gruppo isolato.
 - **Seleziona tutte le istanze** e **Seleziona tutti gli elementi non
   usati**, che sceglie nella lista i simboli che niente usa; le
   **librerie** di VectorCraft, aperte da «Librerie di simboli…», da cui un
