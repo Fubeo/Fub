@@ -7,6 +7,10 @@ import { openLifetime } from "../../../../ui/lifetime";
 import type { RulerGuide } from "../../scene/rulers";
 import { toScene, type View } from "../../view";
 import { rulerTicks } from "../rulers";
+import { SceneEngine } from "../../scene/engine";
+import { doc } from "../../scene/test-support";
+import { PaintBuilder } from "../../painter/paint";
+import { SceneIndexer } from "../hit/indexer";
 import type { EditorContext } from "./context";
 import {
   agganciata,
@@ -61,6 +65,7 @@ function fingi(guide: RulerGuide[], piu: Record<string, unknown> = {}): Finto {
     boardsNow: () => [{ id: "b1", box: { min: [100, 100], max: [200, 200] } }],
     currentIndex: () => ({ layers: [{ id: "l1", hidden: false, locked: false }, { id: "l2", hidden: false, locked: true }] }),
     scene: { root: { guides: guide } },
+    engine: { model: null },
     editable: () => true,
     edgeRulers: true,
     grid: { snap: false, snapPixel: false },
@@ -292,5 +297,35 @@ describe("i gesti delle guide", () => {
     expect(mobile!.getAttribute("class")).toContain("draw-guide-line-hot");
     surface.dispatchEvent(new PointerEvent("pointercancel", { pointerId: 1, bubbles: true }));
     expect(linee(surface)[0]!.getAttribute("x1")).toBe("100");
+  });
+});
+
+describe("i tracciati-guida (Crea guide)", () => {
+  /// Un editor finto col disegno `corpo`: il motore della scena e il cercatore veri.
+  function conDisegno(corpo: string, piu: Record<string, unknown> = {}): Finto {
+    const engine = SceneEngine.open(doc(corpo));
+    const builder = new PaintBuilder();
+    const scene = builder.build(engine);
+    const indexer = new SceneIndexer(builder, (id) => engine.holder(id));
+    return fingi([], { engine, indexer, scene, ...piu });
+  }
+  const tracciati = (surface: HTMLElement) => [...surface.querySelectorAll<SVGPathElement>("svg.draw-guides path.draw-guide-path")];
+
+  it("si vedono come le guide, con la loro forma, anche se display li toglie dal disegno", () => {
+    const { surface } = conDisegno('<g id="l1" fub:layer="Livello 1"><rect id="r1" x="10" y="20" width="30" height="40" display="none" fub:guide="true"/><rect id="r2" x="0" y="0" width="5" height="5"/></g>');
+    const [p] = tracciati(surface);
+    expect(tracciati(surface)).toHaveLength(1);
+    expect(p!.getAttribute("class")).toBe("draw-guide-line draw-guide-path");
+    expect(p!.getAttribute("d")).toBe("M10 20 L40 20 L40 60 L10 60 Z");
+    expect(p!.getAttribute("transform")).toBe("matrix(1 0 0 1 0 0)");
+  });
+
+  it("Nascondi guide e un livello nascosto li tolgono; un oggetto nascosto senza fub:guide non è una guida", () => {
+    const corpo = '<g id="l1" fub:layer="Livello 1"><path id="p1" d="M0 0L50 50" display="none" fub:guide="true"/><rect id="r3" x="0" y="0" width="5" height="5" display="none"/></g><g id="l2" fub:layer="Sotto" display="none"><path id="p2" d="M0 0L9 9" display="none" fub:guide="true"/></g>';
+    const { ctx, surface } = conDisegno(corpo);
+    expect(tracciati(surface)).toHaveLength(1);
+    ctx.guidesHidden = true;
+    ctx.showGuides();
+    expect(tracciati(surface)).toHaveLength(0);
   });
 });

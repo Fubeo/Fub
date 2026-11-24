@@ -90,6 +90,10 @@ wsp    = %x20 / %x09 / %x0A / %x0C / %x0D
   la versione del formato resta 1. Un lettore di prima trova fuori grammatica
   un valore che li usa e lo lascia nel file com'è (§3), quindi non si perdono.
 
+- **Tracciati-guida:** oltre a queste rette, una forma con `fub:guide="true"`
+  è una guida della sua forma (formato della scena, §3): non sta in
+  `fub:guides` e si mostra e si nasconde con le altre guide e col suo livello.
+
 ## 3. Lettura e diagnostica
 
 Un valore fuori grammatica non si usa e resta nel file com'è, finché la

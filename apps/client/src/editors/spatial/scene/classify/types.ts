@@ -65,6 +65,10 @@ export interface ElementItem extends Span {
   /// `display="none"` su un livello, un gruppo, un collegamento o una forma:
   /// non si vede. Su un livello ripete `layer`.
   readonly hidden?: true;
+  /// `fub:guide="true"` su una forma (`path`, `rect`, `ellipse`, `circle`,
+  /// `line`, `polyline`, `polygon`): un tracciato-guida (formato della scena,
+  /// guide). Non si disegna né si esporta, con o senza `display`.
+  readonly guide?: true;
   readonly stroke?: Stroke;
   /// `x1 y1 x2 y2` di una freccia.
   readonly arrow?: readonly [number, number, number, number];

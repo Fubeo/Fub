@@ -1137,6 +1137,10 @@ impl Lavoro<'_> {
                     None => elem(nodo, locale, &self.riferimenti)?,
                 };
                 attrs.insert("id".into(), json!(id));
+                if e_guida(nodo) {
+                    attrs.insert("fub:guide".into(), json!("true"));
+                    attrs.insert("display".into(), json!("none"));
+                }
                 json!({ "elem": { "tag": tag, "attrs": attrs } })
             };
             self.ids.insert(nodo.id, id);
@@ -1216,9 +1220,10 @@ impl Lavoro<'_> {
                 .map(str::to_string)
             {
                 self.set.retain(|op| {
-                    let solo_stato = op["attrs"]
-                        .as_object()
-                        .is_some_and(|a| a.keys().all(|k| k == "display" || k == "fub:locked"));
+                    let solo_stato = op["attrs"].as_object().is_some_and(|a| {
+                        a.keys()
+                            .all(|k| k == "display" || k == "fub:locked" || k == "fub:guide")
+                    });
                     !(op["id"] == prima && solo_stato)
                 });
             }
@@ -1229,6 +1234,10 @@ impl Lavoro<'_> {
         }
         if nodo.locked {
             attrs.insert("fub:locked".into(), json!("true"));
+        }
+        if e_guida(nodo) {
+            attrs.insert("fub:guide".into(), json!("true"));
+            attrs.insert("display".into(), json!("none"));
         }
         if !attrs.is_empty() {
             self.set
@@ -1271,7 +1280,7 @@ impl Lavoro<'_> {
     /// foglio resta bloccato. Un oggetto mostrato che il file nasconde in un
     /// altro modo (uno stile) non si scrive con `display`.
     fn stato(&mut self, b: &Arc<Node>, a: &Arc<Node>) -> Result<Arc<Node>, Rifiuto> {
-        if b.visible == a.visible && b.locked == a.locked {
+        if b.visible == a.visible && b.locked == a.locked && e_guida(b) == e_guida(a) {
             return Ok(b.clone());
         }
         let Some(e) = self.elemento(a.id).cloned() else {
@@ -1287,7 +1296,32 @@ impl Lavoro<'_> {
                 if a.locked { json!("true") } else { Value::Null },
             );
         }
-        if b.visible != a.visible {
+        if e_guida(b) != e_guida(a) {
+            // Crea guide e Rilascia guide: `fub:guide` con `display="none"`,
+            // perché chi non conosce `fub:guide` non la disegni, e via tutti
+            // e due (formato della scena, guide).
+            if e_guida(a) {
+                if !b.visible || !a.visible {
+                    return Err(no("un oggetto nascosto non diventa una guida"));
+                }
+                attrs.insert("fub:guide".into(), json!("true"));
+                attrs.insert("display".into(), json!("none"));
+            } else {
+                attrs.insert("fub:guide".into(), Value::Null);
+                attrs.insert(
+                    "display".into(),
+                    if a.visible {
+                        Value::Null
+                    } else {
+                        json!("none")
+                    },
+                );
+            }
+        } else if e_guida(a) && b.visible != a.visible {
+            return Err(no(
+                "un tracciato-guida non si nasconde né si mostra da solo: lo fa Nascondi guide",
+            ));
+        } else if b.visible != a.visible {
             if e.ruolo == fub_scene::Role::Paper {
                 return Err(no("il foglio di Fub non si nasconde"));
             }
@@ -1315,6 +1349,9 @@ impl Lavoro<'_> {
         let mut c = (**b).clone();
         c.visible = a.visible;
         c.locked = a.locked;
+        if let (NodeKind::Path { guide, .. }, true) = (&mut c.kind, e_guida(b) != e_guida(a)) {
+            *guide = e_guida(a);
+        }
         Ok(Arc::new(c))
     }
 
@@ -2367,6 +2404,11 @@ fn nodi_vicini(a: &Node, b: &Node) -> bool {
 
 /// Due oggetti con la stessa geometria e le stesse proprietà, l'aspetto a
 /// parte.
+/// Un tracciato-guida del motore (Crea guide).
+fn e_guida(n: &Node) -> bool {
+    matches!(n.kind, NodeKind::Path { guide: true, .. })
+}
+
 fn geometrie_vicine(a: &Node, b: &Node) -> bool {
     let senza = |n: &Node| {
         let mut v = in_json(n);

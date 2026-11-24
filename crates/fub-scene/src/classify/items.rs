@@ -449,6 +449,11 @@ pub struct ElementItem {
     /// forma: non si vede. Su un livello ripete `layer`.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub hidden: bool,
+    /// `fub:guide="true"` su una forma (`path`, `rect`, `ellipse`, `circle`,
+    /// `line`, `polyline`, `polygon`): un tracciato-guida (formato della
+    /// scena, guide). Non si disegna né si esporta, con o senza `display`.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub guide: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub stroke: Option<Stroke>,
     /// `x1 y1 x2 y2` di una freccia.

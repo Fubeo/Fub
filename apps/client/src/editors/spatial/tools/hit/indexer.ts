@@ -53,6 +53,17 @@ import { ForeignBlock, Unit } from "./unit";
 /// Chi riceve gli oggetti di un documento: il nodo, il suo percorso, il
 /// livello, la matrice e lo stile del genitore, e i ritagli e le maschere di
 /// chi lo contiene.
+/// Un tracciato-guida (`fub:guide`): l'elemento, il suo livello e la sua
+/// forma nella scena.
+export interface GuidePath {
+  readonly id: string | null;
+  readonly path: readonly number[];
+  readonly layer: string | null;
+  readonly segments: readonly Segment[];
+  /// Dalle coordinate della forma a quelle della scena.
+  readonly matrix: Matrix;
+}
+
 type Visit = (node: ElementPart, path: number[], layer: string | null, parent: Matrix, style: Style, clips: readonly Clip[] | null) => void;
 
 /// Chi riceve i blocchi estranei fuori dagli oggetti: il blocco, la matrice
@@ -240,6 +251,33 @@ export class SceneIndexer {
     };
     this.walk(model, (layer) => !layer.hidden, [], visit);
     return units;
+  }
+
+  /// I tracciati-guida di `model` (`fub:guide`, formato della scena, guide)
+  /// nei livelli che si vedono e fuori dai gruppi nascosti: si vedono come
+  /// le guide del righello, anche se il loro `display="none"` li toglie dal
+  /// disegno. In ordine di documento.
+  guides(model: DocumentModel): GuidePath[] {
+    const out: GuidePath[] = [];
+    const visit = (node: ElementPart, path: number[], layer: string | null, parent: Matrix, style: Style, clips: readonly Clip[] | null): void => {
+      if (node.details === null) return;
+      if (node.details.guide === true && node.kind === "leaf") {
+        const shape = this.builder.shape(node);
+        if (shape === null) return;
+        const matrix = compose(parent, transformOf(shape.attrs));
+        const part = this.part(node, shape, matrix, IDENTITY, styleOf(style, shape.attrs), null, null);
+        out.push({ id: node.facts.id, path, layer, segments: part.segments, matrix: part.matrix });
+        return;
+      }
+      if (node.kind !== "container" || node.details.role === "instance") return;
+      const attrs = this.attrsOf(node);
+      if (attrs === null || hidden(attrs)) return;
+      const matrix = compose(parent, transformOf(attrs));
+      const inner = styleOf(style, attrs);
+      childLoop(node, (child, index) => visit(child, [...path, index], layer, matrix, inner, clips));
+    };
+    this.walk(model, (layer) => !layer.hidden, [], visit);
+    return out;
   }
 
   /// Gli oggetti di `model` che una tavola porta con sé quando si sposta:

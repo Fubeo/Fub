@@ -6643,6 +6643,22 @@
     },
     {
       "fonte": "motore",
+      "id": "view.guides.make",
+      "chiamata": {
+        "comando": "disegno.view.guides.make"
+      },
+      "etichetta": {
+        "it": "Crea guide",
+        "en": "Make Guides"
+      },
+      "posto": "menu/visualizza",
+      "famiglia": "tavole",
+      "tasto": "Cmd+5",
+      "effetto": "mostra",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "view.guides.release",
       "chiamata": {
         "comando": "disegno.view.guides.release"

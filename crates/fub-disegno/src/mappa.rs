@@ -15,7 +15,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use fub_scene::Role;
-use vectorcraft_doc::{Document, Node, NodeId};
+use vectorcraft_doc::{Document, Node, NodeId, NodeKind};
 use vectorcraft_geom::Affine;
 
 /// La lunghezza massima del nome di un livello di Fub, in caratteri
@@ -75,6 +75,10 @@ pub struct Elemento {
     pub bloccato: bool,
     /// `display="none"`.
     pub nascosto: bool,
+    /// `fub:guide="true"`: un tracciato-guida (formato della scena, guide).
+    /// Nel motore è un tracciato con `guide` e visibile, qualunque sia il
+    /// suo `display`.
+    pub guida: bool,
     /// L'oggetto del motore, se l'elemento è mappato.
     pub nodo: Option<NodeId>,
     /// Perché non è mappato, quando si sa prima dell'import.
@@ -174,6 +178,7 @@ impl Mappa {
         let mut per_id = HashMap::new();
         let mut ids = HashSet::new();
         let mut bloccati = Vec::new();
+        let mut guide = Vec::new();
         for (i, e) in elementi.iter_mut().enumerate() {
             if let Some(id) = &e.id {
                 per_id.insert(id.clone(), i);
@@ -191,6 +196,9 @@ impl Mappa {
                     if e.bloccato || e.ruolo == Role::Paper {
                         bloccati.push(*nodo);
                     }
+                    if e.guida {
+                        guide.push(*nodo);
+                    }
                 }
                 Some([_, _, ..]) => {
                     e.motivo =
@@ -202,6 +210,18 @@ impl Mappa {
         for nodo in bloccati {
             if let Some(n) = doc.node_mut(nodo) {
                 n.locked = true;
+            }
+        }
+        // Un tracciato-guida: nel motore la bandierina del tracciato, e
+        // visibile, come in VectorCraft (il `display="none"` è per chi non
+        // conosce `fub:guide`). Una forma che il motore non fa tracciato
+        // resta com'è.
+        for nodo in guide {
+            if let Some(n) = doc.node_mut(nodo) {
+                if let NodeKind::Path { guide, .. } = &mut n.kind {
+                    *guide = true;
+                    n.visible = true;
+                }
             }
         }
         let radici = doc

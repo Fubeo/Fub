@@ -82,6 +82,13 @@ Radice di un documento nuovo:
 - **Blocco e visibilità:** livelli, gruppi, collegamenti e forme si bloccano
   con `fub:locked="true"`, che li toglie dalla scelta sul foglio e ferma ciò
   che contengono; `display="none"` li nasconde, anche negli altri programmi.
+- **Tracciato-guida:** un `path`, `rect`, `ellipse`, `circle`, `line`,
+  `polyline` o `polygon` con `fub:guide="true"` è una
+  guida a forma libera (Crea guide del Completo). Porta sempre anche
+  `display="none"`, così gli altri programmi e l'esportazione non lo
+  disegnano; l'editor lo mostra come le guide del documento
+  ([formato della scena, unità e guide](scene-format-rulers.md)). Un altro
+  valore, o l'attributo su un altro elemento, non conta e resta nel file.
 - **Elementi fuori da ogni livello**, come negli SVG estranei adottati:
   appartengono a un livello implicito alla radice e non si spostano da soli.
 
@@ -288,7 +295,7 @@ non converte `d`. Solo i valori nuovi seguono le regole sui numeri.
 2. **Ordine degli attributi:**
    1. `id`;
    2. `fub:layer`, `fub:role`, `fub:name`, `fub:source`, `fub:repeat`, `fub:style`, `fub:marker`, `fub:board`, `fub:tool`, `fub:shape`, `fub:geom`,
-      `fub:from`, `fub:to`, `fub:along`, `fub:inside`, `fub:wrap`, `fub:join`, `fub:leading`, `fub:locked`, `fub:at`, `fub:brush`;
+      `fub:from`, `fub:to`, `fub:along`, `fub:inside`, `fub:wrap`, `fub:join`, `fub:leading`, `fub:locked`, `fub:guide`, `fub:at`, `fub:brush`;
    3. geometria: `x y dy cx cy r width height rx ry x1 y1 x2 y2 points d startOffset`;
    4. presentazione: `fill fill-opacity stroke stroke-width stroke-opacity stroke-linecap
       stroke-linejoin stroke-dasharray stroke-dashoffset stroke-miterlimit opacity style display font-family font-size font-weight

@@ -1632,6 +1632,55 @@
         ]
       },
       "dopo": "guide-libera.svg"
+    },
+    {
+      "$nota": "Crea guide: il rettangolo scelto diventa un tracciato-guida, che chi non conosce fub:guide non disegna; la selezione si svuota.",
+      "id": "view.guides.make",
+      "disegno": "guide.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oa1a1a1a1",
+            "attrs": {
+              "fub:guide": "true",
+              "display": "none"
+            }
+          }
+        ]
+      },
+      "dopo": "guide-tracciato.svg"
+    },
+    {
+      "$nota": "Crea guide senza oggetti scelti: niente da fare.",
+      "id": "view.guides.make",
+      "disegno": "guide.svg",
+      "selezione": [],
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "$nota": "Rilascia guide senza niente di scelto: ogni tracciato-guida torna un oggetto, senza fub:guide e display.",
+      "id": "view.guides.release",
+      "disegno": "guide-tracciato.svg",
+      "selezione": [],
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oa1a1a1a1",
+            "attrs": {
+              "fub:guide": null,
+              "display": null
+            }
+          }
+        ]
+      },
+      "dopo": "guide.svg"
     }
   ]
 }

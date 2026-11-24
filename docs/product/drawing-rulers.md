@@ -29,7 +29,13 @@ Il **Completo** col motore le riporta come in VectorCraft
   righello si toglie;
 - in Visualizza, **Guide** le nasconde e le rimostra, e **Blocca guide** le
   lascia vedere senza che si prendano; tutte e due valgono per la sessione,
-  non per il file.
+  non per il file;
+- **Crea guide** (Visualizza, Ctrl+5) fa dei tracciati e delle forme scelti
+  delle guide: spariscono dal disegno e si vedono in ciano, con la loro
+  forma, come le altre guide; senza niente di scelto non fa nulla.
+  **Rilascia guide** le riporta oggetti; senza niente di scelto rilascia
+  tutti i tracciati-guida del disegno. Un tracciato-guida non si prende
+  ancora sul foglio, e non si esporta.
 
 ## L'unità del documento
 

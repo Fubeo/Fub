@@ -22,9 +22,12 @@ import { t } from "../../strings";
 import type { Bounds } from "../../scene/geometry";
 import type { Point } from "../../scene/matrix";
 import type { RulerGuide } from "../../scene/rulers";
-import { toScene, toScreen, type View } from "../../view";
+import { compose } from "../../scene/matrix";
+import { pathData } from "../../scene/serialize";
+import { toScene, toScreen, viewMatrix, type View } from "../../view";
 import { gridStep } from "../grid";
 import { rulerTicks } from "../rulers";
+import type { GuidePath } from "../hit/indexer";
 import type { EditorContext } from "./context";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
@@ -247,10 +250,36 @@ export function installGuideLines(ctx: EditorContext): void {
     return [finta[0]!.a, finta[0]!.b];
   };
 
+  /// I tracciati-guida della scena (Crea guide): ricalcolati solo quando la scena si
+  /// ricostruisce, cioè quando il disegno cambia.
+  let tracciati: { readonly scena: unknown; readonly unita: readonly GuidePath[] } | null = null;
+  let versione = 0;
+  const tracciatiGuida = (): readonly GuidePath[] => {
+    if (tracciati?.scena !== ctx.scene) {
+      const model = ctx.engine.model;
+      tracciati = { scena: ctx.scene, unita: model === null ? [] : ctx.indexer.guides(model) };
+      versione++;
+    }
+    return tracciati.unita;
+  };
+
+  /// Un tracciato-guida sullo schermo: la sua forma, portata dalla vista con `transform`
+  /// (il tratto resta di un pixel, `vector-effect`).
+  const tracciatoSulloSchermo = (unita: GuidePath): SVGPathElement | null => {
+    const d = pathData(unita.segments);
+    if (d === "") return null;
+    const p = document.createElementNS(SVG_NS, "path");
+    p.setAttribute("class", "draw-guide-line draw-guide-path");
+    p.setAttribute("d", d);
+    p.setAttribute("transform", `matrix(${compose(viewMatrix(ctx.camera), unita.matrix).join(" ")})`);
+    return p;
+  };
+
   const disegna = (): void => {
     if (ctx.disposed) return;
     const guide = ctx.scene.root.guides ?? [];
-    if (svg === null && guide.length === 0 && gesto === null) return;
+    const conTracciati = tracciatiGuida();
+    if (svg === null && guide.length === 0 && conTracciati.length === 0 && gesto === null) return;
     if (svg === null) {
       svg = document.createElementNS(SVG_NS, "svg") as SVGSVGElement;
       svg.setAttribute("class", "draw-guides");
@@ -265,10 +294,17 @@ export function installGuideLines(ctx: EditorContext): void {
     }
     const { w, h } = ctx.surfaceSize();
     const { tx, ty, scale, angle } = ctx.camera;
-    const chiave = JSON.stringify([tx, ty, scale, angle, w, h, guide, ctx.guidesHidden, ctx.guidesLocked, sotto, gesto, ctx.boards === null]);
+    const chiave = JSON.stringify([tx, ty, scale, angle, w, h, guide, ctx.guidesHidden, ctx.guidesLocked, sotto, gesto, ctx.boards === null, versione]);
     if (chiave === disegnato) return;
     disegnato = chiave;
     const figli: SVGElement[] = [];
+    // I tracciati-guida, come le guide del righello: Nascondi guide li toglie.
+    if (!ctx.guidesHidden) {
+      for (const unita of conTracciati) {
+        const p = tracciatoSulloSchermo(unita);
+        if (p !== null) figli.push(p);
+      }
+    }
     const nascosta = gesto?.kind === "sposta" && gesto.cominciato && !gesto.copia ? gesto.index : null;
     for (const g of guideSulloSchermo(stato())) {
       if (g.index === nascosta) continue;

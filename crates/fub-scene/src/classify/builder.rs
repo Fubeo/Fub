@@ -604,6 +604,18 @@ impl Builder<'_, '_> {
                 && element
                     .value(NS_NONE, "display")
                     .is_some_and(|d| crate::values::trim(d) == "none"),
+            guide: object
+                && matches!(
+                    tag,
+                    Tag::Path
+                        | Tag::Rect
+                        | Tag::Ellipse
+                        | Tag::Circle
+                        | Tag::Line
+                        | Tag::Polyline
+                        | Tag::Polygon
+                )
+                && element.value(NS_FUB, "guide") == Some("true"),
             stroke,
             arrow: (role == Role::Arrow)
                 .then(|| arrow_geometry(element))

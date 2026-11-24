@@ -1568,6 +1568,11 @@ button.draw-isolation-crumb:hover {
 .draw-guide-line-hot {
   stroke-width: 2px;
 }
+/* Un tracciato-guida (Crea guide): la sua forma, senza riempimento. */
+.draw-guide-path {
+  fill: none;
+  shape-rendering: auto;
+}
 /* Ritaglia immagine (`tools/editor/ritaglio-immagine.ts`): l'immagine fuori dal riquadro
    scurita come in VectorCraft (nero al 43%), il riquadro e le maniglie nel ciano dei
    segni dello strumento, la misura sotto l'angolo in basso a sinistra. I gesti li prende
