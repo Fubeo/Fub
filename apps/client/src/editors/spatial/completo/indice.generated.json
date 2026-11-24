@@ -1811,6 +1811,86 @@
     },
     {
       "fonte": "motore",
+      "id": "guide.add",
+      "chiamata": {
+        "comando": "disegno.guide.add"
+      },
+      "etichetta": {
+        "it": "Aggiungi guida",
+        "en": "Add Guide"
+      },
+      "posto": "ispettore/design/documento",
+      "famiglia": "tavole",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "guide.list",
+      "chiamata": {
+        "comando": "disegno.guide.list"
+      },
+      "etichetta": {
+        "it": "Guide",
+        "en": "Guides"
+      },
+      "posto": "interno",
+      "famiglia": "tavole",
+      "tasto": null,
+      "effetto": "legge",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "guide.move",
+      "chiamata": {
+        "comando": "disegno.guide.move"
+      },
+      "etichetta": {
+        "it": "Sposta guida",
+        "en": "Move Guide"
+      },
+      "posto": "ispettore/design/documento",
+      "famiglia": "tavole",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "guide.remove",
+      "chiamata": {
+        "comando": "disegno.guide.remove"
+      },
+      "etichetta": {
+        "it": "Rimuovi guida",
+        "en": "Remove Guide"
+      },
+      "posto": "ispettore/design/documento",
+      "famiglia": "tavole",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "guide.setLayer",
+      "chiamata": {
+        "comando": "disegno.guide.setLayer"
+      },
+      "etichetta": {
+        "it": "Sposta guida nel livello",
+        "en": "Move Guide to Layer"
+      },
+      "posto": "ispettore/design/documento",
+      "famiglia": "tavole",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "layer.delete",
       "chiamata": {
         "comando": "disegno.layer.delete"
@@ -6430,6 +6510,54 @@
       "posto": "menu/visualizza",
       "famiglia": "vista",
       "tasto": "Shift+D",
+      "effetto": "mostra",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "view.guides.clear",
+      "chiamata": {
+        "comando": "disegno.view.guides.clear"
+      },
+      "etichetta": {
+        "it": "Cancella guide",
+        "en": "Clear Guides"
+      },
+      "posto": "menu/visualizza",
+      "famiglia": "tavole",
+      "tasto": null,
+      "effetto": "mostra",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "view.guides.lock",
+      "chiamata": {
+        "comando": "disegno.view.guides.lock"
+      },
+      "etichetta": {
+        "it": "Blocca guide",
+        "en": "Lock Guides"
+      },
+      "posto": "menu/visualizza",
+      "famiglia": "tavole",
+      "tasto": "Cmd+Alt+;",
+      "effetto": "mostra",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "view.guides.release",
+      "chiamata": {
+        "comando": "disegno.view.guides.release"
+      },
+      "etichetta": {
+        "it": "Rilascia guide",
+        "en": "Release Guides"
+      },
+      "posto": "menu/visualizza",
+      "famiglia": "tavole",
+      "tasto": "Cmd+Alt+5",
       "effetto": "mostra",
       "finestra": false
     },

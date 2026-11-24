@@ -1265,6 +1265,358 @@
       "id": "ui.newArtboard",
       "fonte": "interfaccia",
       "prova": "apps/client/src/editors/spatial/completo/famiglie/tavole/nuova.test.ts"
+    },
+    {
+      "$nota": "Nuova guida verticale: sul livello corrente, in coda alle altre.",
+      "id": "guide.add",
+      "disegno": "guide.svg",
+      "selezione": [],
+      "argomenti": {
+        "vertical": true,
+        "pos": 200
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "#root",
+            "attrs": {
+              "fub:guides": "x 120; y 50 board=b3c3c3c3c; x 30 layer=l1a2b3c4d locked; x 200 layer=l1a2b3c4d"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "$nota": "Nuova guida della seconda tavola, in un disegno senza guide.",
+      "id": "guide.add",
+      "disegno": "due.svg",
+      "selezione": [],
+      "argomenti": {
+        "vertical": false,
+        "pos": 10,
+        "artboard": 1
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "#root",
+            "attrs": {
+              "fub:guides": "y 10 board=b3c3c3c3c layer=l1a2b3c4d"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "$nota": "Le guide con gli id del file e il blocco di ognuna.",
+      "id": "guide.list",
+      "disegno": "guide.svg",
+      "selezione": [],
+      "atteso": {
+        "lettura": [
+          {
+            "index": 0,
+            "vertical": true,
+            "pos": 120.0,
+            "selected": false,
+            "layer": "l1a2b3c4d",
+            "shown": true,
+            "editable": true,
+            "locked": false
+          },
+          {
+            "index": 1,
+            "vertical": false,
+            "pos": 50.0,
+            "selected": false,
+            "artboard": 1,
+            "layer": "l1a2b3c4d",
+            "shown": true,
+            "editable": true,
+            "board": "b3c3c3c3c",
+            "locked": false
+          },
+          {
+            "index": 2,
+            "vertical": true,
+            "pos": 30.0,
+            "selected": false,
+            "layer": "l1a2b3c4d",
+            "shown": true,
+            "editable": true,
+            "locked": true
+          }
+        ]
+      }
+    },
+    {
+      "$nota": "Sposta una guida al suo posto nuovo: una guida senza livello va sul primo livello, come in VectorCraft.",
+      "id": "guide.move",
+      "disegno": "guide.svg",
+      "selezione": [],
+      "argomenti": {
+        "index": 0,
+        "pos": 150
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "#root",
+            "attrs": {
+              "fub:guides": "x 150 layer=l1a2b3c4d; y 50 board=b3c3c3c3c; x 30 layer=l1a2b3c4d locked"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "$nota": "Una guida bloccata nel file non si sposta.",
+      "id": "guide.move",
+      "disegno": "guide.svg",
+      "selezione": [],
+      "argomenti": {
+        "index": 2,
+        "pos": 5
+      },
+      "atteso": {
+        "rifiuto": "locked"
+      }
+    },
+    {
+      "$nota": "Copia le guide scelte spostate: restano le vecchie, le copie in coda.",
+      "id": "guide.move",
+      "disegno": "guide.svg",
+      "selezione": [],
+      "argomenti": {
+        "guides": [
+          0,
+          1
+        ],
+        "dx": 10,
+        "dy": 5,
+        "copy": true
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "#root",
+            "attrs": {
+              "fub:guides": "x 120; y 50 board=b3c3c3c3c; x 30 layer=l1a2b3c4d locked; x 130 layer=l1a2b3c4d; y 55 board=b3c3c3c3c layer=l1a2b3c4d"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "$nota": "Togli una guida.",
+      "id": "guide.remove",
+      "disegno": "guide.svg",
+      "selezione": [],
+      "argomenti": {
+        "index": 1
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "#root",
+            "attrs": {
+              "fub:guides": "x 120; x 30 layer=l1a2b3c4d locked"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "$nota": "Togli le guide scelte: una bloccata fra loro rifiuta.",
+      "id": "guide.remove",
+      "disegno": "guide.svg",
+      "selezione": [],
+      "argomenti": {
+        "guides": [
+          0,
+          2
+        ]
+      },
+      "atteso": {
+        "rifiuto": "locked"
+      }
+    },
+    {
+      "$nota": "Porta una guida su un livello.",
+      "id": "guide.setLayer",
+      "disegno": "guide.svg",
+      "selezione": [],
+      "argomenti": {
+        "index": 0,
+        "layer": "l0f0f0f0f"
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "#root",
+            "attrs": {
+              "fub:guides": "x 120 layer=l0f0f0f0f; y 50 board=b3c3c3c3c; x 30 layer=l1a2b3c4d locked"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "$nota": "Cancella guide: tutte, anche le bloccate.",
+      "id": "view.guides.clear",
+      "disegno": "guide.svg",
+      "selezione": [],
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "#root",
+            "attrs": {
+              "fub:guides": null
+            }
+          }
+        ]
+      }
+    },
+    {
+      "$nota": "Blocca guide: il blocco della sessione, il file non cambia.",
+      "id": "view.guides.lock",
+      "disegno": "guide.svg",
+      "selezione": [],
+      "argomenti": {
+        "locked": true
+      },
+      "atteso": {
+        "lettura": {
+          "locked": true
+        }
+      }
+    },
+    {
+      "$nota": "Una guida della tavola si sposta con la sua tavola.",
+      "id": "artboard.move",
+      "disegno": "guide.svg",
+      "selezione": [],
+      "argomenti": {
+        "index": 1,
+        "dx": 10,
+        "dy": 5,
+        "moveArt": false
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "set",
+                "id": "b3c3c3c3c",
+                "attrs": {
+                  "viewBox": "410 5 200 200"
+                }
+              },
+              {
+                "op": "set",
+                "id": "c2b2b2b2b",
+                "attrs": {
+                  "x": "410",
+                  "y": "5",
+                  "width": "200",
+                  "height": "200"
+                }
+              },
+              {
+                "op": "set",
+                "id": "#root",
+                "attrs": {
+                  "fub:guides": "x 120; y 55 board=b3c3c3c3c layer=l1a2b3c4d; x 30 layer=l1a2b3c4d locked"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "$nota": "Una guida della tavola se ne va con la sua tavola.",
+      "id": "artboard.delete",
+      "disegno": "guide.svg",
+      "selezione": [],
+      "argomenti": {
+        "index": 1
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "b3c3c3c3c"
+              },
+              {
+                "op": "remove",
+                "target": "c2b2b2b2b"
+              },
+              {
+                "op": "set",
+                "id": "#root",
+                "attrs": {
+                  "fub:guides": "x 120; x 30 layer=l1a2b3c4d locked"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "$nota": "Libera una guida: diventa un tracciato senza colori lungo tutte le tavole.",
+      "id": "view.guides.release",
+      "disegno": "guide.svg",
+      "selezione": [],
+      "argomenti": {
+        "index": 0
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "last": true
+                },
+                "elem": {
+                  "tag": "line",
+                  "attrs": {
+                    "x1": "120",
+                    "y1": "0",
+                    "x2": "120",
+                    "y2": "300",
+                    "id": "@1"
+                  }
+                }
+              },
+              {
+                "op": "set",
+                "id": "#root",
+                "attrs": {
+                  "fub:guides": "y 50 board=b3c3c3c3c; x 30 layer=l1a2b3c4d locked"
+                }
+              }
+            ]
+          }
+        ]
+      }
     }
   ]
 }

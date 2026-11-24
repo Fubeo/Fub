@@ -29,6 +29,8 @@ mod espansa;
 pub mod famiglie;
 /// I gesti delle forme, della selezione e del testo.
 pub mod gesti;
+/// Le guide del righello di `fub:guides` nel motore.
+mod guide;
 /// Gli identificatori stabili degli elementi del disegno.
 pub mod id;
 /// La mappa fra gli elementi della scena di Fub e gli oggetti del motore.

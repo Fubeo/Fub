@@ -281,6 +281,7 @@ pub(crate) fn differenza(
     lavoro.ident.extend(ident_del_confronto);
     // Le tavole: le operazioni sui `view` e sulle loro carte, che il motore
     // non ha come oggetti (`crate::tavole`).
+    let mut tavole_nuove = HashMap::new();
     let delle_tavole = {
         let mappa = &copia.mappa;
         let dati = &mut lavoro.dati;
@@ -294,6 +295,7 @@ pub(crate) fn differenza(
                 dati.insert(id.clone());
                 Some(id)
             },
+            &mut tavole_nuove,
         )
         .map_err(|e| match e {
             crate::tavole::NonSiScrive::FuoriRegola => {
@@ -349,6 +351,8 @@ pub(crate) fn differenza(
     // Le tavole non sono oggetti del motore: il controllo delle parti non
     // mappate non le guarda.
     ops.extend(delle_tavole);
+    // Le guide dopo le tavole: possono nominare una tavola nuova.
+    ops.extend(operazione_delle_guide(copia, dopo, &tavole_nuove, &ids)?);
     ops.extend(tracciati_dei_testi);
     // I campioni nuovi o cambiati prima di chi li usa, quelli tolti per
     // ultimi, quando nessuno li usa più. Sono risorse, non oggetti del
@@ -377,6 +381,47 @@ pub(crate) fn differenza(
         return Err(Rifiuto::TroppoGrande);
     }
     Ok(Differenza { ops, ids })
+}
+
+/// Il `set` di `fub:guides` sulla radice, se le guide del motore sono
+/// cambiate (`crate::guide`): una tavola si nomina con l'id del file (o con
+/// quello nuovo, se è nata ora), un livello con l'id del suo elemento (o con
+/// quello nuovo).
+fn operazione_delle_guide(
+    copia: &Copia,
+    dopo: &Document,
+    tavole_nuove: &HashMap<u32, String>,
+    ids: &HashMap<NodeId, String>,
+) -> Result<Option<Value>, Rifiuto> {
+    let tavola = |t: u32| {
+        copia
+            .tavole
+            .del_file
+            .iter()
+            .find(|d| d.motore == t)
+            .map(|d| d.id.clone())
+            .or_else(|| tavole_nuove.get(&t).cloned())
+    };
+    let livello = |n: NodeId| {
+        ids.get(&n).cloned().or_else(|| {
+            let e = copia.mappa.elemento(copia.mappa.del_nodo(n)?)?;
+            e.id_del_file().map(str::to_string)
+        })
+    };
+    crate::guide::operazione(
+        &copia.guide,
+        &copia.documento,
+        dopo,
+        copia.radice,
+        &tavola,
+        &livello,
+    )
+    .map_err(|e| match e {
+        crate::guide::NonSiScrive::Ferme(motivo) => no(motivo),
+        crate::guide::NonSiScrive::Bloccata => {
+            no("una guida bloccata non si sposta e non si toglie da sola")
+        }
+    })
 }
 
 /// Gli attributi del `use` di un'istanza nuova (o riscritta) `nodo`, con

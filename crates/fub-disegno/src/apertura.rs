@@ -62,6 +62,8 @@ pub(crate) struct Copia {
     pub tavole: crate::tavole::Tavole,
     /// I simboli del file, che il motore ha come suoi simboli.
     pub simboli: crate::simboli::Simboli,
+    /// Le guide del file, che il motore ha come sue guide.
+    pub guide: crate::guide::GuideAperte,
 }
 
 impl Copia {
@@ -198,6 +200,7 @@ pub(crate) fn importa(testo: &str, revisione: u64) -> Result<Copia, ErroreApertu
     mappa.lega_le_facce(&documento);
     mappa.ricette = ricette;
     campioni::nel_motore(&campioni_del_file, &usi, &mappa, &mut documento);
+    let guide = crate::guide::leggi(testo, &scena.items, base, &mappa, &tavole, &mut documento);
     perdite::classifica(&mut perdite, testo, &scena.items, &mappa);
     Ok(Copia {
         revisione,
@@ -209,6 +212,7 @@ pub(crate) fn importa(testo: &str, revisione: u64) -> Result<Copia, ErroreApertu
         campioni: campioni_del_file,
         tavole,
         simboli,
+        guide,
     })
 }
 

@@ -20,7 +20,7 @@
 
 use std::sync::Arc;
 
-use fub_abi::{DrawingDisabledReason, PluginError};
+use fub_abi::{DrawingDisabledReason, DrawingRefusal, PluginError};
 use fub_motori::{ErroreMotore, Servizi};
 use serde_json::Value;
 use vectorcraft_doc::NodeId;
@@ -50,6 +50,9 @@ impl StatoFamiglia for Stato {
     /// ha, o bloccato, spegne ogni comando; una copia di sola lettura spegne
     /// quelli che cambiano il disegno.
     fn spento(id: &str, copia: &Copia, selezione: &[String]) -> Option<DrawingDisabledReason> {
+        if e_delle_guide(id) {
+            return guida_spenta(id, copia);
+        }
         if id.starts_with("artboard.") {
             return tavola_spenta(id, copia, selezione);
         }
@@ -75,6 +78,52 @@ impl StatoFamiglia for Stato {
         senza.then(|| DrawingDisabledReason::Other {
             text: "Seleziona una quota.".into(),
         })
+    }
+
+    /// Le guide si leggono con gli id del file: la posizione nelle coordinate
+    /// del file, la tavola (`board`) e il livello (`layer`) coi loro id, e il
+    /// blocco della guida nel file (`locked`).
+    fn lettura(&self, id: &str, copia: &Copia, mut risultato: Value) -> Value {
+        if id == "guide.list" {
+            if let Some(righe) = risultato.as_array_mut() {
+                for (i, riga) in righe.iter_mut().enumerate() {
+                    guida_letta(copia, i, riga);
+                }
+            }
+        }
+        risultato
+    }
+
+    /// Una guida bloccata nel file non si sposta, non cambia livello, non si
+    /// toglie e non diventa un tracciato da sola: il comando che la nomina
+    /// (`index`, `indexes` o fra le scelte `guides`) si rifiuta.
+    fn rifiuto_valore(
+        id: &str,
+        copia: &Copia,
+        _selezione: &[String],
+        valore: &Value,
+    ) -> Option<DrawingRefusal> {
+        if !matches!(
+            id,
+            "guide.move" | "guide.remove" | "guide.setLayer" | "view.guides.release"
+        ) {
+            return None;
+        }
+        let indici = ["index"]
+            .into_iter()
+            .filter_map(|k| valore.get(k))
+            .chain(
+                ["indexes", "guides"]
+                    .into_iter()
+                    .filter_map(|k| valore.get(k).and_then(Value::as_array))
+                    .flatten(),
+            )
+            .filter_map(Value::as_u64)
+            .filter_map(|i| usize::try_from(i).ok());
+        indici
+            .into_iter()
+            .any(|i| copia.guide.bloccata(i))
+            .then_some(DrawingRefusal::Locked)
     }
 
     /// Gli `ids` di Aggiorna, l'`id` di Applica a tutti e i nodi della
@@ -135,10 +184,143 @@ impl StatoFamiglia for Stato {
                     }
                 }
             }
+            "guide.add" | "guide.move" | "guide.setLayer" => {
+                guida_nel_motore(copia, &mut valore)?;
+            }
+            "view.guides.release" => {
+                if let Some(ids) = valore.get_mut("ids").and_then(Value::as_array_mut) {
+                    for id in ids {
+                        if let Some(file) = id.as_str() {
+                            *id = Value::from(nodo_del_file(copia, file)?.0);
+                        }
+                    }
+                }
+            }
             _ => {}
         }
         Ok(valore)
     }
+}
+
+/// Vero per un comando delle guide del righello.
+fn e_delle_guide(id: &str) -> bool {
+    id.starts_with("guide.") || id.starts_with("view.guides.")
+}
+
+/// Perché un comando delle guide è spento: la lista e il blocco della
+/// sessione non cambiano il file; gli altri vogliono una copia modificabile e
+/// guide che il file lascia cambiare (`crate::guide`).
+fn guida_spenta(id: &str, copia: &Copia) -> Option<DrawingDisabledReason> {
+    if matches!(id, "guide.list" | "view.guides.lock") {
+        return None;
+    }
+    if !copia.modificabile {
+        return Some(DrawingDisabledReason::ReadOnly);
+    }
+    copia.guide.ferme.map(|motivo| DrawingDisabledReason::Other {
+        text: format!("{}{}.", motivo[..1].to_uppercase(), &motivo[1..]),
+    })
+}
+
+/// Gli indici delle guide scelte (`guides`), tolti dal valore: il motore li
+/// vuole nella sua selezione, che fra due comandi non resta. Un indice che
+/// non è una guida è un argomento rifiutato.
+pub(crate) fn guide_scelte(copia: &Copia, valore: &mut Value) -> Result<Vec<usize>, PluginError> {
+    let Some(lista) = valore.as_object_mut().and_then(|o| o.remove("guides")) else {
+        return Ok(Vec::new());
+    };
+    let quante = copia.documento.guides.len();
+    let Some(lista) = lista.as_array() else {
+        return Err(PluginError::BadArgs("«guides» è un elenco di indici.".into()));
+    };
+    let mut scelte = Vec::with_capacity(lista.len());
+    for v in lista.iter().take(10_000) {
+        match v.as_u64().and_then(|i| usize::try_from(i).ok()) {
+            Some(i) if i < quante => {
+                if !scelte.contains(&i) {
+                    scelte.push(i);
+                }
+            }
+            _ => {
+                return Err(PluginError::BadArgs(
+                    format!("«guides»: {v} non è una guida del disegno.").into(),
+                ))
+            }
+        }
+    }
+    Ok(scelte)
+}
+
+/// La posizione (`pos`) e gli spostamenti (`dx`, `dy`) di una guida dal file
+/// al motore, e il livello (`layer`) dall'id del file al nodo.
+fn guida_nel_motore(copia: &Copia, valore: &mut Value) -> Result<(), PluginError> {
+    let Some(o) = valore.as_object_mut() else {
+        return Ok(());
+    };
+    let [a, _, _, d, _, _] = copia.radice.as_coeffs();
+    if let Some(pos) = o.get("pos").and_then(Value::as_f64) {
+        // `guide.move` con l'indice: l'asse è quello della guida.
+        let verticale = match o.get("index").and_then(Value::as_u64) {
+            Some(i) => usize::try_from(i)
+                .ok()
+                .and_then(|i| copia.documento.guides.get(i))
+                .is_some_and(|g| g.vertical),
+            None => o.get("vertical").and_then(Value::as_bool).unwrap_or(false),
+        };
+        o.insert(
+            "pos".into(),
+            Value::from(crate::guide::nel_motore(copia.radice, verticale, pos)),
+        );
+    }
+    for (chiave, scala) in [("dx", a), ("dy", d)] {
+        if let Some(v) = o.get(chiave).and_then(Value::as_f64) {
+            o.insert(chiave.into(), Value::from(v * scala));
+        }
+    }
+    if let Some(file) = o.get("layer").and_then(Value::as_str).map(str::to_string) {
+        let nodo = crate::guide::livello_del_file(&copia.mappa, &copia.documento, &file)
+            .ok_or_else(|| PluginError::BadArgs(format!("«{file}» non è un livello del disegno.").into()))?;
+        o.insert("layer".into(), Value::from(nodo.0));
+    }
+    Ok(())
+}
+
+/// Una riga di `guide.list` con gli id del file.
+fn guida_letta(copia: &Copia, i: usize, riga: &mut Value) {
+    let Some(o) = riga.as_object_mut() else {
+        return;
+    };
+    let verticale = o.get("vertical").and_then(Value::as_bool).unwrap_or(false);
+    if let Some(pos) = o.get("pos").and_then(Value::as_f64) {
+        let nel_file = crate::guide::nel_file(copia.radice, verticale, pos);
+        o.insert("pos".into(), Value::from(nel_file));
+    }
+    let tavola = copia.documento.guides.get(i).and_then(|g| g.artboard).and_then(|t| {
+        copia
+            .tavole
+            .del_file
+            .iter()
+            .find(|d| d.motore == t)
+            .map(|d| d.id.clone())
+    });
+    if let Some(t) = tavola {
+        o.insert("board".into(), Value::from(t));
+    }
+    let livello = o
+        .get("layer")
+        .and_then(Value::as_u64)
+        .and_then(|n| copia.mappa.del_nodo(NodeId(n)))
+        .and_then(|e| copia.mappa.elemento(e))
+        .and_then(|e| e.id_del_file().map(str::to_string));
+    match livello {
+        Some(l) => {
+            o.insert("layer".into(), Value::from(l));
+        }
+        None => {
+            o.remove("layer");
+        }
+    }
+    o.insert("locked".into(), Value::from(copia.guide.bloccata(i)));
 }
 
 /// La tavola che ha il centro del riquadro degli oggetti scelti.

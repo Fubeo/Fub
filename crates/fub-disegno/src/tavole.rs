@@ -242,12 +242,15 @@ pub(crate) enum NonSiScrive {
 }
 
 /// Le operazioni che portano le tavole del file a quelle del motore `poi`.
+/// `nuove` riceve l'id del file di ogni tavola nuova, per la sua tavola del
+/// motore (le guide che ci stanno sopra lo nominano).
 pub(crate) fn operazioni(
     t: &Tavole,
     prima: &[Artboard],
     poi: &[Artboard],
     radice: Affine,
     id_nuovo: &mut dyn FnMut(Specie) -> Option<String>,
+    nuove: &mut HashMap<u32, String>,
 ) -> Result<Vec<Value>, NonSiScrive> {
     if uguali(prima, poi) {
         return Ok(Vec::new());
@@ -349,6 +352,7 @@ pub(crate) fn operazioni(
         }
         // Una tavola nuova, o la pagina che diventa la prima tavola.
         let id = id_nuovo(Specie::Tavola).ok_or(NonSiScrive::Id)?;
+        nuove.insert(a.id, id.clone());
         ops.push(
             json!({ "op": "add", "parent": "#root", "pos": pos, "elem": vista(&id, &a.name, &st) }),
         );
@@ -507,10 +511,17 @@ mod tests {
             tavola(2, "Artboard 2", Rect::new(500.0, 0.0, 600.0, 100.0)),
         ];
         let mut n = 0;
-        let ops = operazioni(&t, &prima, &poi, Affine::IDENTITY, &mut |s| {
-            n += 1;
-            Some(format!("{}0000000{n}", s.prefisso()))
-        })
+        let ops = operazioni(
+            &t,
+            &prima,
+            &poi,
+            Affine::IDENTITY,
+            &mut |s| {
+                n += 1;
+                Some(format!("{}0000000{n}", s.prefisso()))
+            },
+            &mut HashMap::new(),
+        )
         .unwrap();
         let testo = serde_json::to_string(&ops).unwrap();
         assert!(testo.contains(r#""fub:board":"b00000001""#), "{testo}");
@@ -533,7 +544,15 @@ mod tests {
         };
         let prima = [tavola(1, "Uno", Rect::new(0.0, 0.0, 100.0, 100.0))];
         let poi = [tavola(1, "Uno", Rect::new(10.0, 20.0, 110.0, 120.0))];
-        let ops = operazioni(&t, &prima, &poi, Affine::IDENTITY, &mut |_| None).unwrap();
+        let ops = operazioni(
+            &t,
+            &prima,
+            &poi,
+            Affine::IDENTITY,
+            &mut |_| None,
+            &mut HashMap::new(),
+        )
+        .unwrap();
         assert_eq!(
             ops,
             vec![
@@ -542,7 +561,14 @@ mod tests {
             ]
         );
         assert_eq!(
-            operazioni(&t, &prima, &prima, Affine::IDENTITY, &mut |_| None),
+            operazioni(
+                &t,
+                &prima,
+                &prima,
+                Affine::IDENTITY,
+                &mut |_| None,
+                &mut HashMap::new()
+            ),
             Ok(Vec::new())
         );
     }

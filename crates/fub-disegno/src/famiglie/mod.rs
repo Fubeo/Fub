@@ -1186,6 +1186,13 @@ pub(crate) fn esegui(
     } else {
         Default::default()
     };
+    // Le guide scelte di un comando delle guide (`guides`, i loro indici):
+    // tolte dal valore, vanno nella selezione del motore.
+    let guide_scelte = if famiglia == Famiglia::Tavole {
+        tavole::guide_scelte(copia, &mut valore)?
+    } else {
+        Vec::new()
+    };
     // Un comando che il motore vuole su un oggetto solo gira una volta per
     // oggetto, nella stessa copia: la differenza li scrive in un passo.
     let giri: Vec<Vec<NodeId>> =
@@ -1232,6 +1239,9 @@ pub(crate) fn esegui(
                 .map(|stato| {
                     stato.selection = Selection::default();
                     giro.iter().for_each(|n| stato.selection.add(*n));
+                    if !guide_scelte.is_empty() {
+                        stato.selection.guides.clone_from(&guide_scelte);
+                    }
                     if riga.id == "select.reselect" {
                         stato.last_selection_cmd = ultimo.clone();
                     }

@@ -174,15 +174,15 @@ motore	select.recall	Recall Selection	Select	livelli	F1	T15	da fare	menu/selezio
 motore	select.editSaved	Edit Selection…	Select	livelli	F1	T15	da fare	menu/selezione	famiglia	il motore tiene le selezioni salvate in saved_selections del documento (vectorcraft-doc), e il formato della scena (fub-scene) non ha un posto dove scriverle: salvarne una non arriverebbe su disco, quindi niente voce finché non c’è (K6 T15 giro 2, da chiedere con T27)	Modifica selezione…
 motore	select.savedList	Saved Selections		livelli	F1	T15	da fare	interno	famiglia	il motore tiene le selezioni salvate in saved_selections del documento (vectorcraft-doc), e il formato della scena (fub-scene) non ha un posto dove scriverle: salvarne una non arriverebbe su disco, quindi niente voce finché non c’è (K6 T15 giro 2, da chiedere con T27)	Selezioni salvate
 motore	view.guides.make	Make Guides	View › Guides	tavole	F2	T19	da fare	menu/visualizza	famiglia		Crea guide
-motore	view.guides.release	Release Guides	View › Guides	tavole	F2	T19	da fare	menu/visualizza	famiglia		Rilascia guide
-motore	view.guides.lock	Lock Guides	View › Guides	tavole	F2	T19	da fare	menu/visualizza	famiglia		Blocca guide
-motore	view.guides.clear	Clear Guides	View › Guides	tavole	F2	T19	da fare	menu/visualizza	famiglia		Cancella guide
-motore	guide.add	Add Guide		tavole	F2	T19	da fare	ispettore/design/documento	famiglia		Aggiungi guida
-motore	guide.list	Guides		tavole	F2	T19	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Guide
+motore	view.guides.release	Release Guides	View › Guides	tavole	F2	T19	fatto	menu/visualizza	famiglia	una guida del righello (index) diventa tracciato; i tracciati-guida vengono con Crea guide	Rilascia guide
+motore	view.guides.lock	Lock Guides	View › Guides	tavole	F2	T19	fatto	menu/visualizza	famiglia	blocco della sessione come in VectorCraft; il file ha anche il blocco di ogni guida (locked)	Blocca guide
+motore	view.guides.clear	Clear Guides	View › Guides	tavole	F2	T19	fatto	menu/visualizza	famiglia		Cancella guide
+motore	guide.add	Add Guide		tavole	F2	T19	fatto	ispettore/design/documento	famiglia		Aggiungi guida
+motore	guide.list	Guides		tavole	F2	T19	fatto	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Guide
 motore	guide.select	Select Guides		tavole	F2	T19	da fare	ispettore/design/documento	famiglia		Seleziona guide
-motore	guide.remove	Remove Guide		tavole	F2	T19	da fare	ispettore/design/documento	famiglia		Rimuovi guida
-motore	guide.move	Move Guide		tavole	F2	T19	da fare	ispettore/design/documento	famiglia		Sposta guida
-motore	guide.setLayer	Move Guide to Layer		tavole	F2	T19	da fare	ispettore/design/documento	famiglia		Sposta guida nel livello
+motore	guide.remove	Remove Guide		tavole	F2	T19	fatto	ispettore/design/documento	famiglia	più guide con «guides» (indici)	Rimuovi guida
+motore	guide.move	Move Guide		tavole	F2	T19	fatto	ispettore/design/documento	famiglia	più guide con «guides» (indici)	Sposta guida
+motore	guide.setLayer	Move Guide to Layer		tavole	F2	T19	fatto	ispettore/design/documento	famiglia		Sposta guida nel livello
 motore	file.closeAll	Close All	File	fub	—	T2	fub	fub	—	chiudere le schede di Fub	Chiudi tutto
 motore	file.documentColorMode	Document Color Mode	File › Document Color Mode	formati	F3	T23	da fare	menu/file	famiglia		Metodo colore documento
 motore	file.info	File Info…	File	fub	—	T2	fub	fub	—	proprietà della nota di Fub; finestra	Informazioni file…

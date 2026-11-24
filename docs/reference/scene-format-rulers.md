@@ -8,9 +8,18 @@
 > tutte e due le letture.
 
 Righelli e guide se ne sono andati col livello Standard
-([decisione 0231](../decisions/0231-la-chiusura-di-fubdraw.md)):
-`fub:guides` si legge e resta com'è, e l'editor non lo scrive più;
-`fub:units` si sceglie ancora, nella sezione Documento delle proprietà.
+([decisione 0231](../decisions/0231-la-chiusura-di-fubdraw.md)); il livello
+Completo li riporta con le guide di VectorCraft (`crates/fub-disegno/src/guide.rs`):
+all'apertura `fub:guides` diventa l'elenco delle guide del motore, e un
+comando che le cambia riscrive l'attributo intero nella forma canonica (§2).
+Una guida che non cambia si riscrive com'era, coi suoi riferimenti; una
+guida senza livello che si sposta prende il primo livello visibile e
+sbloccato, come in VectorCraft. Una guida `locked` non si sposta, non cambia
+livello e non si toglie da sola; se ne va con la sua tavola, col suo livello
+o con «Cancella guide». Con un valore fuori grammatica, o con una radice
+ruotata o inclinata, i comandi delle guide sono spenti e il valore resta
+com'è. `fub:units` si sceglie ancora, nella sezione Documento delle
+proprietà.
 
 Due attributi facoltativi della radice del
 [formato della scena](scene-format.md): l'unità in cui la superficie mostra le
