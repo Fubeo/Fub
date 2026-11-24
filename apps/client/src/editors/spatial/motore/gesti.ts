@@ -72,7 +72,7 @@ import { CodaPennello, STRUMENTO_PENNELLO } from "./pennello-tondo";
 import type { ArgomentiRifiutati, GestoMotore, MotoreAssente, SessioneMotore } from "./sessione";
 import { cursoreDelloStrumento, motoreDelloStrumento, StatiStrumenti } from "./strumento";
 import { Scrittura, STRUMENTI_CHE_SCRIVONO } from "./scrittura";
-import { A_PIU_CLIC, segniComeForma, STRUMENTI_DEI_TRACCIATI } from "./tracciati";
+import { A_PIU_CLIC, segniComeForma, STRUMENTI_DEI_TRACCIATI, tieneLaMisura } from "./tracciati";
 
 /// Gli strumenti che scelgono un oggetto a clic e restano aperti fra un clic e
 /// l'altro finché il motore dice `busy`: la Fusione (il primo oggetto, poi il
@@ -604,7 +604,7 @@ export function installGestiMotore(ctx: EditorContext): void {
   /// lo strumento cambiato.
   let misura: readonly DrawingOverlay[] | null = null;
   const mostraMisura = (): void => {
-    if (misura !== null && ctx.motoreTool === "measure") ctx.showShape(segniComeForma(misura, ctx.camera.scale), IDENTITY);
+    if (misura !== null && tieneLaMisura(ctx.motoreTool)) ctx.showShape(segniComeForma(misura, ctx.camera.scale), IDENTITY);
   };
   const ingressi: DrawingInput[] = [];
   let fotogrammaScrittura: number | null = null;
@@ -826,7 +826,10 @@ export function installGestiMotore(ctx: EditorContext): void {
   const togliSegniSopra = (): void => {
     if (!segniSopra) return;
     segniSopra = false;
-    if (ctx.current === null) ctx.showShape(null, IDENTITY);
+    if (ctx.current === null) {
+      ctx.showShape(null, IDENTITY);
+      mostraMisura();
+    }
   };
 
   ctx.motoreSopra = (p) => {
@@ -867,7 +870,9 @@ export function installGestiMotore(ctx: EditorContext): void {
           return;
         }
         if (esito.state) ctx.surface.style.cursor = cursoreDelloStrumento(id, esito.state.cursor, ctx.preciseCursors);
-        const segni = segniComeForma(esito.preview?.overlays ?? [], ctx.camera.scale);
+        // Misura e ispeziona legge il tracciato sotto il mouse accanto alla misura che resta.
+        const conMisura = misura !== null && tieneLaMisura(id) ? misura : [];
+        const segni = segniComeForma([...conMisura, ...(esito.preview?.overlays ?? [])], ctx.camera.scale);
         if (segni === null) togliSegniSopra();
         else {
           segniSopra = true;
@@ -1230,7 +1235,7 @@ export function installGestiMotore(ctx: EditorContext): void {
       if (doppio !== null) mandaDoppioClic(g, doppio);
       return;
     }
-    if (typeof g.tool === "object" && g.tool.engine.id === "measure") {
+    if (typeof g.tool === "object" && tieneLaMisura(g.tool.engine.id)) {
       misuraFinita(g, pezzi[pezzi.length - 1] ?? []);
       return;
     }
@@ -1691,7 +1696,7 @@ export function installGestiMotore(ctx: EditorContext): void {
     clearPreview(g);
     // La misura di prima torna dopo che chi annulla ha pulito le anteprime
     // (`clearPreviews` in `curvature-tool.ts`).
-    if (typeof g.tool === "object" && g.tool.engine.id === "measure") queueMicrotask(mostraMisura);
+    if (typeof g.tool === "object" && tieneLaMisura(g.tool.engine.id)) queueMicrotask(mostraMisura);
     if (g.before.join("\n") !== ctx.selection.join("\n")) ctx.select(g.before);
   };
   ctx.motoreCancel = motoreCancel;

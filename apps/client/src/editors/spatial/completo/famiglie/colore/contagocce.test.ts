@@ -32,10 +32,10 @@ describe("il Contagocce nella colonna", () => {
     expect(DRAW_ICONS["draw-eyedropper"]).toBeDefined();
   });
 
-  it("sta nel gruppo «colore», nella sua casella con la Misura e la Quota, come in VectorCraft", () => {
+  it("sta nel gruppo «colore», nella sua casella con la Misura, Misura e ispeziona e la Quota, come in VectorCraft", () => {
     const gruppo = layoutCompleto(toolsFor("full", "vector"), MOTORE_PRONTO).find((g) => g.id === "color");
     const casella = gruppo?.caselle.find((c) => c.includes("motore:eyedropper")) ?? [];
-    expect(casella).toEqual(["motore:eyedropper", "motore:measure", "motore:dimension"]);
+    expect(casella).toEqual(["motore:eyedropper", "motore:measure", "motore:measureInspect", "motore:dimension"]);
   });
 
   it("il suo clic non apre una finestra: il gesto copia l'aspetto sulla selezione", () => {

@@ -6727,6 +6727,22 @@
     },
     {
       "fonte": "strumento",
+      "id": "measureInspect",
+      "chiamata": {
+        "strumento": "measureInspect"
+      },
+      "etichetta": {
+        "it": "Strumento Misura e ispeziona",
+        "en": "Measure & Inspect Tool"
+      },
+      "posto": "colonna/misura",
+      "famiglia": "tavole",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "strumento",
       "id": "mesh",
       "chiamata": {
         "strumento": "mesh"

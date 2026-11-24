@@ -49,6 +49,14 @@ export const STRUMENTI_DEI_TRACCIATI: ReadonlySet<string> = new Set([
 /// aperto fra un gesto e l'altro finché il motore dice `busy`.
 export const A_PIU_CLIC: ReadonlySet<string> = new Set(["pen", "smartPen", "curvature"]);
 
+/// Gli strumenti la cui ultima misura resta sul foglio fino alla misura dopo (la tiene il client):
+/// la Misura e Misura e ispeziona, come in VectorCraft.
+const TENGONO_LA_MISURA: ReadonlySet<string> = new Set(["measure", "measureInspect"]);
+
+export function tieneLaMisura(id: string | null): boolean {
+  return id !== null && TENGONO_LA_MISURA.has(id);
+}
+
 // Il colore dei segni sta nella pelle (`skin/draw.css`), non sull'elemento:
 // ogni ruolo (selezione, anteprima, guida, misura, prospettiva) ha l'accento,
 // come le maniglie di Fub. Qui solo le classi.

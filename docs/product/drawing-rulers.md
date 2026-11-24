@@ -50,6 +50,14 @@ trascinamento la annulla e riporta quella di prima, e un altro strumento le
 toglie. Con «Etichette delle misure» spenta resta solo la linea. Le scritte
 non si rifanno a uno zoom fatto dopo.
 
+Accanto c'è **Misura e ispeziona**, che VectorCraft ha in più: il
+trascinamento misura come la Misura, e la misura resta allo stesso modo. Il
+mouse che passa sopra un tracciato, senza premere, ne legge accanto al
+puntatore se è aperto o chiuso, quanti punti ha, la lunghezza del segmento e
+del tracciato, l'area che chiude, il raggio di curvatura e la direzione in
+quel punto; sopra un punto anche il suo angolo e le maniglie. Il segmento
+sotto il mouse si illumina. Il disegno non cambia.
+
 ## Lo strumento Quota
 
 Nella stessa casella c'è la **Quota**, come in VectorCraft: lascia nel

@@ -53,6 +53,67 @@
       }
     },
     {
+      "id": "measureInspect",
+      "fonte": "strumento",
+      "disegno": "base.svg",
+      "selezione": [
+        "ob2b2b2b2"
+      ],
+      "gesto": [
+        {
+          "phase": "preview",
+          "events": [
+            {
+              "kind": "move",
+              "x": 150,
+              "y": 150,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "down",
+              "x": 100,
+              "y": 100,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 130,
+              "y": 140,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ]
+        },
+        {
+          "phase": "commit",
+          "events": [
+            {
+              "kind": "up",
+              "x": 130,
+              "y": 140,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ]
+        }
+      ],
+      "atteso": {
+        "selezione": [
+          "ob2b2b2b2"
+        ]
+      }
+    },
+    {
       "id": "dimension",
       "fonte": "strumento",
       "disegno": "base.svg",
