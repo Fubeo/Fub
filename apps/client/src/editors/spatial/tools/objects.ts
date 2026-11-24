@@ -177,6 +177,9 @@ export interface ObjectTreeOptions {
   onSelect(keys: readonly string[]): void;
   /// Invio su un oggetto: le sue proprietà.
   onActivate(): void;
+  /// Un clic sulla riga di un livello (fuori dal triangolo): il livello diventa quello corrente,
+  /// come Imposta livello corrente di VectorCraft. Senza, il clic apre e chiude la riga.
+  onCurrent?(key: string): void;
   onDelete(): void;
   /// Esc: il fuoco torna al foglio.
   onLeave(): void;
@@ -208,6 +211,9 @@ export interface ObjectTree {
   /// attiva va al primo oggetto scelto.
   update(entries: readonly TreeEntry[], selection: readonly string[], count: number): void;
   focus(): void;
+  /// Individua oggetto: apre i livelli e i gruppi che contengono `key`, ne fa la riga attiva e la
+  /// porta in vista, senza prendere il fuoco. Falso se la voce non c'è.
+  locate(key: string): boolean;
   /// Mostra o nasconde il filtro; nascosto, si svuota.
   setFiltering(on: boolean): void;
   /// Porta in vista la voce `key` e ne apre il campo del nome. Falso se la
@@ -1453,7 +1459,10 @@ export function createObjectTree(life: Lifetime, options: ObjectTreeOptions): Ob
     const twisty = event.target instanceof Element && event.target.closest(".draw-object-twisty") !== null;
     if (row.entry.layer || (twisty && row.branch)) {
       active = row.entry.key;
-      if (row.branch) setExpanded(row, !row.open);
+      if (row.entry.layer && !twisty && options.onCurrent !== undefined) {
+        options.onCurrent(row.entry.key);
+        render();
+      } else if (row.branch) setExpanded(row, !row.open);
       else render();
       return;
     }
@@ -1542,6 +1551,14 @@ export function createObjectTree(life: Lifetime, options: ObjectTreeOptions): Ob
     },
     focus() {
       tree.focus({ preventScroll: true });
+    },
+    locate(key) {
+      if (!unfold(key)) return false;
+      flatten();
+      active = key;
+      render();
+      reveal();
+      return true;
     },
     setFiltering(on) {
       if (filterBar.hidden === !on) return;

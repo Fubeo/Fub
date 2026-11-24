@@ -266,6 +266,20 @@ describe("il puntatore", () => {
   });
 });
 
+describe("il livello corrente (Imposta livello corrente di VectorCraft)", () => {
+  it("con onCurrent un clic sul livello lo rende corrente e non lo chiude; il triangolo lo chiude", () => {
+    mount(ENTRIES, [], { onCurrent: (key) => calls.push(`current ${key}`) });
+    const prima = rows().map((row) => row.dataset.key);
+    host.querySelector('[data-key="l2"] .draw-object-label')!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    expect(calls).toEqual(["current l2"]);
+    expect(rows().map((row) => row.dataset.key)).toEqual(prima);
+    expect(chosen).toEqual([]);
+    host.querySelector('[data-key="l2"] .draw-object-twisty')!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    expect(calls).toEqual(["current l2"]);
+    expect(rows().length).toBeLessThan(prima.length);
+  });
+});
+
 describe("dentro i gruppi", () => {
   const NESTED: readonly TreeEntry[] = [
     layer("l1", [
@@ -310,6 +324,18 @@ describe("dentro i gruppi", () => {
     (document.activeElement as HTMLElement).blur();
     tree.update(NESTED, ["b"], 2);
     expect(rows().map((row) => row.dataset.key)).toEqual(["l1", "h", "g"]);
+  });
+
+  it("Individua oggetto riapre i gruppi chiusi sulla riga, anche con la stessa selezione", () => {
+    mount(NESTED);
+    tree.update(NESTED, ["b"], 2);
+    host.querySelector('[data-key="g"] .draw-object-twisty')!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    expect(rows().map((row) => row.dataset.key)).toEqual(["l1", "h", "g"]);
+    expect(tree.locate("b")).toBe(true);
+    expect(rows().map((row) => row.dataset.key)).toEqual(["l1", "h", "g", "c", "i", "b", "a"]);
+    expect(active()?.dataset.key).toBe("b");
+    expect(chosen).toEqual([]);
+    expect(tree.locate("nessuno")).toBe(false);
   });
 
   it("blocca e nasconde la riga attiva coi tasti e coi segni, dove si può", () => {

@@ -223,7 +223,9 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // vuoto, le opzioni del testo in area e su tracciato) diventano «fatto». Trenta righe in più.
   // Seleziona guide passa a «fub»: la scelta delle guide sta nel client (clic, Maiusc+clic, Canc,
   // frecce, trascinamento), il motore riceve gli indici. Una riga in meno «da fare».
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 693, fub: 115, escluso: 12, fatto: 731 });
+  // Imposta livello corrente (il clic sulla riga del livello) e Individua oggetto (menu Livelli)
+  // passano a «fub»: sono vista e sessione del client. Due righe in meno «da fare».
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 691, fub: 117, escluso: 12, fatto: 731 });
 });
 
 // --- un motore finto ---------------------------------------------------------------

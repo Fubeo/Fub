@@ -1397,6 +1397,7 @@ describe("i livelli, nel Completo", () => {
       ["menuitem", "Blocca «Note»", null, null],
       ["menuitem", "Sposta «Note» su", null, "true"],
       ["menuitem", "Sposta «Note» giù", null, null],
+      ["menuitem", "Individua oggetto", null, "true"],
       ["menuitem", "Elimina «Note»", null, null],
     ]);
     menu().find((entry) => labelOf(entry) === "Sfondo")!.click();
@@ -1413,6 +1414,22 @@ describe("i livelli, nel Completo", () => {
     editor.setSpace("simple");
     drag([[60, 60], [90, 80]]);
     expect(editor.engine.text).toMatch(new RegExp(`<rect id="${B}"[^>]*/>\\s*<rect id="o[a-z0-9]{8}"[^>]*/>\\s*</g>\\s*</svg>`));
+  });
+
+  it("un clic sulla riga di un livello lo rende corrente; Individua oggetto apre l'albero sulla riga scelta", () => {
+    mount(TWO, { workspace: "full" });
+    expect(shownName()).toBe("Note");
+    editor.select([A]);
+    choose("Individua oggetto");
+    const tree = host.querySelector<HTMLElement>(".draw-objects")!;
+    expect(tree.closest("[hidden]")).toBeNull();
+    expect(tree.querySelector<HTMLElement>(`[data-key="${A}"]`)).not.toBeNull();
+    expect(tree.querySelector('[role="tree"]')!.getAttribute("aria-activedescendant")).toBe(tree.querySelector<HTMLElement>(`[data-key="${A}"]`)!.id);
+    expect(changes).toEqual([]);
+    tree.querySelector<HTMLElement>('[data-key="l1"] .draw-object-label')!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    expect(shownName()).toBe("Sfondo");
+    expect(spoken()).toBe("Si disegna in «Sfondo».");
+    expect(changes).toEqual([]);
   });
 
   it("il livello corrente è del disegno: due editor lo condividono, e resta dopo il rimontaggio e la rilettura", () => {

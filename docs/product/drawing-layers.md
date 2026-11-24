@@ -21,7 +21,9 @@ Un livello del disegno è un gruppo figlio della radice con `fub:layer`, che
 ne porta il nome. Nello spazio Completo la barra ha il pulsante «Livelli»: mostra
 il livello in cui si disegna, quello corrente, col suo nome e, a parole, il suo
 stato, «bloccato» o «nascosto». Il suo menu elenca i livelli dalla cima, e
-sceglierne uno lo rende corrente; poi ha i comandi su quello corrente:
+sceglierne uno lo rende corrente; lo stesso fa un clic sulla riga di un livello
+nell'albero degli oggetti (il triangolo a sinistra la apre e la chiude). Poi il
+menu ha i comandi su quello corrente:
 
 - **Nuovo livello** ne crea uno vuoto sopra quello corrente, che diventa lui,
   col primo nome libero fra «Livello 2», «Livello 3» e così via;
@@ -35,7 +37,10 @@ sceglierne uno lo rende corrente; poi ha i comandi su quello corrente:
   sotto quello che ha sotto; ciò che sta alla radice fra i due resta dov'era;
 - **Elimina** lo toglie con ciò che contiene, e diventa corrente il livello
   sotto, o quello sopra. L'unico livello e uno bloccato non si eliminano, e la
-  voce spenta dice perché.
+  voce spenta dice perché;
+- **Individua oggetto** apre l'albero sulla riga dell'ultimo oggetto scelto,
+  aprendo il livello e i gruppi che lo contengono, anche se erano stati chiusi
+  a mano; non cambia il disegno. Senza niente di scelto è spenta.
 
 Penna, evidenziatore, forme, testi e immagini, incollate o dal vault, vanno nel
 livello corrente. Se è nascosto o bloccato il gesto non scrive, e un annuncio

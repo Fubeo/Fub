@@ -1987,6 +1987,22 @@
     },
     {
       "fonte": "motore",
+      "id": "layer.locate",
+      "chiamata": {
+        "comando": "disegno.layer.locate"
+      },
+      "etichetta": {
+        "it": "Individua oggetto",
+        "en": "Locate Object"
+      },
+      "posto": "ispettore/livelli",
+      "famiglia": "livelli",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "layer.lockOthers",
       "chiamata": {
         "comando": "disegno.layer.lockOthers"
@@ -2074,6 +2090,22 @@
       "etichetta": {
         "it": "Seleziona grafica",
         "en": "Select Art"
+      },
+      "posto": "ispettore/livelli",
+      "famiglia": "livelli",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "layer.setCurrent",
+      "chiamata": {
+        "comando": "disegno.layer.setCurrent"
+      },
+      "etichetta": {
+        "it": "Imposta livello corrente",
+        "en": "Set Current Layer"
       },
       "posto": "ispettore/livelli",
       "famiglia": "livelli",

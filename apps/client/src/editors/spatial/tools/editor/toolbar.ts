@@ -436,6 +436,7 @@ export function installToolbar(ctx: EditorContext): void {
       if (unit !== null) ctx.frameBounds(unit.bounds);
     },
     onActivate: () => void ctx.properties(),
+    onCurrent: (key) => ctx.chooseLayerKey(key),
     onDelete: () => ctx.deleteSelection(),
     onLeave: () => surface.focus({ preventScroll: true }),
     onToggle: (key, what) => ctx.toggleRow(key, what === "lock" ? "locked" : "hidden"),

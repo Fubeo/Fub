@@ -73,6 +73,9 @@ export interface LayersGridContext {
   /// quello corrente.
   layerFlag: (layer: LayerInfo, flag: "hidden" | "locked", on: boolean, current: boolean) => LayerWrite;
   layerItems: () => MenuItem[];
+  /// Un clic sulla riga di un livello nell'albero (Imposta livello corrente di VectorCraft): il
+  /// livello di chiave `key` diventa quello corrente, e lo si annuncia.
+  chooseLayerKey: (key: string) => void;
   intoItems: () => MenuItem[];
   changeGrid: (next: Grid) => void;
   pageItems: () => MenuItem[];
@@ -400,6 +403,20 @@ export function installLayersGrid(ctx: EditorContext): void {
         },
       );
     }
+    // Individua oggetto, come nel pannello Livelli di VectorCraft: apre l'albero sulla riga
+    // dell'ultimo oggetto scelto, aprendo i livelli e i gruppi che lo contengono. È solo vista.
+    const scelto = ctx.selection[ctx.selection.length - 1];
+    items.push({
+      label: t("draw.livelli.individua"),
+      separator: true,
+      disabled: scelto === undefined,
+      ...(scelto === undefined ? { description: t("draw.livelli.individua.niente") } : {}),
+      run: () => {
+        if (scelto === undefined) return;
+        ctx.showObjects(true, false);
+        ctx.tree.locate(scelto);
+      },
+    });
     items.push(
       {
         label: t("draw.layer.delete", { name }),
@@ -413,6 +430,10 @@ export function installLayersGrid(ctx: EditorContext): void {
     return items;
   };
   ctx.layerItems = layerItems;
+  ctx.chooseLayerKey = (key) => {
+    const layer = currentIndex().layers.find((each) => keyOf(each) === key);
+    if (layer !== undefined) chooseLayer(layer);
+  };
 
   // --- Griglia e pagina -------------------------------------------------------
 
