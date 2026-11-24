@@ -60,8 +60,14 @@ sé stesso.».
 
 ## Nel Disegno completo
 
-Il Completo ha i comandi dei simboli di VectorCraft, che si trovano con la
-ricerca dei comandi (`Ctrl+/`):
+Il Completo ha i comandi dei simboli di VectorCraft, nella sezione
+**Simboli** della scheda Risorse dell'ispettore e nella ricerca dei comandi
+(`Ctrl+/`). La sezione ha la lista dei simboli del disegno, ognuno con
+quante istanze ha; il simbolo scelto nella lista (Ctrl ne sceglie altri) è
+quello su cui lavorano i pulsanti, ed è il simbolo che Spruzzo e Simbolismo
+spargono. Un pulsante che ha bisogno di un simbolo scelto o di oggetti
+scelti nel disegno è spento finché non li ha, e lo dice. Il campo **Nome**
+dà il nome al simbolo nuovo e a quello da rinominare.
 
 - **Nuovo simbolo** fa un simbolo degli oggetti scelti e li sostituisce
   con un'istanza; **Ridefinisci simbolo** gli dà come arte gli oggetti
@@ -73,8 +79,9 @@ ricerca dei comandi (`Ctrl+/`):
 - **Duplica simbolo**, **Opzioni simbolo** (il nome) ed **Elimina
   simbolo**, che scollega o toglie le istanze che lo usano.
 - **Seleziona tutte le istanze** e **Seleziona tutti gli elementi non
-  usati**; le **librerie** di VectorCraft, da cui **Aggiungi ai simboli**
-  copia un simbolo nel disegno.
+  usati**, che sceglie nella lista i simboli che niente usa; le
+  **librerie** di VectorCraft, aperte da «Librerie di simboli…», da cui un
+  clic su un simbolo lo copia nel disegno.
 - **Spruzzo simboli** e **Strumento Simbolismo** spargono le istanze e le
   spostano, le stringono, le ingrandiscono, le girano e le rendono
   trasparenti sotto il pennello.

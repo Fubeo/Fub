@@ -108,6 +108,9 @@ famiglie portano:
   ([Disegni, colori](drawing-colors.md#i-campioni-nella-scheda-risorse)). Sono i campioni
   del documento: quelli delle librerie e della tavolozza del motore arrivano
   con le loro famiglie.
+- **Simboli**: i simboli del disegno, ognuno con le sue istanze, coi
+  comandi del pannello Simboli di VectorCraft e le sue librerie
+  ([Disegni, simboli](drawing-symbols.md#nel-disegno-completo)).
 - **Le sezioni delle famiglie**, nell'ordine della mappa. Ognuna si apre e si
   chiude dalla sua intestazione, e la sua lista è quella che la famiglia
   porta. Quando ce ne sono molte, la scheda scorre dentro sé: il titolo

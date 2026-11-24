@@ -45,6 +45,7 @@ import { creaPortaPreimpostate } from "./sfumature-preimpostate";
 import { registraTrasparenza } from "./trasparenza-sezione";
 import { creaPortaTemi } from "./temi-porta";
 import { registraTemi } from "./temi-sezione";
+import { registraSimboli, type SimboloCorrente } from "./simboli-sezione";
 import { registraTesto } from "./testo-sezioni";
 import type { Teardown } from "../../../ui/lifetime";
 import { languageCurrent } from "../../../i18n/strings";
@@ -553,6 +554,22 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila" | "e
   // Il pannello «Temi di colore» della scheda Risorse (K6 T14, temi): la lista e i comandi passano dal
   // motore, con la famiglia `colore`, che il caricatore porta quando il pannello si apre.
   registraTemi(sezioni, creaPortaTemi({ motore: ctx.motore, carica: { famiglia: (id) => carica.famiglia(id) }, vita: ctx.life }), ctx.life);
+  // La sezione «Simboli» di Risorse: la lista è una lettura del motore, ogni pulsante un comando del
+  // percorso unico. Il simbolo scelto è il simbolo corrente di Spruzzo e Simbolismo.
+  const simboloCorrente: SimboloCorrente = { nome: null };
+  registraSimboli(
+    sezioni,
+    {
+      leggi: async (id, valore) => {
+        const stato = await carica.famiglia("simboli");
+        if (stato.kind !== "pronta" || chiuso) return null;
+        const esito = await chiama(dipendenze, `disegno.${id}`, valore, false).catch(() => null);
+        return esito === null || esito.refused !== null ? null : esito.reading;
+      },
+      esegui: (id, valori) => eseguiPerId(id, valori, { senzaFinestra: true }),
+    },
+    simboloCorrente,
+  );
   // Le sezioni «Carattere» e «Paragrafo» (K6 T16, giro 1): il testo scelto, un comando per cambio.
   registraTesto(sezioni, (id, valori) => void eseguiPerId(id, valori, { senzaFinestra: true }), ctx.life);
   const carica = caricatore({ ctx: { ...ctx, sezioni, registraFila, esegui: eseguiPerId }, moduli: opzioni.moduli, prepara: opzioni.prepara });
