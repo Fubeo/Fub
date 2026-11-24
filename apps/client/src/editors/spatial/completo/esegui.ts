@@ -242,7 +242,22 @@ export function applicaRisposta(esito: DrawingOutcome | ArgomentiRifiutati, etic
 /// dello strumento. `true` solo per un comando senza finestra andato
 /// (`applicaEsito`): Ripeti Elaborazione tracciati ricorda così l'ultima
 /// elaborazione fatta (T13).
-export function eseguiVoce(voce: VoceIndice, dipendenze: DipendenzeComando): Promise<boolean> {
+/// La finestra di una voce che manda un altro comando: le opzioni di un effetto già applicato
+/// (sezione «Aspetto») aprono la finestra dell'effetto coi valori che ha, e OK o l'anteprima mandano
+/// `effect.setParams` al suo posto nella pila, come `effect.dialog` di VectorCraft.
+export interface AltroComando {
+  /// L'id del comando del motore che OK e l'anteprima mandano (`disegno.effect.setParams`).
+  readonly id: string;
+  /// Il valore del comando dai valori della finestra e da quelli con cui si è aperta.
+  readonly valore: (
+    valori: Readonly<Record<string, unknown>>,
+    partenza: Readonly<Record<string, unknown>>,
+  ) => Readonly<Record<string, unknown>>;
+  /// I valori con cui la finestra si apre, sopra quelli di serie; quelli ricordati non contano.
+  readonly iniziali: FinestraOpzioni["iniziali"];
+}
+
+export function eseguiVoce(voce: VoceIndice, dipendenze: DipendenzeComando, altro?: AltroComando): Promise<boolean> {
   const comando = comandoDi(voce);
   if (comando === null) return Promise.resolve(false);
   const etichetta = etichettaDi(voce);
@@ -256,14 +271,17 @@ export function eseguiVoce(voce: VoceIndice, dipendenze: DipendenzeComando): Pro
   // un livello bloccato o nascosto di Fub resta com'è, con ciò che contiene.
   if (dipendenze.diFub?.(comando.id) === true) return Promise.resolve(false);
 
+  if (altro !== undefined && !voce.finestra) return Promise.resolve(false);
   if (voce.finestra) {
     // Una finestra per comando: un secondo comando sulla voce, mentre la sua finestra si apre o è
-    // aperta (un doppio clic), non ne apre un'altra. Si libera quando la finestra si chiude.
+    // aperta (un doppio clic), non ne apre un'altra. Si libera quando la finestra si chiude. Le
+    // opzioni di un effetto applicato sono un'altra finestra di quella che lo applica.
     const aperte = dipendenze.finestreAperte;
-    if (aperte?.has(voce.id) === true) return Promise.resolve(false);
-    aperte?.add(voce.id);
+    const chiave = altro === undefined ? voce.id : `${voce.id}@${altro.id}`;
+    if (aperte?.has(chiave) === true) return Promise.resolve(false);
+    aperte?.add(chiave);
     const libera = (): void => {
-      aperte?.delete(voce.id);
+      aperte?.delete(chiave);
     };
     return dipendenze.finestra(voce).then((opzioni) => {
       if (opzioni === null) {
@@ -277,8 +295,13 @@ export function eseguiVoce(voce: VoceIndice, dipendenze: DipendenzeComando): Pro
       }
       // I punti scelti quando la finestra si apre: valgono fino a OK.
       const partenza = valoreDi(comando.id, comando.valore, dipendenze);
+      // Le opzioni di un effetto applicato si aprono coi valori di serie e i suoi, mai coi ricordati.
+      const apertura = altro === undefined ? undefined : { ...opzioni.iniziali, ...altro.iniziali };
       const esegui: Esegui = async (valori, anteprima): Promise<EsitoComando> => {
-        const esito = await chiamaConArgomenti(dipendenze, comando.id, conValori(voce, partenza, valori), anteprima);
+        const esito =
+          altro === undefined
+            ? await chiamaConArgomenti(dipendenze, comando.id, conValori(voce, partenza, valori), anteprima)
+            : await chiamaConArgomenti(dipendenze, altro.id, altro.valore(valori, apertura ?? {}), anteprima);
         if (esito === null) return { anteprima: null, rifiuto: "not_ready" };
         // I valori che il motore non prende: la finestra dice la sua frase e resta aperta.
         if ("kind" in esito) return { anteprima: null, rifiuto: null, argomenti: esito.message };
@@ -289,9 +312,12 @@ export function eseguiVoce(voce: VoceIndice, dipendenze: DipendenzeComando): Pro
       // La finestra risolve quando si chiude (OK, Annulla o Esc): allora la voce è di nuovo libera.
       void apriFinestra(opzioni.modulo, dipendenze.carica.famiglia(voce.famiglia).then(attesaFamiglia), esegui, {
         ...opzioni,
-        id: voce.id,
+        // I valori ricordati sono della finestra che applica: le opzioni hanno un id loro.
+        id: chiave,
         titolo: etichetta.replace(/…$/u, ""),
         iniziali: opzioni.iniziali ?? {},
+        // Le opzioni di un effetto applicato partono dai suoi valori, sopra quelli ricordati.
+        ...(apertura === undefined ? {} : { dalDisegno: apertura }),
         vita: dipendenze.vita,
         sulFoglio: dipendenze.anteprima,
         // «Riprova» dell'errore della famiglia: rifà la sua attesa.

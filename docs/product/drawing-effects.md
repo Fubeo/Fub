@@ -184,6 +184,26 @@ Il file salva il risultato come grafica normale,
 leggibile da ogni programma, e la ricetta dell'effetto per poterlo cambiare
 ([Formato della scena, ricette](../reference/scene-format-recipe.md)).
 
+## La sezione Aspetto (spazio Completo)
+
+Nella scheda Design del Completo la sezione **Aspetto** mostra la pila degli
+effetti degli oggetti scelti, nell'ordine in cui si applicano, come il
+pannello Aspetto di VectorCraft: prima gli effetti dell'oggetto, poi quelli di
+ogni riempimento o contorno che ne ha. Ogni riga ha:
+
+- l'**occhio**, che spegne o riaccende l'effetto senza toglierlo;
+- il **nome**, che riapre la finestra dell'effetto coi valori che ha: OK
+  cambia solo i valori toccati, e un valore che la finestra non mostra resta
+  com'è;
+- **Su** e **Giù**, che spostano l'effetto nella pila;
+- **Duplica** e **Togli**.
+
+Con più oggetti scelti e pile diverse la sezione mostra solo gli effetti che
+hanno in comune (nello stesso ordine), e un comando li cambia su tutti; lo
+spostamento è spento, come in VectorCraft. In fondo, **Espandi aspetto** (anche
+nel menu Oggetto) rende gli effetti grafica normale e toglie la ricetta.
+Ogni comando è un passo solo di Annulla.
+
 ## Nel file
 
 Gli effetti stanno in `fub:effect` (con un filtro SVG 1.1 privato fra le

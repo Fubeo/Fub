@@ -3572,6 +3572,53 @@
           "activeItem": null
         }
       }
+    },
+    {
+      "id": "effect.expandAppearance",
+      "disegno": "pila.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "oa1a1a1a1"
+              },
+              {
+                "op": "remove",
+                "target": {
+                  "path": [
+                    1
+                  ],
+                  "tag": "metadata"
+                }
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<path id=\"oa1a1a1a1\" d=\"M110.059 105.341 C97.22 98.35 97.911 101.122 111.806 106.681 C99.076 99.299 97.869 93.523 112.642 101.296 C101.38 92.328 106.075 96.771 119.591 104.032 C111.978 96.481 115.089 92.457 125.729 100.652 C119.574 91.651 119.54 92.965 129.536 102.246 C125.423 95.454 131.005 98.687 138.774 106.17 C138.954 100.352 142.333 100.138 147.162 105.936 C150.324 98.266 154.869 94.391 156.493 102.018 C163.037 93.413 167.106 96.297 165.274 103.768 C174.559 96.242 176.918 94.444 173.02 101.896 C185.706 93.03 194.039 92.068 184.761 100.633 C200.356 91.988 198.19 92.943 187.028 101.72 C202.338 94.053 208.711 94.891 193.959 103.093 C210.572 95.821 206.105 95.026 191.154 103.781 C205.59 97.548 208.352 100.545 192.817 108.685 C207.842 105.299 204.773 108.379 190.022 114.322 C203.857 112.718 204.637 112.514 190.787 118.307 C206.064 119.365 208.635 126.695 193.185 129.513 C208.555 135.507 205.198 138.549 190.608 137.846 C205.019 146.201 207.927 152.399 192.789 146.481 C208.192 155.716 206.751 152.249 191.198 145.203 C205.062 152.409 203.956 154.036 189.044 146.834 C202.028 155.035 201.301 154.753 186.922 147.418 C198.942 155.897 199.027 158.542 183.813 149.372 C192.803 157.395 185.344 153.14 173.122 144.874 C177.557 150.627 176.198 150.142 166.546 143.799 C168.909 150.717 163.663 153.769 156.96 146.15 C155.507 153.451 151.381 149.051 148.46 143.095 C144.788 149.901 143.685 155.764 142.342 148.036 C135.929 156.559 128.967 152.646 131.261 144.858 C120.664 151.078 117.587 151.083 123.931 144.558 C112.209 151.829 111.981 153.75 119.337 146.512 C105.385 154.45 97.42 152.939 109.305 146.111 C92.8 154.174 95.794 158.451 109.092 149.251 C93.851 157.158 89.222 150.784 104.995 143.242 C89.336 148.567 94.615 152.639 109.345 144.336 C95.713 149.671 92.62 143.442 107.43 136.66 C92.528 138.097 94.849 138.234 109.143 132.483 C94.932 132.004 93.101 127.154 107.616 122.843 C92.548 117 93.377 108.254 107.916 109.967 C93.086 101.059 91.468 101.535 106.97 106.889 C92.434 99.448 95.04 98.444 110.059 105.341 Z\" fill=\"#000000\"/>"
+              },
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<metadata><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"ob2b2b2b2\" hash=\"@hash\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjozLCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MS4wLCJnIjowLjAsImIiOjAuMH19fV0sImVmZmVjdHMiOlt7ImlkIjoiZGlzdG9ydC5yb3VnaGVuIiwicGFyYW1zIjp7InNpemUiOjUsInJlbGF0aXZlIjp0cnVlLCJkZXRhaWwiOjEwLjAsInBvaW50cyI6InNtb290aCIsInNlZWQiOjF9LCJ2aXNpYmxlIjp0cnVlfV19LCJraW5kIjp7InR5cGUiOiJwYXRoIiwicGF0aCI6eyJzdWJwYXRocyI6W3siYW5jaG9ycyI6W3sicCI6WzIyMC4wLDEwMC4wXX0seyJwIjpbMjgwLjAsMTAwLjBdfSx7InAiOlsyODAuMCwxNTAuMF19LHsicCI6WzIyMC4wLDE1MC4wXX1dLCJjbG9zZWQiOnRydWV9XX19fX0=</vectorcraft:recipe></metadata>"
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "pila-espandi.svg"
     }
   ]
 }

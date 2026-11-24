@@ -183,8 +183,30 @@ pub fn senza_pixel(v: &Value) -> Value {
 
 /// Gli id nuovi (quelli dati da `ident` e dagli `add`) diventano `@1`,
 /// `@2`… nell'ordine in cui compaiono.
+///
+/// Un id che le operazioni tolgono e poi riscrivono nell'XML di un `add`
+/// (un oggetto rifatto al suo posto, come «Espandi aspetto») è quello di
+/// prima, non uno nuovo: resta com'è.
 fn canonicalizza(ops: &mut Value) {
-    let mut nuovi: Vec<String> = Vec::new();
+    fn tolti(v: &Value, fuori: &mut Vec<String>) {
+        match v {
+            Value::Array(a) => a.iter().for_each(|x| tolti(x, fuori)),
+            Value::Object(o) => {
+                if o.get("op").and_then(Value::as_str) == Some("remove") {
+                    if let Some(id) = o.get("target").and_then(Value::as_str) {
+                        fuori.push(id.to_string());
+                    }
+                }
+                o.values().for_each(|x| tolti(x, fuori));
+            }
+            _ => {}
+        }
+    }
+    let mut vecchi: Vec<String> = Vec::new();
+    tolti(ops, &mut vecchi);
+    // Gli id tolti partono già fra i «visti», così l'XML che li riscrive non li
+    // prende per nuovi; escono dalla mappa qui sotto.
+    let mut nuovi: Vec<String> = vecchi.clone();
     fn raccogli(v: &Value, nuovi: &mut Vec<String>) {
         match v {
             Value::Array(a) => a.iter().for_each(|x| raccogli(x, nuovi)),
@@ -231,7 +253,7 @@ fn canonicalizza(ops: &mut Value) {
         }
     }
     raccogli(ops, &mut nuovi);
-    let mappa: HashMap<String, String> = nuovi
+    let mappa: HashMap<String, String> = nuovi[vecchi.len()..]
         .iter()
         .enumerate()
         .map(|(i, id)| (id.clone(), format!("@{}", i + 1)))

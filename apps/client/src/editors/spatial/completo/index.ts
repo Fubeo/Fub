@@ -25,6 +25,7 @@ export type { EffettiSpazio, SchedaSpazio, SpazioPreset } from "./spazi";
 import { COMANDO_DEL_CLIC, iconaMotore, layoutCompleto, MOTORE_PRONTO, TIPO_DEL_GRAFICO, type GruppoLayout } from "./colonna";
 import { registraAllinea } from "./allinea";
 import { registraElaborazione } from "./elaborazione";
+import { registraAspetto } from "./aspetto-sezione";
 import { infoDaLettura, registraFusione, COMANDI_FUSIONE } from "./fusione-sezione";
 import { eGruppoSulTracciato, registraOggettiSulTracciato, STRUMENTO_OGGETTI_SUL_TRACCIATO } from "./oggetti-sul-tracciato-sezione";
 import { registraTrasforma } from "./trasforma-sezione";
@@ -59,7 +60,7 @@ import { t, type DrawKey } from "../strings";
 import { COLONNA_IT } from "../strings/completo";
 // I tasti del motore (K6 T9b): il montaggio sulla radice dell'editor, e il
 // percorso di un comando che fanno partire.
-import { applicaEsito, applicaRisposta, chiama, conValori, eseguiVoce, type AzioniEsito, type DipendenzeComando, type OpzioniFinestraComando } from "./esegui";
+import { applicaEsito, applicaRisposta, chiama, conValori, etichettaDi, eseguiVoce, type AzioniEsito, type DipendenzeComando, type OpzioniFinestraComando } from "./esegui";
 // Gli appunti del motore (K6 T11): copia, taglia e incolla passano dal motore.
 import { creaAppuntiCompleto } from "./appunti";
 import { creaPortaLivelli, type PortaLivelli } from "./livelli-porta";
@@ -491,6 +492,42 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila" | "e
       if (info === null) return null;
       const accesi = new Set(COMANDI_FUSIONE.filter((id) => stato.per?.get(`disegno.${id}`)?.enabled === true));
       return { info, accesi };
+    },
+  });
+  // La sezione «Aspetto»: la pila degli effetti degli oggetti scelti (`effect.list`), coi nomi delle
+  // voci degli effetti dall'indice, che la lettura porta con sé. Le opzioni di un effetto aprono la
+  // sua finestra coi valori che ha e mandano `effect.setParams` coi soli valori cambiati: la
+  // finestra non legge ogni valore (un colore), e uno che non tocca resta com'è.
+  let effettiDellIndice = new Map<string, VoceIndice>();
+  registraAspetto(sezioni, {
+    esegui: (id, valori) => eseguiPerId(id, valori, { senzaFinestra: true }),
+    leggi: async () => {
+      const [pronto, esito] = await Promise.all([
+        indice().catch(() => null),
+        chiama(dipendenze, "disegno.effect.list", {}, false).catch(() => null),
+      ]);
+      if (pronto !== null) effettiDellIndice = new Map(pronto.voci.filter((voce) => voce.fonte === "effetto").map((voce) => [voce.id, voce]));
+      return esito === null || esito.refused !== null ? null : esito.reading;
+    },
+    nome: (id) => {
+      const voce = effettiDellIndice.get(id);
+      return voce === undefined ? id : etichettaDi(voce).replace(/…$/u, "");
+    },
+    haOpzioni: (id) => effettiDellIndice.get(id)?.finestra === true,
+    opzioni: (id, posto, params) => {
+      const voce = effettiDellIndice.get(id);
+      if (voce === undefined || chiuso) return;
+      const iniziali = Object.fromEntries(
+        Object.entries(params).filter((coppia): coppia is [string, string | number | boolean] => ["string", "number", "boolean"].includes(typeof coppia[1])),
+      );
+      void eseguiVoce(voce, dipendenze, {
+        id: "disegno.effect.setParams",
+        iniziali,
+        valore: (valori, partenza) => ({
+          ...posto,
+          params: Object.fromEntries(Object.entries(valori).filter(([nome, valore]) => valore !== partenza[nome])),
+        }),
+      });
     },
   });
   // La sezione «Oggetti sul tracciato»: perno e rotazione dei gruppi scelti, letti col record di

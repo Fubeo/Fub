@@ -1571,6 +1571,22 @@
     },
     {
       "fonte": "motore",
+      "id": "effect.expandAppearance",
+      "chiamata": {
+        "comando": "disegno.effect.expandAppearance"
+      },
+      "etichetta": {
+        "it": "Espandi aspetto",
+        "en": "Expand Appearance"
+      },
+      "posto": "menu/oggetto",
+      "famiglia": "effetti",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "effect.list",
       "chiamata": {
         "comando": "disegno.effect.list"
