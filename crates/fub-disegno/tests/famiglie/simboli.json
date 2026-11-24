@@ -772,7 +772,7 @@
             "pos": {
               "last": true
             },
-            "raw": "<symbol id=\"r8rtis48j\" overflow=\"visible\">\n      <title>Star</title>\n      <g id=\"o07cmcdb0\"><polygon id=\"oacdkjn8r\" points=\"0,-18.995 5.29,-5.276 19.972,-4.484 8.56,4.786 12.343,18.995 0,11.005 -12.343,18.995 -8.56,4.786 -19.972,-4.484 -5.29,-5.276\" fill=\"#f2c233\" stroke=\"#91741f\" stroke-width=\"1.948\" stroke-miterlimit=\"10\"/></g>\n    </symbol>"
+            "raw": "<symbol id=\"r8rtis48j\" overflow=\"visible\">\n      <title>Star</title>\n      <polygon id=\"o07cmcdb0\" points=\"0,-18.995 5.29,-5.276 19.972,-4.484 8.56,4.786 12.343,18.995 0,11.005 -12.343,18.995 -8.56,4.786 -19.972,-4.484 -5.29,-5.276\" fill=\"#f2c233\" stroke=\"#91741f\" stroke-width=\"1.948\" stroke-miterlimit=\"10\"/>\n    </symbol>"
           }
         ]
       },

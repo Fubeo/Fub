@@ -39,9 +39,9 @@ use crate::repeat::{read_repeat, Repeat};
 use crate::text::{Lines, Span, Utf16Map};
 use crate::values::{
     angle, blend_style, dasharray, fraction, href, href_id, is_wsp, keyword, leading, length,
-    letter_spacing, non_negative_length, number, number_list, one_or_two, opacity, paint,
-    paint_reference, points, preserve_aspect_ratio, reference, start_offset, text_decoration,
-    transform, trim, url_ids, view_box, wrap_width, Href, Paint,
+    letter_spacing, miterlimit, non_negative_length, number, number_list, one_or_two, opacity,
+    paint, paint_reference, points, preserve_aspect_ratio, reference, start_offset,
+    text_decoration, transform, trim, url_ids, view_box, wrap_width, Href, Paint,
 };
 use crate::varwidth::{read_var_width, VarWidth};
 use crate::xml::{Document, Element, Kind, NodeId, NS_FUB, NS_NONE, NS_SVG, NS_XLINK};
@@ -290,6 +290,9 @@ fn svg_attribute(tag: Tag, name: &str, value: &str, resolve: Resolve<'_>) -> boo
             matches!(tag, Tag::Text | Tag::Tspan) && text_decoration(value).is_some()
         }
         "stroke-dasharray" => dasharray(value),
+        // Lo spostamento del tratteggio: una lunghezza, anche negativa.
+        "stroke-dashoffset" => length(value).is_some(),
+        "stroke-miterlimit" => miterlimit(value).is_some(),
         "transform" => transform(value).is_some(),
         "font-family" => true,
         _ => geometry_attribute(tag, name, value),

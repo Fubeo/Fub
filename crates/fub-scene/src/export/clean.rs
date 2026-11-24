@@ -798,7 +798,9 @@ fn numbers(doc: &Document<'_>, element: &Element<'_>, decimals: usize, edits: &m
             continue;
         }
         let rewritten = match (element.local, attr.local) {
-            (_, "stroke-width" | "font-size" | "stroke-dasharray") => number_list(raw, decimals),
+            (_, "stroke-width" | "font-size" | "stroke-dasharray" | "stroke-dashoffset") => {
+                number_list(raw, decimals)
+            }
             ("path", "d") => path_data(raw, decimals),
             ("polyline" | "polygon", "points") => number_list(raw, decimals),
             (local, name) if geometry(local, name) => number_list(raw, decimals),

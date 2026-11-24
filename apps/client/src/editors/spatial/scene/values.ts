@@ -111,6 +111,13 @@ export function nonNegativeLength(value: string): number | null {
   return n !== null && n >= 0 ? n : null;
 }
 
+/// `stroke-miterlimit`: un numero non minore di 1 (SVG rifiuta i valori
+/// più piccoli).
+export function miterlimit(value: string): number | null {
+  const n = number(value);
+  return n !== null && n >= 1 ? n : null;
+}
+
 /// Un'opacità: un numero da 0 a 1, senza percentuale.
 export function opacity(value: string): number | null {
   const n = number(value);

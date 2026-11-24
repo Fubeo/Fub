@@ -210,8 +210,8 @@ impl Mappa {
     /// la Selezione pittura li sceglie con l'id del file, e i comandi (il
     /// colore, Elimina) li trovano come ogni altro oggetto. Gli elementi
     /// restano [`crate::ricetta::COPERTO`]: la ricetta del gruppo li riscrive,
-    /// e non sono perdite. Un bordo che la scena tiene estraneo (il motore lo
-    /// scrive con `stroke-miterlimit`) non è un elemento e resta senza legame.
+    /// e non sono perdite. Un bordo che la scena tiene estraneo non è un
+    /// elemento e resta senza legame.
     /// Se un figlio sta oltre i pezzi del motore (un file cambiato a mano)
     /// non se ne lega nessuno, e il gruppo si sceglie intero.
     pub(crate) fn lega_le_facce(&mut self, doc: &Document) {

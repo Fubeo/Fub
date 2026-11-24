@@ -9,11 +9,11 @@
 //! sfumatura degli oggetti scelti come `paint.editGradient`, in un passo: ne prende le regole dalla
 //! famiglia `colore`, che le ha (spento, rifiuto, i testi saltati, ciò che la scena non scrive).
 //!
-//! **Il contorno.** Del pannello Contorno del motore il file dice lo spessore, gli estremi, gli angoli e
-//! il tratteggio semplice (`stroke-width`, `stroke-linecap`, `stroke-linejoin`, `stroke-dasharray`). Il
-//! limite dell'angolo, l'allineamento dentro o fuori, lo spostamento del tratteggio e il tratteggio
-//! adattato agli angoli, le frecce del motore e i profili di spessore non hanno un attributo nella
-//! scena: chiederli è `unsupported`, e niente cambia. Un testo non ha contorno (come per il Colore): con
+//! **Il contorno.** Del pannello Contorno del motore il file dice lo spessore, gli estremi, gli angoli,
+//! il loro limite e il tratteggio con il suo spostamento (`stroke-width`, `stroke-linecap`,
+//! `stroke-linejoin`, `stroke-miterlimit`, `stroke-dasharray`, `stroke-dashoffset`). L'allineamento
+//! dentro o fuori, il tratteggio adattato agli angoli, le frecce del motore e i profili di spessore non
+//! hanno un attributo nella scena: chiederli è `unsupported`, e niente cambia. Un testo non ha contorno (come per il Colore): con
 //! soli testi scelti il comando è spento, e in una selezione mista il contorno va alle altre forme.
 
 use std::sync::Arc;
@@ -64,10 +64,6 @@ type Colore = super::colore::Stato;
 fn come_sfumatura(id: &str) -> Option<&'static str> {
     (id == APPLICA_PRESET).then_some(SFUMATURE[0])
 }
-
-/// Il limite dell'angolo di SVG (4), quello che il motore legge da un file senza `stroke-miterlimit`:
-/// la scena non scrive l'attributo, quindi non se ne chiede un altro.
-const LIMITE_DELL_ANGOLO: f64 = 4.0;
 
 /// Lo stato della famiglia: non tiene niente.
 pub(crate) struct Stato;
@@ -264,15 +260,12 @@ pub(super) fn testo(copia: &Copia, n: NodeId) -> bool {
         .is_some_and(|nodo| matches!(nodo.kind, NodeKind::Text(_)))
 }
 
-/// Gli argomenti di `stroke.set` chiedono qualcosa che la scena non scrive: un limite dell'angolo
-/// diverso da quello di SVG, un allineamento dentro o fuori, un tratteggio spostato o adattato agli
-/// angoli, una freccia del motore (le punte di Fub sono un'altra cosa, `docs/product/drawing-tips.md`),
+/// Gli argomenti di `stroke.set` chiedono qualcosa che la scena non scrive: un allineamento dentro o
+/// fuori, un tratteggio adattato agli angoli, una freccia del motore (le punte di Fub sono un'altra cosa, `docs/product/drawing-tips.md`),
 /// un profilo di spessore, un tratto dell'aspetto che non è quello in cima.
 fn fuori_dalla_scena(valore: &Value) -> bool {
     let c = |chiave: &str| valore.get(chiave).filter(|v| !v.is_null());
-    c("miterLimit").is_some_and(|v| v.as_f64() != Some(LIMITE_DELL_ANGOLO))
-        || c("align").is_some_and(|v| v.as_str() != Some("center"))
-        || c("dashOffset").is_some_and(|v| v.as_f64() != Some(0.0))
+    c("align").is_some_and(|v| v.as_str() != Some("center"))
         || c("alignDashes").is_some_and(|v| v.as_bool() != Some(false))
         || c("startArrow").is_some()
         || c("endArrow").is_some()

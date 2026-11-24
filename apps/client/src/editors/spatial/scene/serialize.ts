@@ -300,6 +300,8 @@ const PRESENTATION_ORDER = [
   "stroke-linecap",
   "stroke-linejoin",
   "stroke-dasharray",
+  "stroke-dashoffset",
+  "stroke-miterlimit",
   "marker-start",
   "marker-mid",
   "marker-end",

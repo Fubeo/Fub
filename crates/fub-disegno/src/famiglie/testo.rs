@@ -42,6 +42,10 @@ const SUI_TESTI: &[&str] = &[
     "type.resetHorizontalScale",
     "type.orientation.vertical",
     "type.orientation.horizontal",
+    "type.scaleTextAttributes",
+    "text.setText",
+    "type.fillPlaceholder",
+    "type.insert",
 ];
 
 /// Cambia le parole di un testo (`text.editRange`).

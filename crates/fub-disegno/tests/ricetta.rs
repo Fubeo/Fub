@@ -201,11 +201,12 @@ fn esempio(c: Costrutto, n: &mut Node) -> Option<()> {
         }
         Motivo => return None,
         Penna => contorno(n).end_arrow = Some(da_json!(serde_json::json!("Triangle"))),
-        // Un tratteggio semplice è `stroke-dasharray` sull'elemento (`differenza::scrivi_stile_del_tratto`,
-        // i casi `stroke.set` di `tests/famiglie/aspetto.json`); spostato, va con la ricetta.
+        // Un tratteggio esatto, anche spostato, è `stroke-dasharray` e `stroke-dashoffset`
+        // sull'elemento (`differenza::scrivi_stile_del_tratto`, i casi `stroke.set` di
+        // `tests/famiglie/aspetto.json`); adattato agli angoli, va con la ricetta.
         Tratteggio => {
             contorno(n).dash = Some(da_json!(
-                serde_json::json!({ "pattern": [4.0, 2.0], "offset": 1.0 })
+                serde_json::json!({ "pattern": [4.0, 2.0], "offset": 1.0, "align_corners": true })
             ))
         }
         Maschera => n.extras_mut().mask = Some(da_json!(serde_json::json!({ "art": quadrato() }))),

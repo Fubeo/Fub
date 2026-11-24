@@ -46,7 +46,7 @@
           ]
         }
       ],
-      "atteso": { "ops": [{ "op": "add", "parent": "l1a2b3c4d", "pos": { "last": true }, "elem": { "tag": "rect", "attrs": { "x": "40", "y": "200", "width": "50", "height": "40", "fill": "none", "stroke": "#000000", "stroke-width": "2", "id": "oc3c3c3c3" } } }] },
+      "atteso": { "ops": [{ "op": "add", "parent": "l1a2b3c4d", "pos": { "last": true }, "elem": { "tag": "rect", "attrs": { "x": "40", "y": "200", "width": "50", "height": "40", "fill": "none", "stroke": "#000000", "stroke-width": "2", "stroke-miterlimit": "10", "id": "oc3c3c3c3" } } }] },
       "dopo": "rettangolo.svg"
     },
     {

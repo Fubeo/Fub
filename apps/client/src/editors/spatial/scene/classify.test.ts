@@ -72,7 +72,7 @@ describe("la classificazione (§4)", () => {
     const presentation =
       'id="o1" fill="#ff0000" fill-opacity="0.5" stroke="none" stroke-width="2" ' +
       'stroke-opacity="1" stroke-linecap="round" stroke-linejoin="bevel" ' +
-      'stroke-dasharray="4 2" opacity="0" display="inline" transform="rotate(45)" ' +
+      'stroke-dasharray="4 2" stroke-dashoffset="-1.5mm" stroke-miterlimit="10" opacity="0" display="inline" transform="rotate(45)" ' +
       'font-family="Inter, sans-serif" font-size="12" font-weight="bold" font-style="italic" ' +
       'letter-spacing="-0.5" text-anchor="middle"';
     expect(first(`<rect ${presentation} x="0" y="0" width="1" height="1"/>`)).toBe("rect");
@@ -84,7 +84,8 @@ describe("la classificazione (§4)", () => {
       'class="a"',
       'style="fill:red"',
       'onclick="alert(1)"',
-      'stroke-miterlimit="4"',
+      'stroke-miterlimit="0.5"',
+      'stroke-dashoffset="10%"',
       'filter="blur(2px)"',
       'mask-type="alpha"',
       'data-x="1"',

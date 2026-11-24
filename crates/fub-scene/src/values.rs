@@ -98,6 +98,12 @@ pub(crate) fn non_negative_length(value: &str) -> Option<f64> {
     length(value).filter(|&n| n >= 0.0)
 }
 
+/// `stroke-miterlimit`: un numero non minore di 1 (SVG rifiuta i valori
+/// più piccoli).
+pub(crate) fn miterlimit(value: &str) -> Option<f64> {
+    number(value).filter(|&n| n >= 1.0)
+}
+
 /// Un'opacità: un numero da 0 a 1, senza percentuale.
 pub(crate) fn opacity(value: &str) -> Option<f64> {
     number(value).filter(|n| (0.0..=1.0).contains(n))

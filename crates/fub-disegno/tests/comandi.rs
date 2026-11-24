@@ -374,6 +374,17 @@ fn una_selezione_con_un_elemento_non_mappato_non_cambia_niente() {
         "disegno.document.switchUnits",
         // La lettura della pila degli effetti non cambia il disegno.
         "disegno.effect.list",
+        // Le letture del Testo (caratteri del disegno, famiglie, catene, tabulazioni) e le
+        // opzioni dell'aggancio ai glifi non cambiano il disegno: con un elemento non
+        // mappato danno il vuoto, come le altre letture.
+        "disegno.text.missingFonts",
+        "disegno.text.fonts",
+        "disegno.text.fontList",
+        "disegno.text.thread.info",
+        "disegno.text.tabs.get",
+        "disegno.view.snapToGlyph.options",
+        // Sostituisci carattere nomina i caratteri nel valore, e senza `selectionOnly` vale su tutto il disegno.
+        "disegno.text.replaceFont",
     ];
     let comandi = d.comandi(&["oa1a1a1a1".into(), "onessuno1".into()]);
     let accesi: Vec<&str> = comandi
@@ -612,7 +623,11 @@ fn un_tratto_o_un_riempimento_che_non_c_era() {
             &["oa1a1a1a1"],
             json!("#ff0000")
         ),
-        set("oa1a1a1a1", json!({ "stroke": "#ff0000" }))
+        // Il motore scrive anche il suo limite dell'angolo (10, SVG ne ha 4).
+        set(
+            "oa1a1a1a1",
+            json!({ "stroke": "#ff0000", "stroke-miterlimit": "10" })
+        )
     );
     assert!(d
         .comandi(&["ob2b2b2b2".into()])

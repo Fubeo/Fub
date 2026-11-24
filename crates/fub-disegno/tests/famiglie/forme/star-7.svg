@@ -9,6 +9,6 @@
     </g>
     <path id="op7a7a7a7" d="M300 200 L360 200 L330 260 Z" fill="#cccccc"/>
     <path id="oi8b8b8b8" fub:tool="pen" fub:brush="pf1 size=4 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0" d="M120 220 L160 220 L160 240 L120 240 Z" fill="#d55e00" fub:ink="1 s100 cxypt 12050,23020,128,0 25,-3,2,8 31,-5,0,8"/>
-    <path id="ovw7otbbb" d="M170 160 L166.91 183.74 L184.71 199.75 L161.18 204.15 L151.45 226.03 L140 205 L116.19 202.51 L132.64 185.12 L127.65 161.71 L149.27 171.99 Z" fill="none" stroke="#000000" stroke-width="2"/>
+    <path id="ovw7otbbb" d="M170 160 L166.91 183.74 L184.71 199.75 L161.18 204.15 L151.45 226.03 L140 205 L116.19 202.51 L132.64 185.12 L127.65 161.71 L149.27 171.99 Z" fill="none" stroke="#000000" stroke-width="2" stroke-miterlimit="10"/>
   </g>
 </svg>

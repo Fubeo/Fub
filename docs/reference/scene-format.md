@@ -109,7 +109,8 @@ Radice di un documento nuovo:
 **Attributi di presentazione ammessi:**
 
 - riempimento e contorno: `fill`, `fill-opacity`, `stroke`, `stroke-width`,
-  `stroke-opacity`, `stroke-linecap`, `stroke-linejoin`, `stroke-dasharray`;
+  `stroke-opacity`, `stroke-linecap`, `stroke-linejoin`, `stroke-dasharray`,
+  `stroke-dashoffset`, `stroke-miterlimit`;
 - visibilità, [fusione](scene-format-effects.md) e trasformazione: `opacity`, `style`, `display`, `transform`;
 - testo: `font-family`, `font-size`, `font-weight`, `font-style`, `letter-spacing`,
   `text-decoration`, `text-anchor`, e `dy` sui `tspan` ([testo](scene-format-text.md));
@@ -120,7 +121,8 @@ Radice di un documento nuovo:
 **Valori:**
 
 - **Lunghezze e coordinate** (`x y dy cx cy r width height rx ry x1 y1 x2 y2`,
-  `stroke-width`, `font-size`, le voci di `stroke-dasharray`): un numero SVG,
+  `stroke-width`, `font-size`, le voci di `stroke-dasharray`,
+  `stroke-dashoffset`): un numero SVG,
   cioè segno facoltativo, cifre con o senza decimali ed esponente facoltativo
   (`-1.5`, `.5`, `1e3`). Il numero può avere un'unità assoluta (`px`, `in`,
   `cm`, `mm`, `Q`, `pt`, `pc`), che si converte in unità utente con i rapporti
@@ -139,6 +141,13 @@ Radice di un documento nuovo:
 - **`points`:** coppie di numeri SVG separate da spazi o virgole; un numero
   dispari di valori rende l'elemento estraneo.
 - **`stroke-dasharray`:** `none` oppure una lista di lunghezze non negative.
+- **`stroke-dashoffset`:** una lunghezza, anche negativa: dove comincia il
+  tratteggio lungo il contorno.
+- **`stroke-miterlimit`:** un numero SVG non minore di 1 (senza unità): oltre
+  quel rapporto fra la punta e lo spessore, una giunzione ad angolo diventa
+  smussata. Senza l'attributo vale 4, come in SVG; il Disegno completo lo
+  scrive solo con la giunzione ad angolo e un valore diverso da 4 (il suo
+  predefinito è 10). Un valore minore di 1 rende l'elemento estraneo.
 - **Colori:** si scrivono `#rrggbb` minuscolo oppure `none`. In lettura si
   accettano anche `#rgb` e i nomi CSS, normalizzati solo se l'elemento viene
   modificato. Ogni altra forma (`rgb()`, `hsl()`, `currentColor`,
@@ -273,7 +282,7 @@ non converte `d`. Solo i valori nuovi seguono le regole sui numeri.
       `fub:from`, `fub:to`, `fub:along`, `fub:inside`, `fub:wrap`, `fub:join`, `fub:leading`, `fub:locked`, `fub:at`, `fub:brush`;
    3. geometria: `x y dy cx cy r width height rx ry x1 y1 x2 y2 points d startOffset`;
    4. presentazione: `fill fill-opacity stroke stroke-width stroke-opacity stroke-linecap
-      stroke-linejoin stroke-dasharray opacity style display font-family font-size font-weight
+      stroke-linejoin stroke-dasharray stroke-dashoffset stroke-miterlimit opacity style display font-family font-size font-weight
       font-style letter-spacing text-decoration text-anchor preserveAspectRatio`;
    5. `transform`, poi `href`;
    6. gli attributi `fub:*` sconosciuti e quelli di altri namespace,

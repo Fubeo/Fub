@@ -10,17 +10,17 @@
     <path id="op7a7a7a7" d="M300 200 L360 200 L330 260 Z" fill="#cccccc"/>
     <path id="oi8b8b8b8" fub:tool="pen" fub:brush="pf1 size=4 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0" d="M120 220 L160 220 L160 240 L120 240 Z" fill="#d55e00" fub:ink="1 s100 cxypt 12050,23020,128,0 25,-3,2,8 31,-5,0,8"/>
     <g id="og0000001">
-      <path id="og0000002" d="M20 190 C20 173.43 33.43 160 50 160 C66.57 160 80 173.43 80 190 C80 206.57 66.57 220 50 220 C33.43 220 20 206.57 20 190 Z" fill="none" stroke="#000000" stroke-width="2"/>
-      <path id="og0000003" d="M25 190 C25 176.19 36.19 165 50 165 C63.81 165 75 176.19 75 190 C75 203.81 63.81 215 50 215 C36.19 215 25 203.81 25 190 Z" fill="none" stroke="#000000" stroke-width="2"/>
-      <path id="og0000004" d="M30 190 C30 178.95 38.95 170 50 170 C61.05 170 70 178.95 70 190 C70 201.05 61.05 210 50 210 C38.95 210 30 201.05 30 190 Z" fill="none" stroke="#000000" stroke-width="2"/>
-      <path id="og0000005" d="M35 190 C35 181.72 41.72 175 50 175 C58.28 175 65 181.72 65 190 C65 198.28 58.28 205 50 205 C41.72 205 35 198.28 35 190 Z" fill="none" stroke="#000000" stroke-width="2"/>
-      <path id="og0000006" d="M40 190 C40 184.48 44.48 180 50 180 C55.52 180 60 184.48 60 190 C60 195.52 55.52 200 50 200 C44.48 200 40 195.52 40 190 Z" fill="none" stroke="#000000" stroke-width="2"/>
-      <path id="og0000007" d="M45 190 C45 187.24 47.24 185 50 185 C52.76 185 55 187.24 55 190 C55 192.76 52.76 195 50 195 C47.24 195 45 192.76 45 190 Z" fill="none" stroke="#000000" stroke-width="2"/>
-      <line id="og0000008" x1="50" y1="190" x2="50" y2="160" stroke="#000000" stroke-width="2"/>
-      <line id="og0000009" x1="50" y1="190" x2="78.53" y2="180.73" stroke="#000000" stroke-width="2"/>
-      <line id="og0000010" x1="50" y1="190" x2="67.63" y2="214.27" stroke="#000000" stroke-width="2"/>
-      <line id="og0000011" x1="50" y1="190" x2="32.37" y2="214.27" stroke="#000000" stroke-width="2"/>
-      <line id="og0000012" x1="50" y1="190" x2="21.47" y2="180.73" stroke="#000000" stroke-width="2"/>
+      <path id="og0000002" d="M20 190 C20 173.43 33.43 160 50 160 C66.57 160 80 173.43 80 190 C80 206.57 66.57 220 50 220 C33.43 220 20 206.57 20 190 Z" fill="none" stroke="#000000" stroke-width="2" stroke-miterlimit="10"/>
+      <path id="og0000003" d="M25 190 C25 176.19 36.19 165 50 165 C63.81 165 75 176.19 75 190 C75 203.81 63.81 215 50 215 C36.19 215 25 203.81 25 190 Z" fill="none" stroke="#000000" stroke-width="2" stroke-miterlimit="10"/>
+      <path id="og0000004" d="M30 190 C30 178.95 38.95 170 50 170 C61.05 170 70 178.95 70 190 C70 201.05 61.05 210 50 210 C38.95 210 30 201.05 30 190 Z" fill="none" stroke="#000000" stroke-width="2" stroke-miterlimit="10"/>
+      <path id="og0000005" d="M35 190 C35 181.72 41.72 175 50 175 C58.28 175 65 181.72 65 190 C65 198.28 58.28 205 50 205 C41.72 205 35 198.28 35 190 Z" fill="none" stroke="#000000" stroke-width="2" stroke-miterlimit="10"/>
+      <path id="og0000006" d="M40 190 C40 184.48 44.48 180 50 180 C55.52 180 60 184.48 60 190 C60 195.52 55.52 200 50 200 C44.48 200 40 195.52 40 190 Z" fill="none" stroke="#000000" stroke-width="2" stroke-miterlimit="10"/>
+      <path id="og0000007" d="M45 190 C45 187.24 47.24 185 50 185 C52.76 185 55 187.24 55 190 C55 192.76 52.76 195 50 195 C47.24 195 45 192.76 45 190 Z" fill="none" stroke="#000000" stroke-width="2" stroke-miterlimit="10"/>
+      <line id="og0000008" x1="50" y1="190" x2="50" y2="160" stroke="#000000" stroke-width="2" stroke-miterlimit="10"/>
+      <line id="og0000009" x1="50" y1="190" x2="78.53" y2="180.73" stroke="#000000" stroke-width="2" stroke-miterlimit="10"/>
+      <line id="og0000010" x1="50" y1="190" x2="67.63" y2="214.27" stroke="#000000" stroke-width="2" stroke-miterlimit="10"/>
+      <line id="og0000011" x1="50" y1="190" x2="32.37" y2="214.27" stroke="#000000" stroke-width="2" stroke-miterlimit="10"/>
+      <line id="og0000012" x1="50" y1="190" x2="21.47" y2="180.73" stroke="#000000" stroke-width="2" stroke-miterlimit="10"/>
     </g>
   </g>
 </svg>

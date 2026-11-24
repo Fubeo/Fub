@@ -2393,10 +2393,11 @@ fn riempimento_dei_pezzi(b: &Node, a: &Node) -> Result<Option<(Node, Paint, Pain
 }
 
 /// L'aspetto senza il colore del riempimento, quello del tratto, lo
-/// spessore, gli estremi, gli angoli e il tratteggio semplice: ciò che
-/// `fill`, `stroke`, `stroke-width`, `stroke-linecap`, `stroke-linejoin` e
-/// `stroke-dasharray` dicono. Un tratteggio spostato o allineato agli angoli
-/// resta: la scena non ha un attributo per dirlo.
+/// spessore, gli estremi, gli angoli, il loro limite e il tratteggio
+/// semplice: ciò che `fill`, `stroke`, `stroke-width`, `stroke-linecap`,
+/// `stroke-linejoin`, `stroke-miterlimit`, `stroke-dasharray` e
+/// `stroke-dashoffset` dicono. Un tratteggio adattato agli angoli resta: la
+/// scena non ha un attributo per dirlo.
 fn senza_colori(a: &Appearance) -> Appearance {
     let mut a = a.clone();
     if let Some(f) = a.fill_mut() {
@@ -2407,6 +2408,7 @@ fn senza_colori(a: &Appearance) -> Appearance {
         s.width = 0.0;
         s.cap = LineCap::default();
         s.join = LineJoin::default();
+        s.miter_limit = LIMITE_DELL_ANGOLO_SVG;
         if s.dash.as_ref().is_none_or(tratteggio_semplice) {
             s.dash = None;
         }
@@ -2415,9 +2417,10 @@ fn senza_colori(a: &Appearance) -> Appearance {
 }
 
 /// I costrutti di `n` e del suo albero che gli attributi di una foglia non
-/// dicono: tutti tranne il tratteggio semplice (`stroke-dasharray`) e la
+/// dicono: tutti tranne il tratteggio semplice (`stroke-dasharray` e
+/// `stroke-dashoffset`) e la
 /// sfumatura lineare o radiale che la scena scrive come risorsa privata
-/// ([`crate::sfumature`]). Un tratteggio spostato o adattato agli angoli, e
+/// ([`crate::sfumature`]). Un tratteggio adattato agli angoli, e
 /// una sfumatura libera o che segue il tratto, restano costrutti della
 /// ricetta.
 fn costrutti_non_detti(n: &Node) -> Vec<ricetta::Costrutto> {
@@ -2456,17 +2459,29 @@ fn costrutti_non_detti(n: &Node) -> Vec<ricetta::Costrutto> {
     c
 }
 
-/// Un tratteggio che `stroke-dasharray` dice: senza spostamento e con le
-/// lunghezze esatte, non adattate agli angoli.
+/// Un tratteggio che `stroke-dasharray` e `stroke-dashoffset` dicono: con
+/// le lunghezze esatte, non adattate agli angoli.
 fn tratteggio_semplice(d: &vectorcraft_doc::Dash) -> bool {
-    d.offset == 0.0 && !d.align_corners
+    !d.align_corners
 }
 
-/// Gli estremi, gli angoli e il tratteggio del tratto in cima, prima e dopo,
-/// come attributi della scena: solo quelli cambiati, e `null` per tornare al
-/// valore di SVG (`butt`, `miter`, nessun tratteggio). Le lunghezze del
-/// tratteggio stanno nel documento del motore e tornano nello spazio
-/// dell'elemento con la sua `scala`, come lo spessore.
+/// Il limite dell'angolo di SVG senza `stroke-miterlimit`.
+const LIMITE_DELL_ANGOLO_SVG: f64 = 4.0;
+
+/// Il `stroke-miterlimit` del tratto `s`, come lo scrive l'esportazione di
+/// VectorCraft: solo con gli angoli vivi e un limite diverso da quello di SVG.
+fn limite_dell_angolo(s: Option<&vectorcraft_doc::StrokeLayer>) -> Option<f64> {
+    s.filter(|s| s.join == LineJoin::Miter && !vicini(s.miter_limit, LIMITE_DELL_ANGOLO_SVG))
+        .map(|s| s.miter_limit)
+}
+
+/// Gli estremi, gli angoli, il limite dell'angolo e il tratteggio del tratto
+/// in cima, prima e dopo, come attributi della scena: solo quelli cambiati, e
+/// `null` per tornare al valore di SVG (`butt`, `miter`, 4, nessun
+/// tratteggio, nessuno spostamento). Le lunghezze del tratteggio e il suo
+/// spostamento stanno nel documento del motore e tornano nello spazio
+/// dell'elemento con la sua `scala`, come lo spessore; il limite dell'angolo
+/// è un rapporto, e non cambia.
 fn scrivi_stile_del_tratto(
     prima: Option<&vectorcraft_doc::StrokeLayer>,
     dopo: Option<&vectorcraft_doc::StrokeLayer>,
@@ -2519,6 +2534,41 @@ fn scrivi_stile_del_tratto(
             }
         };
         attrs.insert("stroke-dasharray".into(), valore);
+    }
+    let (lb, la) = (limite_dell_angolo(prima), limite_dell_angolo(dopo));
+    let uguali = match (lb, la) {
+        (None, None) => true,
+        (Some(b), Some(a)) => vicini(b, a),
+        _ => false,
+    };
+    if !uguali {
+        attrs.insert(
+            "stroke-miterlimit".into(),
+            la.map_or(Value::Null, |l| json!(numero(l, DECIMALI_GEOMETRIA))),
+        );
+    }
+    let spostamento = |s: Option<&vectorcraft_doc::StrokeLayer>| {
+        s.and_then(|s| s.dash.as_ref())
+            .filter(|d| d.is_dashed() && d.offset != 0.0)
+            .map(|d| d.offset)
+    };
+    let (ob, oa) = (spostamento(prima), spostamento(dopo));
+    let uguali = match (ob, oa) {
+        (None, None) => true,
+        (Some(b), Some(a)) => vicini(b, a),
+        _ => false,
+    };
+    if !uguali {
+        let valore = match oa {
+            None => Value::Null,
+            Some(o) => {
+                if scala <= 0.0 || !scala.is_finite() {
+                    return Err(no("il tratteggio non si scrive in uno spazio schiacciato"));
+                }
+                json!(numero(o / scala, DECIMALI_GEOMETRIA))
+            }
+        };
+        attrs.insert("stroke-dashoffset".into(), valore);
     }
     Ok(())
 }
@@ -2796,6 +2846,12 @@ fn scrivi_aspetto(
             LineJoin::Bevel => {
                 attrs.insert("stroke-linejoin".into(), json!("bevel"));
             }
+        }
+        if let Some(l) = limite_dell_angolo(Some(s)) {
+            attrs.insert(
+                "stroke-miterlimit".into(),
+                json!(numero(l, DECIMALI_GEOMETRIA)),
+            );
         }
     }
     Ok(())

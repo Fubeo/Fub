@@ -615,7 +615,7 @@
     {"id": "text.thread.info", "disegno": "base.svg", "selezione": ["ot1t1t1t1"], "argomenti": {}, "atteso": {"lettura": []}},
     {"id": "view.snapToGlyph.options", "disegno": "base.svg", "selezione": ["ot1t1t1t1"], "argomenti": {}, "atteso": {"lettura": {"baseline": true, "xHeight": true, "bounds": true, "proximity": true, "angular": true, "anchors": true}}},
     {"id": "type.fillPlaceholder", "disegno": "base.svg", "selezione": ["ot1t1t1t1", "oa1a1a1a1"], "argomenti": {}, "atteso": {"ops": [{"op": "text", "id": "ot1t1t1t1", "lines": ["Sample copy flows here while the layout takes shape."]}]}, "dopo": "type-fillPlaceholder.svg"},
-    {"id": "type.fillPlaceholder", "disegno": "base.svg", "selezione": ["oa1a1a1a1"], "argomenti": {}, "atteso": {"errore": "bad_args"}},
+    {"id": "type.fillPlaceholder", "disegno": "base.svg", "selezione": ["oa1a1a1a1"], "argomenti": {}, "atteso": {"rifiuto": "empty"}},
     {"id": "type.insert", "disegno": "base.svg", "selezione": ["ot2t2t2t2", "oa1a1a1a1"], "argomenti": {"char": "emDash"}, "atteso": {"ops": [{"op": "text", "id": "ot2t2t2t2", "lines": ["Una riga—"]}]}, "dopo": "type-insert-emDash.svg"},
     {"id": "type.insert", "disegno": "base.svg", "selezione": ["ot2t2t2t2"], "argomenti": {"char": "paragraphReturn"}, "atteso": {"ops": [{"op": "text", "id": "ot2t2t2t2", "lines": ["Una riga", ""]}]}, "dopo": "type-insert-aCapo.svg"},
     {"id": "type.insert", "disegno": "base.svg", "selezione": ["ot2t2t2t2"], "argomenti": {"char": "tab"}, "atteso": {"ops": [{"op": "text", "id": "ot2t2t2t2", "lines": ["Una riga\t"]}]}, "dopo": "type-insert-tab.svg"},

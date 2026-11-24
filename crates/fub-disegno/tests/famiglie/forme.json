@@ -65,6 +65,7 @@
                 "y2": "280",
                 "stroke": "#000000",
                 "stroke-width": "2",
+                "stroke-miterlimit": "10",
                 "id": "omesoqbwf"
               }
             }
@@ -135,6 +136,7 @@
                 "fill": "none",
                 "stroke": "#000000",
                 "stroke-width": "2",
+                "stroke-miterlimit": "10",
                 "id": "ofedgggp5"
               }
             }
@@ -205,6 +207,7 @@
                 "fill": "none",
                 "stroke": "#000000",
                 "stroke-width": "2",
+                "stroke-miterlimit": "10",
                 "id": "od5wyget3"
               }
             }
@@ -278,6 +281,7 @@
                 "fill": "none",
                 "stroke": "#000000",
                 "stroke-width": "2",
+                "stroke-miterlimit": "10",
                 "id": "of8jg6tot"
               }
             }
@@ -344,7 +348,7 @@
                 "pos": {
                   "last": true
                 },
-                "raw": "<g id=\"o5qgdpjl6\"><path id=\"o8d7zz0r6\" d=\"M272 70 L328 70 C334.627 70 340 75.373 340 82 L340 98 C340 104.627 334.627 110 328 110 L272 110 C265.373 110 260 104.627 260 98 L260 82 C260 75.373 265.373 70 272 70 Z\" fill=\"none\" stroke=\"#000000\" stroke-width=\"2\" stroke-miterlimit=\"10\"/></g>"
+                "raw": "<path id=\"o5qgdpjl6\" d=\"M272 70 L328 70 C334.627 70 340 75.373 340 82 L340 98 C340 104.627 334.627 110 328 110 L272 110 C265.373 110 260 104.627 260 98 L260 82 C260 75.373 265.373 70 272 70 Z\" fill=\"none\" stroke=\"#000000\" stroke-width=\"2\" stroke-miterlimit=\"10\"/>"
               },
               {
                 "op": "add",
@@ -352,7 +356,7 @@
                 "pos": {
                   "first": true
                 },
-                "raw": "<metadata><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"o5qgdpjl6\" hash=\"4a416847c27ed46d\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjoxMCwiYXBwZWFyYW5jZSI6eyJpdGVtcyI6W3sia2luZCI6ImZpbGwiLCJwYWludCI6eyJ0eXBlIjoibm9uZSJ9fSx7ImtpbmQiOiJzdHJva2UiLCJwYWludCI6eyJ0eXBlIjoic29saWQiLCJjb2xvciI6eyJtb2RlbCI6InJnYiIsInIiOjAuMCwiZyI6MC4wLCJiIjowLjB9fSwid2lkdGgiOjIuMH1dfSwia2luZCI6eyJ0eXBlIjoicGF0aCIsInBhdGgiOnsic3VicGF0aHMiOlt7ImFuY2hvcnMiOlt7InAiOlsyNzIuMCw3MC4wXSwiaW4iOlsyNjUuMzcyNTgzMDAyMDMwNDcsNzAuMF19LHsicCI6WzMyOC4wLDcwLjBdLCJvdXQiOlszMzQuNjI3NDE2OTk3OTY5NTMsNzAuMF19LHsicCI6WzM0MC4wLDgyLjBdLCJpbiI6WzM0MC4wLDc1LjM3MjU4MzAwMjAzMDQ4XX0seyJwIjpbMzQwLjAsOTguMF0sIm91dCI6WzM0MC4wLDEwNC42Mjc0MTY5OTc5Njk1Ml19LHsicCI6WzMyOC4wLDExMC4wXSwiaW4iOlszMzQuNjI3NDE2OTk3OTY5NTMsMTEwLjBdfSx7InAiOlsyNzIuMCwxMTAuMF0sIm91dCI6WzI2NS4zNzI1ODMwMDIwMzA0NywxMTAuMF19LHsicCI6WzI2MC4wLDk4LjBdLCJpbiI6WzI2MC4wLDEwNC42Mjc0MTY5OTc5Njk1Ml19LHsicCI6WzI2MC4wLDgyLjBdLCJvdXQiOlsyNjAuMCw3NS4zNzI1ODMwMDIwMzA0OF19XSwiY2xvc2VkIjp0cnVlfV19LCJsaXZlIjp7InNoYXBlIjoicmVjdGFuZ2xlIiwidyI6ODAuMCwiaCI6NDAuMCwicmFkaWkiOlsxMi4wLDEyLjAsMTIuMCwxMi4wXSwieGYiOlsxLjAsMC4wLDAuMCwxLjAsMjYwLjAsNzAuMF19fX19</vectorcraft:recipe></metadata>"
+                "raw": "<metadata><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"o5qgdpjl6\" hash=\"94d70f9770cebf1e\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjoxMCwiYXBwZWFyYW5jZSI6eyJpdGVtcyI6W3sia2luZCI6ImZpbGwiLCJwYWludCI6eyJ0eXBlIjoibm9uZSJ9fSx7ImtpbmQiOiJzdHJva2UiLCJwYWludCI6eyJ0eXBlIjoic29saWQiLCJjb2xvciI6eyJtb2RlbCI6InJnYiIsInIiOjAuMCwiZyI6MC4wLCJiIjowLjB9fSwid2lkdGgiOjIuMH1dfSwia2luZCI6eyJ0eXBlIjoicGF0aCIsInBhdGgiOnsic3VicGF0aHMiOlt7ImFuY2hvcnMiOlt7InAiOlsyNzIuMCw3MC4wXSwiaW4iOlsyNjUuMzcyNTgzMDAyMDMwNDcsNzAuMF19LHsicCI6WzMyOC4wLDcwLjBdLCJvdXQiOlszMzQuNjI3NDE2OTk3OTY5NTMsNzAuMF19LHsicCI6WzM0MC4wLDgyLjBdLCJpbiI6WzM0MC4wLDc1LjM3MjU4MzAwMjAzMDQ4XX0seyJwIjpbMzQwLjAsOTguMF0sIm91dCI6WzM0MC4wLDEwNC42Mjc0MTY5OTc5Njk1Ml19LHsicCI6WzMyOC4wLDExMC4wXSwiaW4iOlszMzQuNjI3NDE2OTk3OTY5NTMsMTEwLjBdfSx7InAiOlsyNzIuMCwxMTAuMF0sIm91dCI6WzI2NS4zNzI1ODMwMDIwMzA0NywxMTAuMF19LHsicCI6WzI2MC4wLDk4LjBdLCJpbiI6WzI2MC4wLDEwNC42Mjc0MTY5OTc5Njk1Ml19LHsicCI6WzI2MC4wLDgyLjBdLCJvdXQiOlsyNjAuMCw3NS4zNzI1ODMwMDIwMzA0OF19XSwiY2xvc2VkIjp0cnVlfV19LCJsaXZlIjp7InNoYXBlIjoicmVjdGFuZ2xlIiwidyI6ODAuMCwiaCI6NDAuMCwicmFkaWkiOlsxMi4wLDEyLjAsMTIuMCwxMi4wXSwieGYiOlsxLjAsMC4wLDAuMCwxLjAsMjYwLjAsNzAuMF19fX19</vectorcraft:recipe></metadata>"
               }
             ]
           }
@@ -425,6 +429,7 @@
                 "fill": "none",
                 "stroke": "#000000",
                 "stroke-width": "2",
+                "stroke-miterlimit": "10",
                 "id": "ow2f8mmj9"
               }
             }
@@ -491,7 +496,7 @@
                 "pos": {
                   "last": true
                 },
-                "raw": "<g id=\"o28m0yaml\"><polygon id=\"o78tx8btl\" points=\"230,200 249.641,245.981 219.641,285.981 170,280 150.359,234.019 180.359,194.019\" fill=\"none\" stroke=\"#000000\" stroke-width=\"2\" stroke-miterlimit=\"10\"/></g>"
+                "raw": "<polygon id=\"o28m0yaml\" points=\"230,200 249.641,245.981 219.641,285.981 170,280 150.359,234.019 180.359,194.019\" fill=\"none\" stroke=\"#000000\" stroke-width=\"2\" stroke-miterlimit=\"10\"/>"
               },
               {
                 "op": "add",
@@ -499,7 +504,7 @@
                 "pos": {
                   "first": true
                 },
-                "raw": "<metadata><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"o28m0yaml\" hash=\"0f695c787744757d\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjoxMCwiYXBwZWFyYW5jZSI6eyJpdGVtcyI6W3sia2luZCI6ImZpbGwiLCJwYWludCI6eyJ0eXBlIjoibm9uZSJ9fSx7ImtpbmQiOiJzdHJva2UiLCJwYWludCI6eyJ0eXBlIjoic29saWQiLCJjb2xvciI6eyJtb2RlbCI6InJnYiIsInIiOjAuMCwiZyI6MC4wLCJiIjowLjB9fSwid2lkdGgiOjIuMH1dfSwia2luZCI6eyJ0eXBlIjoicGF0aCIsInBhdGgiOnsic3VicGF0aHMiOlt7ImFuY2hvcnMiOlt7InAiOlsyMzAuMCwyMDAuMF19LHsicCI6WzI0OS42NDEwMTYxNTEzNzc1NiwyNDUuOTgwNzYyMTEzNTMzMTZdfSx7InAiOlsyMTkuNjQxMDE2MTUxMzc3NTYsMjg1Ljk4MDc2MjExMzUzMzE2XX0seyJwIjpbMTcwLjAsMjgwLjBdfSx7InAiOlsxNTAuMzU4OTgzODQ4NjIyNDQsMjM0LjAxOTIzNzg4NjQ2Njg3XX0seyJwIjpbMTgwLjM1ODk4Mzg0ODYyMjQ0LDE5NC4wMTkyMzc4ODY0NjY4NF19XSwiY2xvc2VkIjp0cnVlfV19LCJsaXZlIjp7InNoYXBlIjoicG9seWdvbiIsInJhZGl1cyI6NTAuMCwic2lkZXMiOjYsInhmIjpbMC44LDAuNiwtMC42LDAuOCwyMDAuMCwyNDAuMF19fX19</vectorcraft:recipe></metadata>"
+                "raw": "<metadata><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"o28m0yaml\" hash=\"2e2d3475f280db4c\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjoxMCwiYXBwZWFyYW5jZSI6eyJpdGVtcyI6W3sia2luZCI6ImZpbGwiLCJwYWludCI6eyJ0eXBlIjoibm9uZSJ9fSx7ImtpbmQiOiJzdHJva2UiLCJwYWludCI6eyJ0eXBlIjoic29saWQiLCJjb2xvciI6eyJtb2RlbCI6InJnYiIsInIiOjAuMCwiZyI6MC4wLCJiIjowLjB9fSwid2lkdGgiOjIuMH1dfSwia2luZCI6eyJ0eXBlIjoicGF0aCIsInBhdGgiOnsic3VicGF0aHMiOlt7ImFuY2hvcnMiOlt7InAiOlsyMzAuMCwyMDAuMF19LHsicCI6WzI0OS42NDEwMTYxNTEzNzc1NiwyNDUuOTgwNzYyMTEzNTMzMTZdfSx7InAiOlsyMTkuNjQxMDE2MTUxMzc3NTYsMjg1Ljk4MDc2MjExMzUzMzE2XX0seyJwIjpbMTcwLjAsMjgwLjBdfSx7InAiOlsxNTAuMzU4OTgzODQ4NjIyNDQsMjM0LjAxOTIzNzg4NjQ2Njg3XX0seyJwIjpbMTgwLjM1ODk4Mzg0ODYyMjQ0LDE5NC4wMTkyMzc4ODY0NjY4NF19XSwiY2xvc2VkIjp0cnVlfV19LCJsaXZlIjp7InNoYXBlIjoicG9seWdvbiIsInJhZGl1cyI6NTAuMCwic2lkZXMiOjYsInhmIjpbMC44LDAuNiwtMC42LDAuOCwyMDAuMCwyNDAuMF19fX19</vectorcraft:recipe></metadata>"
               }
             ]
           }
@@ -569,6 +574,7 @@
                 "fill": "none",
                 "stroke": "#000000",
                 "stroke-width": "2",
+                "stroke-miterlimit": "10",
                 "id": "ovw7otbbb"
               }
             }
@@ -604,6 +610,7 @@
                 "fill": "#ffffff",
                 "stroke": "#000000",
                 "stroke-width": "1",
+                "stroke-miterlimit": "10",
                 "id": "o2l4xmo90"
               }
             }
@@ -639,6 +646,7 @@
                 "fill": "#ffffff",
                 "stroke": "#000000",
                 "stroke-width": "1",
+                "stroke-miterlimit": "10",
                 "id": "o8iwbbhue"
               }
             }
@@ -667,7 +675,7 @@
                 "pos": {
                   "last": true
                 },
-                "raw": "<g id=\"oxqicso2k\"><polygon id=\"ok62swmvx\" points=\"200,210 225.981,225 225.981,255 200,270 174.019,255 174.019,225\" fill=\"#ffffff\" stroke=\"#000000\" stroke-miterlimit=\"10\"/></g>"
+                "raw": "<polygon id=\"oxqicso2k\" points=\"200,210 225.981,225 225.981,255 200,270 174.019,255 174.019,225\" fill=\"#ffffff\" stroke=\"#000000\" stroke-miterlimit=\"10\"/>"
               },
               {
                 "op": "add",
@@ -675,7 +683,7 @@
                 "pos": {
                   "first": true
                 },
-                "raw": "<metadata><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"oxqicso2k\" hash=\"1009a646b5dce1df\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjoxMCwiYXBwZWFyYW5jZSI6eyJpdGVtcyI6W3sia2luZCI6ImZpbGwiLCJwYWludCI6eyJ0eXBlIjoic29saWQiLCJjb2xvciI6eyJtb2RlbCI6InJnYiIsInIiOjEuMCwiZyI6MS4wLCJiIjoxLjB9fX0seyJraW5kIjoic3Ryb2tlIiwicGFpbnQiOnsidHlwZSI6InNvbGlkIiwiY29sb3IiOnsibW9kZWwiOiJyZ2IiLCJyIjowLjAsImciOjAuMCwiYiI6MC4wfX0sIndpZHRoIjoxLjB9XX0sImtpbmQiOnsidHlwZSI6InBhdGgiLCJwYXRoIjp7InN1YnBhdGhzIjpbeyJhbmNob3JzIjpbeyJwIjpbMjAwLjAsMjEwLjBdfSx7InAiOlsyMjUuOTgwNzYyMTEzNTMzMTYsMjI1LjBdfSx7InAiOlsyMjUuOTgwNzYyMTEzNTMzMTYsMjU1LjBdfSx7InAiOlsyMDAuMCwyNzAuMF19LHsicCI6WzE3NC4wMTkyMzc4ODY0NjY4NCwyNTUuMF19LHsicCI6WzE3NC4wMTkyMzc4ODY0NjY4NCwyMjUuMF19XSwiY2xvc2VkIjp0cnVlfV19LCJsaXZlIjp7InNoYXBlIjoicG9seWdvbiIsInJhZGl1cyI6MzAuMCwic2lkZXMiOjYsInhmIjpbMS4wLDAuMCwwLjAsMS4wLDIwMC4wLDI0MC4wXX19fX0=</vectorcraft:recipe></metadata>"
+                "raw": "<metadata><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"oxqicso2k\" hash=\"b45100723e69c92d\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjoxMCwiYXBwZWFyYW5jZSI6eyJpdGVtcyI6W3sia2luZCI6ImZpbGwiLCJwYWludCI6eyJ0eXBlIjoic29saWQiLCJjb2xvciI6eyJtb2RlbCI6InJnYiIsInIiOjEuMCwiZyI6MS4wLCJiIjoxLjB9fX0seyJraW5kIjoic3Ryb2tlIiwicGFpbnQiOnsidHlwZSI6InNvbGlkIiwiY29sb3IiOnsibW9kZWwiOiJyZ2IiLCJyIjowLjAsImciOjAuMCwiYiI6MC4wfX0sIndpZHRoIjoxLjB9XX0sImtpbmQiOnsidHlwZSI6InBhdGgiLCJwYXRoIjp7InN1YnBhdGhzIjpbeyJhbmNob3JzIjpbeyJwIjpbMjAwLjAsMjEwLjBdfSx7InAiOlsyMjUuOTgwNzYyMTEzNTMzMTYsMjI1LjBdfSx7InAiOlsyMjUuOTgwNzYyMTEzNTMzMTYsMjU1LjBdfSx7InAiOlsyMDAuMCwyNzAuMF19LHsicCI6WzE3NC4wMTkyMzc4ODY0NjY4NCwyNTUuMF19LHsicCI6WzE3NC4wMTkyMzc4ODY0NjY4NCwyMjUuMF19XSwiY2xvc2VkIjp0cnVlfV19LCJsaXZlIjp7InNoYXBlIjoicG9seWdvbiIsInJhZGl1cyI6MzAuMCwic2lkZXMiOjYsInhmIjpbMS4wLDAuMCwwLjAsMS4wLDIwMC4wLDI0MC4wXX19fX0=</vectorcraft:recipe></metadata>"
               }
             ]
           }
@@ -708,6 +716,7 @@
                 "fill": "#ffffff",
                 "stroke": "#000000",
                 "stroke-width": "1",
+                "stroke-miterlimit": "10",
                 "id": "o9wzy75ts"
               }
             }
@@ -742,6 +751,7 @@
                 "y2": "280",
                 "stroke": "#000000",
                 "stroke-width": "1",
+                "stroke-miterlimit": "10",
                 "id": "ou16h387c"
               }
             }
@@ -775,6 +785,7 @@
                 "fill": "#ffffff",
                 "stroke": "#000000",
                 "stroke-width": "1",
+                "stroke-miterlimit": "10",
                 "id": "ohcouhuod"
               }
             }
@@ -807,6 +818,7 @@
                 "fill": "none",
                 "stroke": "#000000",
                 "stroke-width": "1",
+                "stroke-miterlimit": "10",
                 "id": "o2nfrq3qu"
               }
             }
@@ -857,6 +869,7 @@
                     "fill": "none",
                     "stroke": "#000000",
                     "stroke-width": "1",
+                    "stroke-miterlimit": "10",
                     "id": "og0000002"
                   }
                 }
@@ -876,6 +889,7 @@
                     "y2": "33.33",
                     "stroke": "#000000",
                     "stroke-width": "1",
+                    "stroke-miterlimit": "10",
                     "id": "og0000003"
                   }
                 }
@@ -895,6 +909,7 @@
                     "y2": "46.67",
                     "stroke": "#000000",
                     "stroke-width": "1",
+                    "stroke-miterlimit": "10",
                     "id": "og0000004"
                   }
                 }
@@ -914,6 +929,7 @@
                     "y2": "60",
                     "stroke": "#000000",
                     "stroke-width": "1",
+                    "stroke-miterlimit": "10",
                     "id": "og0000005"
                   }
                 }
@@ -933,6 +949,7 @@
                     "y2": "60",
                     "stroke": "#000000",
                     "stroke-width": "1",
+                    "stroke-miterlimit": "10",
                     "id": "og0000006"
                   }
                 }
@@ -985,6 +1002,7 @@
                     "fill": "none",
                     "stroke": "#000000",
                     "stroke-width": "1",
+                    "stroke-miterlimit": "10",
                     "id": "og0000002"
                   }
                 }
@@ -1002,6 +1020,7 @@
                     "fill": "none",
                     "stroke": "#000000",
                     "stroke-width": "1",
+                    "stroke-miterlimit": "10",
                     "id": "og0000003"
                   }
                 }
@@ -1019,6 +1038,7 @@
                     "fill": "none",
                     "stroke": "#000000",
                     "stroke-width": "1",
+                    "stroke-miterlimit": "10",
                     "id": "og0000004"
                   }
                 }
@@ -1038,6 +1058,7 @@
                     "y2": "160",
                     "stroke": "#000000",
                     "stroke-width": "1",
+                    "stroke-miterlimit": "10",
                     "id": "og0000005"
                   }
                 }
@@ -1057,6 +1078,7 @@
                     "y2": "190",
                     "stroke": "#000000",
                     "stroke-width": "1",
+                    "stroke-miterlimit": "10",
                     "id": "og0000006"
                   }
                 }
@@ -1076,6 +1098,7 @@
                     "y2": "220",
                     "stroke": "#000000",
                     "stroke-width": "1",
+                    "stroke-miterlimit": "10",
                     "id": "og0000007"
                   }
                 }
@@ -1095,6 +1118,7 @@
                     "y2": "190",
                     "stroke": "#000000",
                     "stroke-width": "1",
+                    "stroke-miterlimit": "10",
                     "id": "og0000008"
                   }
                 }
@@ -1204,6 +1228,7 @@
                     "fill": "none",
                     "stroke": "#000000",
                     "stroke-width": "2",
+                    "stroke-miterlimit": "10",
                     "id": "og0000002"
                   }
                 }
@@ -1223,6 +1248,7 @@
                     "y2": "26.67",
                     "stroke": "#000000",
                     "stroke-width": "2",
+                    "stroke-miterlimit": "10",
                     "id": "og0000003"
                   }
                 }
@@ -1242,6 +1268,7 @@
                     "y2": "33.33",
                     "stroke": "#000000",
                     "stroke-width": "2",
+                    "stroke-miterlimit": "10",
                     "id": "og0000004"
                   }
                 }
@@ -1261,6 +1288,7 @@
                     "y2": "40",
                     "stroke": "#000000",
                     "stroke-width": "2",
+                    "stroke-miterlimit": "10",
                     "id": "og0000005"
                   }
                 }
@@ -1280,6 +1308,7 @@
                     "y2": "46.67",
                     "stroke": "#000000",
                     "stroke-width": "2",
+                    "stroke-miterlimit": "10",
                     "id": "og0000006"
                   }
                 }
@@ -1299,6 +1328,7 @@
                     "y2": "53.33",
                     "stroke": "#000000",
                     "stroke-width": "2",
+                    "stroke-miterlimit": "10",
                     "id": "og0000007"
                   }
                 }
@@ -1318,6 +1348,7 @@
                     "y2": "60",
                     "stroke": "#000000",
                     "stroke-width": "2",
+                    "stroke-miterlimit": "10",
                     "id": "og0000008"
                   }
                 }
@@ -1337,6 +1368,7 @@
                     "y2": "60",
                     "stroke": "#000000",
                     "stroke-width": "2",
+                    "stroke-miterlimit": "10",
                     "id": "og0000009"
                   }
                 }
@@ -1356,6 +1388,7 @@
                     "y2": "60",
                     "stroke": "#000000",
                     "stroke-width": "2",
+                    "stroke-miterlimit": "10",
                     "id": "og0000010"
                   }
                 }
@@ -1375,6 +1408,7 @@
                     "y2": "60",
                     "stroke": "#000000",
                     "stroke-width": "2",
+                    "stroke-miterlimit": "10",
                     "id": "og0000011"
                   }
                 }
@@ -1394,6 +1428,7 @@
                     "y2": "60",
                     "stroke": "#000000",
                     "stroke-width": "2",
+                    "stroke-miterlimit": "10",
                     "id": "og0000012"
                   }
                 }
@@ -1473,6 +1508,7 @@
                     "fill": "none",
                     "stroke": "#000000",
                     "stroke-width": "2",
+                    "stroke-miterlimit": "10",
                     "id": "og0000002"
                   }
                 }
@@ -1490,6 +1526,7 @@
                     "fill": "none",
                     "stroke": "#000000",
                     "stroke-width": "2",
+                    "stroke-miterlimit": "10",
                     "id": "og0000003"
                   }
                 }
@@ -1507,6 +1544,7 @@
                     "fill": "none",
                     "stroke": "#000000",
                     "stroke-width": "2",
+                    "stroke-miterlimit": "10",
                     "id": "og0000004"
                   }
                 }
@@ -1524,6 +1562,7 @@
                     "fill": "none",
                     "stroke": "#000000",
                     "stroke-width": "2",
+                    "stroke-miterlimit": "10",
                     "id": "og0000005"
                   }
                 }
@@ -1541,6 +1580,7 @@
                     "fill": "none",
                     "stroke": "#000000",
                     "stroke-width": "2",
+                    "stroke-miterlimit": "10",
                     "id": "og0000006"
                   }
                 }
@@ -1558,6 +1598,7 @@
                     "fill": "none",
                     "stroke": "#000000",
                     "stroke-width": "2",
+                    "stroke-miterlimit": "10",
                     "id": "og0000007"
                   }
                 }
@@ -1577,6 +1618,7 @@
                     "y2": "160",
                     "stroke": "#000000",
                     "stroke-width": "2",
+                    "stroke-miterlimit": "10",
                     "id": "og0000008"
                   }
                 }
@@ -1596,6 +1638,7 @@
                     "y2": "180.73",
                     "stroke": "#000000",
                     "stroke-width": "2",
+                    "stroke-miterlimit": "10",
                     "id": "og0000009"
                   }
                 }
@@ -1615,6 +1658,7 @@
                     "y2": "214.27",
                     "stroke": "#000000",
                     "stroke-width": "2",
+                    "stroke-miterlimit": "10",
                     "id": "og0000010"
                   }
                 }
@@ -1634,6 +1678,7 @@
                     "y2": "214.27",
                     "stroke": "#000000",
                     "stroke-width": "2",
+                    "stroke-miterlimit": "10",
                     "id": "og0000011"
                   }
                 }
@@ -1653,6 +1698,7 @@
                     "y2": "180.73",
                     "stroke": "#000000",
                     "stroke-width": "2",
+                    "stroke-miterlimit": "10",
                     "id": "og0000012"
                   }
                 }
@@ -2184,7 +2230,7 @@
                 "pos": {
                   "first": true
                 },
-                "raw": "<metadata><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"ov0w0i299\" hash=\"628dffbb9ca6219e\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjozLCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MC4yMDAwMDAwMDI5ODAyMzIyNCwiZyI6MC40MDAwMDAwMDU5NjA0NjQ1LCJiIjowLjY2NjY2NjY4NjUzNDg4MTZ9fX1dfSwia2luZCI6eyJ0eXBlIjoiZ3JvdXAiLCJjaGlsZHJlbiI6W3siaWQiOjE2LCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MC4yMDAwMDAwMDI5ODAyMzIyNCwiZyI6MC40MDAwMDAwMDU5NjA0NjQ1LCJiIjowLjY2NjY2NjY4NjUzNDg4MTZ9fX1dfSwia2luZCI6eyJ0eXBlIjoicGF0aCIsInBhdGgiOnsic3VicGF0aHMiOlt7ImFuY2hvcnMiOlt7InAiOls0MC4wLDQwLjBdfSx7InAiOlsxNjAuMCw0MC4wXX0seyJwIjpbMTYwLjAsMTYwLjBdfSx7InAiOls0MC4wLDE2MC4wXX1dLCJjbG9zZWQiOnRydWV9XX19LCJzaGFwZV9tb2RlIjoiaW50ZXJzZWN0In0seyJpZCI6MTcsImFwcGVhcmFuY2UiOnsiaXRlbXMiOlt7ImtpbmQiOiJmaWxsIiwicGFpbnQiOnsidHlwZSI6InNvbGlkIiwiY29sb3IiOnsibW9kZWwiOiJyZ2IiLCJyIjoxLjAsImciOjAuMCwiYiI6MC4wfX19LHsia2luZCI6InN0cm9rZSIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MC4wLCJnIjowLjAsImIiOjAuMH19LCJ3aWR0aCI6Mi4wLCJtaXRlcl9saW1pdCI6NC4wfV19LCJraW5kIjp7InR5cGUiOiJwYXRoIiwicGF0aCI6eyJzdWJwYXRocyI6W3siYW5jaG9ycyI6W3sicCI6WzEwMC4wLDEwMC4wXX0seyJwIjpbMjIwLjAsMTAwLjBdfSx7InAiOlsyMjAuMCwyMjAuMF19LHsicCI6WzEwMC4wLDIyMC4wXX1dLCJjbG9zZWQiOnRydWV9XX19LCJzaGFwZV9tb2RlIjoiaW50ZXJzZWN0In1dLCJjbGlwIjpmYWxzZX0sImNvbXBvdW5kX3NoYXBlIjp0cnVlfX0=</vectorcraft:recipe></metadata>"
+                "raw": "<metadata><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"ov0w0i299\" hash=\"6c59f3c2c78577e5\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjozLCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MC4yMDAwMDAwMDI5ODAyMzIyNCwiZyI6MC40MDAwMDAwMDU5NjA0NjQ1LCJiIjowLjY2NjY2NjY4NjUzNDg4MTZ9fX1dfSwia2luZCI6eyJ0eXBlIjoiZ3JvdXAiLCJjaGlsZHJlbiI6W3siaWQiOjE2LCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MC4yMDAwMDAwMDI5ODAyMzIyNCwiZyI6MC40MDAwMDAwMDU5NjA0NjQ1LCJiIjowLjY2NjY2NjY4NjUzNDg4MTZ9fX1dfSwia2luZCI6eyJ0eXBlIjoicGF0aCIsInBhdGgiOnsic3VicGF0aHMiOlt7ImFuY2hvcnMiOlt7InAiOls0MC4wLDQwLjBdfSx7InAiOlsxNjAuMCw0MC4wXX0seyJwIjpbMTYwLjAsMTYwLjBdfSx7InAiOls0MC4wLDE2MC4wXX1dLCJjbG9zZWQiOnRydWV9XX19LCJzaGFwZV9tb2RlIjoiaW50ZXJzZWN0In0seyJpZCI6MTcsImFwcGVhcmFuY2UiOnsiaXRlbXMiOlt7ImtpbmQiOiJmaWxsIiwicGFpbnQiOnsidHlwZSI6InNvbGlkIiwiY29sb3IiOnsibW9kZWwiOiJyZ2IiLCJyIjoxLjAsImciOjAuMCwiYiI6MC4wfX19LHsia2luZCI6InN0cm9rZSIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MC4wLCJnIjowLjAsImIiOjAuMH19LCJ3aWR0aCI6Mi4wLCJtaXRlcl9saW1pdCI6NC4wfV19LCJraW5kIjp7InR5cGUiOiJwYXRoIiwicGF0aCI6eyJzdWJwYXRocyI6W3siYW5jaG9ycyI6W3sicCI6WzEwMC4wLDEwMC4wXX0seyJwIjpbMjIwLjAsMTAwLjBdfSx7InAiOlsyMjAuMCwyMjAuMF19LHsicCI6WzEwMC4wLDIyMC4wXX1dLCJjbG9zZWQiOnRydWV9XX19LCJzaGFwZV9tb2RlIjoiaW50ZXJzZWN0In1dLCJjbGlwIjpmYWxzZX0sImNvbXBvdW5kX3NoYXBlIjp0cnVlfX0=</vectorcraft:recipe></metadata>"
               }
             ]
           }
@@ -2375,7 +2421,7 @@
                                         "pos": {
                                                 "last": true
                                         },
-                                        "raw": "<g id=\"o5qgdpjl6\"><path id=\"ohw6dfchg\" d=\"M272 70 L328 70 C334.627 70 340 75.373 340 82 L340 98 C340 104.627 334.627 110 328 110 L272 110 C265.373 110 260 104.627 260 98 L260 82 C260 75.373 265.373 70 272 70 Z\" fill=\"none\" stroke=\"#000000\" stroke-width=\"2\" stroke-miterlimit=\"10\"/></g>"
+                                        "raw": "<path id=\"o5qgdpjl6\" d=\"M272 70 L328 70 C334.627 70 340 75.373 340 82 L340 98 C340 104.627 334.627 110 328 110 L272 110 C265.373 110 260 104.627 260 98 L260 82 C260 75.373 265.373 70 272 70 Z\" fill=\"none\" stroke=\"#000000\" stroke-width=\"2\" stroke-miterlimit=\"10\"/>"
                                 }
                         ]
                 }
@@ -2499,6 +2545,7 @@
                 "fill": "#ffffff",
                 "stroke": "#000000",
                 "stroke-width": "1",
+                "stroke-miterlimit": "10",
                 "id": "og0000001"
               }
             }
@@ -2544,6 +2591,7 @@
                 "fill": "#ffffff",
                 "stroke": "#000000",
                 "stroke-width": "1",
+                "stroke-miterlimit": "10",
                 "id": "og0000001"
               }
             }
@@ -2552,8 +2600,8 @@
       },
       "dopo": "modo-dietro-niente.svg"
     },
-    {"id": "parametricShape", "fonte": "strumento", "disegno": "base.svg", "dopo": "parametricShape.svg", "gesto": [{"phase": "preview", "events": [{"kind": "down", "x": 150, "y": 190, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}, {"kind": "drag", "x": 170, "y": 160, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}]}, {"phase": "commit", "events": [{"kind": "up", "x": 170, "y": 160, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}]}], "atteso": {"ops": [{"op": "batch", "ops": [{"op": "add", "parent": "l1a2b3c4d", "pos": {"last": true}, "raw": "<g id=\"oe5fma1h4\"><polygon id=\"o5y1s2c9r\" points=\"170,160 185.981,192.321 165.981,222.321 130,220 114.019,187.679 134.019,157.679\" fill=\"none\" stroke=\"#000000\" stroke-width=\"2\" stroke-miterlimit=\"10\"/></g>"}, {"op": "add", "parent": "#root", "pos": {"first": true}, "raw": "<metadata><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"oe5fma1h4\" hash=\"5c8f477e3f2805e7\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjoxMCwiYXBwZWFyYW5jZSI6eyJpdGVtcyI6W3sia2luZCI6ImZpbGwiLCJwYWludCI6eyJ0eXBlIjoibm9uZSJ9fSx7ImtpbmQiOiJzdHJva2UiLCJwYWludCI6eyJ0eXBlIjoic29saWQiLCJjb2xvciI6eyJtb2RlbCI6InJnYiIsInIiOjAuMCwiZyI6MC4wLCJiIjowLjB9fSwid2lkdGgiOjIuMH1dfSwia2luZCI6eyJ0eXBlIjoicGF0aCIsInBhdGgiOnsic3VicGF0aHMiOlt7ImFuY2hvcnMiOlt7InAiOlsxNzAuMCwxNjAuMF19LHsicCI6WzE4NS45ODA3NjIxMTM1MzMxNiwxOTIuMzIwNTA4MDc1Njg4NzZdfSx7InAiOlsxNjUuOTgwNzYyMTEzNTMzMTYsMjIyLjMyMDUwODA3NTY4ODc2XX0seyJwIjpbMTMwLjAsMjIwLjBdfSx7InAiOlsxMTQuMDE5MjM3ODg2NDY2ODQsMTg3LjY3OTQ5MTkyNDMxMTI2XX0seyJwIjpbMTM0LjAxOTIzNzg4NjQ2NjgsMTU3LjY3OTQ5MTkyNDMxMTI0XX1dLCJjbG9zZWQiOnRydWV9XX19LCJhdHRycyI6eyJkYXRhIjpbWyJ2Yy1wYXRodG9vbHMtc2hhcGUiLCJ7XCJraW5kXCI6XCJwb2x5Z29uXCIsXCJjZW50ZXJcIjpbMTUwLjAsMTkwLjBdLFwid2lkdGhcIjo3Mi4xMTEwMjU1MDkyNzk3OCxcImhlaWdodFwiOjcyLjExMTAyNTUwOTI3OTc4LFwicm90YXRpb25cIjozMy42OTAwNjc1MjU5Nzk3ODUsXCJjb3VudFwiOjYsXCJhXCI6MC4wLFwiYlwiOjAuMCxcInJhZGl1c1wiOjAuMCxcImZwXCI6XCI0ZTdhMDExODQ3ZDk4MDYyXCJ9Il1dfX19</vectorcraft:recipe></metadata>"}]}]}},
-    {"id": "shaper", "fonte": "strumento", "disegno": "base.svg", "dopo": "shaper.svg", "gesto": [{"phase": "preview", "events": [{"kind": "down", "x": 20.0, "y": 180.0, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}, {"kind": "drag", "x": 28.0, "y": 180.1, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}, {"kind": "drag", "x": 34.0, "y": 180.2, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}, {"kind": "drag", "x": 42.0, "y": 180.3, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}, {"kind": "drag", "x": 48.0, "y": 180.4, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}, {"kind": "drag", "x": 56.0, "y": 180.5, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}, {"kind": "drag", "x": 62.0, "y": 180.6, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}, {"kind": "drag", "x": 70.0, "y": 180.7, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}, {"kind": "drag", "x": 76.0, "y": 180.8, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}, {"kind": "drag", "x": 84.0, "y": 180.9, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}, {"kind": "drag", "x": 90.0, "y": 181.0, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}, {"kind": "drag", "x": 90.9, "y": 190.9, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}, {"kind": "drag", "x": 89.8, "y": 200.8, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}, {"kind": "drag", "x": 90.7, "y": 210.7, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}, {"kind": "drag", "x": 89.6, "y": 220.6, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}, {"kind": "drag", "x": 90.5, "y": 230.5, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}, {"kind": "drag", "x": 89.4, "y": 240.4, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}, {"kind": "drag", "x": 90.3, "y": 250.3, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}, {"kind": "drag", "x": 89.2, "y": 260.2, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}, {"kind": "drag", "x": 90.1, "y": 270.1, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}, {"kind": "drag", "x": 89.0, "y": 280.0, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}, {"kind": "drag", "x": 83.2, "y": 279.9, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}, {"kind": "drag", "x": 75.4, "y": 279.8, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}, {"kind": "drag", "x": 69.6, "y": 279.7, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}, {"kind": "drag", "x": 61.8, "y": 279.6, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}, {"kind": "drag", "x": 56.0, "y": 279.5, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}, {"kind": "drag", "x": 48.2, "y": 279.4, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}, {"kind": "drag", "x": 42.4, "y": 279.3, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}, {"kind": "drag", "x": 34.6, "y": 279.2, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}, {"kind": "drag", "x": 28.8, "y": 279.1, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}, {"kind": "drag", "x": 21.0, "y": 279.0, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}, {"kind": "drag", "x": 21.9, "y": 269.3, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}, {"kind": "drag", "x": 20.8, "y": 259.6, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}, {"kind": "drag", "x": 21.7, "y": 249.9, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}, {"kind": "drag", "x": 20.6, "y": 240.2, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}, {"kind": "drag", "x": 21.5, "y": 230.5, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}, {"kind": "drag", "x": 20.4, "y": 220.8, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}, {"kind": "drag", "x": 21.3, "y": 211.1, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}, {"kind": "drag", "x": 20.2, "y": 201.4, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}, {"kind": "drag", "x": 21.1, "y": 191.7, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}, {"kind": "drag", "x": 20, "y": 182, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}]}, {"phase": "commit", "events": [{"kind": "up", "x": 20, "y": 182, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}]}], "atteso": {"ops": [{"op": "add", "parent": "l1a2b3c4d", "pos": {"last": true}, "elem": {"tag": "rect", "attrs": {"x": "20", "y": "180", "width": "70.9", "height": "100", "fill": "none", "stroke": "#000000", "stroke-width": "2", "id": "ogyj1mftt"}}}]}},
+    {"id": "parametricShape", "fonte": "strumento", "disegno": "base.svg", "dopo": "parametricShape.svg", "gesto": [{"phase": "preview", "events": [{"kind": "down", "x": 150, "y": 190, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}, {"kind": "drag", "x": 170, "y": 160, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}]}, {"phase": "commit", "events": [{"kind": "up", "x": 170, "y": 160, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}]}], "atteso": {"ops": [{"op": "batch", "ops": [{"op": "add", "parent": "l1a2b3c4d", "pos": {"last": true}, "raw": "<polygon id=\"oe5fma1h4\" points=\"170,160 185.981,192.321 165.981,222.321 130,220 114.019,187.679 134.019,157.679\" fill=\"none\" stroke=\"#000000\" stroke-width=\"2\" stroke-miterlimit=\"10\"/>"}, {"op": "add", "parent": "#root", "pos": {"first": true}, "raw": "<metadata><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"oe5fma1h4\" hash=\"ae6d838e487e0233\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjoxMCwiYXBwZWFyYW5jZSI6eyJpdGVtcyI6W3sia2luZCI6ImZpbGwiLCJwYWludCI6eyJ0eXBlIjoibm9uZSJ9fSx7ImtpbmQiOiJzdHJva2UiLCJwYWludCI6eyJ0eXBlIjoic29saWQiLCJjb2xvciI6eyJtb2RlbCI6InJnYiIsInIiOjAuMCwiZyI6MC4wLCJiIjowLjB9fSwid2lkdGgiOjIuMH1dfSwia2luZCI6eyJ0eXBlIjoicGF0aCIsInBhdGgiOnsic3VicGF0aHMiOlt7ImFuY2hvcnMiOlt7InAiOlsxNzAuMCwxNjAuMF19LHsicCI6WzE4NS45ODA3NjIxMTM1MzMxNiwxOTIuMzIwNTA4MDc1Njg4NzZdfSx7InAiOlsxNjUuOTgwNzYyMTEzNTMzMTYsMjIyLjMyMDUwODA3NTY4ODc2XX0seyJwIjpbMTMwLjAsMjIwLjBdfSx7InAiOlsxMTQuMDE5MjM3ODg2NDY2ODQsMTg3LjY3OTQ5MTkyNDMxMTI2XX0seyJwIjpbMTM0LjAxOTIzNzg4NjQ2NjgsMTU3LjY3OTQ5MTkyNDMxMTI0XX1dLCJjbG9zZWQiOnRydWV9XX19LCJhdHRycyI6eyJkYXRhIjpbWyJ2Yy1wYXRodG9vbHMtc2hhcGUiLCJ7XCJraW5kXCI6XCJwb2x5Z29uXCIsXCJjZW50ZXJcIjpbMTUwLjAsMTkwLjBdLFwid2lkdGhcIjo3Mi4xMTEwMjU1MDkyNzk3OCxcImhlaWdodFwiOjcyLjExMTAyNTUwOTI3OTc4LFwicm90YXRpb25cIjozMy42OTAwNjc1MjU5Nzk3ODUsXCJjb3VudFwiOjYsXCJhXCI6MC4wLFwiYlwiOjAuMCxcInJhZGl1c1wiOjAuMCxcImZwXCI6XCI0ZTdhMDExODQ3ZDk4MDYyXCJ9Il1dfX19</vectorcraft:recipe></metadata>"}]}]}},
+    {"id": "shaper", "fonte": "strumento", "disegno": "base.svg", "dopo": "shaper.svg", "gesto": [{"phase": "preview", "events": [{"kind": "down", "x": 20.0, "y": 180.0, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}, {"kind": "drag", "x": 28.0, "y": 180.1, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}, {"kind": "drag", "x": 34.0, "y": 180.2, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}, {"kind": "drag", "x": 42.0, "y": 180.3, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}, {"kind": "drag", "x": 48.0, "y": 180.4, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}, {"kind": "drag", "x": 56.0, "y": 180.5, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}, {"kind": "drag", "x": 62.0, "y": 180.6, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}, {"kind": "drag", "x": 70.0, "y": 180.7, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}, {"kind": "drag", "x": 76.0, "y": 180.8, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}, {"kind": "drag", "x": 84.0, "y": 180.9, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}, {"kind": "drag", "x": 90.0, "y": 181.0, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}, {"kind": "drag", "x": 90.9, "y": 190.9, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}, {"kind": "drag", "x": 89.8, "y": 200.8, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}, {"kind": "drag", "x": 90.7, "y": 210.7, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}, {"kind": "drag", "x": 89.6, "y": 220.6, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}, {"kind": "drag", "x": 90.5, "y": 230.5, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}, {"kind": "drag", "x": 89.4, "y": 240.4, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}, {"kind": "drag", "x": 90.3, "y": 250.3, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}, {"kind": "drag", "x": 89.2, "y": 260.2, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}, {"kind": "drag", "x": 90.1, "y": 270.1, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}, {"kind": "drag", "x": 89.0, "y": 280.0, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}, {"kind": "drag", "x": 83.2, "y": 279.9, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}, {"kind": "drag", "x": 75.4, "y": 279.8, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}, {"kind": "drag", "x": 69.6, "y": 279.7, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}, {"kind": "drag", "x": 61.8, "y": 279.6, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}, {"kind": "drag", "x": 56.0, "y": 279.5, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}, {"kind": "drag", "x": 48.2, "y": 279.4, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}, {"kind": "drag", "x": 42.4, "y": 279.3, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}, {"kind": "drag", "x": 34.6, "y": 279.2, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}, {"kind": "drag", "x": 28.8, "y": 279.1, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}, {"kind": "drag", "x": 21.0, "y": 279.0, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}, {"kind": "drag", "x": 21.9, "y": 269.3, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}, {"kind": "drag", "x": 20.8, "y": 259.6, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}, {"kind": "drag", "x": 21.7, "y": 249.9, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}, {"kind": "drag", "x": 20.6, "y": 240.2, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}, {"kind": "drag", "x": 21.5, "y": 230.5, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}, {"kind": "drag", "x": 20.4, "y": 220.8, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}, {"kind": "drag", "x": 21.3, "y": 211.1, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}, {"kind": "drag", "x": 20.2, "y": 201.4, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}, {"kind": "drag", "x": 21.1, "y": 191.7, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}, {"kind": "drag", "x": 20, "y": 182, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}]}, {"phase": "commit", "events": [{"kind": "up", "x": 20, "y": 182, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}]}], "atteso": {"ops": [{"op": "add", "parent": "l1a2b3c4d", "pos": {"last": true}, "elem": {"tag": "rect", "attrs": {"x": "20", "y": "180", "width": "70.9", "height": "100", "fill": "none", "stroke": "#000000", "stroke-width": "2", "stroke-miterlimit": "10", "id": "ogyj1mftt"}}}]}},
     {"id": "shaper.scribble", "disegno": "base.svg", "argomenti": {"points": [[180.0, 110], [185.0, 140], [190.0, 110], [195.0, 140], [200.0, 110], [205.0, 140], [210.0, 110], [215.0, 140], [220.0, 110], [225.0, 140], [230.0, 110], [235.0, 140]]}, "atteso": {"ops": [{"op": "batch", "ops": [{"op": "remove", "target": "ob2b2b2b2"}, {"op": "remove", "target": "oa1a1a1a1"}, {"op": "add", "parent": "l1a2b3c4d", "pos": {"first": true}, "raw": "<g id=\"o2ww59jgy\"><g id=\"onxj797gy\" opacity=\"0\"><rect id=\"ozh7y05mi\" x=\"100\" y=\"100\" width=\"100\" height=\"50\" fill=\"#000000\"/><rect id=\"ont0hpgjg\" x=\"220\" y=\"100\" width=\"60\" height=\"50\" fill=\"#ff0000\"/></g><path id=\"o9u5m3pzn\" d=\"M100 150 L100 100 L200 100 L200 150 Z M220 150 L220 100 L280 100 L280 150 Z\" fill=\"#000000\"/></g>"}, {"op": "add", "parent": "#root", "pos": {"first": true}, "raw": "<metadata><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"o2ww59jgy\" hash=\"00055e04a3be140d\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjoxMiwic2hhcGVyIjp7ImZhY2VzIjpbeyJzZWxlY3RvciI6eyJzb3VyY2VzIjpbMV0sImFuY2hvciI6eyJ4IjowLjUsInkiOjAuNTA2MTgwM319LCJlcmFzZSI6ZmFsc2UsImVyYXNlX2VkZ2VzIjpmYWxzZSwicGFpbnRfc291cmNlIjowLCJtZXJnZSI6MSwicGFpbnQiOm51bGx9LHsic2VsZWN0b3IiOnsic291cmNlcyI6WzBdLCJhbmNob3IiOnsieCI6MC41LCJ5IjowLjUwNjE4MDN9fSwiZXJhc2UiOmZhbHNlLCJlcmFzZV9lZGdlcyI6ZmFsc2UsInBhaW50X3NvdXJjZSI6MCwibWVyZ2UiOjEsInBhaW50IjpudWxsfV0sImVkZ2VzIjpbXX0sImtpbmQiOnsidHlwZSI6Imdyb3VwIiwiY2hpbGRyZW4iOlt7ImlkIjoxMCwibmFtZSI6IlNoYXBlciBTb3VyY2VzIiwib3BhY2l0eSI6MC4wLCJraW5kIjp7InR5cGUiOiJncm91cCIsImNoaWxkcmVuIjpbeyJpZCI6MiwiYXBwZWFyYW5jZSI6eyJpdGVtcyI6W3sia2luZCI6ImZpbGwiLCJwYWludCI6eyJ0eXBlIjoic29saWQiLCJjb2xvciI6eyJtb2RlbCI6InJnYiIsInIiOjAuMCwiZyI6MC4wLCJiIjowLjB9fX1dfSwia2luZCI6eyJ0eXBlIjoicGF0aCIsInBhdGgiOnsic3VicGF0aHMiOlt7ImFuY2hvcnMiOlt7InAiOlsxMDAuMCwxMDAuMF19LHsicCI6WzIwMC4wLDEwMC4wXX0seyJwIjpbMjAwLjAsMTUwLjBdfSx7InAiOlsxMDAuMCwxNTAuMF19XSwiY2xvc2VkIjp0cnVlfV19fX0seyJpZCI6MywiYXBwZWFyYW5jZSI6eyJpdGVtcyI6W3sia2luZCI6ImZpbGwiLCJwYWludCI6eyJ0eXBlIjoic29saWQiLCJjb2xvciI6eyJtb2RlbCI6InJnYiIsInIiOjEuMCwiZyI6MC4wLCJiIjowLjB9fX1dfSwia2luZCI6eyJ0eXBlIjoicGF0aCIsInBhdGgiOnsic3VicGF0aHMiOlt7ImFuY2hvcnMiOlt7InAiOlsyMjAuMCwxMDAuMF19LHsicCI6WzI4MC4wLDEwMC4wXX0seyJwIjpbMjgwLjAsMTUwLjBdfSx7InAiOlsyMjAuMCwxNTAuMF19XSwiY2xvc2VkIjp0cnVlfV19fX1dLCJjbGlwIjpmYWxzZX19LHsiaWQiOjExLCJuYW1lIjoiU2hhcGVyIEZpbGwgMCIsImFwcGVhcmFuY2UiOnsiaXRlbXMiOlt7ImtpbmQiOiJmaWxsIiwicGFpbnQiOnsidHlwZSI6InNvbGlkIiwiY29sb3IiOnsibW9kZWwiOiJyZ2IiLCJyIjowLjAsImciOjAuMCwiYiI6MC4wfX19XX0sImtpbmQiOnsidHlwZSI6InBhdGgiLCJwYXRoIjp7InN1YnBhdGhzIjpbeyJhbmNob3JzIjpbeyJwIjpbMTAwLjAsMTUwLjBdfSx7InAiOlsxMDAuMCwxMDAuMF19LHsicCI6WzIwMC4wLDEwMC4wXX0seyJwIjpbMjAwLjAsMTUwLjBdfV0sImNsb3NlZCI6dHJ1ZX0seyJhbmNob3JzIjpbeyJwIjpbMjIwLjAsMTUwLjBdfSx7InAiOlsyMjAuMCwxMDAuMF19LHsicCI6WzI4MC4wLDEwMC4wXX0seyJwIjpbMjgwLjAsMTUwLjBdfV0sImNsb3NlZCI6dHJ1ZX1dfX19XSwiY2xpcCI6ZmFsc2V9fX0=</vectorcraft:recipe></metadata>"}]}]}, "dopo": "shaper-scribble.svg"},
     {"id": "shaper.select", "disegno": "shaper-scribble.svg", "argomenti": {"point": [150, 125]}, "atteso": {"selezione": ["o2ww59jgy"]}}
   ]

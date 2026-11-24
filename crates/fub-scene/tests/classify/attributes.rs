@@ -79,7 +79,7 @@ fn every_attribute_of_the_list_is_allowed() {
     let presentation = concat!(
         r##"id="o1" fill="#ff0000" fill-opacity="0.5" stroke="none" stroke-width="2" "##,
         r#"stroke-opacity="1" stroke-linecap="round" stroke-linejoin="bevel" "#,
-        r#"stroke-dasharray="4 2" opacity="0" display="inline" transform="rotate(45)" "#,
+        r#"stroke-dasharray="4 2" stroke-dashoffset="-1.5mm" stroke-miterlimit="10" opacity="0" display="inline" transform="rotate(45)" "#,
         r#"font-family="Inter, sans-serif" font-size="12" font-weight="bold" font-style="italic" "#,
         r#"letter-spacing="-0.5" text-anchor="middle""#
     );
@@ -95,7 +95,8 @@ fn an_attribute_outside_the_list_makes_the_element_foreign() {
         r#"class="a""#,
         r#"style="fill:red""#,
         r#"onclick="alert(1)""#,
-        r#"stroke-miterlimit="4""#,
+        r#"stroke-miterlimit="0.5""#,
+        r#"stroke-dashoffset="10%""#,
         r#"filter="blur(2px)""#,
         r#"mask-type="alpha""#,
         r#"data-x="1""#,

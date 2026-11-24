@@ -2,10 +2,10 @@
   <rect id="fub-paper" fub:role="paper" x="0" y="0" width="400" height="300" fill="#ffffff"/>
   <g id="l1a2b3c4d" fub:layer="Livello 1">
     <g id="ouyg0rgdq">
-      <path id="o3s97qvoi" d="M160 100 L160 160 L100 160" fill="none" stroke="#3366aa" stroke-width="1"/>
-      <path id="o51e0mi0i" d="M100 160 L40 160 L40 40 L160 40 L160 100" fill="none" stroke="#3366aa" stroke-width="1"/>
-      <path id="orvzgsxnt" d="M160 100 L220 100 L220 220 L100 220 L100 160" fill="none" stroke="#ff0000" stroke-width="1"/>
-      <path id="os2g86qh1" d="M100 160 L100 100 L160 100" fill="none" stroke="#ff0000" stroke-width="1"/>
+      <path id="o3s97qvoi" d="M160 100 L160 160 L100 160" fill="none" stroke="#3366aa" stroke-width="1" stroke-miterlimit="10"/>
+      <path id="o51e0mi0i" d="M100 160 L40 160 L40 40 L160 40 L160 100" fill="none" stroke="#3366aa" stroke-width="1" stroke-miterlimit="10"/>
+      <path id="orvzgsxnt" d="M160 100 L220 100 L220 220 L100 220 L100 160" fill="none" stroke="#ff0000" stroke-width="1" stroke-miterlimit="10"/>
+      <path id="os2g86qh1" d="M100 160 L100 100 L160 100" fill="none" stroke="#ff0000" stroke-width="1" stroke-miterlimit="10"/>
     </g>
     <path id="oc3c3c3c3" d="M300 200 L360 200 L360 260 L300 260 Z" fill="#009e73"/>
     <text id="od4d4d4d4" x="40" y="280" fill="#0072b2" font-family="Inter, sans-serif" font-size="24"><tspan x="40" dy="0">Ciao</tspan></text>

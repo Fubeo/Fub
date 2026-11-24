@@ -5,6 +5,7 @@ import { parsePath } from "../geometry";
 import {
   blendStyle,
   dasharray,
+  miterlimit,
   href,
   hrefId,
   keyword,
@@ -179,6 +180,11 @@ export function svgAttribute(tag: Tag, name: string, value: string, resolve: Res
       return (tag === "text" || tag === "tspan") && textDecoration(value) !== null;
     case "stroke-dasharray":
       return dasharray(value);
+    // Lo spostamento del tratteggio: una lunghezza, anche negativa.
+    case "stroke-dashoffset":
+      return length(value) !== null;
+    case "stroke-miterlimit":
+      return miterlimit(value) !== null;
     case "transform":
       return transform(value) !== null;
     case "font-family":

@@ -10,17 +10,17 @@
     <path id="op7a7a7a7" d="M300 200 L360 200 L330 260 Z" fill="#cccccc"/>
     <path id="oi8b8b8b8" fub:tool="pen" fub:brush="pf1 size=4 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0" d="M120 220 L160 220 L160 240 L120 240 Z" fill="#d55e00" fub:ink="1 s100 cxypt 12050,23020,128,0 25,-3,2,8 31,-5,0,8"/>
     <g id="og0000001">
-      <path id="og0000002" d="M260 20 L340 20 L340 60 L260 60 Z" fill="none" stroke="#000000" stroke-width="2"/>
-      <line id="og0000003" x1="260" y1="26.67" x2="340" y2="26.67" stroke="#000000" stroke-width="2"/>
-      <line id="og0000004" x1="260" y1="33.33" x2="340" y2="33.33" stroke="#000000" stroke-width="2"/>
-      <line id="og0000005" x1="260" y1="40" x2="340" y2="40" stroke="#000000" stroke-width="2"/>
-      <line id="og0000006" x1="260" y1="46.67" x2="340" y2="46.67" stroke="#000000" stroke-width="2"/>
-      <line id="og0000007" x1="260" y1="53.33" x2="340" y2="53.33" stroke="#000000" stroke-width="2"/>
-      <line id="og0000008" x1="273.33" y1="20" x2="273.33" y2="60" stroke="#000000" stroke-width="2"/>
-      <line id="og0000009" x1="286.67" y1="20" x2="286.67" y2="60" stroke="#000000" stroke-width="2"/>
-      <line id="og0000010" x1="300" y1="20" x2="300" y2="60" stroke="#000000" stroke-width="2"/>
-      <line id="og0000011" x1="313.33" y1="20" x2="313.33" y2="60" stroke="#000000" stroke-width="2"/>
-      <line id="og0000012" x1="326.67" y1="20" x2="326.67" y2="60" stroke="#000000" stroke-width="2"/>
+      <path id="og0000002" d="M260 20 L340 20 L340 60 L260 60 Z" fill="none" stroke="#000000" stroke-width="2" stroke-miterlimit="10"/>
+      <line id="og0000003" x1="260" y1="26.67" x2="340" y2="26.67" stroke="#000000" stroke-width="2" stroke-miterlimit="10"/>
+      <line id="og0000004" x1="260" y1="33.33" x2="340" y2="33.33" stroke="#000000" stroke-width="2" stroke-miterlimit="10"/>
+      <line id="og0000005" x1="260" y1="40" x2="340" y2="40" stroke="#000000" stroke-width="2" stroke-miterlimit="10"/>
+      <line id="og0000006" x1="260" y1="46.67" x2="340" y2="46.67" stroke="#000000" stroke-width="2" stroke-miterlimit="10"/>
+      <line id="og0000007" x1="260" y1="53.33" x2="340" y2="53.33" stroke="#000000" stroke-width="2" stroke-miterlimit="10"/>
+      <line id="og0000008" x1="273.33" y1="20" x2="273.33" y2="60" stroke="#000000" stroke-width="2" stroke-miterlimit="10"/>
+      <line id="og0000009" x1="286.67" y1="20" x2="286.67" y2="60" stroke="#000000" stroke-width="2" stroke-miterlimit="10"/>
+      <line id="og0000010" x1="300" y1="20" x2="300" y2="60" stroke="#000000" stroke-width="2" stroke-miterlimit="10"/>
+      <line id="og0000011" x1="313.33" y1="20" x2="313.33" y2="60" stroke="#000000" stroke-width="2" stroke-miterlimit="10"/>
+      <line id="og0000012" x1="326.67" y1="20" x2="326.67" y2="60" stroke="#000000" stroke-width="2" stroke-miterlimit="10"/>
     </g>
   </g>
 </svg>
