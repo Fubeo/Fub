@@ -1,15 +1,16 @@
 // @vitest-environment happy-dom
-// La sezione «Contorno» del Design (K6 T15, giro 5): c'è nella scheda Design del Completo, fra Colore e
-// Trasparenza; i valori attuali vengono dalla vista (`misure.contorno`); ogni campo confermato manda
-// `stroke.set` senza la finestra della voce, con le lunghezze nell'unità della scena; una selezione
-// mista mostra «Misto»; senza contorno, con un oggetto bloccato o senza selezione la sezione è spenta
-// col perché; il limite dell'angolo e l'allineamento sono sempre spenti, col perché.
+// La sezione «Contorno» del Design, come il pannello Stroke di VectorCraft: c'è nella scheda Design del
+// Completo, fra Colore e Trasparenza; i valori arrivano subito dalla vista (`misure.contorno`) e poi
+// dalla lettura del motore; ogni campo confermato manda `stroke.set` (o `stroke.setAdvanced`) senza la
+// finestra della voce, con le lunghezze nell'unità della scena; una selezione mista mostra «Misto»;
+// senza contorno, con un oggetto bloccato o senza selezione la sezione è spenta col perché; senza la
+// lettura del motore limite, allineamento, adattamento dei trattini e punte sono spenti.
 import { describe, expect, it, vi } from "vitest";
 import { openLifetime } from "../../../ui/lifetime";
 import type { MotoreDelDisegno } from "../motore/gesti";
 import type { SessioneMotore } from "../motore/sessione";
 import { t } from "../strings";
-import { sezioneContorno } from "./contorno-sezione";
+import { sezioneContorno, trattiniDaiCampi, unisciLetture } from "./contorno-sezione";
 import { apri } from "./index";
 import { indiceDi } from "./indice";
 import indiceGenerato from "./indice.generated.json";
@@ -23,12 +24,41 @@ function motoreFinto(): MotoreDelDisegno {
   return { adesso: () => sessione, pronta: () => Promise.resolve(sessione), assente: () => null } as unknown as MotoreDelDisegno;
 }
 
-/// Il corpo della sezione con `numero` oggetti scelti e le misure della vista date.
-function corpoDi(numero: number, misure: MisureSelezione) {
+/// Il corpo della sezione con `numero` oggetti scelti e le misure della vista date; con `nodi` la
+/// sezione ha un motore che li legge.
+function corpoDi(numero: number, misure: MisureSelezione, nodi?: readonly unknown[]) {
   const esegui = vi.fn();
   const elemento = document.createElement("div");
-  sezioneContorno(esegui).disegna({ corpo: elemento, sel: { numero }, misure, motore: null, aggiorna: () => undefined, rileggi: () => undefined, vita: openLifetime() } as never);
+  document.body.replaceChildren(elemento);
+  const leggi = nodi === undefined ? undefined : () => Promise.resolve(nodi);
+  const motore = nodi === undefined ? null : ({} as never);
+  sezioneContorno({ esegui, leggi }).disegna({ corpo: elemento, sel: { numero }, misure, motore, aggiorna: () => undefined, rileggi: () => undefined, vita: openLifetime() } as never);
   return { elemento, esegui };
+}
+
+/// Aspetta che la lettura del motore arrivi e la sezione si rifaccia.
+const lettura = () => new Promise((fatto) => setTimeout(fatto, 0));
+
+/// Il riassunto di un oggetto come lo dà `document.node`: spessore e opzioni in px della scena.
+function nodo(opzioni: Record<string, unknown> = {}, spessore = 4) {
+  return {
+    strokeWidth: spessore,
+    strokeOptions: {
+      cap: "butt",
+      join: "miter",
+      miterLimit: 10,
+      align: "center",
+      dash: null,
+      dashOffset: 0,
+      alignDashes: false,
+      startArrow: null,
+      endArrow: null,
+      arrowAlign: "extend",
+      arrowScale: [100, 100],
+      canAlign: true,
+      ...opzioni,
+    },
+  };
 }
 
 /// Il campo numerico con questa etichetta.
@@ -37,6 +67,9 @@ const campo = (corpo: HTMLElement, etichetta: string): HTMLInputElement =>
 
 const scelta = (corpo: HTMLElement, classe: string): HTMLSelectElement => corpo.querySelector<HTMLSelectElement>(`select.${classe}`)!;
 const interruttore = (corpo: HTMLElement): HTMLInputElement => corpo.querySelector<HTMLInputElement>("input.draw-outline-dashed")!;
+const bottone = (corpo: HTMLElement, classe: string): HTMLButtonElement => corpo.querySelector<HTMLButtonElement>(`button.${classe}`)!;
+const trattino = (corpo: HTMLElement, n: number) => campo(corpo, t("draw.contorno.trattinoN", { n: String(n) }));
+const spazio = (corpo: HTMLElement, n: number) => campo(corpo, t("draw.contorno.spazioN", { n: String(n) }));
 const note = (corpo: HTMLElement): string[] => [...corpo.querySelectorAll(".draw-outline-note")].map((p) => p.textContent ?? "");
 
 /// Scrive un valore nel campo e lo conferma, come chi esce dal campo.
@@ -109,31 +142,47 @@ describe("la sezione Contorno del Design", () => {
     expect(esegui).toHaveBeenLastCalledWith("stroke.set", { join: "round" }, { senzaFinestra: true });
   });
 
-  it("il tratteggio si accende, si cambia e si spegne", () => {
+  it("il tratteggio si accende coi trattini di serie (12 pt), si cambia e si spegne", () => {
     const pieno = corpoDi(1, { contorno: contorno() });
+    // Col contorno pieno i campi mostrano ciò che il tratteggio riprenderebbe, spenti.
+    expect(trattino(pieno.elemento, 1).value).toBe("12");
+    expect(trattino(pieno.elemento, 1).disabled).toBe(true);
     const acceso = interruttore(pieno.elemento);
     acceso.checked = true;
     cambia(acceso);
-    // 4 e 3 volte lo spessore di 3 pt, in px.
-    expect(pieno.esegui).toHaveBeenLastCalledWith("stroke.set", { dash: [16, 12] }, { senzaFinestra: true });
+    expect(pieno.esegui).toHaveBeenLastCalledWith("stroke.set", { dash: [16, 16] }, { senzaFinestra: true });
 
     const tratteggiato = corpoDi(1, { contorno: contorno({ trattini: [6, 3] }) });
     expect(interruttore(tratteggiato.elemento).checked).toBe(true);
-    const trattino = campo(tratteggiato.elemento, t("draw.contorno.trattino"));
-    expect(trattino.value).toBe("6");
-    scrivi(campo(tratteggiato.elemento, t("draw.contorno.spazio")), "1.5");
+    expect(trattino(tratteggiato.elemento, 1).value).toBe("6");
+    expect(trattino(tratteggiato.elemento, 2).value).toBe("");
+    scrivi(spazio(tratteggiato.elemento, 1), "1.5");
     expect(tratteggiato.esegui).toHaveBeenLastCalledWith("stroke.set", { dash: [8, 2] }, { senzaFinestra: true });
+    // La seconda coppia allunga la serie; uno spazio vuoto vale quanto il suo trattino.
+    scrivi(trattino(tratteggiato.elemento, 2), "3");
+    expect(tratteggiato.esegui).toHaveBeenLastCalledWith("stroke.set", { dash: [8, 4, 4, 4] }, { senzaFinestra: true });
     const spento = interruttore(tratteggiato.elemento);
     spento.checked = false;
     cambia(spento);
     expect(tratteggiato.esegui).toHaveBeenLastCalledWith("stroke.set", { dash: [] }, { senzaFinestra: true });
+    // Riacceso, il tratteggio torna com'era.
+    const dopo = corpoDi(1, { contorno: contorno() });
+    expect(trattino(dopo.elemento, 1).value).toBe("6");
   });
 
-  it("un tratteggio su misura lo dice, e scrivere lo sostituisce con trattino e spazio", () => {
-    const { elemento, esegui } = corpoDi(1, { contorno: contorno({ trattini: [3, 1.5, 0.75, 1.5] }) });
-    expect(note(elemento).some((n) => n.includes("3 1.5 0.75 1.5"))).toBe(true);
-    scrivi(campo(elemento, t("draw.contorno.trattino")), "6");
-    expect(esegui).toHaveBeenLastCalledWith("stroke.set", { dash: [8, 2] }, { senzaFinestra: true });
+  it("svuotare un trattino chiude la serie lì", () => {
+    const { elemento, esegui } = corpoDi(1, { contorno: contorno({ trattini: [6, 3, 1.5, 3] }) });
+    scrivi(trattino(elemento, 2), "");
+    expect(esegui).toHaveBeenLastCalledWith("stroke.set", { dash: [8, 4] }, { senzaFinestra: true });
+  });
+
+  it("i trattini dai sei campi, come edited_dash_pattern di VectorCraft", () => {
+    expect(trattiniDaiCampi([6, null, null, null, null, null], [])).toEqual([6, 6]);
+    expect(trattiniDaiCampi([6, 2, null, 4, 1, 1], [])).toEqual([6, 2]);
+    expect(trattiniDaiCampi([0, 0, null, null, null, null], [])).toEqual([]);
+    expect(trattiniDaiCampi([-1, 2, null, null, null, null], [])).toEqual([0, 2]);
+    expect(trattiniDaiCampi([1, 2, 3, 4, 5, 6], [9, 9, 9, 9, 9, 9, 7, 8])).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
+    expect(trattiniDaiCampi([1, 2, 3, null, null, null], [9, 9, 9, 9, 9, 9, 7, 8])).toEqual([1, 2, 3, 3]);
   });
 
   it("una selezione mista mostra «Misto» e non manda niente da sola", () => {
@@ -144,7 +193,7 @@ describe("la sezione Contorno del Design", () => {
     expect(estremi.selectedOptions[0]!.textContent).toBe(t("draw.properties.mixed"));
     expect(scelta(elemento, "draw-outline-join").value).toBe("");
     expect(interruttore(elemento).indeterminate).toBe(true);
-    expect(campo(elemento, t("draw.contorno.trattino")).placeholder).toBe(t("draw.properties.mixed"));
+    expect(trattino(elemento, 1).placeholder).toBe(t("draw.properties.mixed"));
     expect(esegui).not.toHaveBeenCalled();
   });
 
@@ -165,12 +214,96 @@ describe("la sezione Contorno del Design", () => {
     }
   });
 
-  it("il limite dell'angolo e l'allineamento sono spenti col perché", () => {
+  it("senza la lettura del motore limite, allineamento, adattamento e punte sono spenti", () => {
     const { elemento } = corpoDi(1, { contorno: contorno() });
-    const limite = campo(elemento, t("draw.contorno.limite"));
-    expect(limite.disabled).toBe(true);
-    expect(limite.value).toBe("4");
+    expect(campo(elemento, t("draw.contorno.limite")).disabled).toBe(true);
     expect(scelta(elemento, "draw-outline-align").disabled).toBe(true);
-    expect(note(elemento)).toContain(t("draw.contorno.nonScritto"));
+    expect(bottone(elemento, "draw-outline-dash-fit").disabled).toBe(true);
+    expect(scelta(elemento, "draw-outline-start-arrow").disabled).toBe(true);
+    expect(bottone(elemento, "draw-outline-arrow-swap").disabled).toBe(true);
+  });
+
+  it("con la lettura del motore: limite, allineamento, spessore vero e tratteggio adattato", async () => {
+    // Un contorno dentro la forma: la vista vede lo spessore raddoppiato, il motore quello vero.
+    const { elemento, esegui } = corpoDi(1, { contorno: contorno({ spessore: { valore: 6, ...IN_PT } }) }, [
+      nodo({ miterLimit: 7, align: "inside", dash: [8, 4], alignDashes: true }, 4),
+    ]);
+    await lettura();
+    expect(campo(elemento, t("draw.contorno.spessore")).value).toBe("3");
+    const limite = campo(elemento, t("draw.contorno.limite"));
+    expect(limite.disabled).toBe(false);
+    expect(limite.value).toBe("7");
+    scrivi(limite, "600");
+    expect(esegui).toHaveBeenLastCalledWith("stroke.set", { miterLimit: 500 }, { senzaFinestra: true });
+    const allinea = scelta(elemento, "draw-outline-align");
+    expect(allinea.value).toBe("inside");
+    allinea.value = "outside";
+    cambia(allinea);
+    expect(esegui).toHaveBeenLastCalledWith("stroke.set", { align: "outside" }, { senzaFinestra: true });
+    expect(trattino(elemento, 1).value).toBe("6");
+    expect(bottone(elemento, "draw-outline-dash-fit").getAttribute("aria-pressed")).toBe("true");
+    bottone(elemento, "draw-outline-dash-exact").click();
+    expect(esegui).toHaveBeenLastCalledWith("stroke.set", { alignDashes: false }, { senzaFinestra: true });
+  });
+
+  it("il limite è spento con gli angoli arrotondati; dentro e fuori solo su forme chiuse", async () => {
+    const { elemento } = corpoDi(2, { contorno: contorno({ angoli: "round" }) }, [nodo({ canAlign: false }), nodo()]);
+    await lettura();
+    expect(campo(elemento, t("draw.contorno.limite")).disabled).toBe(true);
+    const voci = [...scelta(elemento, "draw-outline-align").options];
+    expect(voci.filter((v) => v.disabled).map((v) => v.value)).toEqual(["inside", "outside"]);
+  });
+
+  it("le punte: inizio, fine, scambio, scala col lucchetto e allineamento", async () => {
+    const { elemento, esegui } = corpoDi(1, { contorno: contorno() }, [nodo({ endArrow: "Triangle", arrowScale: [100, 250], arrowAlign: "tip" })]);
+    await lettura();
+    expect(scelta(elemento, "draw-outline-start-arrow").value).toBe("none");
+    expect(scelta(elemento, "draw-outline-end-arrow").value).toBe("Triangle");
+    expect(scelta(elemento, "draw-outline-end-arrow").options).toHaveLength(41);
+    const inizio = scelta(elemento, "draw-outline-start-arrow");
+    inizio.value = "Swallowtail";
+    cambia(inizio);
+    expect(esegui).toHaveBeenLastCalledWith("stroke.set", { startArrow: "Swallowtail" }, { senzaFinestra: true });
+    bottone(elemento, "draw-outline-arrow-swap").click();
+    expect(esegui).toHaveBeenLastCalledWith("stroke.setAdvanced", { swapArrows: true }, { senzaFinestra: true });
+    const scalaFine = campo(elemento, t("draw.contorno.frecce.scalaFine"));
+    expect(scalaFine.value).toBe("250");
+    scrivi(scalaFine, "300");
+    expect(esegui).toHaveBeenLastCalledWith("stroke.setAdvanced", { arrowScale: [100, 300] }, { senzaFinestra: true });
+    const lucchetto = bottone(elemento, "draw-outline-arrow-link");
+    lucchetto.click();
+    expect(lucchetto.getAttribute("aria-pressed")).toBe("true");
+    scrivi(campo(elemento, t("draw.contorno.frecce.scalaInizio")), "50");
+    expect(esegui).toHaveBeenLastCalledWith("stroke.setAdvanced", { arrowScale: [50, 50] }, { senzaFinestra: true });
+    lucchetto.click();
+    expect(bottone(elemento, "draw-outline-arrow-tip").getAttribute("aria-pressed")).toBe("true");
+    bottone(elemento, "draw-outline-arrow-extend").click();
+    expect(esegui).toHaveBeenLastCalledWith("stroke.set", { arrowAlign: "extend" }, { senzaFinestra: true });
+  });
+
+  it("senza punte la scala e l'allineamento delle punte sono spenti", async () => {
+    const { elemento } = corpoDi(1, { contorno: contorno() }, [nodo()]);
+    await lettura();
+    expect(campo(elemento, t("draw.contorno.frecce.scalaInizio")).disabled).toBe(true);
+    expect(bottone(elemento, "draw-outline-arrow-tip").disabled).toBe(true);
+    expect(scelta(elemento, "draw-outline-start-arrow").disabled).toBe(false);
+  });
+
+  it("le letture di più oggetti si uniscono: ciò che differisce è misto", () => {
+    const unita = unisciLetture([nodo({ miterLimit: 4, startArrow: "Arrow" }), nodo({ miterLimit: 6, startArrow: "Arrow" }), null, { strokeWidth: 1 }]);
+    expect(unita?.limite).toBeNull();
+    expect(unita?.inizio).toBe("Arrow");
+    expect(unita?.conPunta).toBe(true);
+    expect(unisciLetture([null, {}])).toBeNull();
+  });
+
+  it("una lettura che arriva mentre si scrive aspetta che il fuoco esca", async () => {
+    const { elemento } = corpoDi(1, { contorno: contorno() }, [nodo({ miterLimit: 7 })]);
+    const spessore = campo(elemento, t("draw.contorno.spessore"));
+    spessore.focus();
+    await lettura();
+    expect(campo(elemento, t("draw.contorno.limite")).disabled).toBe(true);
+    spessore.blur();
+    expect(campo(elemento, t("draw.contorno.limite")).value).toBe("7");
   });
 });

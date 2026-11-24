@@ -713,8 +713,19 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila" | "e
     stato: () => null,
     esegui: () => apriFinestraLibrerie(creaPortaLibrerie(dipendenze, t("draw.libraries.undo")), ctx.life),
   });
-  // La sezione «Contorno» (K6 T15, giro 5): spessore, estremi, angoli e tratteggio.
-  registraContorno(sezioni, eseguiPerId);
+  // La sezione «Contorno» (K6 T15, giro 5), come il pannello Stroke di VectorCraft: legge dal motore
+  // il contorno di ogni oggetto scelto (`document.node`, con l'id del file).
+  registraContorno(sezioni, {
+    esegui: eseguiPerId,
+    leggi: () =>
+      Promise.all(
+        [...dipendenze.selezione()].map(async (id) => {
+          // Il riassunto del solo oggetto (senza i figli): ha lo spessore e le opzioni del contorno.
+          const esito = await chiama(dipendenze, "disegno.document.node", { id, summary: true, depth: 0 }, false).catch(() => null);
+          return esito === null || esito.refused !== null ? null : esito.reading;
+        }),
+      ),
+  });
   // La sezione «Sfumatura» (K6 T15, giro 5): tipo, angolo e punti della sfumatura lineare o radiale.
   // Le preimpostate (giro 6) leggono dal motore con le famiglie del caricatore, che nasce qui sotto:
   // la porta lo chiede solo quando le preimpostate si aprono.

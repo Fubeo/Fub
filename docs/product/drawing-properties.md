@@ -44,8 +44,12 @@ le tavole): arrivano nell'ordine della mappa e si vedono o no secondo la
 selezione. Il colore di Riempimento e Contorno, col Completo acceso, si
 cambia dalla sua sezione «Colore» ([Disegni, colori](drawing-colors.md#nel-disegno-completo)):
 i due campi del colore escono dal pannello. Spessore e Tratteggio passano alla
-sezione «Contorno» del Completo; del Contorno del pannello restano le punte,
-nella sezione che lì si chiama «Punte». Il carattere e l'allineamento di un testo si cambiano dalle sezioni
+sezione «Contorno» del Completo, che fa come il pannello Contorno di
+VectorCraft: limite dell'angolo, contorno al centro, dentro o fuori (solo su
+forme chiuse), tratteggio con tre coppie trattino/spazio, esatto o adattato
+agli angoli, punte di freccia del motore con scala e allineamento; i valori
+che non si leggono dalla vista li legge dal motore. Del Contorno del pannello
+restano le punte di Fub, nella sezione che lì si chiama «Punte». Il carattere e l'allineamento di un testo si cambiano dalle sezioni
 «Carattere» e «Paragrafo» ([Disegni, tipografia](drawing-typography.md#nel-disegno-completo)):
 Carattere, Dimensione, Peso, Spaziatura e Allineamento escono dal pannello,
 Enfasi, Stile e Interlinea restano. Senza il Completo acceso il pannello è

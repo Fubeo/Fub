@@ -144,7 +144,7 @@ fn la_scala_delle_frecce_si_ricorda() {
             revision: d.revisione(),
             id: "disegno.document.node".into(),
             selection: vec![],
-            value: json!({"id": id, "summary": true}),
+            value: json!({"id": id, "summary": true, "depth": 0}),
             preview: false,
         })
         .expect("la lettura passa")

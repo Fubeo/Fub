@@ -91,7 +91,8 @@ già preso, o che si legge come un colore, prende il primo libero, «Vermiglio
 Col Disegno completo acceso il colore degli oggetti scelti si cambia dalla
 sezione **Colore** della scheda Design, e i campi del colore di Riempimento e
 Contorno escono dal pannello; Spessore e Tratteggio vanno nella sezione
-Contorno del Design e le punte restano nel pannello
+Contorno del Design, con le altre opzioni del contorno e le punte di freccia
+del motore, e le punte di Fub restano nel pannello
 ([Disegni, pannello delle proprietà](drawing-properties.md)). Spento il
 Completo, i campi tornano.
 

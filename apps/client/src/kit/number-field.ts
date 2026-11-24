@@ -53,6 +53,9 @@ export interface NumberFieldOptions {
   /// Un valore confermato. Una stringa è il motivo per cui non è stato
   /// preso: il campo resta com'era scritto e la dice.
   onCommit: (value: number) => string | void;
+  /// Il campo svuotato e confermato: chi la dà accetta il vuoto (un trattino che chiude la serie), e
+  /// come `onCommit` una stringa dice perché non l'ha preso. Senza, il vuoto è un errore.
+  onClear?: () => string | void;
   /// I valori mentre si tira l'etichetta, prima della conferma.
   onPreview?: (value: number) => void;
   /// Possiede gli ascolti. Senza, stanno sugli elementi e vivono quanto loro.
@@ -196,6 +199,17 @@ export function numberField(options: NumberFieldOptions): NumberField {
   const commitTyped = (): void => {
     if (input.readOnly || input.disabled || input.value === shown) {
       if (input.value === shown) showError(null);
+      return;
+    }
+    if (options.onClear !== undefined && input.value.trim() === "") {
+      const failure = options.onClear();
+      if (typeof failure === "string") {
+        showError(failure);
+        return;
+      }
+      value = null;
+      showError(null);
+      paint();
       return;
     }
     const next = typed();

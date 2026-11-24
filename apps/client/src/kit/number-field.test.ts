@@ -124,6 +124,27 @@ describe("il campo numerico del kit", () => {
     expect(input.getAttribute("aria-invalid")).toBe("true");
   });
 
+  it("con onClear il vuoto confermato si prende; senza, è un errore", () => {
+    let svuotati = 0;
+    const libero = field({ onClear: () => void svuotati++ });
+    type(libero.input, " ");
+    press(libero.input, "Enter");
+    expect(svuotati).toBe(1);
+    expect(libero.value()).toBeNull();
+    expect(libero.input.getAttribute("aria-invalid")).toBeNull();
+    expect(commits).toEqual([]);
+    const rifiutato = field({ onClear: () => "serve un trattino" });
+    type(rifiutato.input, "");
+    press(rifiutato.input, "Enter");
+    expect(rifiutato.value()).toBe(120);
+    expect(rifiutato.input.getAttribute("aria-invalid")).toBe("true");
+    const obbligato = field();
+    type(obbligato.input, "");
+    press(obbligato.input, "Enter");
+    expect(obbligato.value()).toBe(120);
+    expect(obbligato.input.getAttribute("aria-invalid")).toBe("true");
+  });
+
   it("misto: vuoto, dice «Misto», e le frecce non hanno da dove partire", () => {
     const { input, element } = field({ value: null });
     expect(input.value).toBe("");
