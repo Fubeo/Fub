@@ -108,6 +108,9 @@ pub struct InfoTesto {
     pub attributi: Vec<(String, String)>,
     /// `fub:wrap` letto: la larghezza di un testo in area.
     pub wrap: Option<f64>,
+    /// L'id del tracciato privato che il `textPath` di un testo su tracciato segue (formato del
+    /// testo, §5); `None` per gli altri testi e per l'etichetta di un connettore.
+    pub tracciato: Option<String>,
     /// Il `fub:join` di ogni `<tspan>`, come è scritto.
     pub unioni: Vec<Option<String>>,
     /// Il `dx` di ogni `<tspan>`: in un testo verticale, quanto la colonna

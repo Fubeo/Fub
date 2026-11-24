@@ -124,7 +124,7 @@ motore	shape.rectangularGrid	Rectangular Grid		forme	F1	T13	fatto	finestra	famig
 motore	shape.polarGrid	Polar Grid		forme	F1	T13	fatto	finestra	famiglia		Griglia polare
 motore	path.create	Create Path		tracciati	F1	T12	fatto	interno	famiglia	comando degli script: in VectorCraft non ha voce né tasto, i tracciati si disegnano con la Penna; crea il tracciato da `d` o dai punti (con le maniglie e `closed`) col colore attuale, e un tracciato aperto senza colore prende il contorno nero	Crea tracciato
 motore	view.drawMode	Drawing Mode		vista	F1	T11	fatto	menu/visualizza	famiglia	Dentro spenta: il motore crea un gruppo di ritaglio che la differenza del file rifiuta (unsupported); test tests/modo_di_disegno.rs	Modalità di disegno
-motore	text.create	Create Text		testo	F2	T16	da fare	ispettore/design	famiglia		Crea testo
+motore	text.create	Create Text		testo	F2	T16	fatto	ispettore/design	famiglia		Crea testo
 motore	css.selection	CSS Properties		web	F3	T22	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Proprietà CSS
 motore	css.generate	Generate CSS		web	F3	T22	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Genera CSS
 motore	css.export	Export CSS		web	F3	T22	da fare	ispettore/design/documento	famiglia		Esporta CSS
@@ -608,7 +608,7 @@ motore	text.startList	Bullets and Numbering		testo	F2	T16	da fare	ispettore/desi
 motore	text.setRangeStyle	Character		testo	F2	T16	fatto	ispettore/design	famiglia		Carattere
 motore	text.touchType	Touch Type		testo	F2	T16	da fare	ispettore/design	famiglia		Ritocco testo
 motore	text.getRange	Get Text Range		testo	F2	T16	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Ottieni intervallo di testo
-motore	text.createInPath	Area / Path Type		testo	F2	T16	da fare	ispettore/design	famiglia		Testo in area / su tracciato
+motore	text.createInPath	Area / Path Type		testo	F2	T16	fatto	ispettore/design	famiglia		Testo in area / su tracciato
 motore	type.fitHeadline	Fit Headline	Type	testo	F2	T16	da fare	menu/testo	famiglia		Adatta titolo
 motore	type.step	Step Type		testo	F2	T16	fatto	ispettore/design	famiglia	passi di Preferenze › Testo: corpo e interlinea 2 pt, spaziatura 20/1000 em; lo spostamento della linea di base è rifiutato (il file non lo scrive)	Dimensione testo a incrementi
 motore	type.size.increase	Increase Font Size		testo	F2	T16	fatto	ispettore/design	famiglia	Ctrl+Maiusc+. (tasto fisico del punto): +2 pt	Aumenta dimensione font
@@ -617,7 +617,7 @@ motore	type.size.increaseByFive	Increase Font Size by Five Steps		testo	F2	T16	f
 motore	type.size.decreaseByFive	Decrease Font Size by Five Steps		testo	F2	T16	fatto	ispettore/design	famiglia	Ctrl+Alt+Maiusc+,: −10 pt	Riduci dimensione font di cinque incrementi
 motore	type.resetTracking	Reset Tracking and Kerning		testo	F2	T16	fatto	ispettore/design	famiglia	Ctrl+Alt+Q: toglie la spaziatura	Reimposta spaziatura caratteri e crenatura
 motore	type.resetHorizontalScale	Reset Horizontal Scale		testo	F2	T16	fatto	ispettore/design	famiglia	il file non scrive la scala orizzontale: non c'è mai niente da reimpostare (rifiuto «vuoto»)	Reimposta scala orizzontale
-motore	text.discardEmpty	Discard Empty Type		testo	F2	T16	da fare	ispettore/design	famiglia		Scarta testo vuoto
+motore	text.discardEmpty	Discard Empty Type		testo	F2	T16	fatto	ispettore/design	famiglia		Scarta testo vuoto
 motore	object.textWrap.make	Make	Object › Text Wrap	testo	F2	T16	da fare	menu/oggetto	famiglia		Crea
 motore	object.textWrap.release	Release	Object › Text Wrap	testo	F2	T16	da fare	menu/oggetto	famiglia		Rilascia
 motore	object.textWrap.options	Text Wrap Options…	Object › Text Wrap	testo	F2	T16	da fare	menu/oggetto	famiglia	finestra	Opzioni testo attorno…
@@ -635,9 +635,9 @@ motore	type.opticalMarginAlignment	Optical Margin Alignment	Type	testo	F2	T16	da
 motore	type.systemLayout	System Layout		testo	F2	T16	da fare	ispettore/design	famiglia		Layout di sistema
 motore	type.fractionalWidths	Fractional Widths		testo	F2	T16	da fare	ispettore/design	famiglia		Larghezze frazionarie
 motore	text.setText	Set Text		testo	F2	T16	fatto	ispettore/design	famiglia		Imposta testo
-motore	text.areaOptions	Area Type Options…	Type	testo	F2	T16	da fare	menu/testo	famiglia	finestra	Opzioni testo in area…
-motore	text.reshapeArea	Reshape Type Area		testo	F2	T16	da fare	ispettore/design	famiglia		Rimodella area di testo
-motore	text.reshapePath	Reshape Type Path		testo	F2	T16	da fare	ispettore/design	famiglia		Reshape Type Path
+motore	text.areaOptions	Area Type Options…	Type	testo	F2	T16	fatto	menu/testo	famiglia	finestra	Opzioni testo in area…
+motore	text.reshapeArea	Reshape Type Area		testo	F2	T16	fatto	ispettore/design	famiglia		Rimodella area di testo
+motore	text.reshapePath	Reshape Type Path		testo	F2	T16	fatto	ispettore/design	famiglia		Reshape Type Path
 motore	text.fitHeadline	Fit Headline	Type	testo	F2	T16	da fare	menu/testo	famiglia		Adatta titolo
 motore	text.setStyle	Character		testo	F2	T16	fatto	ispettore/design	famiglia		Carattere
 motore	type.ruby	Ruby…		testo	F2	T16	da fare	ispettore/design	famiglia	finestra	Ruby…
@@ -645,7 +645,7 @@ motore	type.changeCase	Change Case	Type › Change Case	testo	F2	T16	fatto	menu/
 motore	type.smartPunctuation	Smart Punctuation…	Type	testo	F2	T16	da fare	menu/testo	famiglia	finestra	Punteggiatura intelligente…
 motore	type.convertToAreaType	Convert To Area Type	Type	testo	F2	T16	fatto	menu/testo	famiglia		Converti in testo in area
 motore	type.convertToPointType	Convert To Point Type	Type	testo	F2	T16	fatto	menu/testo	famiglia		Converti in testo per punti
-motore	type.pathOptions	Type on a Path Options…	Type › Type on a Path	testo	F2	T16	da fare	menu/testo	famiglia	finestra	Opzioni testo su tracciato…
+motore	type.pathOptions	Type on a Path Options…	Type › Type on a Path	testo	F2	T16	fatto	menu/testo	famiglia	finestra	Opzioni testo su tracciato…
 motore	type.fillPlaceholder	Fill with Placeholder Text	Type	testo	F2	T16	fatto	menu/testo	famiglia	la frase di VectorCraft nel primo stile dei testi scelti; il testo in area si riempie fino alla cornice	Riempi con testo segnaposto
 motore	type.insert	Insert Character	Type	testo	F2	T16	fatto	menu/testo	famiglia	finestra; aggiunge in fondo ai testi scelti uno dei caratteri speciali di VectorCraft o un testo	Inserisci carattere
 motore	edit.findReplace	Find and Replace…	Edit	testo	F2	T16	fatto	menu/modifica	famiglia	finestra	Trova e sostituisci…

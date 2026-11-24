@@ -387,6 +387,14 @@ fn una_selezione_con_un_elemento_non_mappato_non_cambia_niente() {
         "disegno.text.replaceFont",
         // Crea tracciato aggiunge un tracciato nuovo dai suoi argomenti, senza usare la selezione.
         "disegno.path.create",
+        // Gli strumenti del Testo come in VectorCraft: Testo crea dai suoi argomenti; gli altri
+        // nominano il loro oggetto nel valore (senza, prendono il primo scelto che fa al caso), e
+        // un elemento non mappato lo ferma la guardia delle perdite.
+        "disegno.text.create",
+        "disegno.text.createInPath",
+        "disegno.text.discardEmpty",
+        "disegno.text.reshapeArea",
+        "disegno.text.reshapePath",
     ];
     let comandi = d.comandi(&["oa1a1a1a1".into(), "onessuno1".into()]);
     let accesi: Vec<&str> = comandi

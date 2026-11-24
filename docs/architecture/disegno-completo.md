@@ -141,9 +141,22 @@ motore i comandi sul testo scelto; il formato è quello di
 - `type.createOutlines` trasforma il testo in tracciati; senza i caratteri
   si rifiuta (`unsupported`). `edit.findReplace` ha una finestra scritta da
   Fub (`FINESTRE_SCRITTE`, senza `ids`).
+- **Gli strumenti** (`famiglie/testo.rs`) prendono l'oggetto dal valore:
+  `text.create` (punto o area), `text.createInPath` (dentro o lungo un
+  tracciato, `onPath`), `text.reshapeArea`, `text.reshapePath`,
+  `text.discardEmpty`. Un testo vuoto si rifiuta (`empty`), e senza i
+  caratteri anche quello in area (`unsupported`).
+- **Opzioni testo in area e su tracciato** (`text.areaOptions`,
+  `type.pathOptions`) partono dal testo scelto (`completo/partenze.ts`); ciò
+  che il formato non scrive (colonne, margine, allineamento verticale, fine,
+  effetto, spaziatura, verso girato) si rifiuta (`unsupported`).
+- **Il testo su tracciato** che Fub scrive (un `textPath` con `href` e uno
+  `startOffset` in numeri: `perdite.rs`, `sul_tracciato_semplice`) si
+  modifica: `differenza_testo.rs` (`sul_tracciato_cambiato`) riscrive testo e
+  `d` del tracciato privato, e rifiuta un tracciato condiviso. Con `side`,
+  `method`, un percento o pezzi di un aspetto loro resta approssimato.
 
-Restano da fare `text.areaOptions` (colonne e margini interni non hanno un
-attributo nel formato) e il campo dell'interlinea nella sezione Carattere.
+Resta da fare il campo dell'interlinea nella sezione Carattere.
 
 ## I livelli
 

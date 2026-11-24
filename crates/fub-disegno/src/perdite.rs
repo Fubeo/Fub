@@ -175,10 +175,59 @@ fn approssimazione(tag: &str, attr: &[Attributo], corpo: &str) -> Option<&'stati
     if usa("mask") {
         return Some("una maschera: il motore la approssima; si può solo spostare");
     }
-    if tag == "text" && corpo.contains("<textPath") {
+    if tag == "text" && corpo.contains("<textPath") && !sul_tracciato_semplice(corpo) {
         return Some("un testo su tracciato: il motore lo approssima; si può solo spostare");
     }
     None
+}
+
+/// Vero se il `<text>` `corpo` è un testo su tracciato come lo scrive Fub (formato del testo, §5):
+/// un solo `textPath` con `href` e al più uno `startOffset` in numeri, e dentro solo parole. Il
+/// motore lo rilegge uguale, e lo riscrive (`differenza::figlio_sul_tracciato`) quando cambiano
+/// il tracciato o il punto d'inizio; un altro (pezzi con un aspetto loro, `side`, `method`,
+/// `textLength`, uno `startOffset` in percento) resta approssimato.
+fn sul_tracciato_semplice(corpo: &str) -> bool {
+    let Some(dentro) = corpo
+        .find('>')
+        .and_then(|i| corpo.get(i + 1..corpo.rfind("</text>")?))
+        .map(str::trim)
+    else {
+        return false;
+    };
+    let Some(fine) = dentro.strip_suffix("</textPath>") else {
+        return false;
+    };
+    if !dentro.starts_with("<textPath") {
+        return false;
+    }
+    let Some((_, attr)) = attributi(dentro, 0) else {
+        return false;
+    };
+    let noti = attr.iter().all(|a| match a.nome.as_str() {
+        "href" | "xlink:href" => true,
+        "startOffset" => a.valore.trim().parse::<f64>().is_ok_and(f64::is_finite),
+        _ => false,
+    });
+    // La fine del tag d'apertura: il `>` fuori dalle virgolette.
+    let mut virgolette = None;
+    let chiuso = dentro
+        .char_indices()
+        .find_map(|(i, c)| match (virgolette, c) {
+            (None, '"' | '\'') => {
+                virgolette = Some(c);
+                None
+            }
+            (Some(v), c) if c == v => {
+                virgolette = None;
+                None
+            }
+            (None, '>') => Some(i),
+            _ => None,
+        });
+    noti && chiuso.is_some_and(|i| {
+        fine.get(i + 1..)
+            .is_some_and(|parole| !parole.contains('<'))
+    })
 }
 
 /// Vero per un valore che spegne la proprietà (`none`, vuoto). Il confronto
@@ -372,10 +421,24 @@ mod tests {
         assert!(approssima("<rect filter=\"url(#f)\"/>").is_some_and(|m| m.contains("filtro")));
         assert!(approssima("<rect style=\"fill:red; filter : blur(2px)\"/>").is_some());
         assert!(approssima("<g mask=\"url(#m)\">").is_some_and(|m| m.contains("maschera")));
-        assert!(
-            approssima("<text x=\"1\"><textPath href=\"#p\">a</textPath></text>")
-                .is_some_and(|m| m.contains("tracciato"))
+        // Un testo su tracciato come lo scrive Fub si modifica; uno con un aspetto suo no.
+        assert_eq!(
+            approssima(
+                "<text x=\"1\"><textPath href=\"#p\" startOffset=\"12.5\">a b</textPath></text>"
+            ),
+            None
         );
+        for altro in [
+            "<text x=\"1\"><textPath href=\"#p\"><tspan fill=\"red\">a</tspan></textPath></text>",
+            "<text x=\"1\"><textPath href=\"#p\" startOffset=\"50%\">a</textPath></text>",
+            "<text x=\"1\"><textPath href=\"#p\" method=\"stretch\">a</textPath></text>",
+            "<text x=\"1\">b<textPath href=\"#p\">a</textPath></text>",
+        ] {
+            assert!(
+                approssima(altro).is_some_and(|m| m.contains("tracciato")),
+                "{altro}"
+            );
+        }
         assert_eq!(approssima("<rect filter=\"none\" mask=\" \"/>"), None);
         assert_eq!(
             approssima("<rect style=\"filter: none !important\"/>"),

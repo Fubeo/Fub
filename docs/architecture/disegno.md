@@ -267,7 +267,7 @@ parte per elemento della mappa, con una frase breve in italiano. I tre tipi:
 | Tipo | Vuol dire | Che cosa succede |
 |---|---|---|
 | non mappato (`Unmapped`) | il motore non ha un oggetto per l'elemento: le risorse dentro `<defs>`, le istanze `<use>` che il motore scioglie | l'elemento si vede e si salva com'è; un gesto che lo cambierebbe in altro che una `transform` è rifiutato |
-| approssimato (`Approximated`) | l'oggetto c'è, ma un attributo non tornerebbe uguale: un filtro o una maschera (attributo o `style`), un testo su tracciato | si sposta con una `transform`; ogni altro cambio è rifiutato `Unmapped` |
+| approssimato (`Approximated`) | l'oggetto c'è, ma un attributo non tornerebbe uguale: un filtro o una maschera (attributo o `style`), un testo su tracciato che Fub non scrive così (pezzi con un aspetto loro, `startOffset` in percento) | si sposta con una `transform`; ogni altro cambio è rifiutato `Unmapped` |
 | non supportato (`Unsupported`) | il documento non è modificabile, per esempio troppo grande o con id ripetuti | la copia si apre, ma ogni gesto è rifiutato |
 
 Ciò che non si scrive come attributi dell'elemento originale non si fa: il

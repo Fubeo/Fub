@@ -1338,8 +1338,13 @@ pub(crate) fn esegui(
     // I comandi dei tracciati spostano punti: una matrice li spiega solo se
     // è uno spostamento.
     let dei_punti = riga.famiglia == Some(Famiglia::Tracciati);
+    // Un testo nuovo (Crea testo, Testo in area o su tracciato) si scrive come quello degli
+    // strumenti Testo, con le sue righe.
+    let fa_un_testo = testo::FANNO_UN_TESTO.contains(&riga.id.as_str());
+    let scrittore: Option<differenza::Scrittore<'_>> =
+        fa_un_testo.then_some(&crate::gesti::strumento::scrivi_testo);
     let differenza = vectorcraft_engine::guard::catch_panic(|| {
-        differenza::differenza(copia, &dopo, None, None, dei_punti)
+        differenza::differenza(copia, &dopo, scrittore, None, dei_punti)
     });
     banco.ripristina(copia);
     let differenza = match differenza {
@@ -1359,6 +1364,14 @@ pub(crate) fn esegui(
             });
         }
         Ok(Some(ops)) => {
+            let ops = if fa_un_testo {
+                match crate::gesti::strumento::con_le_righe(&ops, &differenza, &dopo, copia) {
+                    Ok(ops) => ops,
+                    Err(r) => return Ok(rifiuta(r)),
+                }
+            } else {
+                ops
+            };
             esito.selection = selezione_di_fub(copia, &differenza, &selezione);
             esito.ops = Some(ops);
             esito.losses = perdite;

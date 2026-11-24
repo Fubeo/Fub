@@ -805,6 +805,7 @@ fn info_testo(testo: &str, e: &fub_scene::ElementItem) -> crate::mappa::InfoTest
         attributi_delle_righe,
         attributi: propri,
         wrap: e.wrap,
+        tracciato: e.text_path.clone().filter(|_| e.along.is_none()),
         unioni,
         scarti,
     }

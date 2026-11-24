@@ -218,7 +218,10 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // Ridisponi) e la sezione Tavole del Design (il pannello `artboards` e i suoi nove comandi:
   // nuova, elimina, elimina vuote, opzioni, ordine, duplica, copia, taglia, sposta) diventano
   // «fatto». Quattordici righe in più.
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 752, fub: 114, escluso: 12, fatto: 673 });
+  // Le funzioni di base come VectorCraft (tratto, tracciati, pannello Trasforma, forme vive) e gli
+  // strumenti del testo (Testo, Testo in area e su tracciato, i due rimodella, Elimina il testo
+  // vuoto, le opzioni del testo in area e su tracciato) diventano «fatto». Trenta righe in più.
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 722, fub: 114, escluso: 12, fatto: 703 });
 });
 
 // --- un motore finto ---------------------------------------------------------------

@@ -508,6 +508,16 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
+            "crates/fub-motori/src/modulo.rs::virgolettato",
+            (
+                Family::AsciiCase,
+                "riconosce il segnaposto `\"#rrggbb\"` nelle descrizioni dei parametri dei \
+                 comandi di VectorCraft, scritto a volte in maiuscolo, per dare al campo il \
+                 tipo colore: un segnaposto ASCII del vocabolario chiuso di quelle \
+                 descrizioni, non il nome di una nota, di un tag o di un path.",
+            ),
+        ),
+        (
             "crates/fub-format-markdown/src/render.rs::render_top_blocks",
             (
                 Family::AsciiCase,

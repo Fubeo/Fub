@@ -8,7 +8,7 @@
 //! scrive l'altezza, che va dalla prima riga all'ultima.
 
 use serde_json::{json, Value};
-use vectorcraft_doc::text::{Justify, TextKind, TextObject};
+use vectorcraft_doc::text::{FirstBaseline, Justify, TextKind, TextObject, VerticalAlign};
 use vectorcraft_geom::{shapes, Affine, Point, Rect};
 
 use super::{numero, DECIMALI_GEOMETRIA};
@@ -16,6 +16,9 @@ use super::{numero, DECIMALI_GEOMETRIA};
 /// Il perché di un testo che va a capo in modo che il file non dice.
 pub(crate) const RIQUADRO_FUORI: &str =
     "il testo in area di Fub è un riquadro solo, senza margine interno, colonne o righe, con il testo orizzontale";
+/// Il perché di un testo in area allineato in altezza (Opzioni testo in area).
+pub(crate) const ALLINEATO_IN_ALTEZZA: &str =
+    "il file non scrive l'allineamento verticale né la prima linea di base del testo in area: il riquadro cresce col testo, che parte dall'alto";
 /// Il perché del giustificato in area.
 pub(crate) const GIUSTIFICATO_IN_AREA: &str =
     "il file non scrive il giustificato: il testo in area si allinea a sinistra, al centro o a destra";
@@ -189,6 +192,14 @@ pub(crate) fn righe_scritte(
                 || !t.wrap.is_empty()
             {
                 return Err(RIQUADRO_FUORI);
+            }
+            // Il file dà solo la larghezza: il riquadro è alto quanto il testo, che parte
+            // dall'alto con la prima linea di base di serie.
+            if area.vertical_align != VerticalAlign::Top
+                || area.first_baseline != FirstBaseline::Ascent
+                || area.first_baseline_min.abs() > 1e-9
+            {
+                return Err(ALLINEATO_IN_ALTEZZA);
             }
             let fb = frame.bounds().ok_or(RIQUADRO_FUORI)?;
             if fb.width() <= 1e-6

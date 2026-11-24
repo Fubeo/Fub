@@ -9,6 +9,7 @@ use fub_abi::{DrawingDisabledReason, DrawingRefusal, PluginError};
 use serde_json::{json, Value};
 use fub_motori::{ErroreMotore, Servizi};
 use vectorcraft_doc::{Document, NodeId, NodeKind};
+use vectorcraft_geom::{Affine, Point};
 
 use super::{byte_delle_tabelle, libera_le_tabelle, nodi_scelti, StatoFamiglia};
 use crate::apertura::Copia;
@@ -46,7 +47,183 @@ const SUI_TESTI: &[&str] = &[
     "text.setText",
     "type.fillPlaceholder",
     "type.insert",
+    OPZIONI_AREA,
+    OPZIONI_TRACCIATO,
 ];
+
+/// Opzioni testo in area (`text.areaOptions`): senza valori legge quelle del primo testo scelto.
+const OPZIONI_AREA: &str = "text.areaOptions";
+
+/// Opzioni testo su tracciato (`type.pathOptions`): senza valori legge quelle del primo testo scelto.
+const OPZIONI_TRACCIATO: &str = "type.pathOptions";
+
+/// Le lunghezze delle due finestre di opzioni, che vanno e tornano con la scala della radice.
+const LUNGHEZZE_DELLE_OPZIONI: &[&str] = &["width", "height", "gutter", "rowGutter", "inset", "firstBaselineMin", "spacing"];
+
+/// I comandi che in VectorCraft mandano gli strumenti Testo e la Selezione diretta: dal client
+/// nominano gli oggetti con l'id del file (o li prendono dalla selezione) e danno punti e
+/// spostamenti nella scena.
+const DEGLI_STRUMENTI: &[&str] = &[
+    "text.create",
+    "text.createInPath",
+    "text.discardEmpty",
+    "text.reshapeArea",
+    "text.reshapePath",
+];
+
+/// I comandi che fanno un testo nuovo: il `<text>` si scrive come quello degli strumenti Testo
+/// (`gesti::strumento::scrivi_testo`, con le righe di `con_le_righe`).
+pub(crate) const FANNO_UN_TESTO: &[&str] = &["text.create", "text.createInPath"];
+
+/// Un argomento sbagliato del comando `id`, col perché.
+fn argomento_sbagliato(id: &str, perche: impl std::fmt::Display) -> PluginError {
+    PluginError::BadArgs(format!("{id}: {perche}").into())
+}
+
+/// Il numero `x` come valore JSON (`null` se non è finito: il motore lo rifiuta).
+fn numero(x: f64) -> Value {
+    serde_json::Number::from_f64(x).map_or(Value::Null, Value::Number)
+}
+
+/// La scala della radice (il `viewBox`), che una lunghezza prende.
+fn scala(radice: Affine) -> f64 {
+    radice.determinant().abs().sqrt()
+}
+
+/// Le lunghezze delle finestre di opzioni, moltiplicate per `per` (la scala della radice per
+/// andare al motore, il suo inverso per tornare alla scena). Ciò che non è un numero resta.
+fn lunghezze(mut valore: Value, per: f64) -> Value {
+    if !(per.is_finite() && per > 0.0) || (per - 1.0).abs() < 1e-12 {
+        return valore;
+    }
+    if let Some(campi) = valore.as_object_mut() {
+        for chiave in LUNGHEZZE_DELLE_OPZIONI {
+            if let Some(n) = campi.get(*chiave).and_then(Value::as_f64) {
+                campi.insert((*chiave).into(), numero(n * per));
+            }
+        }
+    }
+    valore
+}
+
+/// L'oggetto del motore dell'elemento `nome` del file, se la mappa lo ha.
+fn nodo_dell_id(copia: &Copia, nome: &str) -> Option<NodeId> {
+    copia.mappa.elemento(copia.mappa.dell_id(nome)?)?.nodo
+}
+
+/// L'oggetto che il comando `id` nomina con la chiave `chiave`: l'id del file, oppure, senza, il
+/// primo degli oggetti scelti che `adatto` prende. Un numero (l'id del motore) non si accetta: il
+/// client non vede gli oggetti del motore.
+fn oggetto_nominato(
+    id: &str,
+    chiave: &str,
+    copia: &Copia,
+    selezione: &[String],
+    valore: &Value,
+    adatto: impl Fn(&NodeKind) -> bool,
+) -> Result<NodeId, PluginError> {
+    let preso = |n: NodeId| copia.documento.node(n).is_some_and(|nodo| adatto(&nodo.kind));
+    match valore.get(chiave) {
+        Some(Value::String(nome)) => nodo_dell_id(copia, nome)
+            .filter(|n| preso(*n))
+            .ok_or_else(|| argomento_sbagliato(id, format!("`{nome}` is not an object this command takes"))),
+        Some(_) => Err(argomento_sbagliato(id, format!("name the object in `{chiave}` with its id in the file"))),
+        None => selezione
+            .iter()
+            .filter_map(|nome| nodo_dell_id(copia, nome))
+            .find(|n| preso(*n))
+            .ok_or_else(|| argomento_sbagliato(id, format!("missing `{chiave}`, and no object selected takes it"))),
+    }
+}
+
+/// Il punto `[x, y]` della chiave `chiave`, dalla scena al documento del motore.
+fn punto_nel_motore(campi: &mut serde_json::Map<String, Value>, chiave: &str, radice: Affine) {
+    let xy = campi.get(chiave).and_then(Value::as_array).and_then(|o| match o.as_slice() {
+        [x, y] => Some([x.as_f64()?, y.as_f64()?]),
+        _ => None,
+    });
+    if let Some([x, y]) = xy {
+        let p = radice * Point::new(x, y);
+        campi.insert(chiave.into(), Value::Array(vec![numero(p.x), numero(p.y)]));
+    }
+}
+
+/// Gli argomenti di un comando degli strumenti, dalla scena e dagli id del file al motore.
+fn argomenti_degli_strumenti(
+    id: &str,
+    copia: &Copia,
+    selezione: &[String],
+    mut valore: Value,
+) -> Result<Value, PluginError> {
+    let radice = copia.radice;
+    let [a, _, _, d, e, f] = radice.as_coeffs();
+    let testo = |k: &NodeKind| matches!(k, NodeKind::Text(_));
+    let tracciato = |k: &NodeKind| matches!(k, NodeKind::Path { guide: false, .. });
+    let nodo = match id {
+        "text.createInPath" => Some(("path", oggetto_nominato(id, "path", copia, selezione, &valore, tracciato)?)),
+        "text.discardEmpty" => Some(("id", oggetto_nominato(id, "id", copia, selezione, &valore, testo)?)),
+        "text.reshapeArea" | "text.reshapePath" if valore.get("items").is_none() => {
+            Some(("id", oggetto_nominato(id, "id", copia, selezione, &valore, testo)?))
+        }
+        _ => None,
+    };
+    let elementi = match valore.get("items").and_then(Value::as_array) {
+        Some(voci) if id == "text.reshapeArea" => Some(
+            voci.iter()
+                .map(|voce| {
+                    let n = oggetto_nominato(id, "id", copia, &[], voce, testo)?;
+                    let mut voce = voce.clone();
+                    if let Some(o) = voce.as_object_mut() {
+                        o.insert("id".into(), json!(n.0));
+                    }
+                    Ok(voce)
+                })
+                .collect::<Result<Vec<_>, PluginError>>()?,
+        ),
+        _ => None,
+    };
+    let Some(campi) = valore.as_object_mut() else {
+        return Err(argomento_sbagliato(id, "the value must be an object"));
+    };
+    // Un testo nuovo nasce col carattere e il corpo di Fub, come quello degli strumenti: il
+    // carattere di serie del motore Fub non lo ha.
+    if FANNO_UN_TESTO.contains(&id) {
+        campi.entry("font").or_insert_with(|| json!(crate::gesti::testo::TEXT_FONT));
+        campi.entry("size").or_insert_with(|| json!(crate::gesti::testo::TEXT_SIZE));
+    }
+    if let Some((chiave, n)) = nodo {
+        campi.insert(chiave.into(), json!(n.0));
+    }
+    if let Some(voci) = elementi {
+        campi.insert("items".into(), Value::Array(voci));
+    }
+    if radice == Affine::IDENTITY {
+        return Ok(valore);
+    }
+    let mut cambia = |chiave: &str, come: &dyn Fn(f64) -> f64| {
+        if let Some(n) = campi.get(chiave).and_then(Value::as_f64) {
+            campi.insert(chiave.into(), numero(come(n)));
+        }
+    };
+    match id {
+        "text.create" => {
+            cambia("x", &|x| a * x + e);
+            cambia("y", &|y| d * y + f);
+            cambia("size", &|n| n * scala(radice));
+            if let Some(area) = campi.get_mut("area") {
+                *area = lunghezze(area.take(), scala(radice));
+            }
+        }
+        "text.createInPath" => cambia("size", &|n| n * scala(radice)),
+        "text.reshapeArea" | "text.reshapePath" => {
+            cambia("dx", &|x| a * x);
+            cambia("dy", &|y| d * y);
+        }
+        _ => {}
+    }
+    punto_nel_motore(campi, "at", radice);
+    Ok(valore)
+}
 
 /// Cambia le parole di un testo (`text.editRange`).
 const CAMBIA_LE_PAROLE: &str = "text.editRange";
@@ -153,6 +330,19 @@ impl StatoFamiglia for Stato {
         libera_le_tabelle(TABELLE)
     }
 
+    /// Le due finestre di opzioni senza valori leggono quelle del primo testo scelto.
+    fn legge(&self, id: &str) -> bool {
+        id == OPZIONI_AREA || id == OPZIONI_TRACCIATO
+    }
+
+    /// Le opzioni lette tornano nella scena: le lunghezze col contrario della scala della radice.
+    fn lettura(&self, id: &str, copia: &Copia, risultato: Value) -> Value {
+        if id == OPZIONI_AREA || id == OPZIONI_TRACCIATO {
+            return lunghezze(risultato, 1.0 / scala(copia.radice));
+        }
+        risultato
+    }
+
     /// Carattere e Paragrafo vogliono almeno un testo scelto, che si possa
     /// cambiare.
     fn spento(id: &str, copia: &Copia, selezione: &[String]) -> Option<DrawingDisabledReason> {
@@ -194,13 +384,20 @@ impl StatoFamiglia for Stato {
             .then_some(DrawingRefusal::Unsupported)
     }
 
-    /// Cambia le parole di un testo bloccato o nascosto: no, col motivo.
+    /// Cambia le parole di un testo bloccato o nascosto: no, col motivo. Un testo nuovo senza
+    /// parole (né il testo segnaposto) non si fa: nel file sarebbe un `<text>` vuoto, che il motore
+    /// non rilegge come un suo oggetto, e VectorCraft lo scarta (Scarta testo vuoto).
     fn rifiuto_valore(
         id: &str,
         copia: &Copia,
         _selezione: &[String],
         valore: &Value,
     ) -> Option<DrawingRefusal> {
+        if FANNO_UN_TESTO.contains(&id) {
+            let parole = valore.get("text").and_then(Value::as_str).is_some_and(|t| !t.is_empty());
+            let segnaposto = valore.get("placeholder").and_then(Value::as_bool).unwrap_or(false);
+            return (!parole && !segnaposto).then_some(DrawingRefusal::Empty);
+        }
         if id != CAMBIA_LE_PAROLE {
             return None;
         }
@@ -216,7 +413,13 @@ impl StatoFamiglia for Stato {
     /// il pezzo che cambia, in byte del testo del motore, che il motore
     /// sostituisce in un passo. Così il client manda il testo una volta, alla
     /// conferma, e non conta byte di un testo che non vede.
-    fn argomenti_della_copia(id: &str, copia: &Copia, _selezione: &[String], valore: Value) -> Result<Value, PluginError> {
+    fn argomenti_della_copia(id: &str, copia: &Copia, selezione: &[String], valore: Value) -> Result<Value, PluginError> {
+        if DEGLI_STRUMENTI.contains(&id) {
+            return argomenti_degli_strumenti(id, copia, selezione, valore);
+        }
+        if id == OPZIONI_AREA || id == OPZIONI_TRACCIATO {
+            return Ok(lunghezze(valore, scala(copia.radice)));
+        }
         if id != CAMBIA_LE_PAROLE {
             return Ok(valore);
         }

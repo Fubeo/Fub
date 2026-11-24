@@ -401,3 +401,187 @@ fn il_testo_su_tracciato_si_vede_mentre_si_scrive() {
     assert_eq!(sul["attrs"]["href"], "#fub-anteprima-tracciato", "{forma}");
     assert_eq!(sul["text"], "Onde del mare", "{forma}");
 }
+
+/// Il file dopo `ops` si riapre senza perdite: ogni oggetto scritto è del motore.
+fn si_riapre(disegni: &std::sync::Arc<fub_disegno::motore::Disegni>, svg: &str) {
+    let (_, aperto) = fub_disegno::motore::Disegno::apri_con(disegni, svg).expect("si riapre");
+    // Le risorse in `<defs>` (il tracciato privato di un testo su tracciato) non sono oggetti.
+    let perse: Vec<_> = aperto
+        .losses
+        .iter()
+        .filter(|p| !p.detail.starts_with("dentro <defs>"))
+        .collect();
+    assert!(perse.is_empty(), "{perse:?}\n{svg}");
+}
+
+/// Testo in area con Inter (Opzioni testo in area, Rimodella area di testo, il comando Testo
+/// con un riquadro e Testo in area su una forma): il riquadro nuovo è il `fub:wrap`, le righe
+/// vanno a capo nel riquadro, e il file si riapre senza perdite. Senza caratteri gli stessi casi
+/// di `testo.json` sono `unsupported`: le righe del file non ridarebbero il testo uguale.
+#[test]
+fn il_riquadro_del_testo_in_area_cambia() {
+    let disegni = common::disegni_con_inter();
+    disegni.filtra(fub_disegno::famiglie::Filtro::Tutte);
+    let area = include_str!("famiglie/testo/area.svg");
+    // Opzioni testo in area: la larghezza.
+    let (dopo, _) = con_inter(
+        &disegni,
+        area,
+        "text.areaOptions",
+        &["oz1z1z1z1"],
+        json!({"width": 150}),
+    );
+    let testo = il_testo(&dopo, "oz1z1z1z1");
+    assert!(testo.contains("fub:wrap=\"150\""), "{testo}");
+    assert!(testo.contains(">riva</tspan>"), "{testo}");
+    si_riapre(&disegni, &dopo);
+    // Rimodella area di testo: il lato destro 20 più in là, col testo nominato dall'id.
+    let (dopo, _) = con_inter(
+        &disegni,
+        area,
+        "text.reshapeArea",
+        &[],
+        json!({"id": "oz1z1z1z1", "anchors": [[0, 1], [0, 2]], "dx": 20, "dy": 0}),
+    );
+    assert!(
+        il_testo(&dopo, "oz1z1z1z1").contains("fub:wrap=\"220\""),
+        "{dopo}"
+    );
+    si_riapre(&disegni, &dopo);
+    // Un riquadro stretto: le parole vanno a capo.
+    let (dopo, _) = con_inter(
+        &disegni,
+        area,
+        "text.areaOptions",
+        &["oz1z1z1z1"],
+        json!({"width": 80}),
+    );
+    let testo = il_testo(&dopo, "oz1z1z1z1");
+    assert!(testo.matches("<tspan").count() > 2, "{testo}");
+    si_riapre(&disegni, &dopo);
+}
+
+#[test]
+fn il_comando_testo_crea_un_testo_in_area() {
+    let disegni = common::disegni_con_inter();
+    disegni.filtra(fub_disegno::famiglie::Filtro::Tutte);
+    let base = include_str!("famiglie/testo/base.svg");
+    let (dopo, ops) = con_inter(
+        &disegni,
+        base,
+        "text.create",
+        &[],
+        json!({"x": 100, "y": 250, "text": "Ciao a tutti", "area": {"width": 120, "height": 40}}),
+    );
+    let nuovo = &ops[0]["elem"];
+    assert_eq!(nuovo["tag"], "text", "{ops}");
+    assert_eq!(nuovo["attrs"]["fub:wrap"], "120", "{ops}");
+    assert_eq!(nuovo["attrs"]["font-family"], "Inter, sans-serif", "{ops}");
+    si_riapre(&disegni, &dopo);
+    // Testo in area dentro il rettangolo: il rettangolo diventa il riquadro del testo.
+    let forme = include_str!("famiglie/testo/forme.svg");
+    let (dopo, _) = con_inter(
+        &disegni,
+        forme,
+        "text.createInPath",
+        &[],
+        json!({"path": "oa1a1a1a1", "text": "Dentro il riquadro"}),
+    );
+    assert!(!dopo.contains("id=\"oa1a1a1a1\""), "{dopo}");
+    assert!(dopo.contains("fub:wrap=\"160\""), "{dopo}");
+    si_riapre(&disegni, &dopo);
+}
+
+/// Un testo su tracciato del file: il punto d'inizio, il verso e il tracciato nuovi si scrivono
+/// nel `textPath` e nel tracciato privato, e il testo riaperto è ancora del motore, con i valori
+/// nuovi (non più solo da spostare).
+#[test]
+fn il_testo_su_tracciato_si_modifica() {
+    let disegni = common::disegni_con_inter();
+    disegni.filtra(fub_disegno::famiglie::Filtro::Tutte);
+    let curva = include_str!("famiglie/testo/typeOnPath-curva.svg");
+    si_riapre(&disegni, curva);
+    let leggi = |svg: &str| {
+        let (mut d, _) = fub_disegno::motore::Disegno::apri_con(&disegni, svg).expect("si apre");
+        d.comando(fub_abi::DrawingCommandRequest {
+            revision: d.revisione(),
+            id: "disegno.type.pathOptions".into(),
+            selection: vec!["ok7thtlvb".into()],
+            value: json!({}),
+            preview: false,
+        })
+        .expect("senza errore")
+        .reading
+        .expect("la lettura")
+    };
+    let (dopo, _) = con_inter(
+        &disegni,
+        curva,
+        "type.pathOptions",
+        &["ok7thtlvb"],
+        json!({"start": 0.1}),
+    );
+    si_riapre(&disegni, &dopo);
+    let start = leggi(&dopo)["start"].as_f64().expect("start");
+    assert!((start - 0.1).abs() < 1e-3, "{start}");
+    // Rimodella tracciato del testo, poi ancora un punto d'inizio sul tracciato nuovo.
+    let (dopo, _) = con_inter(
+        &disegni,
+        &dopo,
+        "text.reshapePath",
+        &["ok7thtlvb"],
+        json!({"anchors": [[0, 1]], "dx": 0, "dy": 30}),
+    );
+    assert!(
+        dopo.contains("d=\"M50 200 C150 100 250 130 350 230\""),
+        "{dopo}"
+    );
+    si_riapre(&disegni, &dopo);
+    let start = leggi(&dopo)["start"].as_f64().expect("start");
+    assert!((start - 0.1).abs() < 1e-3, "{start}");
+    let (dopo, _) = con_inter(
+        &disegni,
+        &dopo,
+        "type.pathOptions",
+        &["ok7thtlvb"],
+        json!({"start": 0}),
+    );
+    assert!(!dopo.contains("startOffset"), "{dopo}");
+    // Il verso girato: il tracciato va dall'altra parte, e il testo parte ancora dall'inizio.
+    let (dopo, _) = con_inter(
+        &disegni,
+        &dopo,
+        "type.pathOptions",
+        &["ok7thtlvb"],
+        json!({"flip": true}),
+    );
+    assert!(
+        dopo.contains("d=\"M350 230 C250 130 150 100 50 200\""),
+        "{dopo}"
+    );
+    si_riapre(&disegni, &dopo);
+}
+
+/// Un testo su tracciato che un altro editor scrive con più del suo `textPath` (un pezzo con un
+/// aspetto suo, uno `startOffset` in percento) resta da spostare e basta: il motore lo approssima.
+/// (Uno con attributi che la scena non conosce, come `side`, non è nemmeno un oggetto: resta com'è.)
+#[test]
+fn il_testo_su_tracciato_straniero_resta_approssimato() {
+    let disegni = common::disegni_con_inter();
+    let curva = include_str!("famiglie/testo/typeOnPath-curva.svg");
+    for altro in [
+        curva.replace("startOffset=\"172.17\"", "startOffset=\"50%\""),
+        curva.replace(
+            ">Onde del mare<",
+            "><tspan fill=\"red\">Onde</tspan> del mare<",
+        ),
+    ] {
+        let (_, aperto) =
+            fub_disegno::motore::Disegno::apri_con(&disegni, &altro).expect("si apre");
+        assert!(
+            aperto.losses.iter().any(|p| p.element == "ok7thtlvb"),
+            "{:?}\n{altro}",
+            aperto.losses
+        );
+    }
+}

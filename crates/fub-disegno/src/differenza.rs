@@ -91,8 +91,8 @@ mod ritagli;
 #[path = "differenza_testo.rs"]
 mod testo;
 pub(crate) use righe::righe_scritte;
-pub(crate) use testo::peso_e_corsivo;
-use testo::{da_riscrivere, riscrittura, testo_cambiato, TestoRiscritto};
+use testo::{da_riscrivere, riscrittura, sul_tracciato_cambiato, testo_cambiato, TestoRiscritto};
+pub(crate) use testo::{figlio_sul_tracciato, peso_e_corsivo};
 
 /// `fill-rule` non è un attributo della scena (`docs/reference/scene-format.md`
 /// §4): un elemento che lo scrive diventerebbe estraneo, e i buchi si fanno
@@ -216,6 +216,7 @@ pub(crate) fn differenza(
         dati: HashSet::new(),
         riscritti: HashSet::new(),
         testi_riscritti: HashMap::new(),
+        tracciati_dei_testi: Vec::new(),
         ricette: ricetta::Scritte::default(),
         liberati: HashSet::new(),
         assorbiti: HashSet::new(),
@@ -313,6 +314,7 @@ pub(crate) fn differenza(
         ricette: scritte,
         sfumature,
         simboli,
+        tracciati_dei_testi,
         ..
     } = lavoro;
     // Il blocco delle ricette cambia solo con un gesto che scrive.
@@ -347,6 +349,7 @@ pub(crate) fn differenza(
     // Le tavole non sono oggetti del motore: il controllo delle parti non
     // mappate non le guarda.
     ops.extend(delle_tavole);
+    ops.extend(tracciati_dei_testi);
     // I campioni nuovi o cambiati prima di chi li usa, quelli tolti per
     // ultimi, quando nessuno li usa più. Sono risorse, non oggetti del
     // disegno: il controllo delle parti non mappate non li guarda.
@@ -564,6 +567,9 @@ struct Lavoro<'a> {
     /// dell'elemento di prima va il `<text>` con lo stesso id e le righe
     /// nuove (K6 T16).
     testi_riscritti: HashMap<NodeId, TestoRiscritto>,
+    /// I `set` del `d` dei tracciati privati dei testi su tracciato (risorse in `<defs>`): dopo il
+    /// controllo delle parti non mappate, che non guarda le risorse.
+    tracciati_dei_testi: Vec<Value>,
     /// Le ricette che il gesto scrive o fa cadere.
     ricette: ricetta::Scritte,
     /// I tracciati di un tracciato composto sciolto: c'erano, ma non erano
@@ -1657,6 +1663,23 @@ impl Lavoro<'_> {
         // Un testo di punto con altre parole, un altro carattere o un altro
         // allineamento (K6 T16): il resto del confronto va avanti sul testo
         // di prima che li ha già.
+        // Un testo su tracciato col tracciato o il punto d'inizio nuovi: il `<text>` col
+        // `textPath` nuovo, e il `d` del suo tracciato privato.
+        if let Some((riscritto, tracciato)) = sul_tracciato_cambiato(&e, b, a)? {
+            if let Some((href, d)) = tracciato {
+                let altri = self.copia.mappa.elementi().iter().filter(|x| {
+                    x.testo.as_ref().and_then(|i| i.tracciato.as_deref()) == Some(href.as_str())
+                });
+                if altri.count() > 1 {
+                    return Err(no("il tracciato del testo lo segue anche un altro testo"));
+                }
+                self.tracciati_dei_testi
+                    .push(json!({ "op": "set", "id": href, "attrs": { "d": d } }));
+            }
+            self.testi_riscritti.insert(a.id, riscritto);
+            self.riscritti.insert(a.id);
+            return Ok(());
+        }
         if da_riscrivere(b, a) {
             let riscritto = riscrittura(&e, b, a)?;
             self.testi_riscritti.insert(a.id, riscritto);

@@ -5747,6 +5747,70 @@
     },
     {
       "fonte": "motore",
+      "id": "text.areaOptions",
+      "chiamata": {
+        "comando": "disegno.text.areaOptions"
+      },
+      "etichetta": {
+        "it": "Opzioni testo in area…",
+        "en": "Area Type Options…"
+      },
+      "posto": "menu/testo",
+      "famiglia": "testo",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "motore",
+      "id": "text.create",
+      "chiamata": {
+        "comando": "disegno.text.create"
+      },
+      "etichetta": {
+        "it": "Crea testo",
+        "en": "Create Text"
+      },
+      "posto": "ispettore/design",
+      "famiglia": "testo",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "text.createInPath",
+      "chiamata": {
+        "comando": "disegno.text.createInPath"
+      },
+      "etichetta": {
+        "it": "Testo in area / su tracciato",
+        "en": "Area / Path Type"
+      },
+      "posto": "ispettore/design",
+      "famiglia": "testo",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "text.discardEmpty",
+      "chiamata": {
+        "comando": "disegno.text.discardEmpty"
+      },
+      "etichetta": {
+        "it": "Scarta testo vuoto",
+        "en": "Discard Empty Type"
+      },
+      "posto": "ispettore/design",
+      "famiglia": "testo",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "text.editRange",
       "chiamata": {
         "comando": "disegno.text.editRange"
@@ -5820,6 +5884,38 @@
         "en": "Replace Font"
       },
       "posto": "interno",
+      "famiglia": "testo",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "text.reshapeArea",
+      "chiamata": {
+        "comando": "disegno.text.reshapeArea"
+      },
+      "etichetta": {
+        "it": "Rimodella area di testo",
+        "en": "Reshape Type Area"
+      },
+      "posto": "ispettore/design",
+      "famiglia": "testo",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "text.reshapePath",
+      "chiamata": {
+        "comando": "disegno.text.reshapePath"
+      },
+      "etichetta": {
+        "it": "Reshape Type Path",
+        "en": "Reshape Type Path"
+      },
+      "posto": "ispettore/design",
       "famiglia": "testo",
       "tasto": null,
       "effetto": "cambia",
@@ -6096,6 +6192,22 @@
       "tasto": null,
       "effetto": "cambia",
       "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "type.pathOptions",
+      "chiamata": {
+        "comando": "disegno.type.pathOptions"
+      },
+      "etichetta": {
+        "it": "Opzioni testo su tracciato…",
+        "en": "Type on a Path Options…"
+      },
+      "posto": "menu/testo",
+      "famiglia": "testo",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
     },
     {
       "fonte": "motore",

@@ -34,6 +34,116 @@ pub(crate) const GIUSTIFICATO: &str =
 const STILE_IN_LINEA: &str =
     "il testo scrive il suo carattere nell'attributo style: la sua grandezza non si riscrive";
 
+/// Il perché di un testo su tracciato cambiato in altro che il tracciato e il punto d'inizio.
+pub(crate) const SUL_TRACCIATO: &str =
+    "di un testo su tracciato il file scrive il tracciato e il punto d'inizio: l'effetto, il verso, l'allineamento al tracciato e la spaziatura no";
+
+/// Il perché di un testo su tracciato con una fine prima della fine del tracciato.
+pub(crate) const FINE_SUL_TRACCIATO: &str =
+    "il file scrive il punto d'inizio di un testo su tracciato, non la sua fine: il testo arriva in fondo al tracciato";
+
+/// Il `textPath` di un testo su tracciato che segue il tracciato privato `href` (formato del
+/// testo, §5): `d` è il tracciato nello spazio del `<text>`, e lo `startOffset` la distanza
+/// `start` (una frazione della lunghezza), che all'inizio del tracciato non si scrive. Le righe
+/// del testo diventano una sola: un tracciato ha una riga.
+pub(crate) fn figlio_sul_tracciato(
+    t: &TextObject,
+    d: &vectorcraft_geom::PathData,
+    start: f64,
+    href: &str,
+) -> Value {
+    let lunghezza = vectorcraft_geom::Shape::perimeter(&d.to_bezpath(), 1e-3);
+    let mut attrs = Map::new();
+    let da = start * lunghezza;
+    if da.abs() >= 0.005 {
+        attrs.insert("startOffset".into(), json!(numero(da, 2)));
+    }
+    attrs.insert("href".into(), json!(format!("#{href}")));
+    let testo = t
+        .plain_text()
+        .replace(['\n', '\r', '\u{2028}', '\u{2029}'], " ");
+    json!({ "tag": "textPath", "attrs": attrs, "text": testo })
+}
+
+/// Il tracciato privato di un testo su tracciato e il suo `d` nuovo.
+pub(super) type TracciatoNuovo = (String, Value);
+
+/// Un testo su tracciato del file di cui cambiano solo il tracciato o il punto d'inizio (Opzioni
+/// testo su tracciato, la Selezione diretta sul suo tracciato): il `<text>` riscritto col
+/// `textPath` nuovo e il `d` nuovo del tracciato privato, se cambia. `None` se non è un testo su
+/// tracciato prima e dopo, e il resto del confronto decide; un altro cambio si rifiuta.
+pub(super) fn sul_tracciato_cambiato(
+    e: &Elemento,
+    b: &Node,
+    a: &Node,
+) -> Result<Option<(TestoRiscritto, Option<TracciatoNuovo>)>, Rifiuto> {
+    let (NodeKind::Text(tb), NodeKind::Text(ta)) = (&b.kind, &a.kind) else {
+        return Ok(None);
+    };
+    let (
+        TextKind::OnPath {
+            path: pb,
+            start: sb,
+            end: None,
+        },
+        TextKind::OnPath {
+            path: pa,
+            start,
+            end,
+        },
+    ) = (&tb.kind, &ta.kind)
+    else {
+        return Ok(None);
+    };
+    if end.is_some() {
+        // Anche il verso girato di un testo che non parte dall'inizio: la sua fine si sposta.
+        return Err(no(FINE_SUL_TRACCIATO));
+    }
+    let Some(href) = e.testo.as_ref().and_then(|i| i.tracciato.as_deref()) else {
+        return Ok(None);
+    };
+    if tb == ta || (pb == pa && sb == start && end.is_none()) {
+        // Tracciato e inizio uguali: il resto (transform, aspetto) va per la strada di sempre.
+        return Ok(None);
+    }
+    let mut stesso = a.clone();
+    if let NodeKind::Text(t) = &mut stesso.kind {
+        t.kind = tb.kind.clone();
+        t.cached_bounds = tb.cached_bounds;
+        t.cached_baselines = tb.cached_baselines.clone();
+    }
+    if !proprieta_uguali(b, &stesso) || stesso.kind != b.kind {
+        return Err(no(SUL_TRACCIATO));
+    }
+    let info = e
+        .testo
+        .as_ref()
+        .ok_or_else(|| no("un testo del motore che non viene da un <text>"))?;
+    let ctm = e
+        .ctm()
+        .ok_or_else(|| no("la transform del testo non si legge"))?;
+    let locale = ctm.inverse() * ta.xf;
+    if !locale.is_finite() {
+        return Err(no("il testo ha una transform che non si inverte"));
+    }
+    let d = pa.transformed(locale);
+    let mut attrs = Map::new();
+    for (nome, valore) in &info.attributi {
+        if nome != "id" {
+            attrs.insert(nome.clone(), json!(valore));
+        }
+    }
+    let figlio = figlio_sul_tracciato(ta, &d, *start, href);
+    let tracciato = (pb != pa).then(|| (href.to_string(), json!(super::scrivi_d(&d))));
+    Ok(Some((
+        TestoRiscritto {
+            attrs,
+            righe: vec![figlio],
+        },
+        tracciato,
+    )))
+}
+
 /// Il cambio di un testo di punto.
 pub(super) struct CambioDelTesto {
     /// Il testo di prima con le parole, il carattere e l'allineamento di

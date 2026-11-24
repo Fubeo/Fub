@@ -395,7 +395,7 @@ fn col_carattere_di_fub(
 /// testo di punto verticale ha `writing-mode` e le sue colonne; uno
 /// verticale in area o su tracciato, o su tracciato con una fine, resta alla
 /// differenza, che non lo sa scrivere.
-fn scrivi_testo(nodo: &Node, locale: Affine) -> Option<(String, Map<String, Value>)> {
+pub(crate) fn scrivi_testo(nodo: &Node, locale: Affine) -> Option<(String, Map<String, Value>)> {
     let NodeKind::Text(t) = &nodo.kind else {
         return None;
     };
@@ -604,7 +604,7 @@ fn testo_in_scrittura(sessione: &Session, copia: &Copia) -> Option<Value> {
 
 /// Le righe dei `<text>` nuovi in `ops` (anche dentro un `batch`), come
 /// `tspan` col testo del motore: `scrivi_testo` dà solo l'elemento.
-fn con_le_righe(
+pub(crate) fn con_le_righe(
     ops: &str,
     differenza: &differenza::Differenza,
     dopo: &Document,
@@ -716,18 +716,8 @@ fn sul_tracciato(
     id: &str,
 ) -> (Value, Value) {
     let d = path.transformed(t.xf);
-    let lunghezza = vectorcraft_geom::Shape::perimeter(&d.to_bezpath(), 1e-3);
-    let mut attrs = Map::new();
-    let da = start * lunghezza;
-    if da.abs() >= 0.005 {
-        attrs.insert("startOffset".into(), json!(numero(da, 2)));
-    }
-    attrs.insert("href".into(), json!(format!("#{id}")));
-    let testo = t
-        .plain_text()
-        .replace(['\n', '\r', '\u{2028}', '\u{2029}'], " ");
     (
-        json!({ "tag": "textPath", "attrs": attrs, "text": testo }),
+        differenza::figlio_sul_tracciato(t, &d, start, id),
         json!({ "tag": "path", "attrs": { "id": id, "fub:role": "private", "d": differenza::scrivi_d(&d) } }),
     )
 }

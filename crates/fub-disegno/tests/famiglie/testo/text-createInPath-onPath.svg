@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:fub="https://fubeo.github.io/ns/scene/1" fub:version="1" viewBox="0 0 400 300" width="400" height="300">
+  <defs id="fub-defs">
+    <path id="retxw7qwt" fub:role="private" d="M40 250 C140 150 260 150 360 250"/>
+  </defs>
+  <rect id="fub-paper" fub:role="paper" x="0" y="0" width="400" height="300" fill="#ffffff"/>
+  <g id="l1a2b3c4d" fub:layer="Livello 1">
+    <rect id="oa1a1a1a1" x="40" y="40" width="160" height="80" fill="#ffcc00"/>
+    <text id="o3sjmdne3" fill="#000000" font-family="Inter, sans-serif" font-size="32">
+      <textPath startOffset="181.43" href="#retxw7qwt">Sulla linea</textPath>
+    </text>
+  </g>
+</svg>
