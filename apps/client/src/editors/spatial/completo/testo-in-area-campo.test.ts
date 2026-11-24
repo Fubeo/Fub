@@ -42,6 +42,8 @@ vi.mock("./index", () => ({
       cassetto: () => undefined,
       preparaStrumento: () => Promise.resolve(false),
       clicStrumento: () => undefined,
+      // Nessuno strumento del motore ha una fila sua in questa prova.
+      fila: () => null,
       parole: (elemento: string, testo: string) => {
         visto.parole.push([elemento, testo]);
         if (visto.risposta !== null) visto.commit?.(visto.risposta, "Modifica testo");
