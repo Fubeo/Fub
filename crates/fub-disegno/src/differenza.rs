@@ -263,7 +263,7 @@ pub(crate) fn differenza(
         .map_err(no)?
     };
     lavoro.composti(&prima, &poi);
-    lavoro.ritagli(&prima, &poi);
+    lavoro.ritagli(&prima, &poi)?;
     // Il confronto per primo: dice quali oggetti si riscrivono interi
     // (tolti e rimessi con la loro ricetta), che le altre fasi saltano.
     for l in &dopo.layers {
@@ -883,6 +883,9 @@ impl Lavoro<'_> {
                         && !self.riscritti.contains(&c.id)
                         && !self.liberati.contains(&c.id)
                         && !self.assorbiti.contains(&c.id)
+                        // La forma che ritaglia sta nel `clipPath`, non fra i
+                        // figli del gruppo nel file.
+                        && !self.elemento(c.id).is_some_and(|e| e.ritaglia)
                 })
                 .collect();
             let chiavi: Vec<Option<usize>> = rimasti
@@ -1470,6 +1473,9 @@ impl Lavoro<'_> {
         let b = &self.stato(b, a)?;
         if uguali(b, a) {
             return Ok(());
+        }
+        if let Some(e) = self.elemento(a.id).filter(|e| e.ritaglia).cloned() {
+            return self.forma_del_ritaglio(&e, b, a);
         }
         let radice = self.copia.mappa.e_radice(a.id);
         let livello = matches!(a.kind, NodeKind::Layer { .. })

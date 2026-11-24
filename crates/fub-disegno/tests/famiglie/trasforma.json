@@ -480,6 +480,37 @@
       }
     },
     {
+      "id": "object.move",
+      "disegno": "ritaglio-fatto.svg",
+      "selezione": [
+        "rf0rma001"
+      ],
+      "argomenti": {
+        "dx": 10,
+        "dy": 5
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "rkcu808lm",
+            "part": [
+              0
+            ],
+            "attrs": {
+              "d": "M230 115 C230 145.38 194.18 170 150 170 C105.82 170 70 145.38 70 115 C70 84.62 105.82 60 150 60 C194.18 60 230 84.62 230 115 Z",
+              "fill": "#000000",
+              "clip-rule": null
+            }
+          }
+        ],
+        "selezione": [
+          "rf0rma001"
+        ]
+      },
+      "dopo": "ritaglio-forma-spostata.svg"
+    },
+    {
       "id": "rotate",
       "fonte": "strumento",
       "disegno": "base.svg",

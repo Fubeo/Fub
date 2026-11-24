@@ -35,8 +35,8 @@
 //!   `unmapped` ([`elaborabile`]). Un risultato vuoto (due forme che non si
 //!   toccano, con Intersezione) è `empty`, e niente cambia
 //!   ([`StatoFamiglia::rifiuto_del_motore`]).
-//! - **Maschera di ritaglio** (`RITAGLI`, T12): Crea, Rilascia e Modifica
-//!   contenuto, spenti e rifiutati col perché in `tracciati_ritagli.rs`.
+//! - **Maschera di ritaglio** (`RITAGLI`, T12): Crea, Rilascia, Modifica
+//!   contenuto e Modifica maschera, spenti e rifiutati col perché in `tracciati_ritagli.rs`.
 //! - **I comandi su un punto** (`SU_UN_PUNTO`, T12 punti): spostare un punto o
 //!   una maniglia, aggiungere, eliminare o convertire un punto, chiudere,
 //!   continuare o dividere un tracciato. Nominano il tracciato con `element` e

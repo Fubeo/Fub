@@ -15,8 +15,13 @@
 //!   gruppo suo che il file non ha, così Rilascia lo rifiuta `unsupported` e
 //!   Modifica contenuto non lo conta come maschera.
 //!
-//! «Modifica tracciato di ritaglio» non c'è: il tracciato che ritaglia sta nel
-//! `clipPath` del file, non è un oggetto che la selezione di Fub sa dire.
+//! - **Modifica maschera** sceglie il tracciato che ritaglia di ogni maschera
+//!   fra gli oggetti scelti (o che li contiene), come il motore. Il file lo
+//!   tiene come forma del `clipPath` privato del gruppo, con un id suo
+//!   (`Mappa::lega_i_ritagli`): così si sceglie, si sposta e si modifica come
+//!   ogni oggetto, e il cambio si scrive sulla forma. Un ritaglio senza quella
+//!   forma (di un altro programma, o con il `clipPath` condiviso) non ha un
+//!   tracciato da scegliere: la voce è spenta col perché.
 
 use fub_abi::{DrawingDisabledReason, DrawingRefusal};
 use vectorcraft_doc::{Node, NodeId, NodeKind};
@@ -24,10 +29,11 @@ use vectorcraft_doc::{Node, NodeId, NodeKind};
 use crate::apertura::Copia;
 
 /// I comandi delle maschere di ritaglio.
-pub(super) const RITAGLI: [&str; 3] = [
+pub(super) const RITAGLI: [&str; 4] = [
     "object.clippingMask.make",
     "object.clippingMask.release",
     "object.clippingMask.editContents",
+    "object.clippingMask.editMask",
 ];
 
 /// Il perché di una voce spenta quando non c'è una maschera da usare.
@@ -38,6 +44,11 @@ const SCEGLI_UNA_MASCHERA: &str = "Scegli una maschera di ritaglio.";
 /// un gruppo: il file non ha un gruppo da sciogliere.
 const RITAGLIO_SULL_OGGETTO: &str =
     "Questo ritaglio è scritto sull'oggetto stesso, non su un gruppo: Rilascia non lo toglie ancora.";
+
+/// Il perché di Modifica maschera spento su una maschera il cui tracciato
+/// non è una forma del file che si sceglie.
+const MASCHERA_SENZA_FORMA: &str =
+    "Il tracciato di questa maschera non si modifica da solo: è scritto in un ritaglio di un altro programma o condiviso. Rilascia la maschera e rifalla.";
 
 /// Perché un comando delle maschere non vale sugli oggetti scelti `nodi`
 /// (già controllati: mappati, non bloccati, nel disegno modificabile).
@@ -78,6 +89,23 @@ pub(super) fn ritaglio_spento(id: &str, copia: &Copia, nodi: &[NodeId]) -> Optio
             let c_e = nodi.iter().any(|n| dentro_una_maschera(copia, *n));
             (!c_e).then(scegli_una_maschera)
         }
+        "object.clippingMask.editMask" => {
+            let maschere: Vec<NodeId> = nodi.iter().filter_map(|n| maschera_di(copia, *n)).collect();
+            if maschere.is_empty() {
+                return Some(scegli_una_maschera());
+            }
+            // Ogni maschera trovata deve avere la sua forma nel file.
+            let con_forma = |g: &NodeId| {
+                doc.node(*g)
+                    .and_then(|n| n.children()?.first().map(|c| c.id))
+                    .and_then(|c| copia.mappa.del_nodo(c))
+                    .and_then(|i| copia.mappa.elemento(i))
+                    .is_some_and(|e| e.ritaglia)
+            };
+            (!maschere.iter().all(con_forma)).then(|| DrawingDisabledReason::Other {
+                text: MASCHERA_SENZA_FORMA.into(),
+            })
+        }
         _ => None,
     }
 }
@@ -88,7 +116,9 @@ pub(super) fn ritaglio_spento(id: &str, copia: &Copia, nodi: &[NodeId]) -> Optio
 pub(super) fn ritaglio_rifiutato(id: &str, copia: &Copia, nodi: &[NodeId]) -> Option<DrawingRefusal> {
     match ritaglio_spento(id, copia, nodi)? {
         DrawingDisabledReason::NeedsPath => Some(DrawingRefusal::Unsupported),
-        DrawingDisabledReason::Other { text } if text == RITAGLIO_SULL_OGGETTO => Some(DrawingRefusal::Unsupported),
+        DrawingDisabledReason::Other { text } if text == RITAGLIO_SULL_OGGETTO || text == MASCHERA_SENZA_FORMA => {
+            Some(DrawingRefusal::Unsupported)
+        }
         DrawingDisabledReason::ReadOnly => Some(DrawingRefusal::Locked),
         _ => Some(DrawingRefusal::Empty),
     }
@@ -131,6 +161,12 @@ fn il_piu_alto(copia: &Copia, nodi: &[NodeId]) -> Option<NodeId> {
 /// del file: il gruppo che il motore fa per un `clip-path` scritto su un
 /// tracciato non c'è nel file, e il motore sceglierebbe l'oggetto stesso.
 fn dentro_una_maschera(copia: &Copia, n: NodeId) -> bool {
+    maschera_di(copia, n).is_some()
+}
+
+/// La maschera più vicina che è `n` o lo contiene, come la cerca il motore,
+/// se è un elemento del file.
+fn maschera_di(copia: &Copia, n: NodeId) -> Option<NodeId> {
     let doc = &copia.documento;
     let mut cur = Some(n);
     while let Some(c) = cur {
@@ -138,9 +174,9 @@ fn dentro_una_maschera(copia: &Copia, n: NodeId) -> bool {
             .node(c)
             .is_some_and(|nodo| matches!(nodo.kind, NodeKind::Group { clip: true, .. }));
         if maschera {
-            return copia.mappa.del_nodo(c).is_some();
+            return copia.mappa.del_nodo(c).map(|_| c);
         }
         cur = doc.position(c).and_then(|(genitore, _, _)| genitore);
     }
-    false
+    None
 }

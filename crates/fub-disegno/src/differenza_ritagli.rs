@@ -28,7 +28,7 @@ use super::{
     elem, no, proprieta_uguali, scrivi_d, tracciato_composto, trasformato, Lavoro, Rifiuto,
 };
 use crate::id::Specie;
-use crate::mappa::Posti;
+use crate::mappa::{Elemento, Posti};
 use std::collections::HashSet;
 use std::sync::Arc;
 
@@ -37,6 +37,10 @@ use std::sync::Arc;
 const GEOMETRIA: [&str; 13] = [
     "d", "x", "y", "width", "height", "cx", "cy", "rx", "ry", "x1", "y1", "x2", "y2",
 ];
+
+/// Il perché di un gesto che toglie la forma legata da una maschera che resta.
+const FORMA_TOLTA: &str =
+    "il tracciato che ritaglia non esce da solo dalla maschera: usa Rilascia maschera di ritaglio";
 
 /// Un testo che ritaglia: il motore lo sa fare, il file non ancora.
 pub(super) const TESTO_CHE_RITAGLIA: &str =
@@ -47,7 +51,11 @@ impl Lavoro<'_> {
     /// gruppo di ritaglio nuovo esce dal file (va nel `clipPath`, fra gli
     /// [`Lavoro::assorbiti`]); quello di un gruppo rilasciato, che nel file
     /// non era un elemento, entra (fra i [`Lavoro::liberati`]).
-    pub(super) fn ritagli(&mut self, prima: &Posti<'_>, poi: &Posti<'_>) {
+    ///
+    /// La forma legata di una maschera (`Mappa::lega_i_ritagli`) non lascia
+    /// il suo posto se la maschera resta: tolta, o spostata fuori, il motore
+    /// farebbe ritagliare l'oggetto dopo, che nel file è un'altra cosa.
+    pub(super) fn ritagli(&mut self, prima: &Posti<'_>, poi: &Posti<'_>) -> Result<(), Rifiuto> {
         for (id, dopo) in &poi.nodi {
             match prima.nodi.get(id) {
                 None => {
@@ -60,6 +68,12 @@ impl Lavoro<'_> {
                     }
                 }
                 Some(p) => {
+                    if let (Some(c), Some(d)) = (taglierina(p.nodo), taglierina(dopo.nodo)) {
+                        let legata = self.elemento(c.id).is_some_and(|e| e.ritaglia);
+                        if legata && d.id != c.id {
+                            return Err(no(FORMA_TOLTA));
+                        }
+                    }
                     let rilasciato = matches!(p.nodo.kind, NodeKind::Group { clip: true, .. })
                         && matches!(dopo.nodo.kind, NodeKind::Group { clip: false, .. });
                     if !rilasciato {
@@ -73,12 +87,84 @@ impl Lavoro<'_> {
                         .children()
                         .and_then(|f| f.first())
                         .is_some_and(|d| d.id == c.id);
-                    if ancora_primo && self.copia.mappa.del_nodo(c.id).is_none() {
+                    // Senza forma nel file, o con la forma legata che esce
+                    // dal `clipPath`: torna un oggetto, con un id nuovo.
+                    let fuori_dal_file = match self.elemento(c.id) {
+                        None => true,
+                        Some(e) => e.ritaglia,
+                    };
+                    if ancora_primo && fuori_dal_file {
                         self.liberati.insert(c.id);
                     }
                 }
             }
         }
+        Ok(())
+    }
+
+    /// La forma legata di una maschera cambiata (Modifica maschera, poi un
+    /// gesto su di lei): si riscrive nel suo `clipPath` con un `set` sulla
+    /// parte `[0]`, nello spazio del gruppo. Se cambia tipo (un'ellisse che
+    /// diventa un tracciato), la parte non lo può dire: la maschera prende un
+    /// `clipPath` privato nuovo, e quello di prima se ne va con l'ultimo
+    /// riferimento.
+    pub(super) fn forma_del_ritaglio(
+        &mut self,
+        e: &Elemento,
+        b: &Node,
+        a: &Node,
+    ) -> Result<(), Rifiuto> {
+        let gruppo = e
+            .genitore
+            .and_then(|i| self.copia.mappa.elemento(i))
+            .cloned()
+            .ok_or_else(|| no("la forma che ritaglia senza la sua maschera"))?;
+        let risorsa = gruppo
+            .ritaglio
+            .clone()
+            .ok_or_else(|| no("la maschera non nomina il suo clipPath"))?;
+        let locale = e
+            .ctm_genitore
+            .ok_or_else(|| no("la transform della maschera non si legge"))?
+            .inverse();
+        if !locale.is_finite() {
+            return Err(no("la maschera ha una transform che non si inverte"));
+        }
+        let forma = forma_che_ritaglia(a, locale)?;
+        let tag = forma["tag"].as_str().unwrap_or_default();
+        let prima = forma_che_ritaglia(b, locale).ok();
+        let stessa = prima.as_ref().is_some_and(|p| p == &forma);
+        if stessa && e.propria.is_some_and(|t| t == Affine::IDENTITY) {
+            return Ok(());
+        }
+        if tag == e.tag {
+            let mut attrs = forma["attrs"].as_object().cloned().unwrap_or_default();
+            // La `transform` di prima ora è nella geometria, e la regola di
+            // prima se ne va se non serve più.
+            if e.propria != Some(Affine::IDENTITY) {
+                attrs.insert("transform".into(), Value::Null);
+            }
+            attrs.entry("clip-rule").or_insert(Value::Null);
+            self.set
+                .push(json!({ "op": "set", "id": risorsa, "part": [0], "attrs": attrs }));
+            return Ok(());
+        }
+        let id_gruppo = gruppo
+            .id
+            .clone()
+            .ok_or_else(|| no("la maschera non ha un id"))?;
+        let mut forma = forma;
+        let nuova = self.id_nuovo(Specie::Risorsa)?;
+        let id_forma = self.id_nuovo(Specie::Risorsa)?;
+        forma["attrs"]["id"] = json!(id_forma);
+        self.ids.insert(a.id, id_forma);
+        self.sfumature.push(json!({
+            "tag": "clipPath",
+            "attrs": { "id": nuova, "fub:role": "private", "clipPathUnits": "userSpaceOnUse" },
+            "children": [forma],
+        }));
+        self.set.push(json!({ "op": "set", "id": id_gruppo, "attrs": { "clip-path": format!("url(#{nuova})") } }));
+        Ok(())
     }
 
     /// Un gruppo di prima che smette di ritagliare (Rilascia): il `set` che
@@ -127,8 +213,13 @@ impl Lavoro<'_> {
         locale: Affine,
     ) -> Result<(), Rifiuto> {
         let c = taglierina(nodo).ok_or_else(|| no("un gruppo di ritaglio senza tracciato"))?;
-        let forma = forma_che_ritaglia(c, locale)?;
+        let mut forma = forma_che_ritaglia(c, locale)?;
         let risorsa = self.id_nuovo(Specie::Risorsa)?;
+        // La forma ha un id suo, di risorsa: «Modifica maschera» la sceglie
+        // e un suo cambio si scrive sul posto ([`crate::mappa::Mappa::lega_i_ritagli`]).
+        let id_forma = self.id_nuovo(Specie::Risorsa)?;
+        forma["attrs"]["id"] = json!(id_forma);
+        self.ids.insert(c.id, id_forma);
         let id = self.id_nuovo(Specie::Oggetto)?;
         self.ids.insert(nodo.id, id.clone());
         self.gruppi_nuovi.insert(nodo.id, genitore);

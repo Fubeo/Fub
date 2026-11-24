@@ -239,6 +239,16 @@ fn una_selezione_con_un_elemento_non_mappato_non_cambia_niente() {
     let sempre = [
         // Il modo di disegno (K6 T11) è della sessione: normale e dietro non leggono la scelta.
         "disegno.view.drawMode",
+        // Le guide del righello sono della radice e dei livelli: nominano la guida per numero
+        // nel valore, e Libera, Blocca e Cancella guide valgono per tutte.
+        "disegno.view.guides.release",
+        "disegno.view.guides.lock",
+        "disegno.view.guides.clear",
+        "disegno.guide.add",
+        "disegno.guide.list",
+        "disegno.guide.remove",
+        "disegno.guide.move",
+        "disegno.guide.setLayer",
         "disegno.eyedropper.setOptions",
         "disegno.path.moveAnchor",
         "disegno.path.setHandle",

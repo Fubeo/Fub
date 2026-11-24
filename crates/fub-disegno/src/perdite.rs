@@ -131,6 +131,7 @@ pub(crate) fn classifica(perdite: &mut Perdite, testo: &str, items: &[Item], map
     for e in mappa.elementi() {
         if e.motivo == Some(crate::ricetta::COPERTO)
             || e.motivo == Some(crate::apertura::CARTA_FUORI)
+            || e.motivo == Some(crate::mappa::RITAGLIO_LEGATO)
         {
             continue;
         }

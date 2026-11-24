@@ -376,8 +376,11 @@ dell'immagine: quelle di `x y width height`, dopo il suo `transform`
   spaziatura, un corpo sopra la linea di base e 0,35 sotto, a partire
   dall'ancora; il contorno si somma. La regione si arrotonda in fuori ai
   centesimi.
-- **Il contenuto** non ha id, e scrive lo stile che ereditava, perché una
-  risorsa non eredita niente da chi la usa. In un `clipPath` scrive anche
+- **Il contenuto** non ha id, salvo la forma di un `clipPath`, che ne ha
+  uno di risorsa (`r…`): è la forma che «Modifica maschera» sceglie e
+  cambia con un `set` sulla parte `[0]` del `clipPath`. Un lettore che non
+  lo conosce lo ignora. Il contenuto scrive lo stile che ereditava, perché
+  una risorsa non eredita niente da chi la usa. In un `clipPath` scrive anche
   `fill="#000000"` quando non aveva riempimento; i motivi diventano il loro
   ripiego e i marcatori se ne vanno. In una `mask` non entrano motivi,
   marcatori, ritagli, maschere e filtri.

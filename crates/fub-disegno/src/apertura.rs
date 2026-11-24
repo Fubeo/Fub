@@ -198,6 +198,7 @@ pub(crate) fn importa(testo: &str, revisione: u64) -> Result<Copia, ErroreApertu
     angoli_dei_riquadri(&mappa, &mut documento);
     crate::ricetta::nomi_di_ruolo(&ricette, &mut documento);
     mappa.lega_le_facce(&documento);
+    mappa.lega_i_ritagli(&documento);
     mappa.ricette = ricette;
     campioni::nel_motore(&campioni_del_file, &usi, &mappa, &mut documento);
     let guide = crate::guide::leggi(testo, &scena.items, base, &mappa, &tavole, &mut documento);
@@ -468,7 +469,49 @@ fn elementi(testo: &str, items: &[Item], base: Affine) -> Vec<Elemento> {
                 motivo,
                 testo: (e.tag == "text").then(|| info_testo(testo, e)),
                 clip_path: valore(&attr, "clip-path").is_some(),
+                ritaglio: valore(&attr, "clip-path").and_then(|v| {
+                    let v = v.trim();
+                    let id = v.strip_prefix("url(#")?.strip_suffix(')')?;
+                    (!id.is_empty()).then(|| id.to_string())
+                }),
+                privato: valore(&attr, "fub:role") == Some("private"),
+                ritaglia: false,
             });
+        }
+        // La forma di un `clipPath` privato: la scena non scende in una
+        // risorsa, e la si legge qui dal testo. Resta una risorsa finché
+        // `Mappa::lega_i_ritagli` non la lega al tracciato che ritaglia.
+        if let (Some(k), "clipPath", true) =
+            (indice, e.tag, valore(&attr, "fub:role") == Some("private"))
+        {
+            if let Some((tag, ruolo, inizio)) = forma_del_ritaglio(testo, e.span.bytes) {
+                let a = attributi(testo, inizio).map(|(_, a)| a).unwrap_or_default();
+                let mut percorso = e.path.clone();
+                percorso.push(0);
+                fuori.push(Elemento {
+                    percorso,
+                    tag,
+                    ruolo,
+                    id: valore(&a, "id").map(str::to_string),
+                    nome: String::new(),
+                    livello: None,
+                    genitore: Some(k),
+                    propria: match valore(&a, "transform") {
+                        Some(t) => leggi_trasformazione(t),
+                        None => Some(Affine::IDENTITY),
+                    },
+                    ctm_genitore: None,
+                    bloccato: false,
+                    nascosto: false,
+                    nodo: None,
+                    motivo: Some("dentro <defs>: una risorsa, non un oggetto del disegno"),
+                    testo: None,
+                    clip_path: false,
+                    ritaglio: None,
+                    privato: false,
+                    ritaglia: false,
+                });
+            }
         }
         visti.insert(
             e.path.clone(),
@@ -480,6 +523,30 @@ fn elementi(testo: &str, items: &[Item], base: Affine) -> Vec<Elemento> {
         );
     }
     fuori
+}
+
+/// La prima forma dentro il `clipPath` che occupa `span` nel testo: il tag,
+/// il ruolo e dove comincia. `None` se il primo figlio non è una forma (un
+/// commento, un testo, un `use`) o se il `clipPath` è vuoto.
+fn forma_del_ritaglio(testo: &str, span: [usize; 2]) -> Option<(&'static str, Role, usize)> {
+    let b = testo.as_bytes();
+    let (dopo_il_nome, _) = attributi(testo, span[0])?;
+    let fine = dopo_il_nome + testo.get(dopo_il_nome..span[1])?.find('>')?;
+    if b.get(fine.checked_sub(1)?) == Some(&b'/') {
+        return None;
+    }
+    let inizio = fine + 1 + testo.get(fine + 1..span[1])?.find('<')?;
+    let (nome, _) = attributi(testo, inizio)?;
+    let (tag, ruolo) = match testo.get(inizio + 1..nome)? {
+        "path" => ("path", Role::Path),
+        "rect" => ("rect", Role::Rect),
+        "ellipse" => ("ellipse", Role::Ellipse),
+        "circle" => ("circle", Role::Circle),
+        "polygon" => ("polygon", Role::Polygon),
+        "polyline" => ("polyline", Role::Polyline),
+        _ => return None,
+    };
+    Some((tag, ruolo, inizio))
 }
 
 /// Come il file scrive un paragrafo vuoto di un testo in area: uno spazio

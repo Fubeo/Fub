@@ -460,7 +460,19 @@ pub(crate) fn selezione_di_fub(
 ) -> Vec<String> {
     let mut fuori: Vec<String> = Vec::new();
     for n in selezione {
-        let n = &maschera_del_ritaglio(&copia.documento, *n).unwrap_or(*n);
+        // Il tracciato che ritaglia si sceglie con la forma del suo
+        // `clipPath` quando il file le dà un id (`Mappa::lega_i_ritagli`);
+        // senza, con il suo gruppo.
+        let legato = copia
+            .mappa
+            .del_nodo(*n)
+            .and_then(|i| copia.mappa.elemento(i))
+            .is_some_and(|e| e.ritaglia);
+        let n = &if legato {
+            *n
+        } else {
+            maschera_del_ritaglio(&copia.documento, *n).unwrap_or(*n)
+        };
         let id = differenza.ids.get(n).cloned().or_else(|| {
             copia
                 .mappa

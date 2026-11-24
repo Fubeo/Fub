@@ -146,8 +146,10 @@ fn crea_scrive_un_g_col_clippath_che_si_riapre_uguale() {
 
     // Riaperto: la stessa maschera, che si sceglie e si rilascia.
     let mut r = apri(&ds, &salvato);
+    // Come nel motore, Seleziona › Maschere di ritaglio sceglie il tracciato
+    // che ritaglia: la forma del `clipPath`, che ha un id suo.
     let tutte = comando(&mut r, "select.object.clippingMasks", &[], json!(null));
-    assert_eq!(tutte.selection, vec![g.clone()]);
+    assert_eq!(tutte.selection, vec![forma_del_ritaglio(&salvato)]);
     let contenuto = comando(
         &mut r,
         "object.clippingMask.editContents",
@@ -342,4 +344,130 @@ fn media_e_unisci_unisce_due_estremi_o_dice_perche() {
         json!({ "to": "corner" }),
     );
     assert_eq!(esito.refused, Some(DrawingRefusal::Empty));
+}
+
+/// L'id della forma dentro il `clipPath` del testo.
+fn forma_del_ritaglio(testo: &str) -> String {
+    let dentro = testo.split("<clipPath ").nth(1).expect("un clipPath");
+    let forma = dentro.split('>').nth(1).expect("una forma");
+    forma
+        .split("id=\"")
+        .nth(1)
+        .expect("la forma ha un id")
+        .split('"')
+        .next()
+        .unwrap()
+        .to_string()
+}
+
+/// Il `d` della forma dentro il `clipPath` del testo.
+fn d_del_ritaglio(testo: &str) -> String {
+    let dentro = testo.split("<clipPath ").nth(1).expect("un clipPath");
+    let forma = dentro.split("</clipPath>").next().unwrap();
+    forma
+        .split(" d=\"")
+        .nth(1)
+        .expect("un d")
+        .split('"')
+        .next()
+        .unwrap()
+        .to_string()
+}
+
+#[test]
+fn modifica_maschera_sceglie_la_forma_e_la_scrive_nel_suo_ritaglio() {
+    let ds = motore();
+    let mut d = apri(&ds, RITAGLIO);
+    let scelti = ["oa1a1a1a1", "oe5e5e5e5", "ob2b2b2b2"];
+    let esito = comando(&mut d, "object.clippingMask.make", &scelti, json!(null));
+    let salvato = applica(RITAGLIO, &un_passo(&esito)).expect("si applica");
+    let g = gruppo_ritagliato(&salvato);
+    // Crea dà un id di risorsa alla forma del ritaglio.
+    let forma = forma_del_ritaglio(&salvato);
+    assert!(forma.starts_with('r'), "{forma}");
+
+    // Modifica maschera sceglie la forma, dal gruppo o da un oggetto dentro.
+    let mut r = apri(&ds, &salvato);
+    assert_eq!(spenta(&r, "object.clippingMask.editMask", &[&g]), None);
+    assert_eq!(
+        spenta(&r, "object.clippingMask.editMask", &["oa1a1a1a1"]),
+        None
+    );
+    let m = comando(
+        &mut r,
+        "object.clippingMask.editMask",
+        &["oa1a1a1a1"],
+        json!(null),
+    );
+    assert!(m.refused.is_none(), "{m:?}");
+    assert_eq!(m.selection, vec![forma.clone()]);
+    assert!(
+        ops_di(&m).as_array().is_none_or(|o| o.is_empty()),
+        "scegliere non cambia il file"
+    );
+
+    // Spostata: un `set` sulla parte del ritaglio, nelle coordinate del
+    // gruppo; la forma resta scelta.
+    let mosso = comando(&mut r, "object.move", &[&forma], json!({"dx": 10, "dy": 5}));
+    let ops = un_passo(&mosso);
+    assert_eq!(ops[0]["part"], json!([0]), "{ops}");
+    assert_eq!(mosso.selection, vec![forma.clone()]);
+    let spostato = applica(&salvato, &ops).expect("si applica");
+    assert!(
+        d_del_ritaglio(&spostato).starts_with("M230 115"),
+        "{spostato}"
+    );
+    assert_eq!(
+        forma_del_ritaglio(&spostato),
+        forma,
+        "l'id della forma resta"
+    );
+
+    // Ruotata: la rotazione entra nella geometria.
+    let mut r = apri(&ds, &spostato);
+    let ruotato = comando(&mut r, "object.rotate", &[&forma], json!({"angle": 90}));
+    let ruotato = applica(&spostato, &un_passo(&ruotato)).expect("si applica");
+    let dr = d_del_ritaglio(&ruotato);
+    assert_ne!(dr, d_del_ritaglio(&spostato));
+    assert!(
+        !ruotato
+            .split("<clipPath ")
+            .nth(1)
+            .unwrap()
+            .split("</clipPath>")
+            .next()
+            .unwrap()
+            .contains("transform"),
+        "{ruotato}"
+    );
+
+    // Togliere la forma lascerebbe ritagliare l'oggetto dopo: rifiutato.
+    let mut r = apri(&ds, &spostato);
+    let tolto = comando(&mut r, "edit.clear", &[&forma], json!(null));
+    assert_eq!(
+        tolto.refused,
+        Some(DrawingRefusal::Unsupported),
+        "{tolto:?}"
+    );
+
+    // Rilascia ridà la forma spostata come oggetto del gruppo.
+    let ril = comando(&mut r, "object.clippingMask.release", &[&g], json!(null));
+    let rilasciato = applica(&spostato, &un_passo(&ril)).expect("si applica");
+    let nel_gruppo = rilasciato.split(&format!("id=\"{g}\"")).nth(1).unwrap();
+    let primo = nel_gruppo.split("<path").nth(1).expect("un tracciato");
+    assert!(primo.contains("d=\"M230 115"), "{rilasciato}");
+    assert!(primo.contains("fill=\"none\""), "{primo}");
+}
+
+#[test]
+fn modifica_maschera_spenta_dove_il_ritaglio_non_ha_una_forma_sua() {
+    let ds = motore();
+    let r = apri(&ds, INKSCAPE);
+    let perche = spenta(&r, "object.clippingMask.editMask", &["og1g1g1g1"]);
+    assert!(
+        matches!(&perche, Some(DrawingDisabledReason::Other { text }) if text.contains("Rilascia")),
+        "{perche:?}"
+    );
+    let d = apri(&ds, RITAGLIO);
+    assert!(spenta(&d, "object.clippingMask.editMask", &["oa1a1a1a1"]).is_some());
 }

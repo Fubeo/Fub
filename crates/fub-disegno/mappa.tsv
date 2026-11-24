@@ -871,7 +871,7 @@ motore	object.compoundPath.release	Release	Object › Compound Path	tracciati	F1
 motore	object.clippingMask.make	Make	Object › Clipping Mask	tracciati	F1	T12	fatto	menu/oggetto/ritaglio	famiglia		Crea
 motore	object.clippingMask.release	Release	Object › Clipping Mask	tracciati	F1	T12	fatto	menu/oggetto/ritaglio	famiglia		Rilascia
 motore	object.clippingMask.editContents	Edit Contents	Object › Clipping Mask	tracciati	F1	T12	fatto	menu/oggetto/ritaglio	famiglia		Modifica contenuto
-motore	object.clippingMask.editMask	Edit Clipping Path	Object › Clipping Mask	tracciati	F1	T12	da fare	menu/oggetto/ritaglio	famiglia	il tracciato che ritaglia sta nel clipPath del file, non è un oggetto che la selezione di Fub sa dire	Modifica tracciato di ritaglio
+motore	object.clippingMask.editMask	Edit Clipping Path	Object › Clipping Mask	tracciati	F1	T12	fatto	menu/oggetto/ritaglio	famiglia		Modifica tracciato di ritaglio
 motore	object.isolate	Enter Isolation Mode		fub	—	T11	fub	fub	—	«Isola» di Fub nel tasto destro del disegno (il motore non tiene lo stato fra le richieste)	Entra in modalità isolamento
 motore	object.exitIsolation	Exit Isolation Mode		fub	—	T11	fub	fub	—	«Esci dall'isolamento» di Fub nel tasto destro, o Esc	Esci dalla modalità isolamento
 motore	object.setProps	Object Properties		nucleo	F1	T11	fatto	interno	nucleo	lettura del motore per l’ispettore e i test: nessuna voce di menu	Proprietà oggetto

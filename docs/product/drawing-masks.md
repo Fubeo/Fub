@@ -29,6 +29,12 @@ crearle, in un passo di Annulla ciascuna:
 - **Rilascia**: il gruppo perde il ritaglio, e il tracciato che ritagliava
   torna primo nel gruppo, senza colore, perché si possa riprendere;
 - **Modifica contenuto**: sceglie gli oggetti dentro la maschera;
+- **Modifica maschera**: sceglie il tracciato che ritaglia, dal gruppo o da
+  un oggetto dentro. Si sposta, si ruota e si scala
+  come ogni oggetto, e il ritaglio segue. Non si elimina da
+  solo, perché il gruppo resterebbe con un ritaglio vuoto: lo dice e indica
+  Rilascia. La voce è spenta, e dice perché, se il ritaglio viene da un
+  altro programma o è condiviso: la sua forma allora non ha un id;
 - **≡ › Selezione › Oggetto › Maschere di ritaglio** sceglie tutte le
   maschere del disegno.
 
@@ -38,8 +44,8 @@ altro programma la legge com'è e Fub la riapre uguale. Si aprono e si
 rilasciano anche le maschere scritte da Inkscape, col loro `clipPath` in
 `<defs>`, che resta nel file. Un ritaglio scritto sull'oggetto stesso e non
 su un gruppo, come lo scrive Illustrator, si vede e si tiene, ma Rilascia
-non lo toglie ancora e lo dice. Modifica tracciato di ritaglio e il ritaglio
-di un livello non ci sono ancora: sono spenti e dicono perché.
+non lo toglie ancora e lo dice. Il ritaglio di un livello non c'è ancora:
+è spento e dice perché.
 
 **Maschera di opacità.** Il comando Crea maschera di opacità, nel pannello
 Trasparenza, prende il più alto dei due o più oggetti scelti come maschera

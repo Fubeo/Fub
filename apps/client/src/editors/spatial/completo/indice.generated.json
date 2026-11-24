@@ -2595,6 +2595,22 @@
     },
     {
       "fonte": "motore",
+      "id": "object.clippingMask.editMask",
+      "chiamata": {
+        "comando": "disegno.object.clippingMask.editMask"
+      },
+      "etichetta": {
+        "it": "Modifica tracciato di ritaglio",
+        "en": "Edit Clipping Path"
+      },
+      "posto": "menu/oggetto/ritaglio",
+      "famiglia": "tracciati",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "object.clippingMask.make",
       "chiamata": {
         "comando": "disegno.object.clippingMask.make"

@@ -2730,32 +2730,32 @@
       ],
       "atteso": {
         "ops": [
-                {
-                        "op": "batch",
-                        "ops": [
-                                {
-                                        "op": "remove",
-                                        "target": "op7a7a7a7"
-                                },
-                                {
-                                        "op": "remove",
-                                        "target": {
-                                                "path": [
-                                                        1
-                                                ],
-                                                "tag": "metadata"
-                                        }
-                                },
-                                {
-                                        "op": "add",
-                                        "parent": "l1a2b3c4d",
-                                        "pos": {
-                                                "after": "of4f4f4f4"
-                                        },
-                                        "raw": "<path id=\"op7a7a7a7\" d=\"M321.056 242.111 C324.741 249.482 335.259 249.482 338.944 242.111 L360 200 L300 200 Z\" fill=\"#cccccc\"/>"
-                                }
-                        ]
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "op7a7a7a7"
+              },
+              {
+                "op": "remove",
+                "target": {
+                  "path": [
+                    1
+                  ],
+                  "tag": "metadata"
                 }
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "after": "of4f4f4f4"
+                },
+                "raw": "<path id=\"op7a7a7a7\" d=\"M321.056 242.111 C324.741 249.482 335.259 249.482 338.944 242.111 L360 200 L300 200 Z\" fill=\"#cccccc\"/>"
+              }
+            ]
+          }
         ]
       },
       "dopo": "angolo-rovescio.svg"
@@ -3756,7 +3756,8 @@
                           "tag": "path",
                           "attrs": {
                             "d": "M220 110 C220 140.38 184.18 165 140 165 C95.82 165 60 140.38 60 110 C60 79.62 95.82 55 140 55 C184.18 55 220 79.62 220 110 Z",
-                            "fill": "#000000"
+                            "fill": "#000000",
+                            "id": "rf0rma001"
                           }
                         }
                       ]
@@ -3905,6 +3906,38 @@
     },
     {
       "id": "object.clippingMask.editContents",
+      "disegno": "ritaglio.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "object.clippingMask.editMask",
+      "disegno": "ritaglio-fatto.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "atteso": {
+        "selezione": [
+          "rf0rma001"
+        ]
+      }
+    },
+    {
+      "id": "object.clippingMask.editMask",
+      "disegno": "ritaglio-inkscape.svg",
+      "selezione": [
+        "og1g1g1g1"
+      ],
+      "atteso": {
+        "rifiuto": "unsupported"
+      }
+    },
+    {
+      "id": "object.clippingMask.editMask",
       "disegno": "ritaglio.svg",
       "selezione": [
         "oa1a1a1a1"
@@ -6024,32 +6057,32 @@
       "argomenti": {},
       "atteso": {
         "ops": [
-                {
-                        "op": "batch",
-                        "ops": [
-                                {
-                                        "op": "remove",
-                                        "target": "op7a7a7a7"
-                                },
-                                {
-                                        "op": "remove",
-                                        "target": {
-                                                "path": [
-                                                        1
-                                                ],
-                                                "tag": "metadata"
-                                        }
-                                },
-                                {
-                                        "op": "add",
-                                        "parent": "l1a2b3c4d",
-                                        "pos": {
-                                                "after": "of4f4f4f4"
-                                        },
-                                        "raw": "<polygon id=\"op7a7a7a7\" points=\"300,200 360,200 330,260\" fill=\"#cccccc\"/>"
-                                }
-                        ]
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "op7a7a7a7"
+              },
+              {
+                "op": "remove",
+                "target": {
+                  "path": [
+                    1
+                  ],
+                  "tag": "metadata"
                 }
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "after": "of4f4f4f4"
+                },
+                "raw": "<polygon id=\"op7a7a7a7\" points=\"300,200 360,200 330,260\" fill=\"#cccccc\"/>"
+              }
+            ]
+          }
         ]
       },
       "dopo": "angoli-tolti-da-tagliato.svg"
@@ -9051,7 +9084,26 @@
         "closed": true
       },
       "atteso": {
-        "ops": [{"op": "add", "parent": "l1a2b3c4d", "pos": {"last": true}, "elem": {"tag": "path", "attrs": {"d": "M10 10 C10 10 40 0 50 10 C60 20 50 50 50 50 Z", "fill": "#ffffff", "stroke": "#000000", "stroke-width": "1", "stroke-miterlimit": "10", "id": "ocrea0002"}}}]
+        "ops": [
+          {
+            "op": "add",
+            "parent": "l1a2b3c4d",
+            "pos": {
+              "last": true
+            },
+            "elem": {
+              "tag": "path",
+              "attrs": {
+                "d": "M10 10 C10 10 40 0 50 10 C60 20 50 50 50 50 Z",
+                "fill": "#ffffff",
+                "stroke": "#000000",
+                "stroke-width": "1",
+                "stroke-miterlimit": "10",
+                "id": "ocrea0002"
+              }
+            }
+          }
+        ]
       },
       "dopo": "crea-tracciato-chiuso.svg"
     },

@@ -85,6 +85,15 @@ pub struct Elemento {
     /// `set`. Un ritaglio scritto in `style` o dato da un foglio di stile
     /// non si toglie così.
     pub clip_path: bool,
+    /// L'id del `clipPath` che l'attributo `clip-path` nomina
+    /// (`url(#id)`), se lo nomina così.
+    pub ritaglio: Option<String>,
+    /// `fub:role="private"`: una risorsa di FubDraw, che se ne va con
+    /// l'ultimo riferimento.
+    pub privato: bool,
+    /// La forma del `clipPath` privato di un gruppo di ritaglio, legata al
+    /// tracciato che ritaglia del motore ([`Mappa::lega_i_ritagli`]).
+    pub ritaglia: bool,
 }
 
 /// Ciò che la differenza sa di un `<text>` del file per scriverne le parole
@@ -129,6 +138,11 @@ impl Elemento {
         self.id.as_deref()
     }
 }
+
+/// Il motivo del `clipPath` privato di una maschera la cui forma è legata
+/// ([`Mappa::lega_i_ritagli`]): non è un oggetto del motore, ma non è una
+/// perdita, perché un cambio della forma lo riscrive.
+pub(crate) const RITAGLIO_LEGATO: &str = "il ritaglio di una maschera, che la maschera riscrive";
 
 /// Oggetti del motore ↔ elementi di Fub.
 #[derive(Clone, Debug, Default)]
@@ -242,6 +256,71 @@ impl Mappa {
                 self.elementi[j].nodo = Some(pezzi[k]);
                 self.per_nodo.insert(pezzi[k], j);
             }
+        }
+    }
+
+    /// Lega la forma del `clipPath` privato di ogni gruppo di ritaglio al
+    /// tracciato che ritaglia del motore (il primo figlio del gruppo), come
+    /// [`Mappa::lega_le_facce`]: così «Modifica maschera» la sceglie con
+    /// l'id del file, e un cambio della forma si scrive sul posto. Vale
+    /// solo per un `clipPath` privato, nominato da un gruppo solo, con una
+    /// forma sola che ha un id (formato della scena, risorse). La forma
+    /// sta nello spazio del gruppo (`userSpaceOnUse`): il suo genitore,
+    /// per le matrici, è il gruppo.
+    pub(crate) fn lega_i_ritagli(&mut self, doc: &Document) {
+        use vectorcraft_doc::NodeKind;
+        let mut usi: HashMap<&str, usize> = HashMap::new();
+        for e in &self.elementi {
+            if let Some(r) = e.ritaglio.as_deref() {
+                *usi.entry(r).or_default() += 1;
+            }
+        }
+        let mut legami = Vec::new();
+        for (i, e) in self.elementi.iter().enumerate() {
+            let (Some(r), Some(nodo)) = (e.ritaglio.as_deref(), e.nodo) else {
+                continue;
+            };
+            if usi.get(r) != Some(&1) {
+                continue;
+            }
+            let Some(c) = doc.node(nodo).and_then(|n| match &n.kind {
+                NodeKind::Group {
+                    children,
+                    clip: true,
+                } => children.first(),
+                _ => None,
+            }) else {
+                continue;
+            };
+            if self.per_nodo.contains_key(&c.id) {
+                continue;
+            }
+            let Some(&k) = self.per_id.get(r) else {
+                continue;
+            };
+            let risorsa = &self.elementi[k];
+            if risorsa.tag != "clipPath" || !risorsa.privato {
+                continue;
+            }
+            let figli: Vec<usize> = (0..self.elementi.len())
+                .filter(|j| self.elementi[*j].genitore == Some(k))
+                .collect();
+            let [j] = figli[..] else { continue };
+            if self.elementi[j].id.is_none() || self.elementi[j].nodo.is_some() {
+                continue;
+            }
+            legami.push((i, j, k, c.id, e.ctm()));
+        }
+        for (i, j, k, nodo, ctm) in legami {
+            // Il `clipPath` non è una perdita: la maschera lo riscrive.
+            self.elementi[k].motivo = Some(RITAGLIO_LEGATO);
+            let f = &mut self.elementi[j];
+            f.nodo = Some(nodo);
+            f.motivo = None;
+            f.genitore = Some(i);
+            f.ctm_genitore = ctm;
+            f.ritaglia = true;
+            self.per_nodo.insert(nodo, j);
         }
     }
 
