@@ -6051,6 +6051,22 @@
     },
     {
       "fonte": "motore",
+      "id": "type.scaleTextAttributes",
+      "chiamata": {
+        "comando": "disegno.type.scaleTextAttributes"
+      },
+      "etichetta": {
+        "it": "Scala attributi di testo",
+        "en": "Scale Text Attributes"
+      },
+      "posto": "menu/testo",
+      "famiglia": "testo",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "type.size.decrease",
       "chiamata": {
         "comando": "disegno.type.size.decrease"

@@ -630,7 +630,7 @@ motore	text.thread.info	Threads		testo	F2	T16	fatto	interno	famiglia	lettura del
 motore	type.orientation.vertical	Vertical	Type › Orientation	testo	F2	T16	fatto	menu/testo	famiglia		Verticale
 motore	type.orientation.horizontal	Horizontal	Type › Orientation	testo	F2	T16	fatto	menu/testo	famiglia		Orizzontale
 motore	type.createOutlines	Create Outlines	Type	testo	F2	T16	fatto	menu/testo	famiglia		Crea contorni
-motore	type.scaleTextAttributes	Scale Text Attributes	Type	testo	F2	T16	da fare	menu/testo	famiglia		Scala attributi di testo
+motore	type.scaleTextAttributes	Scale Text Attributes	Type	testo	F2	T16	fatto	menu/testo	famiglia	Fub scrive la scala di un testo nella dimensione del carattere: non c'è mai una scala da fissare (rifiuto «vuoto»)	Scala attributi di testo
 motore	type.opticalMarginAlignment	Optical Margin Alignment	Type	testo	F2	T16	da fare	menu/testo	famiglia		Allineamento ottico dei margini
 motore	type.systemLayout	System Layout		testo	F2	T16	da fare	ispettore/design	famiglia		Layout di sistema
 motore	type.fractionalWidths	Fractional Widths		testo	F2	T16	da fare	ispettore/design	famiglia		Larghezze frazionarie
