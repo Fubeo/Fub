@@ -19,7 +19,6 @@
 //!   punti scelti la portano, e lì un punto sparito è `stale`).
 
 use fub_abi::{DrawingRefusal, PluginError};
-use fub_scene::Role;
 use serde_json::{json, Map, Value};
 use vectorcraft_doc::NodeId;
 use vectorcraft_geom::{Affine, PathData, Point};
@@ -74,7 +73,7 @@ pub(crate) fn tracciato(copia: &Copia, element: &str) -> Result<NodeId, DrawingR
         .mappa
         .dell_id(element)
         .and_then(|i| copia.mappa.elemento(i))
-        .is_some_and(|e| matches!(e.ruolo, Role::Stroke | Role::Width));
+        .is_some_and(|e| crate::famiglie::tracciati::inchiostro(copia, e));
     if inchiostro {
         return Err(DrawingRefusal::Unmapped);
     }

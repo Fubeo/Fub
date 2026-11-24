@@ -1,7 +1,7 @@
 //! Lo strumento Larghezza di VectorCraft (`width`, `distort/width.rs`): si
 //! trascina dal contorno di una linea per allargarla o stringerla in un
-//! punto, e il profilo dello spessore va nel file con la ricetta, come in
-//! VectorCraft.
+//! punto, e il profilo dello spessore va nel file come linea a spessore
+//! variabile del formato (`fub:shape="width"`, `profilo::motore`).
 
 #![cfg(feature = "completo")]
 
@@ -72,9 +72,13 @@ fn scritto(testo: &str, esito: &DrawingOutcome) -> String {
 
 /// Il `d` del contorno pieno della linea nel file.
 fn contorno(testo: &str) -> &str {
-    let da = testo
-        .find(r#"<g id="oc3c3c3c3""#)
-        .expect("la linea è un gruppo");
+    let id = testo.find(r#"id="oc3c3c3c3""#).expect("la linea c'è");
+    let da = testo[..id].rfind('<').expect("il suo tag");
+    assert!(
+        testo[da..].starts_with("<path") && testo[da..id].contains(r#"fub:shape="width""#),
+        "la linea è una linea a spessore variabile: {}",
+        &testo[da..]
+    );
     let d = testo[da..].find(" d=\"").expect("il contorno") + da + 4;
     let fine = testo[d..].find('"').expect("la fine del d") + d;
     &testo[d..fine]
@@ -86,8 +90,7 @@ fn un_trascinamento_dal_contorno_allarga_la_linea_in_quel_punto() {
     // Da un quarto della linea (x = 150) giù fino a 20 dal centro: là la
     // linea è larga 40, ai capi resta 10.
     let dopo = trascina(&mut d, BASE, (150.0, 201.0), (150.0, 220.0), false);
-    assert!(dopo.contains("vectorcraft:recipe"), "{dopo}");
-    assert!(!dopo.contains(r#"<path id="oc3c3c3c3""#), "{dopo}");
+    assert!(!dopo.contains("vectorcraft:recipe"), "{dopo}");
     let c = contorno(&dopo);
     assert!(c.contains("150 180") && c.contains("150 220"), "{c}");
     assert!(c.contains("100 195") && c.contains("100 205"), "{c}");

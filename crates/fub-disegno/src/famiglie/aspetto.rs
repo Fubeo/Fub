@@ -231,10 +231,9 @@ impl StatoFamiglia for Stato {
             return (c("clip") == Some(false) || c("invert") == Some(true)).then_some(DrawingRefusal::Unsupported);
         }
         if id == CONTORNO_AVANZATO {
-            // Il profilo rovesciato aspetta i profili nella scena, come `stroke.set`; il pennello non
-            // ha una forma nel file.
+            // Il pennello non ha una forma nel file.
             let c = |chiave: &str| valore.get(chiave).is_some();
-            return (c("flipProfile") || c("brush") || fuori_dalla_scena(valore)).then_some(DrawingRefusal::Unsupported);
+            return (c("brush") || fuori_dalla_scena(valore)).then_some(DrawingRefusal::Unsupported);
         }
         (id == CONTORNO && fuori_dalla_scena(valore)).then_some(DrawingRefusal::Unsupported)
     }
@@ -277,12 +276,12 @@ pub(super) fn testo(copia: &Copia, n: NodeId) -> bool {
         .is_some_and(|nodo| matches!(nodo.kind, NodeKind::Text(_)))
 }
 
-/// Gli argomenti di `stroke.set` chiedono qualcosa che il file non sa ancora scrivere: un profilo di
-/// spessore, un tratto dell'aspetto che non è quello in cima.
+/// Gli argomenti di `stroke.set` chiedono qualcosa che il file non sa ancora scrivere: un tratto
+/// dell'aspetto che non è quello in cima. Un profilo di spessore si scrive: una linea semplice come
+/// `fub:shape="width"` (`profilo::motore`), il resto con la sua ricetta.
 fn fuori_dalla_scena(valore: &Value) -> bool {
     let c = |chiave: &str| valore.get(chiave).filter(|v| !v.is_null());
-    c("profile").is_some_and(|v| v.as_str() != Some("uniform"))
-        || c("item").is_some()
+    c("item").is_some()
         || c("target").is_some_and(|v| v.as_str() != Some("object"))
 }
 

@@ -282,7 +282,13 @@ parte per elemento della mappa, con una frase breve in italiano. I tre tipi:
 | non supportato (`Unsupported`) | il documento non è modificabile, per esempio troppo grande o con id ripetuti | la copia si apre, ma ogni gesto è rifiutato |
 
 Ciò che non si scrive come attributi dell'elemento originale non si fa: il
-motore non riscrive mai un elemento intero, salvo la [ricetta](#la-ricetta).
+motore non riscrive mai un elemento intero, salvo la [ricetta](#la-ricetta) e
+la linea a spessore variabile. Questa (`fub:shape="width"`) entra nel motore
+come tracciato con un contorno a profilo, e un tracciato col solo contorno a
+profilo torna nel file in quella forma, riscritto intero a ogni cambio che non
+è una `transform`
+([formato](../reference/scene-format-width.md#5-lettura-e-scrittura),
+`src/profilo/motore.rs`).
 Fub salva da sé, quindi la perdita evitata si dice all'apertura e al gesto:
 il chip «N parti restano come sono» (`motore/standing.ts`, dalle parti di
 `perdite()` di `motoreDa`) apre «Che cosa manca?», un posto per parte col suo

@@ -197,18 +197,17 @@ fn lo_scambio_porta_la_freccia_all_inizio() {
 
 /// Il profilo rovesciato e il pennello non hanno ancora una forma nel file.
 #[test]
-fn profilo_e_pennello_restano_fuori() {
-    for valore in [json!({"flipProfile": "along"}), json!({"brush": "Gesso"})] {
-        let (mut d, _) = apri(LINEA);
-        let esito = d
-            .comando(DrawingCommandRequest {
-                revision: d.revisione(),
-                id: "disegno.stroke.setAdvanced".into(),
-                selection: vec!["oa1a1a1a1".into()],
-                value: valore,
-                preview: false,
-            })
-            .expect("il comando risponde");
-        assert_eq!(esito.refused, Some(fub_abi::DrawingRefusal::Unsupported));
-    }
+fn il_pennello_resta_fuori() {
+    let valore = json!({"brush": "Gesso"});
+    let (mut d, _) = apri(LINEA);
+    let esito = d
+        .comando(DrawingCommandRequest {
+            revision: d.revisione(),
+            id: "disegno.stroke.setAdvanced".into(),
+            selection: vec!["oa1a1a1a1".into()],
+            value: valore,
+            preview: false,
+        })
+        .expect("il comando risponde");
+    assert_eq!(esito.refused, Some(fub_abi::DrawingRefusal::Unsupported));
 }

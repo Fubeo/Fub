@@ -128,3 +128,15 @@ Chi non calcola il contorno usa `d` così com'è.
   radice del valore assoluto del determinante, e una trasformazione che
   specchia scambia i lati. Trasformare la forma in tracciato toglie
   `fub:shape` e `fub:geom` e lascia il `d`.
+- **Nel Disegno completo** il motore di VectorCraft legge la linea come un
+  tracciato con un contorno a profilo: il colore del riempimento diventa il
+  contorno, largo quanto il punto più largo, e ogni terna diventa un fattore
+  di quella larghezza. Un profilo che coincide, coi suoi punti accanto agli
+  spigoli, con un profilo del menu torna quel profilo. Alla scrittura un
+  tracciato col solo contorno a profilo (pieno, centrato, senza tratteggio,
+  frecce, pennello o effetti, un sottotracciato) diventa di nuovo questa
+  forma; il profilo del motore è lineare fra i punti, e perché la curva di §2
+  lo segua si aggiunge un punto sulla retta a un centesimo della lunghezza
+  prima e dopo ogni spigolo. Un contorno a profilo che non è così resta con
+  la [ricetta](scene-format-recipe.md). Codice:
+  `crates/fub-disegno/src/profilo/motore.rs`.

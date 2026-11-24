@@ -1140,10 +1140,22 @@ impl Lavoro<'_> {
                 Some(id) => id,
                 None => self.id_nuovo(Specie::Oggetto)?,
             };
-            let scritto = if riscritto {
-                None
-            } else {
-                self.scrittore.and_then(|s| s(nodo, locale))
+            // Una linea a spessore variabile che il formato sa dire va col suo `fub:shape`, non
+            // con la ricetta (`profilo::motore`).
+            let scritto = match crate::profilo::motore::nel_file(nodo, locale) {
+                Some((v, colore)) => {
+                    let mut attrs = Map::new();
+                    attrs.insert("fub:shape".into(), json!("width"));
+                    attrs.insert("fub:geom".into(), json!(v.geom));
+                    attrs.insert("d".into(), json!(v.d));
+                    attrs.insert(
+                        "fill".into(),
+                        json!(scrivi_colore(&self.riferimenti, Some(colore))?),
+                    );
+                    Some(("path".to_string(), attrs))
+                }
+                None if riscritto => None,
+                None => self.scrittore.and_then(|s| s(nodo, locale)),
             };
             // Un oggetto ricco, o uno riscritto, va con il corpo espanso (la
             // grafica che il motore disegna) e la sua ricetta, se nessuno dei
@@ -1615,6 +1627,24 @@ impl Lavoro<'_> {
             }
         }
         if let Some(e) = oggetto {
+            // Una linea a spessore variabile, prima o dopo: spostata, ruotata o scalata cambia
+            // solo la sua `transform`; ogni altro cambio la riscrive intera, col suo `fub:geom`
+            // o come tracciato (`profilo::motore`).
+            let variabile = |n: &Node| crate::profilo::motore::variabile(n).is_some();
+            if variabile(b) || variabile(a) {
+                if let Some(m) = self.adatta(b, a) {
+                    if mosso_da(b, m, true).is_some_and(|c| nodi_vicini(&c, a)) {
+                        if !vicina_all_identita(m) {
+                            let t = nuova_trasformazione(&e, m)?;
+                            let id = self.bersaglio(a.id)?;
+                            self.set.push(json!({ "op": "set", "id": id, "attrs": { "transform": scrivi_matrice(t) } }));
+                        }
+                        return Ok(());
+                    }
+                }
+                self.riscritti.insert(a.id);
+                return Ok(());
+            }
             let con_ricetta =
                 e.id.as_deref()
                     .is_some_and(|id| self.copia.mappa.ricette().applicata(id));

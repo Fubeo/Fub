@@ -24,7 +24,7 @@ use std::sync::Arc;
 
 use fub_abi::{DrawingLoss, DrawingLossKind};
 use fub_scene::{Item, ReadOnly, Role};
-use vectorcraft_doc::{Document, LayerColor, Node, NodeKind};
+use vectorcraft_doc::{Document, LayerColor, Node, NodeKind, WidthProfile};
 use vectorcraft_geom::Affine;
 
 use crate::campioni::{self, CampioniDelFile};
@@ -135,7 +135,7 @@ pub(crate) fn importa(testo: &str, revisione: u64) -> Result<Copia, ErroreApertu
         .map_or(Affine::IDENTITY, |(_, a)| matrice_della_radice(&a));
     let mut elementi = elementi(testo, &scena.items, base);
     let (campioni_del_file, usi) = campioni::leggi(testo, &scena.items);
-    let (copia_testo, _) = copia_per_l_import(testo, &mut elementi, &scena.items);
+    let (copia_testo, _, profili) = copia_per_l_import(testo, &mut elementi, &scena.items);
     let senza_carta = elementi.iter().any(|e| e.motivo == Some(CARTA_FUORI));
 
     let documento = if elementi.is_empty() && scena.items.len() <= 1 {
@@ -192,6 +192,7 @@ pub(crate) fn importa(testo: &str, revisione: u64) -> Result<Copia, ErroreApertu
         modificabile = false;
     }
     let mut mappa = Mappa::nuova(elementi, &mut documento);
+    profili_nel_motore(&mappa, &profili, &mut documento);
     spazi_fra_le_righe(&mappa, &mut documento);
     testi_in_area(&mappa, &mut documento);
     testi_verticali(&mappa, &mut documento);
@@ -897,8 +898,16 @@ fn copia_per_l_import(
     testo: &str,
     elementi: &mut [Elemento],
     items: &[Item],
-) -> (String, Vec<String>) {
+) -> (String, Vec<String>, Vec<(String, WidthProfile)>) {
     let mut ids: HashSet<String> = HashSet::new();
+    let variabili: std::collections::HashMap<&[usize], &fub_scene::varwidth::VarWidth> = items
+        .iter()
+        .filter_map(|i| match i {
+            Item::Element(e) => e.varwidth.as_ref().map(|v| (e.path.as_slice(), v)),
+            _ => None,
+        })
+        .collect();
+    let mut profili = Vec::new();
     for item in items {
         if let Item::Element(e) = item {
             if let Some(id) = &e.id {
@@ -957,6 +966,11 @@ fn copia_per_l_import(
         for a in attr.iter().filter(|a| etichetta(&a.nome)) {
             modifiche.push((a.da, a.a, String::new()));
         }
+        if let Some(v) = variabili.get(e.percorso.as_slice()) {
+            if let Some(profilo) = linea_variabile(v, &attr, dopo_il_nome, &mut modifiche) {
+                profili.push((e.nome.clone(), profilo));
+            }
+        }
         if e.ruolo == Role::Layer && !attr.iter().any(|a| a.nome == "data-vc-layer") {
             modifiche.push((
                 dopo_il_nome,
@@ -977,7 +991,92 @@ fn copia_per_l_import(
         at = a;
     }
     out.push_str(&testo[at..]);
-    (out, sintetici)
+    (out, sintetici, profili)
+}
+
+/// Una linea a spessore variabile del file (`fub:shape="width"`) per il motore: la linea centrale
+/// in `d`, il colore del riempimento come contorno largo quanto il suo punto più largo, con gli
+/// estremi e gli angoli del formato. Il profilo va sul contorno dopo l'import
+/// ([`profili_nel_motore`]). Una linea con un colore che non è scritto sull'elemento (ereditato o in
+/// `style`), che non è un colore pieno, o con un contorno suo resta l'area piena che il motore
+/// legge.
+fn linea_variabile(
+    v: &fub_scene::varwidth::VarWidth,
+    attr: &[Attributo],
+    dopo_il_nome: usize,
+    modifiche: &mut Vec<(usize, usize, String)>,
+) -> Option<WidthProfile> {
+    if attr.iter().any(|a| a.nome == "style") {
+        return None;
+    }
+    if valore(attr, "stroke").is_some_and(|s| s.trim() != "none") {
+        return None;
+    }
+    let fill = attr.iter().find(|a| a.nome == "fill")?;
+    let colore = fill.valore.clone();
+    if colore.contains("url(") || colore.trim() == "none" {
+        return None;
+    }
+    let d = attr.iter().find(|a| a.nome == "d")?;
+    let (peso, profilo) = crate::profilo::motore::dal_file(v)?;
+    let (cap, join) = crate::profilo::motore::parole(v);
+    // La forma e i punti del formato: il motore li terrebbe come attributi suoi, ma alla scrittura
+    // tornano dal profilo (`profilo::motore::nel_file`).
+    for a in attr
+        .iter()
+        .filter(|a| a.nome.ends_with(":shape") || a.nome.ends_with(":geom"))
+    {
+        modifiche.push((a.da, a.a, String::new()));
+    }
+    modifiche.push((d.valore_da, d.valore_a, v.spine.clone()));
+    modifiche.push((fill.valore_da, fill.valore_a, "none".to_string()));
+    if let Some(o) = attr.iter().find(|a| a.nome == "fill-opacity") {
+        modifiche.push((o.da, o.a, String::new()));
+        let valore = o.valore.clone();
+        modifiche.push((
+            dopo_il_nome,
+            dopo_il_nome,
+            format!(" stroke-opacity=\"{}\"", attributo_xml(&valore)),
+        ));
+    }
+    modifiche.push((
+        dopo_il_nome,
+        dopo_il_nome,
+        format!(
+            " stroke=\"{}\" stroke-width=\"{peso}\" stroke-linecap=\"{cap}\" stroke-linejoin=\"{join}\"",
+            attributo_xml(&colore)
+        ),
+    ));
+    Some(profilo)
+}
+
+/// `s` dentro un attributo fra virgolette doppie.
+fn attributo_xml(s: &str) -> String {
+    s.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('"', "&quot;")
+}
+
+/// Il profilo di ogni linea a spessore variabile del file sul contorno del suo oggetto del motore.
+fn profili_nel_motore(mappa: &Mappa, profili: &[(String, WidthProfile)], doc: &mut Document) {
+    for (nome, profilo) in profili {
+        let Some(nodo) = mappa
+            .elementi()
+            .iter()
+            .find(|e| &e.nome == nome)
+            .and_then(|e| e.nodo)
+        else {
+            continue;
+        };
+        let Some(n) = doc.node_mut(nodo) else {
+            continue;
+        };
+        for item in &mut n.appearance.items {
+            if let vectorcraft_doc::AppearanceItem::Stroke(s) = item {
+                s.profile = Some(profilo.clone());
+            }
+        }
+    }
 }
 
 /// Le carte da lasciare fuori dalla copia per l'import: se fra i figli
@@ -1423,7 +1522,7 @@ mod tests {
         let testo = "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 10 10\">\n<g id=\"l1\" fub:layer=\"L\"><rect x=\"1\" y=\"1\" width=\"2\" height=\"2\"/></g>\n</svg>\n";
         let scena = fub_scene::read(testo).expect("scena");
         let mut el = elementi(testo, &scena.items, Affine::IDENTITY);
-        let (copia, sintetici) = copia_per_l_import(testo, &mut el, &scena.items);
+        let (copia, sintetici, _) = copia_per_l_import(testo, &mut el, &scena.items);
         assert_eq!(sintetici, vec!["fubtmp-1".to_string()]);
         assert!(
             copia.contains("<g data-vc-layer=\"\" id=\"l1\" fub:layer=\"L\">"),

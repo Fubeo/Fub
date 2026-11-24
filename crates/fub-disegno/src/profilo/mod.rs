@@ -20,6 +20,7 @@
 
 mod contorno;
 mod curve;
+pub(crate) mod motore;
 mod unione;
 
 use fub_scene::varwidth::{read_var_width, VarWidth, WidthCap, WidthJoin, MAX_POINTS, MIN_POINTS};

@@ -516,15 +516,16 @@
                 "pos": {
                   "after": "gd4d4d4d4"
                 },
-                "raw": "<g id=\"oc3c3c3c3\"><path id=\"o5vnx90p3\" d=\"M100 195 L150 180 L300 195 L300 205 L150 220 L100 205 Z\" fill=\"#000000\"/></g>"
-              },
-              {
-                "op": "add",
-                "parent": "#root",
-                "pos": {
-                  "first": true
-                },
-                "raw": "<metadata><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"oc3c3c3c3\" hash=\"3c6780feb92eecf1\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjo3LCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoic3Ryb2tlIiwicGFpbnQiOnsidHlwZSI6InNvbGlkIiwiY29sb3IiOnsibW9kZWwiOiJyZ2IiLCJyIjowLjAsImciOjAuMCwiYiI6MC4wfX0sIndpZHRoIjoxMC4wLCJtaXRlcl9saW1pdCI6NC4wLCJwcm9maWxlIjp7InBvaW50cyI6W1swLjAsMS4wLDEuMF0sWzAuMjUwMDAwMDAwMDAwMDY3ODMsNC4wLDQuMF0sWzEuMCwxLjAsMS4wXV19fV19LCJraW5kIjp7InR5cGUiOiJwYXRoIiwicGF0aCI6eyJzdWJwYXRocyI6W3siYW5jaG9ycyI6W3sicCI6WzEwMC4wLDIwMC4wXX0seyJwIjpbMzAwLjAsMjAwLjBdfV0sImNsb3NlZCI6ZmFsc2V9XX19fX0=</vectorcraft:recipe></metadata>"
+                "elem": {
+                  "tag": "path",
+                  "attrs": {
+                    "fub:shape": "width",
+                    "fub:geom": "butt miter 0 5 5 0.24 19.4 19.4 0.25 20 20 0.26 19.8 19.8 1 5 5 M100 200 L300 200",
+                    "d": "M100 205 L100 195 C116 190.2 132 185.4 148 180.6 C148.67 180.4 149.33 180 150 180 C150.67 180 151.33 180.13 152 180.2 C201.33 185.13 250.67 190.07 300 195 L300 205 C250.67 209.93 201.33 214.87 152 219.8 C151.33 219.87 150.67 220 150 220 C149.33 220 148.67 219.6 148 219.4 C132 214.6 116 209.8 100 205 Z",
+                    "fill": "#000000",
+                    "id": "oc3c3c3c3"
+                  }
+                }
               }
             ]
           }

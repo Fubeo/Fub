@@ -679,8 +679,21 @@ pub(crate) fn sceglie_inchiostro(copia: &Copia, selezione: &[String]) -> bool {
             .mappa
             .dell_id(id)
             .and_then(|i| copia.mappa.elemento(i))
-            .is_some_and(|e| matches!(e.ruolo, Role::Stroke | Role::Width))
+            .is_some_and(|e| inchiostro(copia, e))
     })
+}
+
+/// Vero se `e` è un tratto dell'Inchiostro: un tratto, o una linea a spessore variabile che il
+/// motore non legge come contorno a profilo (`profilo::motore`).
+pub(crate) fn inchiostro(copia: &Copia, e: &crate::mappa::Elemento) -> bool {
+    match e.ruolo {
+        Role::Stroke => true,
+        Role::Width => e
+            .nodo
+            .and_then(|n| copia.documento.node(n))
+            .is_none_or(|n| crate::profilo::motore::variabile(n).is_none()),
+        _ => false,
+    }
 }
 
 /// Vero se Media ha portato tutti i punti di un tracciato in un punto solo:
@@ -709,7 +722,7 @@ fn media_schiaccia(copia: &Copia, dopo: &Document) -> bool {
 /// più quello della copia.
 pub(crate) fn inchiostro_toccato(copia: &Copia, dopo: &Document) -> bool {
     copia.mappa.elementi().iter().any(|e| {
-        matches!(e.ruolo, Role::Stroke | Role::Width)
+        inchiostro(copia, e)
             && e.nodo.is_some_and(|n| match (copia.documento.node(n), dopo.node(n)) {
                 (Some(prima), Some(ora)) => !std::ptr::eq(prima, ora),
                 (Some(_), None) => true,

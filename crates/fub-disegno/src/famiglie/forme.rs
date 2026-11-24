@@ -187,7 +187,7 @@ fn tocca_inchiostro(copia: &Copia, selezione: &[String]) -> bool {
     let mappa = &copia.mappa;
     let scelti: HashSet<usize> = selezione.iter().filter_map(|id| mappa.dell_id(id)).collect();
     mappa.elementi().iter().enumerate().any(|(i, e)| {
-        if !matches!(e.ruolo, Role::Stroke | Role::Width) {
+        if !crate::famiglie::tracciati::inchiostro(copia, e) {
             return false;
         }
         let mut j = Some(i);
