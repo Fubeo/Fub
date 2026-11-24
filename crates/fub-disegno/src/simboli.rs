@@ -503,13 +503,6 @@ fn contenuto_scritto(
     Ok(fuori)
 }
 
-/// Il testo di un titolo, con i caratteri che XML vuole scritti a parte.
-fn testo_xml(s: &str) -> String {
-    s.replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-}
-
 /// Le operazioni sui simboli del file fra `prima` e `dopo`. I simboli del
 /// motore si legano a quelli del file per nome; uno che cambia nome tiene
 /// la sua arte (lo stesso `Arc`).
@@ -586,7 +579,7 @@ pub(crate) fn operazioni(
         // Il simbolo sta nella `fub-defs`, figlia della radice: il suo
         // contenuto va a capo, rientrato di due spazi come quello di un
         // gruppo (`docs/reference/scene-format-symbols.md`, §7).
-        let mut righe = vec![format!("<title>{}</title>", testo_xml(&s.name))];
+        let mut righe = vec![format!("<title>{}</title>", fub_abi::html::escape(&s.name))];
         righe.extend(contenuto);
         fuori.nuovi.push(format!(
             "<symbol id=\"{id}\" overflow=\"visible\">\n      {}\n    </symbol>",

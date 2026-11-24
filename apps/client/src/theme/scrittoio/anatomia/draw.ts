@@ -47,6 +47,10 @@ export const DRAW: PartAnatomy = {
         "draw-guide-head", "draw-guide-rule-name", "draw-guide-note", "draw-guide-grid", "draw-guide-row", "draw-guide-swatch",
         "draw-guide-field", "draw-guide-rule",
         "draw-graph-data-body", "draw-graph-data-tools", "draw-graph-data-scroll", "draw-graph-data-table", "draw-graph-data-cell",
+        "draw-artboards", "draw-artboards-bar", "draw-artboards-list", "draw-artboards-item", "draw-artboards-number",
+        "draw-artboards-name", "draw-artboards-current", "draw-artboards-fields", "draw-artboards-name-field", "draw-artboards-art",
+        "draw-appearance-list", "draw-appearance-head", "draw-appearance-row", "draw-appearance-eye", "draw-appearance-name",
+        "draw-appearance-button", "draw-appearance-expand", "draw-view-goto-field",
       ],
     },
     {

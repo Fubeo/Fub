@@ -1763,6 +1763,45 @@ button.draw-isolation-crumb:hover {
 }
 
 /* ── K6 · La sezione «Tavole» del Design ─────────────────────────────────── */
+/* La sezione «Aspetto»: la pila degli effetti, una riga per effetto con
+   l'occhio, il nome (pulsante quando ha opzioni) e i pulsanti di posto. */
+.draw-appearance-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.draw-appearance-head {
+  margin-top: var(--space-2);
+}
+.draw-appearance-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: 28px;
+}
+.draw-appearance-eye {
+  flex: none;
+  margin: 0;
+}
+.draw-appearance-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: start;
+}
+.draw-appearance-name[data-hidden="true"] {
+  color: var(--text-muted);
+  text-decoration: line-through;
+}
+.draw-appearance-button {
+  flex: none;
+}
+.draw-appearance-expand {
+  margin-top: var(--space-2);
+}
+
 .draw-artboards {
   grid-column: 1 / -1;
   display: flex;
