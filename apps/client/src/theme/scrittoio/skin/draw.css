@@ -1568,6 +1568,55 @@ button.draw-isolation-crumb:hover {
 .draw-guide-line-hot {
   stroke-width: 2px;
 }
+/* Ritaglia immagine (`tools/editor/ritaglio-immagine.ts`): l'immagine fuori dal riquadro
+   scurita come in VectorCraft (nero al 43%), il riquadro e le maniglie nel ciano dei
+   segni dello strumento, la misura sotto l'angolo in basso a sinistra. I gesti li prende
+   la radice: il puntatore attraversa il disegno. */
+.draw-ritaglio {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 2;
+  overflow: hidden;
+  pointer-events: none;
+}
+.draw-ritaglio-ombra {
+  fill: rgb(0 0 0 / 43%);
+}
+.draw-ritaglio-bordo {
+  fill: none;
+  stroke: #1fc8e0;
+  stroke-width: 1px;
+  vector-effect: non-scaling-stroke;
+}
+.draw-ritaglio-maniglia {
+  fill: #ffffff;
+  stroke: #1fc8e0;
+  stroke-width: 1px;
+}
+.draw-ritaglio-misura {
+  fill: #1fc8e0;
+  font: 11px var(--font-ui, sans-serif);
+  paint-order: stroke;
+  stroke: rgb(0 0 0 / 60%);
+  stroke-width: 2px;
+}
+.draw-surface[data-ritaglio="move"] {
+  cursor: move !important;
+}
+.draw-surface[data-ritaglio="ns"] {
+  cursor: ns-resize !important;
+}
+.draw-surface[data-ritaglio="ew"] {
+  cursor: ew-resize !important;
+}
+.draw-surface[data-ritaglio="nwse"] {
+  cursor: nwse-resize !important;
+}
+.draw-surface[data-ritaglio="nesw"] {
+  cursor: nesw-resize !important;
+}
 /* Sopra una guida che si prende il cursore dice dove va, anche sopra quello dello
    strumento (scritto sulla superficie da `motore/gesti.ts`). */
 .draw-surface[data-guida-sotto="x"] {

@@ -1683,6 +1683,22 @@
     },
     {
       "fonte": "motore",
+      "id": "file.place",
+      "chiamata": {
+        "comando": "disegno.file.place"
+      },
+      "etichetta": {
+        "it": "Inserisci…",
+        "en": "Place…"
+      },
+      "posto": "menu/file",
+      "famiglia": "formati",
+      "tasto": "Cmd+Shift+P",
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "motore",
       "id": "gradient.presets.apply",
       "chiamata": {
         "comando": "disegno.gradient.presets.apply"
@@ -2093,6 +2109,22 @@
       },
       "posto": "ispettore/livelli",
       "famiglia": "livelli",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "links.embed",
+      "chiamata": {
+        "comando": "disegno.links.embed"
+      },
+      "etichetta": {
+        "it": "Incorpora immagine",
+        "en": "Embed Image"
+      },
+      "posto": "ispettore/design",
+      "famiglia": "immagini",
       "tasto": null,
       "effetto": "cambia",
       "finestra": false
@@ -2736,6 +2768,22 @@
       "tasto": null,
       "effetto": "cambia",
       "finestra": true
+    },
+    {
+      "fonte": "motore",
+      "id": "object.cropImage",
+      "chiamata": {
+        "comando": "disegno.object.cropImage"
+      },
+      "etichetta": {
+        "it": "Ritaglia immagine",
+        "en": "Crop Image"
+      },
+      "posto": "menu/oggetto",
+      "famiglia": "immagini",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
     },
     {
       "fonte": "motore",
@@ -6993,6 +7041,22 @@
     },
     {
       "fonte": "interfaccia",
+      "id": "file.place",
+      "chiamata": {
+        "client": "file.place"
+      },
+      "etichetta": {
+        "it": "Inserisci…",
+        "en": "Place…"
+      },
+      "posto": "interno",
+      "famiglia": "formati",
+      "tasto": "Cmd+Shift+P",
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "interfaccia",
       "id": "pathfinder.repeat",
       "chiamata": {
         "client": "pathfinder.repeat"
@@ -7262,6 +7326,22 @@
       "tasto": null,
       "effetto": "mostra",
       "finestra": true
+    },
+    {
+      "fonte": "interfaccia",
+      "id": "ui.cropImage",
+      "chiamata": {
+        "client": "ui.cropImage"
+      },
+      "etichetta": {
+        "it": "Ritaglia immagine",
+        "en": "Crop Image"
+      },
+      "posto": "interno",
+      "famiglia": "immagini",
+      "tasto": null,
+      "effetto": "mostra",
+      "finestra": false
     },
     {
       "fonte": "interfaccia",

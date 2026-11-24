@@ -97,8 +97,28 @@ export function voceClienteCompleto(ctx: EditorContext, id: string): string | nu
   // `null` vuol dire «si fa»: non si confonde con «non è di questa parte» (`??` lo
   // scambierebbe per assente, e una voce fatta comparirebbe come non collegata).
   if (id === CAMBIA_UNITA) return null;
+  const immagini = voceImmagini(ctx, id);
+  if (immagini !== undefined) return immagini;
   const visualizza = voceVisualizza(ctx, id);
   return visualizza !== undefined ? visualizza : voceClienteBanda(id);
+}
+
+/// Le voci delle immagini dell'interfaccia di VectorCraft che fa il client: Ritaglia
+/// immagine apre lo strumento (`ritaglio-immagine.ts`), Inserisci… sceglie un'immagine
+/// del vault (`vault-images.ts`). Le loro righe del motore passano da `COMANDI_DI_FUB`.
+export const VOCI_IMMAGINI: Readonly<Record<string, (ctx: EditorContext) => void>> = {
+  "ui.cropImage": (ctx) => ctx.cropImage(),
+  "file.place": (ctx) => void ctx.vaultImage(),
+};
+
+/// Lo stato di una voce di `VOCI_IMMAGINI`: `null` se si fa, il perché se è spenta,
+/// `undefined` se non è una di loro.
+export function voceImmagini(ctx: EditorContext, id: string): string | null | undefined {
+  if (VOCI_IMMAGINI[id] === undefined) return undefined;
+  if (!ctx.editable()) return t("draw.disabled.read_only");
+  if (id === "file.place") return ctx.insertsImages(ctx.features) ? null : t("draw.place.off");
+  if (ctx.croppingImage()) return null;
+  return ctx.selectedUnits().some((unit) => unit.role === "image") ? null : t("draw.crop.none");
 }
 
 /// Lo stato con la spunta delle voci del Disegno completo, `undefined` se non ne hanno.
@@ -118,6 +138,11 @@ const COMANDI_DI_FUB: Readonly<Record<string, (ctx: EditorContext) => void>> = {
   // Modificare un simbolo è la modalità di Fub, che il motore non tiene fra le richieste.
   "disegno.symbol.edit": editSymbol,
   "disegno.symbol.exitEditing": exitSymbol,
+  // Il ritaglio è uno strumento sul foglio, e non perde i pixel: il clipPath di `crop.ts`.
+  "disegno.object.cropImage": VOCI_IMMAGINI["ui.cropImage"]!,
+  // Incorpora e Inserisci leggono i file del vault, che il motore non vede.
+  "disegno.links.embed": (ctx) => void ctx.embedImages(),
+  "disegno.file.place": VOCI_IMMAGINI["file.place"]!,
 };
 
 /// Fa il comando del motore `id` con la regola di Fub, se è uno di quelli

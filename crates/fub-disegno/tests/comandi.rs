@@ -403,6 +403,8 @@ fn una_selezione_con_un_elemento_non_mappato_non_cambia_niente() {
         "disegno.text.replaceFont",
         // Crea tracciato aggiunge un tracciato nuovo dai suoi argomenti, senza usare la selezione.
         "disegno.path.create",
+        // Inserisci… mette un'immagine nuova del vault, senza usare la selezione (lo fa il client).
+        "disegno.file.place",
         // Gli strumenti del Testo come in VectorCraft: Testo crea dai suoi argomenti; gli altri
         // nominano il loro oggetto nel valore (senza, prendono il primo scelto che fa al caso), e
         // un elemento non mappato lo ferma la guardia delle perdite.

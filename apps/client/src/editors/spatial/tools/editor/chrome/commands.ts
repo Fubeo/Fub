@@ -12,7 +12,7 @@ import { t } from "../../../strings";
 import { toolsOf, toolSpec, type ToolId } from "../../registry";
 import type { EditorContext } from "../context";
 import type { AzioniVociCompleto } from "./command-search";
-import { isComandoBanda } from "./status";
+import { isComandoBanda, VOCI_IMMAGINI } from "./status";
 
 /// Quando un comando vale: sempre, con uno strumento, con una selezione.
 export type CommandContext = "always" | "tool" | "selection";
@@ -113,6 +113,7 @@ export function azioniVoci(ctx: EditorContext, riprova: () => void): AzioniVociC
 /// dal menu o dal suo tasto (`OpzioniTastiCompleto.client`). Le altre non le conosce.
 export function eseguiVoceClient(ctx: EditorContext, id: string): void {
   if (id === CAMBIA_UNITA) cambiaUnita(ctx);
+  else if (VOCI_IMMAGINI[id] !== undefined) VOCI_IMMAGINI[id]!(ctx);
   else if (isComandoBanda(id)) ctx.comandoVista(id);
 }
 

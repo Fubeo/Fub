@@ -325,7 +325,7 @@ motore	links.updateChanged	Update Changed Links		immagini	F3	T20	da fare	ispetto
 motore	links.relink	Relink		immagini	F3	T20	da fare	ispettore/design	famiglia		Ricollega
 motore	links.list	Links		immagini	F3	T20	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Collegamenti
 motore	links.goTo	Go To Link		immagini	F3	T20	da fare	ispettore/design	famiglia		Vai al collegamento
-motore	links.embed	Embed Image		immagini	F3	T20	da fare	ispettore/design	famiglia		Incorpora immagine
+motore	links.embed	Embed Image		immagini	F3	T20	fatto	ispettore/design	famiglia	voce del client: i byte del file del vault entrano nell'href (e nell'xlink:href), dentro il peso delle immagini del disegno e ridotti dopo averlo chiesto, come un'immagine incollata; la misura resta; il motore non vede il vault e lo rifiuta	Incorpora immagine
 motore	links.unembed	Unembed		immagini	F3	T20	da fare	ispettore/design	famiglia		Rimuovi incorporamento
 motore	links.info	Link Info		immagini	F3	T20	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Informazioni collegamento
 motore	links.placementOptions	Placement Options		immagini	F3	T20	da fare	ispettore/design	famiglia		Opzioni di posizionamento
@@ -342,7 +342,7 @@ motore	object.transformEach	Transform Each…	Object › Transform	trasforma	F1	
 motore	object.resetBoundingBox	Reset Bounding Box	Object › Transform	trasforma	F1	T13	fatto	menu/oggetto/trasforma	famiglia		Reimposta riquadro di delimitazione
 motore	object.rasterize	Rasterize…	Object	immagini	F3	T20	da fare	menu/oggetto	famiglia	finestra	Rasterizza…
 motore	object.createObjectMosaic	Create Object Mosaic…	Object	immagini	F3	T20	da fare	menu/oggetto	famiglia	finestra	Crea mosaico di oggetti…
-motore	object.cropImage	Crop Image	Object	immagini	F3	T20	da fare	menu/oggetto	famiglia		Ritaglia immagine
+motore	object.cropImage	Crop Image	Object	immagini	F3	T20	fatto	menu/oggetto	famiglia	voce del client: lo strumento Ritaglia immagine sul foglio (tools/editor/ritaglio-immagine.ts) con maniglie, spostamento, Maiusc per le proporzioni, Alt dal centro, Invio o doppio clic, Esc; il ritaglio non riscrive i pixel come VectorCraft ma è il clipPath di tools/crop.ts (il collegamento al vault e la parte tolta restano); il motore lo rifiuta	Ritaglia immagine
 motore	object.maskImage	Mask		immagini	F3	T20	da fare	ispettore/design	famiglia		Maschera
 motore	object.createTrimMarks	Create Trim Marks	Object	stampa	F4	T25	da fare	menu/oggetto	famiglia		Crea segni di taglio
 motore	object.shape.convertToShape	Convert to Shape	Object › Shape	forme	F1	T13	da fare	menu/oggetto	famiglia	il motore la fa come forma viva (rettangolo, ellisse) e la scena non scrive una forma viva di quelle forme: fub:shape ha solo freccia, connettore, poligono, stella e spessore variabile (docs/reference/scene-format-shapes.md, scene-format.md); la forma viva è in Ricetta (scene-format-recipe.md)	Converti in forma
@@ -458,7 +458,7 @@ motore	perspective.grid.lock	Lock Grid		prospettiva	F4	T25	da fare	menu/visualiz
 motore	perspective.grid.lockStation	Lock Station Point		prospettiva	F4	T25	da fare	menu/visualizza	famiglia		Blocca punto di osservazione
 motore	perspective.grid.snap	Snap to Grid		prospettiva	F4	T25	da fare	menu/visualizza	famiglia		Aggancia alla griglia
 motore	perspective.grid.rulers	Show Rulers		prospettiva	F4	T25	da fare	menu/visualizza	famiglia		Mostra righelli
-motore	file.place	Place…	File	formati	F3	T23	da fare	menu/file	famiglia	finestra	Inserisci…
+motore	file.place	Place…	File	formati	F3	T23	fatto	menu/file	famiglia	voce del client: sceglie un'immagine del vault (Ctrl+I, tools/editor/vault-images.ts) e la mette per riferimento dove è il cursore; il motore non vede il vault e lo rifiuta	Inserisci…
 motore	file.place.info	Placed File Info		formati	F3	T23	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Informazioni file inserito
 motore	image.info	Image Info		immagini	F3	T20	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Informazioni immagine
 motore	file.place.queue	Load Place Cursor		formati	F3	T23	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Carica cursore di inserimento
@@ -887,7 +887,7 @@ interfaccia	addon.arrange.zoomSelection	Zoom to Selection		vista	F1	T11	fatto	is
 interfaccia	app.language	Interface Language		fub	—	T2	fub	fub	—	la lingua di Fub	Lingua interfaccia
 interfaccia	file.open	Open…		fub	—	T2	fub	fub	—	aprire dal vault	Apri…
 interfaccia	file.save	Save		fub	—	T2	fub	fub	—	il salvataggio di Fub (DocumentSession)	Salva
-interfaccia	file.place	Place…		formati	F3	T23	da fare	menu/file	famiglia		Inserisci…
+interfaccia	file.place	Place…		formati	F3	T23	fatto	interno	famiglia	la stessa voce di file.place del motore (menu File)	Inserisci…
 interfaccia	file.openRecent1	Open Recent File 1		fub	—	T2	fub	fub	—	recenti di Fub; voce numerata: una sola voce che elenca, non file.openRecentN	Apri file recente 1
 interfaccia	file.openRecent2	Open Recent File 2		fub	—	T2	fub	fub	—	recenti di Fub; voce numerata: una sola voce che elenca, non file.openRecentN	Apri file recente 2
 interfaccia	file.openRecent3	Open Recent File 3		fub	—	T2	fub	fub	—	recenti di Fub; voce numerata: una sola voce che elenca, non file.openRecentN	Apri file recente 3
@@ -1092,7 +1092,7 @@ interfaccia	tool.setOption	Tool Option		nucleo	F1	T11	fatto	colonna	nucleo		Opzi
 interfaccia	effect.dialog	Effect…		effetti	F2	T18	fatto	menu/effetto	famiglia	Effetto…: le voci degli effetti del menu aprono la loro finestra; un effetto già nella pila del primo oggetto scelto chiede prima Modifica (effect.setParams al suo posto, aligned con più oggetti) o Aggiungi nuovo; la pila di un riempimento o contorno si cambia dalla sezione Aspetto (Fub non ha una voce attiva dell'aspetto)	Effetto…
 interfaccia	ui.paramDialog	Command Dialog		fub	—	T11	fub	fub	—	le finestre dei comandi di Fub (completo/finestre)	Finestra dei comandi
 interfaccia	ui.recolorDialog	Recolor Artwork…		colore	F1	T14	fatto	menu/modifica/colori	famiglia		Ricolora grafica…
-interfaccia	ui.cropImage	Crop Image		immagini	F3	T20	da fare	finestra	famiglia		Ritaglia immagine
+interfaccia	ui.cropImage	Crop Image		immagini	F3	T20	fatto	interno	famiglia	la stessa voce di object.cropImage (menu Oggetto): apre lo strumento, e di nuovo ritaglia	Ritaglia immagine
 interfaccia	effect.applyLast	Apply Last Effect		effetti	F2	T18	fatto	menu/effetto	famiglia	rifà l'ultimo effetto applicato dal menu Effetto, coi suoi valori, sugli oggetti scelti adesso; spento finché non se n'è applicato uno (completo/index.ts)	Applica ultimo effetto
 interfaccia	pathfinder.repeat	Repeat Pathfinder		forme	F1	T13	fatto	menu/oggetto/elaborazione	famiglia		Ripeti Elaborazione tracciati
 interfaccia	file.export.pdf	Save as PDF…		formati	F3	T23	da fare	menu/file	sotto:disegno-formati		Salva come PDF…

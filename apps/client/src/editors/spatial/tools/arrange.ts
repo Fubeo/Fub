@@ -193,7 +193,7 @@ export function fubAttributes(node: ElementPart): Map<string, string> {
 }
 
 /// I valori di `href` e di `xlink:href` di `node`; `null` quello che manca.
-function hrefAttributes(node: ElementPart): { readonly plain: string | null; readonly xlink: string | null } {
+export function hrefAttributes(node: ElementPart): { readonly plain: string | null; readonly xlink: string | null } {
   const read = readHead(node);
   let plain: string | null = null;
   let xlink: string | null = null;

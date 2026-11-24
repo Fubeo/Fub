@@ -6,12 +6,17 @@ import { isWritingField } from "../../../../ui/field-history";
 import { t } from "../../strings";
 import { nextTurn } from "../../view";
 import { carriesFiles, type Decoded } from "../images";
+import { hrefAttributes, hrefOf, nodeOf, Plan, type Arranged } from "../arrange";
+import type { NewIds } from "../edit";
+import type { Unit } from "../hit";
+import type { DocumentModel } from "../../scene/model";
 import { toolForKey, type Feature, type ToolSpec } from "../registry";
 import { ROTATE_STEP, ZOOM_STEP } from "./constants";
 import type { Edge } from "../arrange";
 import type { EditorContext } from "./context";
 import { adattaTavola } from "./chrome/zoom-menu";
 import { cambiaUnita } from "./chrome/unita";
+import { installCropImage } from "./ritaglio-immagine";
 
 const ROTATE_STEP_SHIFT = 90;
 
@@ -31,6 +36,8 @@ const ALIGN_KEYS: Readonly<Record<string, Edge>> = {
 export interface VaultImagesContext {
   insertsImages: (at: ReadonlySet<Feature>) => boolean;
   vaultImage: () => Promise<void>;
+  /// «Incorpora immagine»: le immagini scelte collegate a un file entrano nel disegno.
+  embedImages: () => Promise<void>;
 }
 
 /// Monta le immagini del vault.
@@ -100,6 +107,55 @@ export function installVaultImages(ctx: EditorContext): void {
     }
   }
   ctx.vaultImage = vaultImage;
+
+  /// «Incorpora immagine» (VectorCraft: `links.embed`): ogni immagine scelta che porta
+  /// a un file del vault riceve i byte di quel file nel suo `href`, dentro il peso
+  /// che il disegno ha ancora e, se serve, ridotti dopo averlo chiesto, come
+  /// un'immagine incollata. La misura sul foglio non cambia. Un passo di annulla.
+  async function embedImages(): Promise<void> {
+    const port = options.images;
+    if (ctx.asking || ctx.disposed || !editable()) return;
+    const model = ctx.engine.model;
+    if (model === null) return;
+    const linked = linkedImages(model, ctx.selectedUnits());
+    if (linked.length === 0) {
+      announce(t("draw.embed.none"));
+      return;
+    }
+    if (port === undefined) {
+      announce(t("draw.image.gone"));
+      return;
+    }
+    ctx.asking = true;
+    cancelGesture();
+    const loaded = ctx.loads;
+    try {
+      const gone = (): boolean => ctx.disposed || ctx.loads !== loaded || !editable();
+      const blobs: Blob[] = [];
+      for (const { href } of linked) {
+        const blob = await port.read(href).catch(() => null);
+        if (gone()) return;
+        if (blob === null) {
+          announce(t("draw.embed.gone", { href }));
+          return;
+        }
+        blobs.push(blob);
+      }
+      const placed = await ctx.encodeImages(blobs, gone);
+      if (placed === null || gone()) return;
+      const now = ctx.engine.model;
+      if (now === null) return;
+      if (ctx.arrange("draw.action.embed", embedOps(now, linked, placed.map((one) => one.href), ctx.newIds())) !== null) {
+        announce(t(linked.length === 1 ? "draw.embed.one" : "draw.embed.other", { count: linked.length }));
+      }
+    } finally {
+      ctx.asking = false;
+    }
+  }
+  ctx.embedImages = embedImages;
+
+  // Ritaglia immagine, del Disegno completo.
+  installCropImage(ctx);
 
   const onDragOver = (event: DragEvent): void => {
     if (!editable() || !carriesFiles(event.dataTransfer)) return;
@@ -525,4 +581,37 @@ export function installVaultImages(ctx: EditorContext): void {
     }
     event.preventDefault();
   });
+}
+
+/// Un'immagine collegata a un file, e il file.
+export interface LinkedImage {
+  readonly unit: Unit;
+  readonly href: string;
+}
+
+/// Le immagini di `units` che portano a un file (non a un `data:` già dentro il disegno).
+/// Come in SVG 2, `href` prevale su `xlink:href`.
+export function linkedImages(model: DocumentModel, units: readonly Unit[]): LinkedImage[] {
+  return units.flatMap((unit) => {
+    if (unit.role !== "image") return [];
+    const href = hrefOf(nodeOf(model, unit))?.trim() ?? "";
+    return href === "" || href.startsWith("data:") ? [] : [{ unit, href }];
+  });
+}
+
+/// Le operazioni di Incorpora: ogni immagine di `linked` riceve il suo `data:` di `hrefs`
+/// negli attributi che la collegavano (`href`, `xlink:href` per i lettori di SVG 1.1, o tutti
+/// e due, come `relinkOps`); la misura e il resto non cambiano. Le chiavi sono quelle delle
+/// immagini dopo, anche quando ricevono un id.
+export function embedOps(model: DocumentModel, linked: readonly LinkedImage[], hrefs: readonly string[], ids: NewIds): Arranged {
+  const plan = new Plan(model, ids);
+  linked.forEach(({ unit }, i) => {
+    const node = nodeOf(model, unit);
+    const now = hrefAttributes(node);
+    const attrs: Record<string, string> = {};
+    if (now.plain !== null || now.xlink === null) attrs.href = hrefs[i]!;
+    if (now.xlink !== null) attrs["xlink:href"] = hrefs[i]!;
+    plan.ops.push({ op: "set", id: plan.idOf(node), attrs });
+  });
+  return plan.finish(linked.map(({ unit }) => plan.keyOf(nodeOf(model, unit), unit.key)));
 }

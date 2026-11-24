@@ -151,6 +151,10 @@ export interface ClipboardCommandsContext {
   viewBounds: () => Bounds;
   inSight: (p: Point) => boolean;
   placeImages: (pictures: readonly Placed[], at: Point | null) => void;
+  /// I byte di `sources` come entrano nel disegno, con le loro misure: dentro il peso che il
+  /// disegno ha ancora, e se serve ridotti dopo averlo chiesto. `null` se non si fa, detto a voce;
+  /// `gone` dice se nel frattempo l'editor è cambiato.
+  encodeImages: (sources: readonly Blob[], gone: () => boolean) => Promise<Placed[] | null>;
   /// Fino a quando l'incolla dei tasti va nello stesso punto: Ctrl+Maiusc+V
   /// lo chiede, e l'evento del browser arriva subito dietro.
   inPlaceUntil: number;
@@ -200,7 +204,7 @@ export function installClipboardCommands(ctx: EditorContext): void {
   /// I byte di `file` come entrano nel disegno: così come sono se sono PNG,
   /// JPEG diritto, WebP o GIF; altrimenti ricodificati. `null` se non è
   /// un'immagine che il browser sa leggere.
-  const pictureOf = async (file: File, decoder: ImageCodec): Promise<Picture | null> => {
+  const pictureOf = async (file: Blob, decoder: ImageCodec): Promise<Picture | null> => {
     let bytes: Uint8Array;
     let decoded: Decoded | null;
     try {
@@ -240,6 +244,57 @@ export function installClipboardCommands(ctx: EditorContext): void {
     }).then((answer) => answer !== null);
   };
 
+  /// I byte di `sources` come entrano nel disegno, dentro il peso che resta: `null` se non si fa,
+  /// detto a voce. `codec` c'è.
+  async function encodeImages(sources: readonly Blob[], gone: () => boolean): Promise<Placed[] | null> {
+    if (codec === null) {
+      announce(t("draw.image.unreadable"));
+      return null;
+    }
+    const pictures: Picture[] = [];
+    try {
+      for (const source of sources) {
+        const picture = await pictureOf(source, codec);
+        if (picture !== null) pictures.push(picture);
+      }
+      if (gone()) return null;
+      if (pictures.length === 0) {
+        announce(t("draw.image.unreadable"));
+        return null;
+      }
+      const docBytes = utf8Length(ctx.engine.text);
+      const budget = budgetFor(docBytes, pictures.length);
+      if (budget < MIN_ROOM) {
+        announce(t("draw.image.full", { limit: sizeText(MAX_EDIT_BYTES) }));
+        return null;
+      }
+      const limits = limitsFor(pictures.map((picture) => picture.encoded.bytes.length), budget);
+      if (pictures.some((picture, i) => picture.encoded.bytes.length > limits[i]!)) {
+        if (!(await askReduce(pictures, limits, budget < MAX_IMAGE_BYTES))) return null;
+        if (gone()) return null;
+        announce(t("draw.image.reducing"));
+        for (const [i, picture] of pictures.entries()) {
+          if (picture.encoded.bytes.length <= limits[i]!) continue;
+          const reduced = await reduce(picture.decoded, limits[i]!);
+          if (reduced === null) {
+            announce(t("draw.image.failed"));
+            return null;
+          }
+          picture.encoded = reduced;
+        }
+        if (gone()) return null;
+      }
+      return pictures.map((picture) => ({
+        width: picture.decoded.width,
+        height: picture.decoded.height,
+        href: dataUri(picture.encoded.type, picture.encoded.bytes),
+      }));
+    } finally {
+      for (const picture of pictures) picture.decoded.close();
+    }
+  }
+  ctx.encodeImages = encodeImages;
+
   /// `files` sul foglio, in un gesto solo: al cursore se si vede, o al
   /// centro della vista, scelti, con lo strumento della selezione.
   async function addImages(files: readonly File[], at: Point | null): Promise<void> {
@@ -252,50 +307,12 @@ export function installClipboardCommands(ctx: EditorContext): void {
     ctx.asking = true;
     cancelGesture();
     const loaded = ctx.loads;
-    const pictures: Picture[] = [];
     try {
-      for (const file of files) {
-        const picture = await pictureOf(file, codec);
-        if (picture !== null) pictures.push(picture);
-      }
       const gone = (): boolean => ctx.disposed || ctx.loads !== loaded || !editable();
-      if (gone()) return;
-      if (pictures.length === 0) {
-        announce(t("draw.image.unreadable"));
-        return;
-      }
-      const docBytes = utf8Length(ctx.engine.text);
-      const budget = budgetFor(docBytes, pictures.length);
-      if (budget < MIN_ROOM) {
-        announce(t("draw.image.full", { limit: sizeText(MAX_EDIT_BYTES) }));
-        return;
-      }
-      const limits = limitsFor(pictures.map((picture) => picture.encoded.bytes.length), budget);
-      if (pictures.some((picture, i) => picture.encoded.bytes.length > limits[i]!)) {
-        if (!(await askReduce(pictures, limits, budget < MAX_IMAGE_BYTES))) return;
-        if (gone()) return;
-        announce(t("draw.image.reducing"));
-        for (const [i, picture] of pictures.entries()) {
-          if (picture.encoded.bytes.length <= limits[i]!) continue;
-          const reduced = await reduce(picture.decoded, limits[i]!);
-          if (reduced === null) {
-            announce(t("draw.image.failed"));
-            return;
-          }
-          picture.encoded = reduced;
-        }
-        if (gone()) return;
-      }
-      placeImages(
-        pictures.map((picture) => ({
-          width: picture.decoded.width,
-          height: picture.decoded.height,
-          href: dataUri(picture.encoded.type, picture.encoded.bytes),
-        })),
-        at,
-      );
+      const placed = await encodeImages(files, gone);
+      if (placed === null || gone()) return;
+      placeImages(placed, at);
     } finally {
-      for (const picture of pictures) picture.decoded.close();
       ctx.asking = false;
     }
   }

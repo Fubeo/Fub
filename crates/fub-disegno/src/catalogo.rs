@@ -670,6 +670,15 @@ pub struct FinestraScritta {
 /// Espandi non chiede come espandere le sfumature (`gradient`, `steps`): vale
 /// quello del motore, strisce piene.
 pub const FINESTRE_SCRITTE: &[FinestraScritta] = &[
+    // Inserisci… (menu File): la finestra è la scelta di un'immagine del vault, che apre il
+    // client (`vault-images.ts`); il motore, che il vault non lo vede, il comando lo rifiuta.
+    // Nessun campo da chiedere.
+    FinestraScritta {
+        id: "file.place",
+        schema: "{}",
+        predefiniti: &[],
+        limiti: &[],
+    },
     // Inserisci carattere (menu Testo, K6 T16): il carattere speciale da aggiungere in fondo ai
     // testi scelti, fra quelli di `special_char` del motore. Il motore prende anche un testo
     // libero (`text`, la finestra Glifi) e gli id: la finestra non li chiede, la selezione basta.

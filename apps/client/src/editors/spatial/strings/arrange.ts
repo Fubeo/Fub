@@ -4,6 +4,18 @@
 
 /// L'italiano di quest'area, che è anche la forma dell'inglese.
 export const ARRANGE_IT = {
+  "draw.action.cropImage": "Ritaglio immagine",
+  "draw.crop.none": "Scegli un’immagine da ritagliare.",
+  "draw.crop.other": "Questa immagine ha già un ritaglio che l’editor non sa cambiare: toglilo con Oggetto › Maschera di ritaglio › Rilascia.",
+  "draw.crop.hint": "Ritaglia immagine: tira le maniglie o sposta il riquadro; Invio o doppio clic ritagliano, Esc annulla.",
+  "draw.crop.done": "Immagine ritagliata.",
+  "draw.crop.cancelled": "Ritaglio annullato.",
+  "draw.action.embed": "Immagini incorporate",
+  "draw.place.off": "Qui non si inseriscono immagini del vault.",
+  "draw.embed.none": "Scegli un’immagine collegata a un file da incorporare.",
+  "draw.embed.gone": "Il file «{href}» non si legge: l’immagine resta collegata.",
+  "draw.embed.one": "Immagine incorporata nel disegno.",
+  "draw.embed.other": "{count} immagini incorporate nel disegno.",
   "draw.action.image": "Immagine",
   "draw.added.image.one": "Immagine aggiunta.",
   "draw.added.image.other": "{count} immagini aggiunte.",
@@ -112,6 +124,18 @@ export const ARRANGE_IT = {
 
 /// L'inglese di quest'area, completo per tipo.
 export const ARRANGE_EN: Record<keyof typeof ARRANGE_IT, string> = {
+  "draw.action.cropImage": "Crop image",
+  "draw.crop.none": "Choose an image to crop.",
+  "draw.crop.other": "This image already has a clip the editor can’t change: remove it with Object › Clipping Mask › Release.",
+  "draw.crop.hint": "Crop Image: drag the handles or move the box; Enter or a double click crops, Esc cancels.",
+  "draw.crop.done": "Image cropped.",
+  "draw.crop.cancelled": "Crop cancelled.",
+  "draw.action.embed": "Embedded images",
+  "draw.place.off": "Vault images can’t be placed here.",
+  "draw.embed.none": "Choose an image linked to a file to embed.",
+  "draw.embed.gone": "The file “{href}” can’t be read: the image stays linked.",
+  "draw.embed.one": "Image embedded in the drawing.",
+  "draw.embed.other": "{count} images embedded in the drawing.",
   "draw.action.image": "Image",
   "draw.added.image.one": "Image added.",
   "draw.added.image.other": "{count} images added.",
