@@ -1563,11 +1563,11 @@
         "it": "Opzioni spazi vuoti",
         "en": "Gap Options"
       },
-      "posto": "interno",
+      "posto": "menu/oggetto",
       "famiglia": "trame",
       "tasto": null,
       "effetto": "cambia",
-      "finestra": false
+      "finestra": true
     },
     {
       "fonte": "motore",
@@ -5339,6 +5339,22 @@
       },
       "posto": "finestra",
       "famiglia": "tracciati",
+      "tasto": null,
+      "effetto": "mostra",
+      "finestra": true
+    },
+    {
+      "fonte": "interfaccia",
+      "id": "ui.livePaintGapOptions",
+      "chiamata": {
+        "client": "ui.livePaintGapOptions"
+      },
+      "etichetta": {
+        "it": "Opzioni spazi vuoti…",
+        "en": "Gap Options…"
+      },
+      "posto": "finestra",
+      "famiglia": "trame",
       "tasto": null,
       "effetto": "mostra",
       "finestra": true

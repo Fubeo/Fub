@@ -65,7 +65,7 @@ motore	livePaint.make	Make	Object › Live Paint	trame	F2	T21	fatto	menu/oggetto
 motore	livePaint.merge	Merge	Object › Live Paint	trame	F2	T21	fatto	menu/oggetto	famiglia	porta i tracciati scelti nel gruppo vivo scelto, che tiene il suo id	Fondi
 motore	livePaint.release	Release	Object › Live Paint	trame	F2	T21	fatto	menu/oggetto	famiglia	rende i tracciati di partenza e toglie la ricetta	Rilascia
 motore	livePaint.expand	Expand	Object › Live Paint	trame	F2	T21	fatto	menu/oggetto	famiglia	lascia un gruppo semplice coi pezzi dipinti	Espandi
-motore	livePaint.gapOptions	Gap Options		trame	F2	T21	fatto	interno	famiglia	le opzioni delle aperture restano nel file con la ricetta; la finestra è «ui.livePaintGapOptions»	Opzioni spazi vuoti
+motore	livePaint.gapOptions	Gap Options		trame	F2	T21	fatto	menu/oggetto	famiglia	finestra, che parte dalle opzioni del gruppo scelto; le opzioni restano nel file con la ricetta; la finestra è anche «ui.livePaintGapOptions»	Opzioni spazi vuoti
 motore	livePaint.fill	Live Paint Bucket		trame	F2	T21	fatto	interno	famiglia	lo usa il Secchiello: colora la faccia sotto il punto (fa vivi i tracciati scelti se serve)	Secchiello pittura dinamica
 motore	livePaint.strokeEdge	Live Paint Bucket (Stroke)		trame	F2	T21	fatto	interno	famiglia	lo usa il Secchiello: colora il bordo vicino al punto	Secchiello pittura dinamica (traccia)
 motore	livePaint.info	Live Paint Info		trame	F2	T21	fatto	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Informazioni pittura dinamica
@@ -1276,7 +1276,7 @@ interfaccia	ui.perspectiveUserPreset3.3	Three Point Perspective Preset 3		prospe
 interfaccia	ui.perspectiveUserPreset3.4	Three Point Perspective Preset 4		prospettiva	F4	T25	da fare	finestra	famiglia	voce numerata: una sola voce che elenca, non ui.perspectiveUserPresetN	Preset prospettiva a tre punti 4
 interfaccia	ui.perspectiveUserPreset3.5	Three Point Perspective Preset 5		prospettiva	F4	T25	da fare	finestra	famiglia	voce numerata: una sola voce che elenca, non ui.perspectiveUserPresetN	Preset prospettiva a tre punti 5
 interfaccia	ui.blendOptions	Blend Options…		dinamici	F2	T21	da fare	finestra	famiglia		Opzioni fusione…
-interfaccia	ui.livePaintGapOptions	Gap Options…		trame	F2	T21	da fare	finestra	famiglia		Opzioni spazi vuoti…
+interfaccia	ui.livePaintGapOptions	Gap Options…		trame	F2	T21	fatto	finestra	famiglia	la stessa finestra di livePaint.gapOptions: «custom» diventa i punti scritti	Opzioni spazi vuoti…
 interfaccia	ui.perspectivePlane	Perspective Plane Options…		prospettiva	F4	T25	da fare	finestra	famiglia		Opzioni piano prospettico…
 strumento	selection	Selection Tool		nucleo	F1	T11	fatto	colonna/scegli	nucleo	riquadro «selection»	Strumento Selezione
 strumento	directSelection	Direct Selection Tool		nucleo	F1	T11	fatto	colonna/scegli	nucleo	riquadro «directSelection»	Strumento Selezione diretta

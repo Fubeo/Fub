@@ -84,6 +84,9 @@ export interface FinestraOpzioni {
   readonly unita?: Readonly<Record<string, string>>;
   /// I valori di partenza, per nome del campo, se non ci sono quelli di prima.
   readonly iniziali: Readonly<Record<string, ValoreCampo>>;
+  /// I valori che il disegno ha già (le Opzioni spazi vuoti del gruppo scelto): vincono anche su
+  /// quelli di prima, perché la finestra mostra com'è l'oggetto adesso.
+  readonly dalDisegno?: Readonly<Record<string, ValoreCampo>>;
   /// La frase del caricamento, se la funzione ne ha una sua.
   readonly caricamento?: string;
   /// Il disegno. Quando si chiude, la finestra si chiude senza mandare niente.
@@ -381,7 +384,7 @@ export function apriFinestra(
     };
 
     const costruisci = (): void => {
-      const partenza: Readonly<Record<string, ValoreCampo>> = { ...opzioni.iniziali, ...RICORDATI.get(opzioni.id) };
+      const partenza: Readonly<Record<string, ValoreCampo>> = { ...opzioni.iniziali, ...RICORDATI.get(opzioni.id), ...opzioni.dalDisegno };
       const righe: HTMLElement[] = [];
       campi = modulo.campi.map((campo) => {
         const etichetta = opzioni.campi[campo.nome] ?? campo.nome;

@@ -603,6 +603,9 @@ pub const NOMI: &[(&str, Tipo)] = &[
     ("replace", Tipo::Testo),
     ("matchCase", Tipo::SiNo),
     ("wholeWord", Tipo::SiNo),
+    // Le opzioni degli spazi vuoti della Pittura dinamica: rileva, chiudi coi tracciati.
+    ("detect", Tipo::SiNo),
+    ("closeGaps", Tipo::SiNo),
 ];
 
 /// Una finestra che Fub scrive da sé, perché lo schema del motore descrive i
@@ -684,6 +687,22 @@ pub const FINESTRE_SCRITTE: &[FinestraScritta] = &[
         schema: "{object, fill, stroke}",
         predefiniti: &[("object", "true"), ("fill", "true"), ("stroke", "true")],
         limiti: &[],
+    },
+    // Opzioni spazi vuoti della Pittura dinamica, come in VectorCraft: rileva gli spazi, quanto
+    // grandi (piccoli 3 pt, medi 6, grandi 12, o i punti scritti fino a 72), il colore che li
+    // mostra e «Chiudi gli spazi con tracciati». `custom` lo traduce la famiglia `trame` nei
+    // punti; i valori di partenza veri sono quelli del gruppo scelto, che il client legge.
+    FinestraScritta {
+        id: "livePaint.gapOptions",
+        schema: "{detect, size: small|medium|large|custom, points, color, closeGaps}",
+        predefiniti: &[
+            ("detect", "false"),
+            ("size", "small"),
+            ("points", "3"),
+            ("color", "#ff4f4f"),
+            ("closeGaps", "false"),
+        ],
+        limiti: &[("points", Some(0.01), Some(72.0))],
     },
     // Pulisci (K6 T12): i tre interruttori del motore, tutti veri di serie. Il comando vale su
     // tutto il disegno, non sulla selezione: il motore non legge la selezione (`clean_up`).

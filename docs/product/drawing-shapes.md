@@ -93,10 +93,14 @@ Generatore forme ci sono due strumenti:
   faccia scelta si colora dal pannello del colore. I bordi non si scelgono
   ancora come oggetti del file.
 
-Il menu Oggetto offre «Crea», «Unisci», «Rilascia» ed «Espandi». Il gruppo
-vivo va nel file con la ricetta: riaperto, si dipinge ancora; un altro
-programma vede le facce e i bordi come forme normali. Mancano ancora la
-finestra «Opzioni aperture» e la vista che mostra le aperture.
+Il menu Oggetto offre «Crea», «Unisci», «Rilascia», «Espandi» e «Opzioni
+spazi vuoti». La finestra delle opzioni parte da quelle del gruppo scelto:
+rileva gli spazi, fin dove il colore si ferma (spazi piccoli 3 pt, medi 6,
+grandi 12, o i punti scritti fino a 72), il colore che li mostra e «Chiudi gli
+spazi con tracciati», che aggiunge una linea senza colore su ogni spazio. Il
+gruppo vivo va nel file con la ricetta, opzioni comprese: riaperto, si dipinge
+ancora; un altro programma vede le facce e i bordi come forme normali. Manca
+ancora la vista che mostra gli spazi vuoti.
 
 La sezione «Allinea», nella scheda Design dell'ispettore, offre gli allineamenti
 e le distribuzioni del motore. Alla selezione servono due oggetti; con «alla

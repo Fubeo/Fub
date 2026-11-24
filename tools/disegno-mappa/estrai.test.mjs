@@ -202,7 +202,9 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // Shaper va nel file con la ricetta. Tre righe in più.
   // La Pittura dinamica (`livePaint.*` e i suoi due strumenti) diventa «fatto»: il gruppo vivo va
   // nel file con la ricetta, le facce hanno l'id del file. Dieci righe in più.
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 989, fub: 114, escluso: 12, fatto: 436 });
+  // La finestra delle Opzioni spazi vuoti (`ui.livePaintGapOptions`) diventa «fatto»: è quella di
+  // `livePaint.gapOptions`, che parte dalle opzioni del gruppo scelto. Una riga in più.
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 988, fub: 114, escluso: 12, fatto: 437 });
 });
 
 // --- un motore finto ---------------------------------------------------------------

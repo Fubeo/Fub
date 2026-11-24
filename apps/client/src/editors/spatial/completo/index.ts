@@ -15,7 +15,7 @@ import { creaSezioni, type Sezioni, type VoceDelCompleto } from "./sezioni";
 import type { Indice, VoceIndice } from "./indice";
 // I comandi nel menu ≡ e nella ricerca Ctrl+/ (T9a): le voci, il perché e l'avvio.
 import { menuComando, menuNonCaricato, nomeVoce, statoComandi, METODI_FORMA, OPERAZIONI_ELABORAZIONE, vociRicerca, type StatoComandi, type VoceRicerca } from "./comandi";
-import type { CampoFinestra, ModuloFinestra } from "../motore/finestre";
+import type { CampoFinestra, ModuloFinestra, ValoreCampo } from "../motore/finestre";
 import type { DrawingAnchor, DrawingPreview, DrawingToolState } from "../../../host/contract";
 import type { MenuItem } from "../../../ui/menu";
 // Blocco degli spazi del Completo (T7): i preset e la loro applicazione.
@@ -60,6 +60,7 @@ import { creaPortaLivelli, type PortaLivelli } from "./livelli-porta";
 import { apriFinestraLibrerie, creaPortaLibrerie } from "./librerie-finestra";
 export type { EsitoLivello, PortaLivelli, RichiestaLivello } from "./livelli-porta";
 import { registraAppuntiCompleto } from "../tools/clipboard";
+import { PARTENZE_LETTE } from "./partenze";
 import { montaTasti } from "./montaggio-tasti";
 import { seguiTastiUtente } from "./segui-tasti";
 import { strumentoDelTasto, type ModificheTasti, type Piattaforma } from "./tasti";
@@ -499,6 +500,17 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila" | "e
   // Le sezioni «Carattere» e «Paragrafo» (K6 T16, giro 1): il testo scelto, un comando per cambio.
   registraTesto(sezioni, (id, valori) => void eseguiPerId(id, valori, { senzaFinestra: true }), ctx.life);
   const carica = caricatore({ ctx: { ...ctx, sezioni, registraFila, esegui: eseguiPerId }, moduli: opzioni.moduli, prepara: opzioni.prepara });
+  // I valori di partenza che una finestra legge dal disegno (`partenze.ts`): `null` se non ne
+  // legge, o se il motore non risponde (la finestra parte allora dai valori di serie).
+  const partenzaDalDisegno = async (id: string): Promise<Readonly<Record<string, ValoreCampo>> | null> => {
+    const partenza = PARTENZE_LETTE[id];
+    if (partenza === undefined || ctx.motore === null) return null;
+    const sessione = await ctx.motore.pronta(ATTESA_MOTORE_FILA_MS);
+    if (ctx.life.closed || sessione === null) return null;
+    const esito = await sessione.comando({ id: partenza.lettura, selection: [...(opzioni.tasti?.selezione() ?? [])], value: {} });
+    if (esito === null || "kind" in esito || esito.reading === undefined || esito.reading === null) return null;
+    return partenza.campi(esito.reading);
+  };
   // La finestra di un comando con parametri (T6): il modulo dello schema della sua
   // famiglia. `null` se la famiglia non ha la finestra di quel comando.
   const finestraDi = async (voce: VoceIndice): Promise<OpzioniFinestraComando | null> => {
@@ -539,10 +551,12 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila" | "e
     const descrizione = parola(`descrizione:${voce.id}`);
     const azione = parola(`azione:${voce.id}`);
     const iniziali = Object.fromEntries(Object.entries(schema.predefiniti).filter(([nome]) => campi.some((campo) => campo.nome === nome)));
+    const dalDisegno = await partenzaDalDisegno(voce.id);
     return {
       modulo: { campi },
       campi: etichette,
       iniziali,
+      ...(dalDisegno === null ? {} : { dalDisegno }),
       ...(descrizione === undefined ? {} : { descrizione }),
       ...(azione === undefined ? {} : { azione }),
       ...(Object.keys(scelte).length === 0 ? {} : { scelte }),

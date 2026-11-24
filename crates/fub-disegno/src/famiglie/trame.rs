@@ -116,6 +116,9 @@ impl StatoFamiglia for Stato {
         selezione: &[String],
         mut valore: Value,
     ) -> Result<Value, PluginError> {
+        if id == "livePaint.gapOptions" {
+            return Ok(misura_scritta(valore));
+        }
         if !COL_GRUPPO.contains(&id) {
             return Ok(valore);
         }
@@ -153,4 +156,41 @@ fn gruppo_scelto(copia: &Copia, selezione: &[String]) -> Option<NodeId> {
         .ok()?
         .into_iter()
         .find(|n| copia.documento.node(*n).is_some_and(is_live_paint))
+}
+
+/// La finestra delle Opzioni spazi vuoti sceglie «personalizzata» e scrive i
+/// punti: il motore vuole la misura come numero. Senza «personalizzata» i
+/// punti non vanno al motore, e un colore vuoto lascia quello del gruppo.
+fn misura_scritta(mut valore: Value) -> Value {
+    let Some(o) = valore.as_object_mut() else {
+        return valore;
+    };
+    let punti = o.remove("points");
+    if o.get("size").and_then(Value::as_str) == Some("custom") {
+        o.insert("size".into(), punti.unwrap_or(Value::Null));
+    }
+    if o.get("color").and_then(Value::as_str).is_some_and(|c| c.trim().is_empty()) {
+        o.remove("color");
+    }
+    valore
+}
+
+#[cfg(test)]
+mod prove {
+    use super::misura_scritta;
+    use serde_json::json;
+
+    #[test]
+    fn la_misura_personalizzata_diventa_i_punti() {
+        assert_eq!(
+            misura_scritta(json!({"detect": true, "size": "custom", "points": 9.5, "color": "#00ff00"})),
+            json!({"detect": true, "size": 9.5, "color": "#00ff00"})
+        );
+        assert_eq!(
+            misura_scritta(json!({"size": "large", "points": 9.5, "color": " "})),
+            json!({"size": "large"})
+        );
+        // «Personalizzata» senza punti: il motore rifiuta la misura con la sua frase.
+        assert_eq!(misura_scritta(json!({"size": "custom"})), json!({"size": null}));
+    }
 }
