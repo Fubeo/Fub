@@ -30,6 +30,49 @@
           "predefinito": false
         }
       ]
+    },
+    {
+      "fonte": "motore",
+      "id": "type.insert",
+      "campi": [
+        {
+          "nome": "char",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "bullet",
+            "copyright",
+            "ellipsis",
+            "paragraph",
+            "registered",
+            "section",
+            "trademark",
+            "emDash",
+            "enDash",
+            "discretionaryHyphen",
+            "nonBreakingHyphen",
+            "doubleLeftQuote",
+            "doubleRightQuote",
+            "singleLeftQuote",
+            "singleRightQuote",
+            "emSpace",
+            "enSpace",
+            "hairSpace",
+            "sixthSpace",
+            "thinSpace",
+            "nonBreakingSpace",
+            "figureSpace",
+            "punctuationSpace",
+            "thirdSpace",
+            "quarterSpace",
+            "tab",
+            "forcedLineBreak",
+            "paragraphReturn"
+          ],
+          "aperta": false,
+          "predefinito": "bullet"
+        }
+      ]
     }
   ]
 }

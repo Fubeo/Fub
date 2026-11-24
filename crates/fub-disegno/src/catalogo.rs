@@ -670,6 +670,15 @@ pub struct FinestraScritta {
 /// Espandi non chiede come espandere le sfumature (`gradient`, `steps`): vale
 /// quello del motore, strisce piene.
 pub const FINESTRE_SCRITTE: &[FinestraScritta] = &[
+    // Inserisci carattere (menu Testo, K6 T16): il carattere speciale da aggiungere in fondo ai
+    // testi scelti, fra quelli di `special_char` del motore. Il motore prende anche un testo
+    // libero (`text`, la finestra Glifi) e gli id: la finestra non li chiede, la selezione basta.
+    FinestraScritta {
+        id: "type.insert",
+        schema: "{char: bullet|copyright|ellipsis|paragraph|registered|section|trademark|emDash|enDash|discretionaryHyphen|nonBreakingHyphen|doubleLeftQuote|doubleRightQuote|singleLeftQuote|singleRightQuote|emSpace|enSpace|hairSpace|sixthSpace|thinSpace|nonBreakingSpace|figureSpace|punctuationSpace|thirdSpace|quarterSpace|tab|forcedLineBreak|paragraphReturn}",
+        predefiniti: &[("char", "bullet")],
+        limiti: &[],
+    },
     // Ridisponi tutte le tavole (Oggetto › Tavole da disegno): la griglia, il
     // verso, le colonne (le righe per colonna), la distanza e se il disegno
     // va con le sue tavole. `patterns` resta alle preferenze del motore.

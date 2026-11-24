@@ -5971,6 +5971,22 @@
     },
     {
       "fonte": "motore",
+      "id": "type.insert",
+      "chiamata": {
+        "comando": "disegno.type.insert"
+      },
+      "etichetta": {
+        "it": "Inserisci carattere",
+        "en": "Insert Character"
+      },
+      "posto": "menu/testo",
+      "famiglia": "testo",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "motore",
       "id": "type.orientation.horizontal",
       "chiamata": {
         "comando": "disegno.type.orientation.horizontal"
