@@ -206,7 +206,9 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // `livePaint.gapOptions`, che parte dalle opzioni del gruppo scelto. Una riga in più.
   // Visualizza › Mostra spazi vuoti pittura dinamica (`view.livePaintGaps`) diventa «fatto»: legge
   // gli spazi dal motore e li disegna sul foglio. Una riga in più.
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 987, fub: 114, escluso: 12, fatto: 438 });
+  // La trama sfumatura (`object.mesh.*`: Crea, i cinque comandi sui punti, Espandi) e lo strumento
+  // Trama sfumatura (`mesh`) diventano «fatto». Otto righe in più.
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 979, fub: 114, escluso: 12, fatto: 446 });
 });
 
 // --- un motore finto ---------------------------------------------------------------

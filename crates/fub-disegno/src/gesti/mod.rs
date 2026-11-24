@@ -196,11 +196,13 @@ pub(crate) struct Banco {
     /// [`Banco::installa`] lo toglie, perché il documento è un altro.
     pub(crate) ultimo_di_selezione: Option<(String, serde_json::Value, Vec<NodeId>)>,
     /// I punti che lo strumento del motore aveva scelti alla fine dell'ultimo
-    /// commit, col suo id (i punti di larghezza della Larghezza): `ripristina`
-    /// rimette lo strumento a capo, e il gesto dopo li sceglie di nuovo con
-    /// dei clic ([`strumento::rimetti_i_scelti`]). Resta fra una revisione e
-    /// l'altra, perché è il commit stesso a cambiare la revisione.
-    pub(crate) scelti_dello_strumento: Option<(String, Vec<vectorcraft_geom::Point>)>,
+    /// commit, col suo id (i punti di larghezza della Larghezza, i punti della
+    /// Maglia): `ripristina` rimette lo strumento a capo, e il gesto dopo li
+    /// sceglie di nuovo con dei clic ([`strumento::rimetti_i_scelti`]), come
+    /// i comandi che li leggono ([`strumento::scelti_per_il_comando`]). Resta
+    /// fra una revisione e l'altra, perché è il commit stesso a cambiare la
+    /// revisione.
+    pub(crate) scelti_dello_strumento: Option<strumento::Scelti>,
 }
 
 impl Banco {
@@ -313,6 +315,13 @@ impl Banco {
                 self.ripristina(copia);
             }
             return esito;
+        }
+        // Un gesto di un altro strumento dimentica i punti scelti: in
+        // VectorCraft cambiare strumento li toglie.
+        let stesso = matches!(&gesto.tool, DrawingTool::Engine { id }
+            if self.scelti_dello_strumento.as_ref().is_some_and(|s| &s.strumento == id));
+        if !stesso {
+            self.scelti_dello_strumento = None;
         }
         if let DrawingTool::Engine { id } = &gesto.tool {
             return strumento::gesto(self, copia, gesto, id);

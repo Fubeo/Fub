@@ -1171,8 +1171,16 @@ pub(crate) fn esegui(
     // `select.reselect` ripete l'ultimo comando di selezione, che il motore non
     // ricorda fra due richieste: il ricordo del banco va nello stato del documento.
     let ultimo = banco.ultimo_di_selezione.clone();
+    let scelti_dello_strumento = banco.scelti_dello_strumento.clone();
     let sessione = &mut banco.sessione;
     let fatto = vectorcraft_engine::guard::catch_panic(|| {
+        // I punti scelti della Maglia tornano scelti per i comandi che li
+        // leggono, prima che il comando sostituisca la selezione.
+        crate::gesti::strumento::scelti_per_il_comando(
+            sessione,
+            &riga.id,
+            scelti_dello_strumento.as_ref(),
+        )?;
         // Il comando cambia anche lo stile delle forme nuove: quello della
         // sessione resta com'era.
         let stile = sessione.paint.clone();

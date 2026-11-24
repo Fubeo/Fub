@@ -48,6 +48,48 @@
       ]
     },
     {
+      "fonte": "motore",
+      "id": "object.mesh.create",
+      "campi": [
+        {
+          "nome": "rows",
+          "tipo": "numero",
+          "facoltativo": false,
+          "minimo": 1.0,
+          "massimo": 50.0,
+          "predefinito": 4.0
+        },
+        {
+          "nome": "cols",
+          "tipo": "numero",
+          "facoltativo": false,
+          "minimo": 1.0,
+          "massimo": 50.0,
+          "predefinito": 4.0
+        },
+        {
+          "nome": "appearance",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "flat",
+            "center",
+            "edge"
+          ],
+          "aperta": false,
+          "predefinito": "flat"
+        },
+        {
+          "nome": "highlight",
+          "tipo": "numero",
+          "facoltativo": false,
+          "minimo": 0.0,
+          "massimo": 100.0,
+          "predefinito": 100.0
+        }
+      ]
+    },
+    {
       "fonte": "interfaccia",
       "id": "ui.livePaintGapOptions",
       "campi": []

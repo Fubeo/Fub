@@ -130,6 +130,9 @@ export const MOTORE_PRONTO: ReadonlySet<string> = new Set([
   // facce; il gruppo va nel file con la ricetta.
   "livePaintBucket",
   "livePaintSelection",
+  // La Trama sfumatura: il clic su un oggetto ne fa una trama, sulla trama
+  // aggiunge una linea; i punti scelti prendono il colore e la trasparenza.
+  "mesh",
   // I pennelli che deformano (la casella «Larghezza»): un comando, `object.liquify`.
   "warp",
   "twirl",
@@ -186,6 +189,7 @@ export const ICONE_MOTORE: Readonly<Record<string, string>> = {
   width: "draw-width-tool",
   livePaintBucket: "draw-live-paint-bucket",
   livePaintSelection: "draw-live-paint-selection",
+  mesh: "draw-mesh",
   warp: "draw-warp",
   twirl: "draw-twirl",
   pucker: "draw-pucker",

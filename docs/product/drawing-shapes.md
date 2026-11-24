@@ -105,6 +105,25 @@ sul foglio gli spazi dei gruppi scelti nel colore d'anteprima di ciascun
 gruppo, finché i bordi sono visibili; la scelta resta fra una sessione e
 l'altra e non va nel file.
 
+La Trama sfumatura funziona come in VectorCraft. Lo strumento (`mesh`) sta
+nella casella della Sfumatura:
+- un clic su un oggetto ne fa una trama 4 × 4 col suo colore;
+- un clic su una trama aggiunge una linea che passa per quel punto;
+- un trascinamento sposta un punto o una maniglia;
+- un clic su un punto lo sceglie; Maiusc lo aggiunge agli altri, o lo toglie
+  se era già scelto. I punti scelti si trascinano insieme.
+Il colore del pannello e la trasparenza vanno solo sui punti scelti. Se non ce
+n'è nessuno, il colore va a tutto l'oggetto e i punti tengono il loro. Uno
+strumento diverso dimentica i punti scelti.
+
+Il menu Oggetto offre «Crea trama sfumatura…» ed «Espandi trama sfumatura».
+La finestra chiede righe e colonne (da 1 a 50), l'aspetto (piatto, al centro,
+al bordo) e l'evidenziazione (da 0 a 100 %). Espandi è spento se fra gli
+oggetti scelti non c'è una trama, e la trasforma in un gruppo di pezzi a tinta
+piatta. La trama va nel file con la ricetta: riaperta, si modifica ancora. Un
+altro programma vede pezzi a tinta piatta, e dove i colori dei punti cambiano
+la sfumatura si approssima con tanti piccoli pezzi.
+
 La sezione «Allinea», nella scheda Design dell'ispettore, offre gli allineamenti
 e le distribuzioni del motore. Alla selezione servono due oggetti; con «alla
 tavola» ne basta uno per allineare. Un pulsante spento dice perché. La famiglia

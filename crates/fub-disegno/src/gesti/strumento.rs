@@ -195,12 +195,12 @@ pub(crate) fn gesto(
         // prima che il gesto cominci (e prima di `inizio`, così non contano come
         // un cambio).
         let scelti = banco.scelti_dello_strumento.take();
-        if let Some((strumento, punti)) = scelti.filter(|(s, _)| s == id) {
+        if let Some(scelti) = scelti.filter(|s| s.strumento == id) {
             let sessione = &mut banco.sessione;
             let _ = vectorcraft_engine::guard::catch_panic(|| {
-                rimetti_i_scelti(sessione, &punti, cx.vista)
+                rimetti_i_scelti(sessione, &scelti.punti, cx.vista)
             });
-            banco.scelti_dello_strumento = Some((strumento, punti));
+            banco.scelti_dello_strumento = Some(scelti);
         }
         let al_motore = forme::destinazione(&cx)
             .map(|d| d.al_motore)
@@ -314,7 +314,11 @@ pub(crate) fn gesto(
         vectorcraft_engine::guard::catch_panic(|| scelti_da_tenere(sessione, id, cx.vista))
             .ok()
             .flatten();
-    banco.scelti_dello_strumento = scelti.map(|p| (id.to_string(), p));
+    banco.scelti_dello_strumento = scelti.map(|punti| Scelti {
+        strumento: id.to_string(),
+        punti,
+        vista: cx.vista,
+    });
     banco.ripristina(copia);
     let differenza = match differenza {
         Ok(Ok(d)) => d,
@@ -799,6 +803,9 @@ const ROMBO_SCELTO: f32 = 2.5;
 /// disegno è cambiato, come in VectorCraft, dove lo strumento resta vivo.
 /// `None` se non ne ha.
 fn scelti_da_tenere(sessione: &mut Session, id: &str, vista: ViewInfo) -> Option<Vec<Point>> {
+    if id == MAGLIA {
+        return punti_della_maglia(sessione);
+    }
     if id != "width" {
         return None;
     }
@@ -814,6 +821,62 @@ fn scelti_da_tenere(sessione: &mut Session, id: &str, vista: ViewInfo) -> Option
         })
         .collect();
     (!punti.is_empty()).then_some(punti)
+}
+
+/// I punti che lo strumento del motore ha scelti, con l'id e la vista del
+/// commit in cui li ha lasciati (vedi [`Banco::scelti_dello_strumento`]).
+#[derive(Clone, Debug)]
+pub(crate) struct Scelti {
+    pub(crate) strumento: String,
+    pub(crate) punti: Vec<Point>,
+    pub(crate) vista: ViewInfo,
+}
+
+/// Lo strumento Maglia del motore (`tools/src/meshedit.rs`).
+const MAGLIA: &str = "mesh";
+
+/// I comandi che leggono i punti scelti della Maglia (l'opzione `meshPoints`
+/// dello strumento attivo, `engine/src/cmd/paint.rs` `picked_mesh_points`): un
+/// colore pieno di riempimento li colora, la Trasparenza li sfuma e li legge.
+const LEGGONO_I_PUNTI_DELLA_MAGLIA: [&str; 3] =
+    ["paint.setFill", "transparency.set", "transparency.info"];
+
+/// Le posizioni dei punti che la Maglia ha scelti, nel documento del motore:
+/// li sceglie di nuovo un clic su ciascuno. `None` se non ne ha.
+fn punti_della_maglia(sessione: &Session) -> Option<Vec<Point>> {
+    let opzioni = sessione.tool_options();
+    let scelti = opzioni.get("meshPoints").and_then(Value::as_array)?;
+    let stato = sessione.doc().ok()?;
+    let punti: Vec<Point> = scelti
+        .iter()
+        .filter_map(|p| {
+            let id = NodeId(p.get("id").and_then(Value::as_u64)?);
+            let indice = usize::try_from(p.get("index").and_then(Value::as_u64)?).ok()?;
+            let griglia = vectorcraft_tools::meshedit::grid_of(stato.doc.node(id)?)?;
+            griglia.points.get(indice).map(|q| q.p)
+        })
+        .collect();
+    (!punti.is_empty()).then_some(punti)
+}
+
+/// Prima di un comando che legge i punti scelti della Maglia, quelli che lo
+/// strumento aveva al commit di prima tornano scelti nella sessione, come in
+/// VectorCraft, dove lo strumento resta vivo fra un gesto e un comando: il
+/// colore pieno va solo a quei punti. Per gli altri comandi, o senza punti
+/// scelti, non fa niente; la selezione degli oggetti del comando resta la sua.
+pub(crate) fn scelti_per_il_comando(
+    sessione: &mut Session,
+    comando: &str,
+    scelti: Option<&Scelti>,
+) -> Result<(), EngineError> {
+    let Some(scelti) = scelti.filter(|s| s.strumento == MAGLIA) else {
+        return Ok(());
+    };
+    if !LEGGONO_I_PUNTI_DELLA_MAGLIA.contains(&comando) {
+        return Ok(());
+    }
+    sessione.select_tool(MAGLIA, scelti.vista)?;
+    rimetti_i_scelti(sessione, &scelti.punti, scelti.vista)
 }
 
 /// Sceglie di nuovo i punti `punti` nello strumento appena preparato: un clic

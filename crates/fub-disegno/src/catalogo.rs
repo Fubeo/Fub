@@ -597,6 +597,9 @@ pub const NOMI: &[(&str, Tipo)] = &[
     ("concentricSkew", Tipo::Numero),
     ("radialSkew", Tipo::Numero),
     ("frame", Tipo::SiNo),
+    // Crea trama sfumatura: le colonne e l'evidenziazione (le righe sono sopra).
+    ("cols", Tipo::Numero),
+    ("highlight", Tipo::Numero),
     ("compound", Tipo::SiNo),
     // Trova e sostituisci, Trova successivo (T16): le parole da cercare.
     ("find", Tipo::Testo),
@@ -703,6 +706,24 @@ pub const FINESTRE_SCRITTE: &[FinestraScritta] = &[
             ("closeGaps", "false"),
         ],
         limiti: &[("points", Some(0.01), Some(72.0))],
+    },
+    // Crea trama sfumatura, come in VectorCraft: righe e colonne da 1 a 50 (4 di serie),
+    // l'aspetto (piatto, chiaro al centro o al bordo) e quanto è chiara la luce, da 0 a 100.
+    // `at`, `tolerance` e `ids` restano allo strumento Trama e al motore.
+    FinestraScritta {
+        id: "object.mesh.create",
+        schema: "{rows, cols, appearance: flat|center|edge, highlight}",
+        predefiniti: &[
+            ("rows", "4"),
+            ("cols", "4"),
+            ("appearance", "flat"),
+            ("highlight", "100"),
+        ],
+        limiti: &[
+            ("rows", Some(1.0), Some(50.0)),
+            ("cols", Some(1.0), Some(50.0)),
+            ("highlight", Some(0.0), Some(100.0)),
+        ],
     },
     // Pulisci (K6 T12): i tre interruttori del motore, tutti veri di serie. Il comando vale su
     // tutto il disegno, non sulla selezione: il motore non legge la selezione (`clean_up`).

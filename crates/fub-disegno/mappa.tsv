@@ -840,13 +840,13 @@ motore	object.envelope.options	Envelope Options…	Object › Envelope Distort	d
 motore	object.envelope.expand	Expand	Object › Envelope Distort	dinamici	F2	T21	da fare	menu/oggetto	famiglia		Espandi
 motore	object.envelope.editContents	Edit Contents	Object › Envelope Distort	dinamici	F2	T21	da fare	menu/oggetto	famiglia		Modifica contenuto
 motore	object.envelope.setMeshPoint	Move Envelope Mesh Point		dinamici	F2	T21	da fare	menu/oggetto	famiglia		Sposta punto trama involucro
-motore	object.mesh.create	Create Gradient Mesh…	Object	trame	F2	T21	da fare	menu/oggetto	famiglia	finestra	Crea trama sfumatura…
-motore	object.mesh.setPointColor	Set Mesh Point Color		trame	F2	T21	da fare	ispettore/design	famiglia		Imposta colore punto trama
-motore	object.mesh.movePoint	Move Mesh Point		trame	F2	T21	da fare	ispettore/design	famiglia		Sposta punto trama
-motore	object.mesh.movePoints	Move Mesh Points		trame	F2	T21	da fare	ispettore/design	famiglia		Sposta punti trama
-motore	object.mesh.addLine	Add Mesh Line		trame	F2	T21	da fare	ispettore/design	famiglia		Aggiungi linea trama
-motore	object.mesh.deletePoint	Delete Mesh Point		trame	F2	T21	da fare	ispettore/design	famiglia		Elimina punto trama
-motore	object.mesh.expand	Expand Gradient Mesh	Object	trame	F2	T21	da fare	menu/oggetto	famiglia		Espandi trama sfumatura
+motore	object.mesh.create	Create Gradient Mesh…	Object	trame	F2	T21	fatto	menu/oggetto	famiglia	la finestra chiede righe, colonne, aspetto e luce; un tracciato pieno, una sfumatura o un'immagine incorporata diventano trama; il file la tiene con la ricetta e la disegna a tasselli	Crea trama sfumatura…
+motore	object.mesh.setPointColor	Set Mesh Point Color		trame	F2	T21	fatto	ispettore/design	famiglia	id della trama (o la prima scelta) tradotto dalla famiglia trame	Imposta colore punto trama
+motore	object.mesh.movePoint	Move Mesh Point		trame	F2	T21	fatto	ispettore/design	famiglia	id della trama (o la prima scelta) tradotto dalla famiglia trame	Sposta punto trama
+motore	object.mesh.movePoints	Move Mesh Points		trame	F2	T21	fatto	ispettore/design	famiglia	id e items[].id tradotti dalla famiglia trame	Sposta punti trama
+motore	object.mesh.addLine	Add Mesh Line		trame	F2	T21	fatto	ispettore/design	famiglia	id della trama (o la prima scelta) tradotto dalla famiglia trame	Aggiungi linea trama
+motore	object.mesh.deletePoint	Delete Mesh Point		trame	F2	T21	fatto	ispettore/design	famiglia	id della trama (o la prima scelta) tradotto dalla famiglia trame	Elimina punto trama
+motore	object.mesh.expand	Expand Gradient Mesh	Object	trame	F2	T21	fatto	menu/oggetto	famiglia	senza una trama scelta il comando è spento con la frase di VectorCraft	Espandi trama sfumatura
 motore	object.transform	Transform		trasforma	F1	T13	fatto	ispettore/design	famiglia		Trasforma
 motore	object.move	Move…	Object › Transform	trasforma	F1	T13	fatto	menu/oggetto/trasforma	famiglia	finestra	Sposta…
 motore	object.rotate	Rotate…	Object › Transform	trasforma	F1	T13	fatto	menu/oggetto/trasforma	famiglia	finestra	Ruota…
@@ -1339,7 +1339,7 @@ strumento	livePaintBucket	Live Paint Bucket		trame	F2	T21	fatto	colonna/colore	f
 strumento	livePaintSelection	Live Paint Selection Tool		trame	F2	T21	fatto	colonna/colore	famiglia	riquadro «shapeBuilder»; clic sceglie una faccia (Maiusc aggiunge), trascinato sceglie quelle toccate; le facce hanno l'id del file e il pannello colore le riempie; i bordi scritti con stroke-miterlimit restano estranei alla scena e non si scelgono	Strumento Selezione pittura dinamica
 strumento	perspectiveGrid	Perspective Grid Tool		prospettiva	F4	T25	da fare	colonna/prospettiva	famiglia	riquadro «perspectiveGrid»	Strumento Griglia prospettica
 strumento	perspectiveSelection	Perspective Selection Tool		prospettiva	F4	T25	da fare	colonna/prospettiva	famiglia	riquadro «perspectiveGrid»	Strumento Selezione prospettica
-strumento	mesh	Mesh Tool		trame	F2	T21	da fare	colonna/colore	famiglia	riquadro «mesh»	Strumento Trama
+strumento	mesh	Mesh Tool		trame	F2	T21	fatto	colonna/colore	famiglia	clic dentro un oggetto pieno fa la trama, poi aggiunge linee; clic sceglie i punti (Maiusc ne aggiunge), trascinare li sposta, Alt-clic toglie le linee; il colore pieno e la trasparenza vanno ai punti scelti, che il ponte tiene fra un gesto e un comando	Strumento Trama
 strumento	gradient	Gradient Tool		colore	F1	T14	fatto	colonna/colore	famiglia	riquadro «gradient»; trascinare sull'oggetto scelto ne mette l'inizio e la fine della sfumatura, con l'annotatore del motore (barra, maniglie, un campione per punto) mentre si trascina; il rilascio è un passo di Annulla	Strumento Sfumatura
 strumento	eyedropper	Eyedropper Tool		colore	F1	T14	fatto	colonna/colore	famiglia	riquadro «eyedropper»	Strumento Contagocce
 strumento	measure	Measure Tool		tavole	F2	T19	fatto	colonna/misura	famiglia	riquadro «eyedropper»; trascinato misura distanza, angolo, dX e dY; la misura resta sul foglio fino alla misura dopo (la tiene il client: la sessione rimette lo strumento a capo dopo il commit); Esc a metà riporta quella di prima	Strumento Misura

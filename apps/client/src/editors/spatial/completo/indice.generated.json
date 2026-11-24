@@ -2147,6 +2147,118 @@
     },
     {
       "fonte": "motore",
+      "id": "object.mesh.addLine",
+      "chiamata": {
+        "comando": "disegno.object.mesh.addLine"
+      },
+      "etichetta": {
+        "it": "Aggiungi linea trama",
+        "en": "Add Mesh Line"
+      },
+      "posto": "ispettore/design",
+      "famiglia": "trame",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "object.mesh.create",
+      "chiamata": {
+        "comando": "disegno.object.mesh.create"
+      },
+      "etichetta": {
+        "it": "Crea trama sfumatura…",
+        "en": "Create Gradient Mesh…"
+      },
+      "posto": "menu/oggetto",
+      "famiglia": "trame",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "motore",
+      "id": "object.mesh.deletePoint",
+      "chiamata": {
+        "comando": "disegno.object.mesh.deletePoint"
+      },
+      "etichetta": {
+        "it": "Elimina punto trama",
+        "en": "Delete Mesh Point"
+      },
+      "posto": "ispettore/design",
+      "famiglia": "trame",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "object.mesh.expand",
+      "chiamata": {
+        "comando": "disegno.object.mesh.expand"
+      },
+      "etichetta": {
+        "it": "Espandi trama sfumatura",
+        "en": "Expand Gradient Mesh"
+      },
+      "posto": "menu/oggetto",
+      "famiglia": "trame",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "object.mesh.movePoint",
+      "chiamata": {
+        "comando": "disegno.object.mesh.movePoint"
+      },
+      "etichetta": {
+        "it": "Sposta punto trama",
+        "en": "Move Mesh Point"
+      },
+      "posto": "ispettore/design",
+      "famiglia": "trame",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "object.mesh.movePoints",
+      "chiamata": {
+        "comando": "disegno.object.mesh.movePoints"
+      },
+      "etichetta": {
+        "it": "Sposta punti trama",
+        "en": "Move Mesh Points"
+      },
+      "posto": "ispettore/design",
+      "famiglia": "trame",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "object.mesh.setPointColor",
+      "chiamata": {
+        "comando": "disegno.object.mesh.setPointColor"
+      },
+      "etichetta": {
+        "it": "Imposta colore punto trama",
+        "en": "Set Mesh Point Color"
+      },
+      "posto": "ispettore/design",
+      "famiglia": "trame",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "object.move",
       "chiamata": {
         "comando": "disegno.object.move"
@@ -6258,6 +6370,22 @@
       "posto": "colonna/misura",
       "famiglia": "tavole",
       "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "strumento",
+      "id": "mesh",
+      "chiamata": {
+        "strumento": "mesh"
+      },
+      "etichetta": {
+        "it": "Strumento Trama",
+        "en": "Mesh Tool"
+      },
+      "posto": "colonna/colore",
+      "famiglia": "trame",
+      "tasto": "U",
       "effetto": "cambia",
       "finestra": false
     },

@@ -1,14 +1,16 @@
 //! La famiglia `trame` della mappa: la Pittura dinamica di VectorCraft
-//! (`livePaint.*`, `vendor/vectorcraft/crates/engine/src/cmd/buildcmds/live_paint.rs`).
+//! (`livePaint.*`, `vendor/vectorcraft/crates/engine/src/cmd/buildcmds/live_paint.rs`)
+//! e la trama sfumatura (`object.mesh.*`, `engine/src/cmd/live/mesh.rs`).
 //! Lo stato non tiene niente; la famiglia traduce il gruppo che i comandi
-//! vogliono (`group`) dall'id del file al nodo del motore.
+//! vogliono (`group`) e la trama (`id`, `items[].id`, `ids`) dall'id del file
+//! al nodo del motore.
 
 use std::sync::Arc;
 
 use fub_abi::{DrawingDisabledReason, DrawingRefusal, PluginError};
 use fub_motori::{ErroreMotore, Servizi};
 use serde_json::Value;
-use vectorcraft_doc::NodeId;
+use vectorcraft_doc::{NodeId, NodeKind};
 use vectorcraft_tools::builder::is_live_paint;
 
 use super::{nodi_scelti, selezione_spenta, StatoFamiglia};
@@ -18,6 +20,16 @@ use crate::apertura::Copia;
 /// `group`: Riempi lo prende anche dalla selezione (se non c'è, fa vivi i
 /// tracciati scelti), Bordo e Info lo vogliono.
 const COL_GRUPPO: [&str; 3] = ["livePaint.fill", "livePaint.strokeEdge", "livePaint.info"];
+
+/// I comandi che lavorano su una trama data come `id` (o, per più trame, in
+/// `items`): senza `id`, la prima trama fra gli oggetti scelti.
+const SULLA_TRAMA: [&str; 5] = [
+    "object.mesh.setPointColor",
+    "object.mesh.movePoint",
+    "object.mesh.movePoints",
+    "object.mesh.addLine",
+    "object.mesh.deletePoint",
+];
 
 /// Lo stato della famiglia: non tiene niente.
 pub(crate) struct Stato;
@@ -37,7 +49,7 @@ impl StatoFamiglia for Stato {
 
     /// Come in VectorCraft: i comandi del menu vogliono una selezione; Unisci,
     /// Rilascia, Espandi e le Opzioni aperture vogliono un gruppo vivo fra
-    /// gli oggetti scelti. Un oggetto scelto che il motore non ha, o bloccato,
+    /// gli oggetti scelti, Espandi trama sfumatura una trama. Un oggetto scelto che il motore non ha, o bloccato,
     /// spegne ogni comando; una copia di sola lettura spegne quelli che
     /// cambiano il disegno.
     fn spento(id: &str, copia: &Copia, selezione: &[String]) -> Option<DrawingDisabledReason> {
@@ -48,6 +60,8 @@ impl StatoFamiglia for Stato {
                 | "livePaint.release"
                 | "livePaint.expand"
                 | "livePaint.gapOptions"
+                | "object.mesh.create"
+                | "object.mesh.expand"
         );
         if del_menu && selezione.is_empty() {
             return Some(DrawingDisabledReason::NoSelection);
@@ -57,6 +71,18 @@ impl StatoFamiglia for Stato {
         }
         if id != "livePaint.info" && !copia.modificabile {
             return Some(DrawingDisabledReason::ReadOnly);
+        }
+        // Espandi trama sfumatura vuole una trama fra gli oggetti scelti, con la
+        // frase di VectorCraft.
+        if id == "object.mesh.expand" {
+            return trama_scelta(copia, selezione).is_none().then(|| {
+                DrawingDisabledReason::Other {
+                    text: "Seleziona una trama sfumatura.".into(),
+                }
+            });
+        }
+        if id.starts_with("object.mesh.") {
+            return None;
         }
         let vuole_il_gruppo = del_menu && id != "livePaint.make";
         (vuole_il_gruppo && gruppo_scelto(copia, selezione).is_none())
@@ -119,6 +145,12 @@ impl StatoFamiglia for Stato {
         if id == "livePaint.gapOptions" {
             return Ok(misura_scritta(valore));
         }
+        if id == "object.mesh.create" {
+            return ids_del_motore(copia, valore);
+        }
+        if SULLA_TRAMA.contains(&id) {
+            return trama_del_motore(copia, selezione, valore);
+        }
         if !COL_GRUPPO.contains(&id) {
             return Ok(valore);
         }
@@ -148,6 +180,67 @@ impl StatoFamiglia for Stato {
         }
         Ok(valore)
     }
+}
+
+/// L'id del file `file` come nodo del motore, o l'argomento che non lo è.
+fn nodo_del_file(copia: &Copia, file: &str) -> Result<NodeId, PluginError> {
+    nodi_scelti(copia, &[file.to_string()])
+        .ok()
+        .and_then(|n| n.first().copied())
+        .ok_or_else(|| PluginError::BadArgs(format!("«{file}» non è nel disegno.").into()))
+}
+
+/// Gli `ids` di Crea trama sfumatura come id del file diventano nodi del
+/// motore; senza `ids`, il motore prende gli oggetti scelti.
+fn ids_del_motore(copia: &Copia, mut valore: Value) -> Result<Value, PluginError> {
+    if let Some(ids) = valore.get_mut("ids").and_then(Value::as_array_mut) {
+        for id in ids {
+            if let Some(file) = id.as_str() {
+                *id = Value::from(nodo_del_file(copia, file)?.0);
+            }
+        }
+    }
+    Ok(valore)
+}
+
+/// La trama dei comandi sui punti: `id` e `items[].id` come id del file
+/// diventano nodi del motore; senza `id` né `items`, la prima trama fra gli
+/// oggetti scelti.
+fn trama_del_motore(
+    copia: &Copia,
+    selezione: &[String],
+    mut valore: Value,
+) -> Result<Value, PluginError> {
+    if !valore.is_object() {
+        valore = Value::Object(serde_json::Map::new());
+    }
+    if let Some(file) = valore.get("id").and_then(Value::as_str).map(str::to_string) {
+        valore["id"] = Value::from(nodo_del_file(copia, &file)?.0);
+    }
+    if let Some(voci) = valore.get_mut("items").and_then(Value::as_array_mut) {
+        for voce in voci {
+            if let Some(file) = voce.get("id").and_then(Value::as_str).map(str::to_string) {
+                voce["id"] = Value::from(nodo_del_file(copia, &file)?.0);
+            }
+        }
+    }
+    let senza = valore.get("id").is_none_or(Value::is_null) && valore.get("items").is_none();
+    if senza {
+        if let Some(trama) = trama_scelta(copia, selezione) {
+            valore["id"] = Value::from(trama.0);
+        }
+    }
+    Ok(valore)
+}
+
+/// La prima trama sfumatura fra gli oggetti scelti.
+fn trama_scelta(copia: &Copia, selezione: &[String]) -> Option<NodeId> {
+    nodi_scelti(copia, selezione).ok()?.into_iter().find(|n| {
+        copia
+            .documento
+            .node(*n)
+            .is_some_and(|n| matches!(n.kind, NodeKind::Mesh(_)))
+    })
 }
 
 /// Il primo gruppo della Pittura dinamica fra gli oggetti scelti.
