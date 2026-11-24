@@ -82,9 +82,17 @@ dà il nome al simbolo nuovo e a quello da rinominare.
   usati**, che sceglie nella lista i simboli che niente usa; le
   **librerie** di VectorCraft, aperte da «Librerie di simboli…», da cui un
   clic su un simbolo lo copia nel disegno.
-- **Spruzzo simboli** e **Strumento Simbolismo** spargono le istanze e le
-  spostano, le stringono, le ingrandiscono, le girano e le rendono
-  trasparenti sotto il pennello.
+- Gli **strumenti dei simboli** stanno nel riquadro del Generatore forme
+  della colonna. **Spruzzo simboli** sparge istanze del simbolo lungo il
+  tratto, in un gruppo nuovo; la sua fila ha il **Simbolo** (lo stesso
+  scelto nella sezione: cambiarlo da una parte lo cambia dall'altra; senza
+  scelta, il primo del disegno), il **Diametro** del pennello e la
+  **Densità**. **Spostamento**, **Compressione**, **Ridimensionamento**,
+  **Rotazione** e **Trasparenza** cambiano le istanze sotto il pennello
+  (Alt fa il contrario: allarga, rimpicciolisce, rende opache); la loro
+  fila ha il Diametro e l'**Intensità**. Ogni tratto è un passo di
+  annulla. **Colorazione** e **Stile** non ci sono ancora: danno
+  all'istanza un riempimento suo, che il file non sa ancora scrivere.
 
 Ogni comando è un passo di annulla. Ciò che il file non sa ancora dire non
 si fa e lo si dice: colorare un'istanza col Coloratore, cambiarne l'aspetto,

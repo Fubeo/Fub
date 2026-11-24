@@ -45,7 +45,8 @@ import { creaPortaPreimpostate } from "./sfumature-preimpostate";
 import { registraTrasparenza } from "./trasparenza-sezione";
 import { creaPortaTemi } from "./temi-porta";
 import { registraTemi } from "./temi-sezione";
-import { registraSimboli, type SimboloCorrente } from "./simboli-sezione";
+import { filaSimbolismo, STRUMENTI_SIMBOLISMO } from "./fila-simbolismo";
+import { registraSimboli, simboloCorrente as nuovoSimboloCorrente, type SimboloCorrente } from "./simboli-sezione";
 import { registraTesto } from "./testo-sezioni";
 import type { Teardown } from "../../../ui/lifetime";
 import { languageCurrent } from "../../../i18n/strings";
@@ -556,7 +557,11 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila" | "e
   registraTemi(sezioni, creaPortaTemi({ motore: ctx.motore, carica: { famiglia: (id) => carica.famiglia(id) }, vita: ctx.life }), ctx.life);
   // La sezione «Simboli» di Risorse: la lista è una lettura del motore, ogni pulsante un comando del
   // percorso unico. Il simbolo scelto è il simbolo corrente di Spruzzo e Simbolismo.
-  const simboloCorrente: SimboloCorrente = { nome: null };
+  const simboloCorrente: SimboloCorrente = nuovoSimboloCorrente();
+  // Lo Spruzzo e il Simbolismo: la loro fila, col simbolo corrente della sezione «Simboli».
+  for (const strumento of STRUMENTI_SIMBOLISMO) {
+    registraFila(strumento, (stato, azioni, vita) => filaSimbolismo(strumento, simboloCorrente, stato, azioni, vita));
+  }
   registraSimboli(
     sezioni,
     {

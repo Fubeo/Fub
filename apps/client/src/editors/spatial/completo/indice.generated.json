@@ -7623,6 +7623,102 @@
     },
     {
       "fonte": "strumento",
+      "id": "symbolScreener",
+      "chiamata": {
+        "strumento": "symbolScreener"
+      },
+      "etichetta": {
+        "it": "Strumento Trasparenza simboli",
+        "en": "Symbol Screener Tool"
+      },
+      "posto": "colonna/oggetti",
+      "famiglia": "simboli",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "strumento",
+      "id": "symbolScruncher",
+      "chiamata": {
+        "strumento": "symbolScruncher"
+      },
+      "etichetta": {
+        "it": "Strumento Addensamento simboli",
+        "en": "Symbol Scruncher Tool"
+      },
+      "posto": "colonna/oggetti",
+      "famiglia": "simboli",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "strumento",
+      "id": "symbolShifter",
+      "chiamata": {
+        "strumento": "symbolShifter"
+      },
+      "etichetta": {
+        "it": "Strumento Spostamento simboli",
+        "en": "Symbol Shifter Tool"
+      },
+      "posto": "colonna/oggetti",
+      "famiglia": "simboli",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "strumento",
+      "id": "symbolSizer",
+      "chiamata": {
+        "strumento": "symbolSizer"
+      },
+      "etichetta": {
+        "it": "Strumento Ridimensionamento simboli",
+        "en": "Symbol Sizer Tool"
+      },
+      "posto": "colonna/oggetti",
+      "famiglia": "simboli",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "strumento",
+      "id": "symbolSpinner",
+      "chiamata": {
+        "strumento": "symbolSpinner"
+      },
+      "etichetta": {
+        "it": "Strumento Rotazione simboli",
+        "en": "Symbol Spinner Tool"
+      },
+      "posto": "colonna/oggetti",
+      "famiglia": "simboli",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "strumento",
+      "id": "symbolSprayer",
+      "chiamata": {
+        "strumento": "symbolSprayer"
+      },
+      "etichetta": {
+        "it": "Strumento Spruzzo simboli",
+        "en": "Symbol Sprayer Tool"
+      },
+      "posto": "colonna/oggetti",
+      "famiglia": "simboli",
+      "tasto": "Shift+S",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "strumento",
       "id": "twirl",
       "chiamata": {
         "strumento": "twirl"

@@ -44,7 +44,7 @@ export const CASELLE: readonly Casella[] = [
   { id: "type", gruppo: "shape", strumenti: ["motore:type", "motore:areaType", "motore:typeOnPath", "motore:verticalType", "motore:verticalAreaType", "motore:verticalTypeOnPath", "motore:touchType", "text"] },
   { id: "rotate", gruppo: "modify", strumenti: ["motore:rotate", "motore:reflect", "motore:scale", "motore:shear", "motore:reshape", "motore:freeTransform", "motore:puppetWarp"] },
   { id: "width", gruppo: "modify", strumenti: ["motore:width", "motore:warp", "motore:twirl", "motore:pucker", "motore:bloat", "motore:scallop", "motore:crystallize", "motore:wrinkle"] },
-  { id: "shapeBuilder", gruppo: "modify", strumenti: ["motore:shapeBuilder", "motore:livePaintBucket", "motore:livePaintSelection", "motore:blend", "motore:objectsOnPath"] },
+  { id: "shapeBuilder", gruppo: "modify", strumenti: ["motore:shapeBuilder", "motore:livePaintBucket", "motore:livePaintSelection", "motore:blend", "motore:objectsOnPath", "motore:symbolSprayer", "motore:symbolShifter", "motore:symbolScruncher", "motore:symbolSizer", "motore:symbolSpinner", "motore:symbolScreener"] },
   { id: "gradient", gruppo: "color", strumenti: ["motore:gradient", "motore:mesh"] },
   { id: "eyedropper", gruppo: "color", strumenti: ["motore:eyedropper", "motore:measure", "motore:measureInspect", "motore:dimension"] },
   { id: "hand", gruppo: "view", strumenti: ["motore:hand", "motore:zoom", "motore:rotateView", "motore:printTiling", "hand", "zoom"] },
@@ -138,6 +138,15 @@ export const MOTORE_PRONTO: ReadonlySet<string> = new Set([
   // Gli Oggetti sul tracciato: il clic su un tracciato vi attacca gli oggetti
   // scelti, distribuiti lungo la linea; il gruppo va nel file con la ricetta.
   "objectsOnPath",
+  // Lo Spruzzo di simboli e cinque strumenti Simbolismo (Colorazione e Stile aspettano il modo
+  // di scrivere nel file il colore proprio di un'istanza): le istanze nuove e quelle sotto il
+  // pennello; la fila dà il simbolo corrente, il diametro, la densità o l'intensità.
+  "symbolSprayer",
+  "symbolShifter",
+  "symbolScruncher",
+  "symbolSizer",
+  "symbolSpinner",
+  "symbolScreener",
   // La Trama sfumatura: il clic su un oggetto ne fa una trama, sulla trama
   // aggiunge una linea; i punti scelti prendono il colore e la trasparenza.
   "mesh",
@@ -206,6 +215,12 @@ export const ICONE_MOTORE: Readonly<Record<string, string>> = {
   livePaintBucket: "draw-live-paint-bucket",
   blend: "draw-blend",
   objectsOnPath: "draw-objects-on-path",
+  symbolSprayer: "draw-symbol-spray",
+  symbolShifter: "draw-symbols",
+  symbolScruncher: "draw-symbols",
+  symbolSizer: "draw-symbols",
+  symbolSpinner: "draw-symbols",
+  symbolScreener: "draw-symbols",
   livePaintSelection: "draw-live-paint-selection",
   mesh: "draw-mesh",
   warp: "draw-warp",

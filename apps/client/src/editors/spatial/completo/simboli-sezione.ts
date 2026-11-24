@@ -33,8 +33,23 @@ export interface LibreriaSimboli {
 
 /// Il simbolo corrente del Completo aperto: quello scelto nella sezione, che Spruzzo e Simbolismo
 /// usano. Non sta nel file (`docs/reference/scene-format-symbols.md`, §10).
+/// Chi lo cambia passa da `poniSimbolo`, che lo dice agli `ascolti` (la fila degli strumenti dei
+/// simboli, se è montata).
 export interface SimboloCorrente {
   nome: string | null;
+  readonly ascolti?: Set<(nome: string | null) => void>;
+}
+
+/// Un simbolo corrente nuovo, senza nessuno che ascolta.
+export function simboloCorrente(): SimboloCorrente {
+  return { nome: null, ascolti: new Set() };
+}
+
+/// Cambia il simbolo corrente e lo dice a chi ascolta; lo stesso nome non dice niente.
+export function poniSimbolo(corrente: SimboloCorrente, nome: string | null): void {
+  if (corrente.nome === nome) return;
+  corrente.nome = nome;
+  for (const ascolto of [...(corrente.ascolti ?? [])]) ascolto(nome);
 }
 
 /// Ciò che la sezione chiede al Completo.
@@ -124,7 +139,7 @@ export function sezioneSimboli(azioni: AzioniSimboli, corrente: SimboloCorrente)
 
       const scegli = (nomi: readonly string[]): void => {
         stato.scelti = nomi;
-        corrente.nome = nomi.length === 1 ? nomi[0]! : nomi.length === 0 ? null : corrente.nome;
+        poniSimbolo(corrente, nomi.length === 1 ? nomi[0]! : nomi.length === 0 ? null : corrente.nome);
         stato.messaggio = null;
       };
 
@@ -137,7 +152,7 @@ export function sezioneSimboli(azioni: AzioniSimboli, corrente: SimboloCorrente)
             const nomi = new Set(stato.simboli.map((s) => s.nome));
             const rimasti = stato.scelti.filter((n) => nomi.has(n));
             if (rimasti.length !== stato.scelti.length) scegli(rimasti);
-            if (corrente.nome !== null && !nomi.has(corrente.nome)) corrente.nome = null;
+            if (corrente.nome !== null && !nomi.has(corrente.nome)) poniSimbolo(corrente, null);
           } else stato.simboli ??= [];
           costruisci();
         });
