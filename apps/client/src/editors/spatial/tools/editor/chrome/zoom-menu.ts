@@ -18,7 +18,7 @@ import { DRAW_SCALE_LIMITS, ZOOM_STEP } from "../constants";
 import type { EditorContext } from "../context";
 
 /// I comandi `view.*` che il client fa: la mappa li dà «fatto» con la loro prova.
-export const COMANDI_VISTA = ["view.zoomIn", "view.zoomOut", "view.actualSize", "view.fitAll", "view.setZoom"] as const;
+export const COMANDI_VISTA = ["view.zoomIn", "view.zoomOut", "view.actualSize", "view.fitArtboard", "view.fitAll", "view.setZoom"] as const;
 export type ComandoVista = (typeof COMANDI_VISTA)[number];
 
 export function isComandoVista(id: string): id is ComandoVista {
@@ -31,6 +31,7 @@ const VOCI: readonly { readonly id: Exclude<ComandoVista, "view.setZoom">; reado
   { id: "view.zoomIn", chiave: "draw.zoom_in" },
   { id: "view.zoomOut", chiave: "draw.zoom_out" },
   { id: "view.actualSize", chiave: "draw.keys.actual" },
+  { id: "view.fitArtboard", chiave: "draw.zoom.fit_artboard" },
   { id: "view.fitAll", chiave: "draw.zoom.fit_all" },
 ];
 
@@ -101,6 +102,9 @@ export function creaMenuZoom(ctx: EditorContext, bottone: () => HTMLElement | nu
         return;
       case "view.actualSize":
         ctx.zoomBy(1 / ctx.camera.scale);
+        return;
+      case "view.fitArtboard":
+        adattaTavola(ctx);
         return;
       case "view.fitAll":
         ctx.fit();
@@ -219,3 +223,11 @@ export function creaMenuZoom(ctx: EditorContext, bottone: () => HTMLElement | nu
   return { apri, comando: esegui };
 }
 
+/// Adatta tavola alla finestra (VectorCraft: Fit Artboard in Window): inquadra la tavola di adesso;
+/// senza tavole, la pagina, come Adatta tutto.
+export function adattaTavola(ctx: EditorContext): void {
+  const tavole = ctx.boardsNow();
+  const adesso = ctx.currentBoard();
+  const posto = adesso === null ? -1 : tavole.findIndex((b) => b.id === adesso.id);
+  if (posto < 0 || !ctx.visitBoard(posto, true)) ctx.fit();
+}

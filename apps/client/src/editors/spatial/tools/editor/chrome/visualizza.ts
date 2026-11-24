@@ -8,12 +8,14 @@
 // contorno è la vista del contorno; i righelli di bordo stanno in `edge-rulers.ts`;
 // la rotazione è quella della vista; la griglia di trasparenza, i bordi e il
 // riquadro di delimitazione li disegnano `view.ts` e `marks.ts`; gli spazi vuoti della
-// pittura dinamica li legge dal motore `../spazi-pittura.ts`. Una voce che il
+// pittura dinamica li legge dal motore `../spazi-pittura.ts`; le tavole nascoste sono un attributo
+// del foglio che il CSS legge (`view.ts`), e «Vai alla tavola» chiede quale (`vista-tavola.ts`). Una voce che il
 // client non fa non è qui: resta «da fare» in mappa, con la nota del perché.
 
 import { t } from "../../../strings";
 import type { EditorContext } from "../context";
 import { chiediAngoloVista } from "./vista-ruota";
+import { chiediTavola } from "./vista-tavola";
 
 export const COMANDI_VISUALIZZA = [
   "view.grid",
@@ -27,24 +29,28 @@ export const COMANDI_VISUALIZZA = [
   "view.rulers",
   "view.edges",
   "view.boundingBox",
+  "view.artboards",
   "view.livePaintGaps",
   "view.preciseCursors",
   "view.rotate",
   "view.rotateReset",
+  "view.goToArtboard",
 ] as const;
 export type ComandoVisualizza = (typeof COMANDI_VISUALIZZA)[number];
 
 /// Le file di ≡ › Visualizza, in ordine, con una riga di separazione fra l'una e
 /// l'altra: griglia e aggancio, poi le guide sensibili e gli agganci del motore, poi come si vede la carta e il disegno (la griglia di
 /// trasparenza, contorno, righelli), poi ciò che si nasconde attorno agli oggetti
-/// scelti (bordi, riquadro), poi i cursori di precisione, poi la rotazione della vista.
+/// scelti (bordi, riquadro) e le tavole, poi i cursori di precisione, poi la rotazione della vista,
+/// poi la tavola da inquadrare.
 export const FILE_VISUALIZZA: readonly (readonly ComandoVisualizza[])[] = [
   ["view.grid", "view.snapToGrid", "view.snapToPixel"],
   ["view.smartGuides", "view.snapToPoint", "view.snapToGlyph"],
   ["view.transparencyGrid", "view.outline", "view.rulers"],
-  ["view.edges", "view.boundingBox", "view.livePaintGaps"],
+  ["view.edges", "view.boundingBox", "view.artboards", "view.livePaintGaps"],
   ["view.preciseCursors"],
   ["view.rotate", "view.rotateReset"],
+  ["view.goToArtboard"],
 ];
 
 /// «Zoom sulla selezione» (`addon.arrange.zoomSelection`): la vista di Fub, `fitSelection` dell'editor.
@@ -61,6 +67,7 @@ export function voceVisualizza(ctx: EditorContext, id: string): string | null | 
   if (id === COMANDO_ZOOM_SCELTA) return ctx.selection.length === 0 ? t("draw.selection.empty") : null;
   if (!isComandoVisualizza(id)) return undefined;
   if (id === "view.rotateReset" && ctx.camera.angle === 0) return t("draw.view.not_turned");
+  if (id === "view.goToArtboard" && ctx.boardsNow().length === 0) return t("draw.view.goto.none");
   return null;
 }
 
@@ -90,6 +97,8 @@ export function statoVisualizza(ctx: EditorContext, id: string): boolean | undef
       return ctx.grid.hideEdges === true;
     case "view.boundingBox":
       return ctx.grid.hideBoundingBox === true;
+    case "view.artboards":
+      return ctx.grid.hideArtboards === true;
     case "view.livePaintGaps":
       return ctx.grid.livePaintGaps === true;
     case "view.preciseCursors":
@@ -136,6 +145,9 @@ export function comandoVisualizza(ctx: EditorContext, id: ComandoVisualizza): vo
     case "view.boundingBox":
       ctx.changeGrid({ ...ctx.grid, hideBoundingBox: ctx.grid.hideBoundingBox !== true });
       return;
+    case "view.artboards":
+      ctx.changeGrid({ ...ctx.grid, hideArtboards: ctx.grid.hideArtboards !== true });
+      return;
     case "view.livePaintGaps":
       ctx.changeGrid({ ...ctx.grid, livePaintGaps: ctx.grid.livePaintGaps !== true });
       return;
@@ -150,5 +162,22 @@ export function comandoVisualizza(ctx: EditorContext, id: ComandoVisualizza): vo
     case "view.rotateReset":
       ctx.turnView(0);
       return;
+    case "view.goToArtboard":
+      vaiAllaTavola(ctx);
+      return;
   }
+}
+
+/// «Vai alla tavola…»: chiede quale, partendo da quella di adesso, e la inquadra.
+function vaiAllaTavola(ctx: EditorContext): void {
+  const tavole = ctx.boardsNow();
+  if (tavole.length === 0) return;
+  const adesso = ctx.currentBoard();
+  const attuale = adesso === null ? 0 : Math.max(0, tavole.findIndex((b) => b.id === adesso.id));
+  void chiediTavola(
+    tavole.map((b) => b.name),
+    attuale,
+  ).then((posto) => {
+    if (posto !== null && !ctx.disposed) ctx.visitBoard(posto, true);
+  });
 }

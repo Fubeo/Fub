@@ -1240,6 +1240,21 @@
       "id": "artboards",
       "fonte": "pannello",
       "prova": "apps/client/src/editors/spatial/completo/famiglie/tavole/sezione.test.ts"
+    },
+    {
+      "id": "view.fitArtboard",
+      "fonte": "interfaccia",
+      "prova": "apps/client/src/editors/spatial/tools/editor/chrome/zoom-menu.test.ts"
+    },
+    {
+      "id": "view.goToArtboard",
+      "fonte": "interfaccia",
+      "prova": "apps/client/src/editors/spatial/tools/editor/chrome/visualizza.test.ts"
+    },
+    {
+      "id": "view.artboards",
+      "fonte": "interfaccia",
+      "prova": "apps/client/src/editors/spatial/tools/editor/chrome/visualizza.test.ts"
     }
   ]
 }

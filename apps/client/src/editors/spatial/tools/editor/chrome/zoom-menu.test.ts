@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { openLifetime } from "../../../../../ui/lifetime";
 import { DRAW_SCALE_LIMITS, ZOOM_STEP } from "../constants";
 import type { EditorContext } from "../context";
-import { COMANDI_VISTA, creaMenuZoom, impostaZoom, isComandoVista } from "./zoom-menu";
+import { adattaTavola, COMANDI_VISTA, creaMenuZoom, impostaZoom, isComandoVista } from "./zoom-menu";
 
 /// Un editor finto con la camera e il fuoco del foglio: `zoomBy` fa lo stesso
 /// limite del client (`DRAW_SCALE_LIMITS`), così il campo vede ciò che vedrebbe.
@@ -22,6 +22,9 @@ function fingi() {
       camera.scale = Math.min(DRAW_SCALE_LIMITS.max, Math.max(DRAW_SCALE_LIMITS.min, camera.scale * factor));
     }),
     fit: vi.fn(),
+    boardsNow: () => [],
+    currentBoard: () => null,
+    visitBoard: vi.fn(() => false),
     status: {
       items: () => [],
       subscribe: (listener: () => void) => {
@@ -50,12 +53,12 @@ describe("il menu dello zoom della banda", () => {
     document.body.innerHTML = "";
   });
 
-  it("apre con le quattro voci e il campo, e il fuoco entra nella prima voce", () => {
+  it("apre con le cinque voci e il campo, e il fuoco entra nella prima voce", () => {
     const { menu, bottone } = fingi();
     bottone.focus();
     menu.apri();
     const voci = [...document.querySelectorAll<HTMLButtonElement>(".draw-zoom-popover [role='menuitem']")];
-    expect(voci.map((v) => v.dataset.command)).toEqual(["view.zoomIn", "view.zoomOut", "view.actualSize", "view.fitAll"]);
+    expect(voci.map((v) => v.dataset.command)).toEqual(["view.zoomIn", "view.zoomOut", "view.actualSize", "view.fitArtboard", "view.fitAll"]);
     expect(campo().value).toBe("100");
     expect(document.activeElement).toBe(voci[0]);
     expect(bottone.getAttribute("aria-expanded")).toBe("true");
@@ -165,8 +168,38 @@ describe("il menu dello zoom della banda", () => {
   });
 
   it("ogni comando della vista è il suo id della mappa, e nessun altro lo è", () => {
-    expect(COMANDI_VISTA).toEqual(["view.zoomIn", "view.zoomOut", "view.actualSize", "view.fitAll", "view.setZoom"]);
+    expect(COMANDI_VISTA).toEqual(["view.zoomIn", "view.zoomOut", "view.actualSize", "view.fitArtboard", "view.fitAll", "view.setZoom"]);
     expect(isComandoVista("view.fitAll")).toBe(true);
     expect(isComandoVista("tool.select")).toBe(false);
+  });
+});
+
+describe("Adatta tavola alla finestra (view.fitArtboard)", () => {
+  const tavola = (id: string) => ({ id, name: id, rect: [0, 0, 10, 10] });
+
+  it("inquadra la tavola di adesso, nel suo posto fra le tavole", () => {
+    const visitBoard = vi.fn(() => true);
+    const fit = vi.fn();
+    const ctx = { boardsNow: () => [tavola("a"), tavola("b")], currentBoard: () => tavola("b"), visitBoard, fit } as unknown as EditorContext;
+    adattaTavola(ctx);
+    expect(visitBoard).toHaveBeenCalledWith(1, true);
+    expect(fit).not.toHaveBeenCalled();
+  });
+
+  it("senza tavole, o se la tavola non si raggiunge, inquadra tutto", () => {
+    const fit = vi.fn();
+    adattaTavola({ boardsNow: () => [], currentBoard: () => null, visitBoard: vi.fn(), fit } as unknown as EditorContext);
+    expect(fit).toHaveBeenCalledTimes(1);
+    const visitBoard = vi.fn(() => false);
+    adattaTavola({ boardsNow: () => [tavola("a")], currentBoard: () => tavola("a"), visitBoard, fit } as unknown as EditorContext);
+    expect(visitBoard).toHaveBeenCalledWith(0, true);
+    expect(fit).toHaveBeenCalledTimes(2);
+  });
+
+  it("la voce del menu la fa", () => {
+    const { menu, ctx } = fingi();
+    menu.apri();
+    voce("view.fitArtboard").click();
+    expect(ctx.fit).toHaveBeenCalledTimes(1);
   });
 });

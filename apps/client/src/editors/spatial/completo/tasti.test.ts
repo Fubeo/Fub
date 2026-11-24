@@ -253,6 +253,10 @@ describe("TASTI_DELLA_FINESTRA", () => {
     expect(regola.coperti.map((c) => c.comando).sort()).toEqual(["edit.copy", "edit.undo"]);
   });
 
+  it("i tasti della vista di VectorCraft restano all'editor: adatta tavola e tutto, nascondi tavole", () => {
+    for (const tasto of ["Mod-0", "Mod-Alt-0", "Mod-Shift-h"]) expect(TASTI_DELLA_FINESTRA).toContain(tasto);
+  });
+
   it("senza il motore (la regola di sempre) quei tasti restano di Fub", () => {
     const regola = risolviTasti(voci, {}, "other");
     expect(tastoDelComando(regola, "object.group")).toBeNull();

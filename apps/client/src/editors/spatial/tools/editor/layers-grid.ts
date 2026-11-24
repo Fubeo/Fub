@@ -385,6 +385,7 @@ export function installLayersGrid(ctx: EditorContext): void {
     else if (ctx.grid.transparencyGrid !== before.transparencyGrid) announce(t(ctx.grid.transparencyGrid ? "draw.view.transparency.on" : "draw.view.transparency.off"));
     else if (ctx.grid.hideEdges !== before.hideEdges) announce(t(ctx.grid.hideEdges ? "draw.view.edges.hidden" : "draw.view.edges.shown"));
     else if (ctx.grid.hideBoundingBox !== before.hideBoundingBox) announce(t(ctx.grid.hideBoundingBox ? "draw.view.boundingBox.hidden" : "draw.view.boundingBox.shown"));
+    else if (ctx.grid.hideArtboards !== before.hideArtboards) announce(t(ctx.grid.hideArtboards ? "draw.view.artboards.hidden" : "draw.view.artboards.shown"));
     else if (ctx.grid.livePaintGaps !== before.livePaintGaps) announce(t(ctx.grid.livePaintGaps ? "draw.view.livePaintGaps.shown" : "draw.view.livePaintGaps.hidden"));
     // Il pannello aperto o chiuso, le sue sezioni, la gomma, la penna, il
     // tasto laterale e l'uscita si ricordano in silenzio: chi li cambia lo

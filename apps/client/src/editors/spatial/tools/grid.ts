@@ -85,6 +85,10 @@ export interface Grid {
   /// selezione né maniglie, né misure, e nessuna maniglia si può prendere.
   /// Assente, si vedono.
   readonly hideBoundingBox?: boolean;
+  /// Nascondi tavole da disegno (Visualizza, K6): le carte delle tavole senza
+  /// bordo né ombra e senza nome sul foglio, come il resto del tavolo. Assente,
+  /// si vedono. È stato della vista: non entra nel file né nella cronologia.
+  readonly hideArtboards?: boolean;
   /// Aggancio al pixel (K6 T11): i punti cadono su interi di scena, come con
   /// una griglia di un pixel che non si vede. La griglia, se aggancia, vince
   /// (come nel motore). Assente, spento: è stato della vista, come `shown`.

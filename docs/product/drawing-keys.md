@@ -15,8 +15,9 @@ quel tasto. Vale questo ordine:
   come in VectorCraft, annulla e ripeti (`Ctrl+Z`, `Ctrl+Maiusc+Z`), copia,
   taglia e incolla (`Ctrl+C`, `Ctrl+X`, `Ctrl+V`, `Ctrl+Maiusc+V` incolla sul
   posto: il browser li manda agli appunti del Completo) e la vista: `Ctrl+Y`
-  contorni, `Ctrl+'` griglia, `Ctrl+Maiusc+'` aggancio alla griglia, `Ctrl+0` e
-  `Ctrl+Alt+0` adatta, `Ctrl+1` 100%, `Ctrl+=` e `Ctrl+-` zoom,
+  contorni, `Ctrl+'` griglia, `Ctrl+Maiusc+'` aggancio alla griglia, `Ctrl+0` adatta
+  la tavola di adesso e `Ctrl+Alt+0` tutto, `Ctrl+1` 100%, `Ctrl+=` e `Ctrl+-`
+  zoom, `Ctrl+Maiusc+H` nasconde le tavole,
   `Ctrl+Maiusc+/` cerca i comandi. Ogni altro tasto con `Ctrl` o `Alt` è del
   motore, anche dove lo Standard o la shell ne fanno altro: per esempio `Ctrl+G`
   raggruppa, `Ctrl+2` blocca, `Ctrl+3` nasconde, `Ctrl+D` ripete la

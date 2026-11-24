@@ -15,12 +15,17 @@ interface GrigliaFinta {
   transparencyGrid?: boolean;
   hideEdges?: boolean;
   hideBoundingBox?: boolean;
+  hideArtboards?: boolean;
   livePaintGaps?: boolean;
 }
 
 /// Un editor finto con la griglia, il contorno, i righelli di bordo e la vista.
-function fingi(angle = 0) {
+function fingi(angle = 0, tavole: readonly { id: string; name: string }[] = [{ id: "a", name: "Tavola 1" }]) {
   return {
+    disposed: false,
+    boardsNow: () => tavole,
+    currentBoard: () => tavole[0] ?? null,
+    visitBoard: vi.fn(() => true),
     camera: { scale: 1, angle, tx: 0, ty: 0 },
     grid: { shown: false, snap: false } as GrigliaFinta,
     outline: false,
@@ -49,10 +54,12 @@ describe("le righe view.* di ≡ › Visualizza del Disegno completo", () => {
       "view.rulers",
       "view.edges",
       "view.boundingBox",
+      "view.artboards",
       "view.livePaintGaps",
       "view.preciseCursors",
       "view.rotate",
       "view.rotateReset",
+      "view.goToArtboard",
     ]);
     expect(isComandoVisualizza("view.grid")).toBe(true);
     expect(isComandoVisualizza("view.snapToPixel")).toBe(true);
@@ -69,7 +76,7 @@ describe("le righe view.* di ≡ › Visualizza del Disegno completo", () => {
 
   it("le file del menu portano ognuna voce una volta sola, nell'ordine dei comandi", () => {
     expect(FILE_VISUALIZZA.flat()).toEqual([...COMANDI_VISUALIZZA]);
-    expect(FILE_VISUALIZZA.map((file) => file.length)).toEqual([3, 3, 3, 3, 1, 2]);
+    expect(FILE_VISUALIZZA.map((file) => file.length)).toEqual([3, 3, 3, 4, 1, 2, 1]);
   });
 
   it("una voce che il client fa è attiva; rotateReset è spenta col perché se la vista non è girata", () => {
@@ -247,3 +254,38 @@ describe("«Usa cursori di precisione» (K6 T11, cursori): la voce di ≡ › Vi
     expect(ctx.setPreciseCursors).toHaveBeenLastCalledWith(false);
   });
 });
+
+describe("le tavole nel menu Visualizza (view.artboards, view.goToArtboard)", () => {
+  it("«Nascondi tavole da disegno» ha la spunta quando sono nascoste e si scambia nella griglia", () => {
+    const ctx = fingi();
+    const editor = ctx as unknown as EditorContext;
+    expect(voceVisualizza(editor, "view.artboards")).toBeNull();
+    expect(statoVisualizza(editor, "view.artboards")).toBe(false);
+    comandoVisualizza(editor, "view.artboards");
+    expect(ctx.changeGrid).toHaveBeenLastCalledWith({ shown: false, snap: false, hideArtboards: true });
+    ctx.grid = { shown: false, snap: false, hideArtboards: true };
+    expect(statoVisualizza(editor, "view.artboards")).toBe(true);
+    comandoVisualizza(editor, "view.artboards");
+    expect(ctx.changeGrid).toHaveBeenLastCalledWith({ shown: false, snap: false, hideArtboards: false });
+  });
+
+  it("«Vai alla tavola» è spenta col perché senza tavole, e non ha spunta", () => {
+    expect(voceVisualizza(fingi(0, []) as unknown as EditorContext, "view.goToArtboard")).toBe("Il disegno non ha tavole.");
+    expect(voceVisualizza(fingi() as unknown as EditorContext, "view.goToArtboard")).toBeNull();
+    expect(statoVisualizza(fingi() as unknown as EditorContext, "view.goToArtboard")).toBeUndefined();
+  });
+
+  it("«Vai alla tavola» chiede quale e la inquadra nella finestra", async () => {
+    const ctx = fingi(0, [
+      { id: "a", name: "Copertina" },
+      { id: "b", name: "Retro" },
+    ]);
+    comandoVisualizza(ctx as unknown as EditorContext, "view.goToArtboard");
+    const finestra = document.querySelector<HTMLElement>('[role="dialog"]')!;
+    finestra.querySelector<HTMLSelectElement>("select")!.value = "1";
+    finestra.querySelector<HTMLButtonElement>('[data-action="apply"]')!.click();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(ctx.visitBoard).toHaveBeenCalledWith(1, true);
+  });
+});
+

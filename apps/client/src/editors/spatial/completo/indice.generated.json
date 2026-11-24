@@ -6519,6 +6519,22 @@
     },
     {
       "fonte": "interfaccia",
+      "id": "view.artboards",
+      "chiamata": {
+        "client": "view.artboards"
+      },
+      "etichetta": {
+        "it": "Nascondi tavole",
+        "en": "Hide Artboards"
+      },
+      "posto": "menu/visualizza",
+      "famiglia": "tavole",
+      "tasto": null,
+      "effetto": "mostra",
+      "finestra": false
+    },
+    {
+      "fonte": "interfaccia",
       "id": "view.boundingBox",
       "chiamata": {
         "client": "view.boundingBox"
@@ -6561,6 +6577,38 @@
       },
       "posto": "banda",
       "famiglia": "vista",
+      "tasto": null,
+      "effetto": "mostra",
+      "finestra": false
+    },
+    {
+      "fonte": "interfaccia",
+      "id": "view.fitArtboard",
+      "chiamata": {
+        "client": "view.fitArtboard"
+      },
+      "etichetta": {
+        "it": "Adatta tavola alla finestra",
+        "en": "Fit Artboard in Window"
+      },
+      "posto": "banda",
+      "famiglia": "tavole",
+      "tasto": null,
+      "effetto": "mostra",
+      "finestra": false
+    },
+    {
+      "fonte": "interfaccia",
+      "id": "view.goToArtboard",
+      "chiamata": {
+        "client": "view.goToArtboard"
+      },
+      "etichetta": {
+        "it": "Vai alla tavola",
+        "en": "Go to Artboard"
+      },
+      "posto": "menu/visualizza",
+      "famiglia": "tavole",
       "tasto": null,
       "effetto": "mostra",
       "finestra": false

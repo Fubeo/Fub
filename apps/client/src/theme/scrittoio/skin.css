@@ -20373,6 +20373,21 @@ button.draw-isolation-crumb:hover {
   gap: var(--space-1);
 }
 
+/* ── K6 · Nascondi tavole da disegno (Visualizza) ────────────────────────── */
+/* Le carte delle tavole restano (sono il fondo del disegno), ma senza bordo
+   né ombra e senza nome: si confondono col resto del tavolo. */
+.draw-surface[data-boards-hidden] .draw-page {
+  box-shadow: none;
+}
+.draw-surface[data-boards-hidden] .draw-sheet-name {
+  visibility: hidden;
+}
+.draw-view-goto-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
 /* ── skin/media.css ─────────────────────────────────────────────────────── */
 
 /* Immagini, zoom, lightbox, SVG. */

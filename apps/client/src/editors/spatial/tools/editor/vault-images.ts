@@ -10,6 +10,7 @@ import { toolForKey, type Feature, type ToolSpec } from "../registry";
 import { ROTATE_STEP, ZOOM_STEP } from "./constants";
 import type { Edge } from "../arrange";
 import type { EditorContext } from "./context";
+import { adattaTavola } from "./chrome/zoom-menu";
 
 const ROTATE_STEP_SHIFT = 90;
 
@@ -122,7 +123,8 @@ export function installVaultImages(ctx: EditorContext): void {
   /// Un tasto con Ctrl o ⌘ che col Completo e il motore resta all'editor, come in
   /// VectorCraft: annulla (`Ctrl+Z`) e ripeti (`Ctrl+Maiusc+Z`) sulla cronologia del
   /// disegno, la vista (`Ctrl+Y` contorni, `Ctrl+'` griglia, `Ctrl+Maiusc+'` aggancio,
-  /// `Ctrl+0` e `Ctrl+Alt+0` adatta, `Ctrl+1` 100%, `Ctrl+=` e `Ctrl+-` zoom) e la
+  /// `Ctrl+0` adatta la tavola e `Ctrl+Alt+0` tutto, `Ctrl+1` 100%, `Ctrl+=` e `Ctrl+-`
+  /// zoom, `Ctrl+Maiusc+H` nasconde le tavole) e la
   /// ricerca dei comandi (`Ctrl+Maiusc+/`). `true` se l'ha preso. Copia, taglia e
   /// incolla restano al browser, che manda gli appunti al Completo.
   function vistaComeVectorCraft(event: KeyboardEvent): boolean {
@@ -144,7 +146,12 @@ export function installVaultImages(ctx: EditorContext): void {
       return true;
     }
     if (event.code === "Digit0" && !event.shiftKey) {
-      ctx.fit();
+      if (alt) ctx.fit();
+      else adattaTavola(ctx);
+      return true;
+    }
+    if (event.code === "KeyH" && event.shiftKey && !alt) {
+      changeGrid({ ...ctx.grid, hideArtboards: ctx.grid.hideArtboards !== true });
       return true;
     }
     if (event.code === "Digit1" && !alt && !event.shiftKey) {

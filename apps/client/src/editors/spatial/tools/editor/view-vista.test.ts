@@ -233,3 +233,20 @@ describe("i segni della selezione con gli strumenti del motore, come in VectorCr
     expect(tipi()).toContain("anchor");
   });
 });
+
+describe("Nascondi tavole da disegno (view.artboards): le carte senza bordo né nome", () => {
+  it("accesa, la superficie ha l'attributo che il CSS legge, e spenta lo toglie", () => {
+    const e = mount(SOURCE, { ...DEFAULT_GRID, hideArtboards: true });
+    const superficie = host.querySelector(".draw-surface");
+    expect(superficie?.hasAttribute("data-boards-hidden")).toBe(true);
+    e.setGrid({ ...DEFAULT_GRID });
+    expect(superficie?.hasAttribute("data-boards-hidden")).toBe(false);
+  });
+
+  it("spenta di serie, e la scelta non entra nella cronologia", () => {
+    const e = mount();
+    expect(host.querySelector(".draw-surface")?.hasAttribute("data-boards-hidden")).toBe(false);
+    e.setGrid({ ...DEFAULT_GRID, hideArtboards: true });
+    expect(e.canUndo).toBe(false);
+  });
+});

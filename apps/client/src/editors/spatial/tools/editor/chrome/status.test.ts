@@ -163,7 +163,7 @@ describe("la banda di stato del disegno", () => {
     expect(zoom.hint).toBe("100 %: scegli lo zoom");
     zoom.open?.();
     expect(ctx.zoomBy).not.toHaveBeenCalled();
-    expect(document.querySelectorAll(".draw-zoom-popover [role='menuitem']")).toHaveLength(4);
+    expect(document.querySelectorAll(".draw-zoom-popover [role='menuitem']")).toHaveLength(5);
   });
 
   it("il Completo senza il suo spazio «Completo» resta come negli altri spazi", () => {

@@ -222,6 +222,8 @@ export function installView(ctx: EditorContext): void {
   /// rifà qui perché cambia con le stesse scelte.
   const showGrid = (): void => {
     surface.toggleAttribute("data-transparency", ctx.grid.transparencyGrid === true);
+    // Nascondi tavole da disegno: il CSS toglie bordo, ombra e nome alle carte delle tavole.
+    surface.toggleAttribute("data-boards-hidden", ctx.grid.hideArtboards === true);
     const shown = has("grid") && ctx.grid.shown;
     gridMark.style.display = shown ? "" : "none";
     if (!shown) return;

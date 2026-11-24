@@ -1031,13 +1031,13 @@ interfaccia	type.hyphenate	Hyphenate		testo	F2	T16	da fare	menu/testo	famiglia		
 interfaccia	effect.last	Last Effect…		effetti	F2	T18	da fare	menu/effetto	famiglia		Ultimo effetto…
 interfaccia	view.zoomIn	Zoom In		vista	F1	T11	fatto	banda	famiglia		Ingrandisci
 interfaccia	view.zoomOut	Zoom Out		vista	F1	T11	fatto	banda	famiglia		Riduci
-interfaccia	view.fitArtboard	Fit Artboard in Window		tavole	F2	T19	da fare	banda	famiglia		Adatta tavola da disegno alla finestra
+interfaccia	view.fitArtboard	Fit Artboard in Window		tavole	F2	T19	fatto	banda	famiglia	Adatta tavola alla finestra nel menu dello zoom della banda: inquadra la tavola di adesso; senza tavole, tutto.	Adatta tavola da disegno alla finestra
 interfaccia	view.fitAll	Fit All in Window		vista	F1	T11	fatto	banda	famiglia		Adatta tutto alla finestra
 interfaccia	view.actualSize	Actual Size		vista	F1	T11	fatto	banda	famiglia		Dimensioni effettive
 interfaccia	view.setZoom	Set Zoom		vista	F1	T11	fatto	banda	famiglia		Imposta zoom
-interfaccia	view.goToArtboard	Go to Artboard		tavole	F2	T19	da fare	menu/visualizza	famiglia		Vai alla tavola da disegno
+interfaccia	view.goToArtboard	Go to Artboard		tavole	F2	T19	fatto	menu/visualizza	famiglia	≡ › Visualizza › Vai alla tavola: un dialogo con le tavole, parte da quella di adesso e la inquadra; spenta senza tavole.	Vai alla tavola da disegno
 interfaccia	view.edges	Hide Edges		vista	F1	T11	fatto	menu/visualizza	famiglia		Nascondi bordi
-interfaccia	view.artboards	Hide Artboards		tavole	F2	T19	da fare	menu/visualizza	famiglia		Nascondi tavole da disegno
+interfaccia	view.artboards	Hide Artboards		tavole	F2	T19	fatto	menu/visualizza	famiglia	≡ › Visualizza › Nascondi tavole da disegno: le carte senza bordo, ombra e nome; stato della vista, non del file.	Nascondi tavole da disegno
 interfaccia	view.template	Hide Template		vista	F1	T11	da fare	menu/visualizza	famiglia	il modello della pagina non c'è ancora nel client	Nascondi modello
 interfaccia	view.rulers	Show Rulers		vista	F1	T11	fatto	menu/visualizza	famiglia		Mostra righelli
 interfaccia	view.videoRulers	Show Video Rulers		stampa	F4	T25	da fare	menu/visualizza	famiglia		Mostra righelli video

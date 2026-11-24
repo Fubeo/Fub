@@ -146,7 +146,8 @@ export function installStage(ctx: EditorContext): void {
   const tavoleSezioni = (): TavoleDocumento => ({
     elenco: ctx.boardsNow().map((b) => ({ id: b.id, nome: b.name, rect: b.rect })),
     attuale: ctx.currentBoard()?.id ?? null,
-    visita: (indice) => void ctx.visitBoard(indice),
+    // Come Vai alla tavola di VectorCraft: la sceglie e la inquadra nella finestra.
+    visita: (indice) => void ctx.visitBoard(indice, true),
   });
   const rileggiStrumento = (): void => {
     const id = ctx.motoreTool;

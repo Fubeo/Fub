@@ -248,9 +248,9 @@ export function currentGrid(): Grid {
 /// penna com'è. Un passo ricordato che la griglia non accetta non conta.
 function gridOf(value: unknown): Grid | null {
   if (typeof value !== "object" || value === null) return null;
-  const { shown, snap, step, steps, panel, bar, shapes, closed, twist, taps, pen, steady, eraser, penId, barrel, output, fidelity, transparencyGrid, hideEdges, hideBoundingBox, snapPixel, smartGuidesOff, snapPointOff, snapGlyph, livePaintGaps } = value as Record<string, unknown>;
+  const { shown, snap, step, steps, panel, bar, shapes, closed, twist, taps, pen, steady, eraser, penId, barrel, output, fidelity, transparencyGrid, hideEdges, hideBoundingBox, hideArtboards, snapPixel, smartGuidesOff, snapPointOff, snapGlyph, livePaintGaps } = value as Record<string, unknown>;
   if (typeof shown !== "boolean" || typeof snap !== "boolean" || typeof step !== "number" || !validStep(step)) return null;
-  for (const flag of [bar, shapes, twist, taps, transparencyGrid, hideEdges, hideBoundingBox, snapPixel, smartGuidesOff, snapPointOff, snapGlyph, livePaintGaps]) if (flag !== undefined && typeof flag !== "boolean") return null;
+  for (const flag of [bar, shapes, twist, taps, transparencyGrid, hideEdges, hideBoundingBox, hideArtboards, snapPixel, smartGuidesOff, snapPointOff, snapGlyph, livePaintGaps]) if (flag !== undefined && typeof flag !== "boolean") return null;
   if (panel !== undefined && panel !== null && typeof panel !== "boolean") return null;
   if (steps !== undefined && (typeof steps !== "object" || steps === null)) return null;
   const sections = closed === undefined ? DEFAULT_GRID.closed : validClosed(closed);
@@ -282,6 +282,7 @@ function gridOf(value: unknown): Grid | null {
     ...(transparencyGrid === true ? { transparencyGrid: true } : {}),
     ...(hideEdges === true ? { hideEdges: true } : {}),
     ...(hideBoundingBox === true ? { hideBoundingBox: true } : {}),
+    ...(hideArtboards === true ? { hideArtboards: true } : {}),
     // L'aggancio al pixel (K6 T11): assente se spento, come gli altri interruttori.
     ...(snapPixel === true ? { snapPixel: true } : {}),
     // Guide sensibili e agganci del motore (Visualizza): assenti se valgono quelli di serie.

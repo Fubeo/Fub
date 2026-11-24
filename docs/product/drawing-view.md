@@ -55,7 +55,8 @@ selezione: un'unica voce, aggiornata al più una volta per fotogramma) e quanti
 oggetti ci sono o sono scelti.
 
 Nel Disegno completo lo zoom apre un menu: ingrandisci, riduci, zoom al 100%,
-adatta tutto alla finestra, e sotto un campo dove si scrive la percentuale. Un
+adatta tavola alla finestra (la tavola di adesso; senza tavole, tutto), adatta
+tutto alla finestra, e sotto un campo dove si scrive la percentuale. Un
 valore fuori dai limiti della vista (dal 10% al 3200%) lo dice e lo zoom non
 cambia. Il menu si apre con Invio o Spazio, le frecce vanno fra le voci, Esc lo
 chiude e riporta il fuoco alla voce dello zoom. Negli altri spazi di lavoro e nel
@@ -66,11 +67,13 @@ Nel Disegno completo, ≡ › Visualizza ha la griglia («Mostra griglia» e
 «Aggancia alla griglia», le stesse impostazioni del Semplice), «Aggancia ai
 pixel», «Guide sensibili», «Aggancia al punto», «Aggancia ai glifi», «Mostra
 griglia trasparenza», il contorno, i righelli del bordo del foglio
-(«Mostra righelli»), «Nascondi bordi» e «Nascondi riquadro di delimitazione», e
-«Reimposta rotazione vista», che è spenta finché la vista non è girata. Le voci
-stanno in sei file, separate da una riga: griglia e aggancio; guide e agganci
-del motore; trasparenza,
-contorno e righelli; bordi e riquadro; la croce di precisione; la rotazione. Le
+(«Mostra righelli»), «Nascondi bordi», «Nascondi riquadro di delimitazione» e
+«Nascondi tavole da disegno», «Reimposta rotazione vista», che è spenta finché
+la vista non è girata, e «Vai alla tavola da disegno…», spenta se il disegno non
+ha tavole. Le voci stanno in sette file, separate da una riga: griglia e
+aggancio; guide e agganci del motore; trasparenza, contorno e righelli; bordi,
+riquadro e tavole; la croce di precisione; la rotazione; la tavola da
+inquadrare. Le
 voci «Nascondi» hanno la spunta quando nascondono davvero. «Usa cursori di
 precisione» mette la croce al posto del cursore degli strumenti che disegnano
 (penna, matita, forme, pennelli e gomma dei punti di ancoraggio); la scelta resta
@@ -100,10 +103,15 @@ fondo suo: un PDF di sfondo, con la sua pagina, la copre. «Nascondi bordi»
 toglie il contorno di ogni oggetto scelto. «Nascondi riquadro di delimitazione»
 toglie la cornice della selezione, le sue maniglie, le misure e il rotore: senza
 maniglie non si ridimensiona né si gira la selezione con il mouse, ma la si
-sposta ancora trascinandola. I righelli stanno sul bordo in alto e a sinistra
+sposta ancora trascinandola. «Nascondi tavole da disegno» toglie alle carte
+delle tavole il bordo, l'ombra e il nome: le carte restano, col loro fondo.
+«Vai alla tavola da disegno…» apre un dialogo con le tavole in ordine, che parte
+da quella di adesso: «Vai» la inquadra nella finestra, Annulla ed Esc non
+cambiano la vista. Un clic su una tavola nella sezione «Tavole» del Design la
+inquadra allo stesso modo. I righelli stanno sul bordo in alto e a sinistra
 del foglio, con le tacche e i numeri nell'unità del documento; non spostano il
 disegno, e con la vista girata non si leggono. Lo stato dei righelli non si
-salva nel file. Gli interruttori della vista (trasparenza, bordi, riquadro,
+salva nel file. Gli interruttori della vista (trasparenza, bordi, riquadro, tavole,
 agganci e guide) si ricordano come la griglia, nelle sue stesse impostazioni:
 non cambiano il file e non entrano nella cronologia. Le altre voci di Visualizza
 (l'anteprima dei pixel, la modalità presentazione e lo schermo intero, il
