@@ -179,7 +179,7 @@ motore	view.guides.lock	Lock Guides	View › Guides	tavole	F2	T19	fatto	menu/vis
 motore	view.guides.clear	Clear Guides	View › Guides	tavole	F2	T19	fatto	menu/visualizza	famiglia		Cancella guide
 motore	guide.add	Add Guide		tavole	F2	T19	fatto	ispettore/design/documento	famiglia		Aggiungi guida
 motore	guide.list	Guides		tavole	F2	T19	fatto	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Guide
-motore	guide.select	Select Guides		tavole	F2	T19	fub	ispettore/design/documento	famiglia	la scelta delle guide del client (tools/editor/guide-linee.ts): clic, Maiusc+clic, Canc, frecce (object.nudge con «guides»), trascinamento	Seleziona guide
+motore	guide.select	Select Guides		fub	—	T2	fub	fub	—	la scelta delle guide del client (tools/editor/guide-linee.ts): clic, Maiusc+clic, Canc, frecce (object.nudge con «guides»), trascinamento	Seleziona guide
 motore	guide.remove	Remove Guide		tavole	F2	T19	fatto	ispettore/design/documento	famiglia	più guide con «guides» (indici)	Rimuovi guida
 motore	guide.move	Move Guide		tavole	F2	T19	fatto	ispettore/design/documento	famiglia	più guide con «guides» (indici)	Sposta guida
 motore	guide.setLayer	Move Guide to Layer		tavole	F2	T19	fatto	ispettore/design/documento	famiglia		Sposta guida nel livello
@@ -273,7 +273,7 @@ motore	layer.new	New Layer…	Window › Layers	livelli	F1	T15	fatto	ispettore/l
 motore	layer.newSublayer	New Sublayer…	Window › Layers	livelli	F1	T15	fatto	ispettore/livelli	famiglia	un livello dentro il livello `parent` (ADR 0251), in cima o in fondo (`bottom`), col nome dato o il primo «Livello N» libero; senza `parent` non parte (`empty`), su un oggetto è `unsupported`, in un livello bloccato `locked`	Nuovo sottolivello…
 motore	layer.delete	Delete Selection	Window › Layers	livelli	F1	T15	fatto	ispettore/livelli	famiglia		Elimina selezione
 motore	layer.duplicate	Duplicate Selection	Window › Layers	livelli	F1	T15	fatto	ispettore/livelli	famiglia	la copia di un livello va subito sopra di lui, come livello del file (`differenza.rs`, `livello_nuovo`), col nome «… copia»; anche un livello bloccato si copia, e la copia resta bloccata. Senza righe non parte	Duplica selezione
-motore	layer.setCurrent	Set Current Layer		livelli	F1	T15	fub	ispettore/livelli	famiglia	un clic sulla riga del livello nell'albero degli oggetti (tools/objects.ts, onCurrent) o il menu Livelli lo rende corrente nella cella del disegno del client (livello-corrente.ts), non nella sessione del motore	Imposta livello corrente
+motore	layer.setCurrent	Set Current Layer		fub	—	T2	fub	fub	—	un clic sulla riga del livello nell'albero degli oggetti (tools/objects.ts, onCurrent) o il menu Livelli lo rende corrente nella cella del disegno del client (livello-corrente.ts), non nella sessione del motore	Imposta livello corrente
 motore	layer.highlight	Highlight Rows		livelli	F1	T15	da fare	ispettore/livelli	famiglia		Evidenzia righe
 motore	layer.setProps	Layer Options…	Window › Layers	livelli	F1	T15	fatto	ispettore/livelli	famiglia	finestra	Opzioni livello…
 motore	layer.collectInNew	Collect in New Layer	Window › Layers	livelli	F1	T15	fatto	ispettore/livelli	famiglia	le righe date o gli oggetti scelti in un livello nuovo, accanto al più alto: dentro il suo livello è un sottolivello (ADR 0251), fra i livelli della radice un livello che li contiene; col primo «Livello N» libero; righe in un livello bloccato: `locked`	Raccogli in un nuovo livello
@@ -301,7 +301,7 @@ motore	layer.outlineOthers	Outline Others	Window › Layers	livelli	F1	T15	da fa
 motore	layer.previewAll	Preview All Layers	Window › Layers	livelli	F1	T15	da fare	ispettore/livelli	famiglia		Anteprima di tutti i livelli
 motore	layer.lockOthers	Lock Others	Window › Layers	livelli	F1	T15	fatto	ispettore/livelli	famiglia	blocca i livelli di primo livello che non tengono la selezione (Fub dà gli `ids`, livelli.rs); senza scelta il menu dice perché e il comando rifiuta `empty`; la carta resta fuori dal motore, così i livelli di Fub sono livelli del motore (casi su `livelli/doppio.svg` e `tre-livelli*.svg`, test livelli_carta)	Blocca altri
 motore	layer.unlockAll	Unlock All Layers	Window › Layers	livelli	F1	T15	fatto	ispettore/livelli	famiglia		Sblocca tutti i livelli
-motore	layer.locate	Locate Object	Window › Layers	livelli	F1	T15	fub	ispettore/livelli	famiglia	Individua oggetto nel menu Livelli (tools/editor/layers-grid.ts): l'albero si apre sulla riga dell'ultimo oggetto scelto e ne apre i livelli e i gruppi (ObjectTree.locate); è solo vista	Individua oggetto
+motore	layer.locate	Locate Object	Window › Layers	fub	—	T2	fub	fub	—	Individua oggetto nel menu Livelli (tools/editor/layers-grid.ts): l'albero si apre sulla riga dell'ultimo oggetto scelto e ne apre i livelli e i gruppi (ObjectTree.locate); è solo vista	Individua oggetto
 motore	library.list	Libraries		simboli	F3	T22	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Librerie
 motore	library.get	Library		simboli	F3	T22	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Libreria
 motore	library.setCurrent	Show Library		simboli	F3	T22	da fare	ispettore/risorse	famiglia		Mostra libreria

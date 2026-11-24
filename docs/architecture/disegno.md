@@ -137,48 +137,36 @@ tracciati) M vale solo come spostamento. I nuovi sono `add` (`rect`, `ellipse`,
 fratelli. Il resto è `Unsupported`; un oggetto fuori dalla mappa toccato è
 `Unmapped`.
 
-Il client scrive le misure nella scena (le unità del `viewBox`). Prima del
+Il client scrive le misure nella scena (le unità del `viewBox`); prima del
 motore ogni comando le porta nel suo documento con la radice (`copia.radice`):
-un punto la prende intera, uno spostamento, una larghezza o un'altezza solo la
-scala del suo asse, uno spessore o una distanza la scala media. La tabella dei
-comandi con misure semplici (Sposta, Trasforma singolarmente, Contorno, Sposta
-tracciato, Dividi in trattini e in griglia, Opzioni fusione, Grafico, la misura
-di Disponi) sta in `crates/fub-disegno/src/famiglie/scala.rs`, che riporta
-anche lo spessore e il tratteggio letti da `document.node` nella scena; i punti
-del pannello Trasforma, delle tavole, delle forme vive, del testo e degli
-strumenti dei tracciati passano nella loro famiglia.
+un punto la prende intera, uno spostamento o una misura la scala del suo asse,
+uno spessore o una distanza la scala media. I comandi con misure semplici sono
+in `src/famiglie/scala.rs`, che riporta anche ciò che `document.node` legge;
+gli altri punti passano nella loro famiglia.
 
 Dopo ogni gesto la sessione del motore torna alla copia: lo stato vero è il
-file. Un panico del motore lo prende `vectorcraft_engine::guard::catch_panic`:
-il gesto è `Unsupported`, la sessione si ricarica dalla copia e l'istanza
-resta viva. Gli strumenti stanno in `crates/fub-disegno/src/gesti/`, uno per
-strumento di Fub (il Testo crea al clic il `<text>` di `textElem`). Ogni evento
-passa prima dallo strumento di Fub (`Strumento::evento`), che applica le
-regole di Fub che il motore farebbe a modo suo.
+file. Un panico (`vectorcraft_engine::guard::catch_panic`) rende il gesto
+`Unsupported` e ricarica la sessione dalla copia; l'istanza resta viva. Gli
+strumenti (`src/gesti/`, il Testo crea il `<text>` di `textElem`) passano ogni
+evento prima dalle regole di Fub (`Strumento::evento`).
 
-Le forme (`gesti/forme.rs`) usano lo strumento forma del motore: `rectangle`,
-`ellipse` e `lineSegment`, che fa anche la freccia. Prima del motore la
-griglia aggancia la pressione e ogni punto dopo (Ctrl/⌘ la scioglie), Maiusc
-fa il quadrato, il cerchio o i passi di 15° nello spazio del livello, e
-Maiusc, Alt e Ctrl/⌘ si tolgono: nel motore varrebbero passi di 45°, il
-disegno dal centro e la selezione prestata. Il livello è quello del gesto, o
-il più alto né nascosto né bloccato (`hidden`, `locked`); il motore riceve lo
-stile del gesto e niente guide magnetiche sue. L'elemento nuovo è quello di
-`shapeElem` del client (la freccia è un `path` con `fub:shape="arrow"`);
-sotto i 4 pixel sullo schermo, o con un lato nullo, non c'è forma (`Empty`), e
-disegnare non cambia la selezione. L'anteprima è l'`Elem` della forma
-provvisoria nello spazio del livello.
+Le forme (`gesti/forme.rs`) usano lo strumento forma del motore (`rectangle`,
+`ellipse`, `lineSegment` anche per la freccia). Prima del motore la griglia
+aggancia ogni punto (Ctrl/⌘ la scioglie), Maiusc fa il quadrato, il cerchio o i
+passi di 15°, e i modificatori si tolgono (nel motore varrebbero 45°, il centro
+e la selezione prestata). Il livello è quello del gesto o il più alto libero;
+niente guide magnetiche del motore. L'elemento è quello di `shapeElem` del
+client (la freccia un `path` con `fub:shape="arrow"`); sotto i 4 pixel, o con
+un lato nullo, non c'è forma (`Empty`); l'anteprima è l'`Elem` provvisorio.
 
 La selezione (`gesti/selezione.rs`) decide il gesto con le regole di Fub,
 dalla pressione come l'ha mandata Fub e dalla selezione di prima: una
 maniglia della cornice ridimensiona o ruota, un oggetto (il più esterno del
 livello, con Ctrl/⌘ il più dentro, o quello scelto dentro un gruppo) si
 sceglie e si sposta (la soglia di trascinamento, passata, resta passata), il
-vuoto comincia un riquadro, che sceglie ciò che contiene per intero. Spostare usa la
-Selezione del motore (`selection`), ruotare il suo `rotate`, ridimensionare una
-cornice dritta senza contorno la sua maniglia: gli eventi arrivano già con la
-griglia, le proporzioni, la misura minima e la calamita degli angoli di Fub,
-senza i modificatori che il motore leggerebbe a modo suo. Dove il motore
+vuoto comincia un riquadro, che sceglie ciò che contiene per intero. Spostare,
+ruotare e ridimensionare una cornice dritta usano il motore, con gli eventi già
+agganciati alle regole di Fub e senza i modificatori. Dove il motore
 farebbe altro (una cornice girata, inclinata o col contorno, una sua maniglia
 sotto la pressione, la carta) la matrice la calcola Fub, va sugli oggetti del
 documento del motore e la differenza la scrive come sempre. La selezione
@@ -283,22 +271,17 @@ parte per elemento della mappa, con una frase breve in italiano. I tre tipi:
 
 Ciò che non si scrive come attributi dell'elemento originale non si fa: il
 motore non riscrive mai un elemento intero, salvo la [ricetta](#la-ricetta) e
-la linea a spessore variabile. Questa (`fub:shape="width"`) entra nel motore
-come tracciato con un contorno a profilo, e un tracciato col solo contorno a
-profilo torna nel file in quella forma, riscritto intero a ogni cambio che non
-è una `transform`
-([formato](../reference/scene-format-width.md#5-lettura-e-scrittura),
-`src/profilo/motore.rs`).
-Fub salva da sé, quindi la perdita evitata si dice all'apertura e al gesto:
-il chip «N parti restano come sono» (`motore/standing.ts`, dalle parti di
-`perdite()` di `motoreDa`) apre «Che cosa manca?», un posto per parte col suo
-«Vai»; manca col motore spento o fermo, in Lettura e in sola lettura. Gli elementi estranei della scena (`<style>`, `<foreignObject>`,
-gli elementi di altre app) non sono nella mappa e non sono parti: nessuno
-strumento li modifica, e un gesto sul loro oggetto del motore è rifiutato
-`Unmapped`. L'elenco per ogni file del corpus e dei modelli sta in
-`crates/fub-disegno/tests/corpus/perdite.tsv`: la prova
-`cargo test -p fub-disegno --test corpus` lo confronta, e
-`UPDATE_PERDITE=1` lo riscrive.
+la linea a spessore variabile (`fub:shape="width"`), che nel motore è un
+tracciato col solo contorno a profilo e torna nel file intera a ogni cambio
+che non è una `transform` ([formato](../reference/scene-format-width.md#5-lettura-e-scrittura),
+`src/profilo/motore.rs`). Fub salva da sé, quindi la perdita evitata si dice
+all'apertura e al gesto: il chip «N parti restano come sono»
+(`motore/standing.ts`) apre «Che cosa manca?», un posto per parte col suo
+«Vai»; manca col motore spento o fermo, in Lettura e in sola lettura. Gli
+elementi estranei (`<style>`, `<foreignObject>`, quelli di altre app) non sono
+parti: nessuno strumento li modifica, e un gesto sul loro oggetto è `Unmapped`.
+L'elenco del corpus e dei modelli è `crates/fub-disegno/tests/corpus/perdite.tsv`
+(`cargo test -p fub-disegno --test corpus`; `UPDATE_PERDITE=1` lo riscrive).
 
 ## La ricetta
 
