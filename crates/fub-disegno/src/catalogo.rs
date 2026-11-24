@@ -448,6 +448,7 @@ pub const SOTTOMENU: &[(&str, &[&str])] = &[
             "blocca",
             "nascondi",
             "ritaglio",
+            "tavole",
         ],
     ),
     ("selezione", &["uguale", "oggetto"]),
@@ -616,6 +617,9 @@ pub const NOMI: &[(&str, Tipo)] = &[
     ("colorShift", Tipo::Numero),
     // I simboli (K6): le opzioni dei simboli e degli strumenti dei simboli.
     ("newName", Tipo::Testo),
+    // Ridisponi tutte le tavole: la distanza fra le tavole e il disegno che va con loro.
+    ("spacing", Tipo::Numero),
+    ("moveArtwork", Tipo::SiNo),
 ];
 
 /// Una finestra che Fub scrive da sé, perché lo schema del motore descrive i
@@ -640,6 +644,24 @@ pub struct FinestraScritta {
 /// Espandi non chiede come espandere le sfumature (`gradient`, `steps`): vale
 /// quello del motore, strisce piene.
 pub const FINESTRE_SCRITTE: &[FinestraScritta] = &[
+    // Ridisponi tutte le tavole (Oggetto › Tavole da disegno): la griglia, il
+    // verso, le colonne (le righe per colonna), la distanza e se il disegno
+    // va con le sue tavole. `patterns` resta alle preferenze del motore.
+    FinestraScritta {
+        id: "artboard.rearrange",
+        schema: "{layout: gridByRow|gridByColumn|row|column, order: leftToRight|rightToLeft, columns, spacing, moveArtwork}",
+        predefiniti: &[
+            ("layout", "gridByRow"),
+            ("order", "leftToRight"),
+            ("columns", "2"),
+            ("spacing", "20"),
+            ("moveArtwork", "true"),
+        ],
+        limiti: &[
+            ("columns", Some(1.0), Some(1000.0)),
+            ("spacing", Some(-100_000.0), Some(100_000.0)),
+        ],
+    },
     // Le finestre di Disponi (K6 T13): la misura di ciascun oggetto scelto, e
     // l'opacità casuale fra un minimo e un massimo (il seme dà la stessa scelta).
     FinestraScritta {

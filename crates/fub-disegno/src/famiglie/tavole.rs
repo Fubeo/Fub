@@ -1,8 +1,18 @@
-//! La famiglia `tavole` della mappa: le tavole (lo strumento `artboard`, che
-//! non vuole un ponte) e la Quota di VectorCraft (`dimension.*`,
+//! La famiglia `tavole` della mappa: le tavole (lo strumento `artboard` e i
+//! comandi `artboard.*`, che il ponte `crate::tavole` scrive nel file) e la
+//! Quota di VectorCraft (`dimension.*`,
 //! `vendor/vectorcraft/crates/engine/src/cmd/dimension.rs`). Lo stato non
 //! tiene niente; la famiglia traduce le quote (`ids`, `id`) e gli oggetti
 //! misurati (`source`) dall'id del file al nodo del motore.
+//!
+//! I comandi delle tavole ricevono le misure nelle coordinate del file (il
+//! `viewBox` delle tavole): la famiglia le porta nel documento del motore con
+//! la matrice della radice. Il colore, il blocco e i segni di una tavola
+//! (`color`, `locked`, `showCenterMark`, `showCrossHairs`,
+//! `showVideoSafeAreas`, `videoRulerPixelAspectRatio`) il file non li tiene
+//! ancora (`docs/reference/scene-format-boards.md`, §8): un valore diverso da
+//! quello di serie è un argomento rifiutato, invece di un cambio che sparisce
+//! al salvataggio.
 //!
 //! Il legame di una quota con l'oggetto che misura vive solo nel gesto: la
 //! ricetta lo toglie quando punta fuori dalla quota (`ricetta::codifica`),
@@ -14,6 +24,7 @@ use fub_abi::{DrawingDisabledReason, PluginError};
 use fub_motori::{ErroreMotore, Servizi};
 use serde_json::Value;
 use vectorcraft_doc::NodeId;
+use vectorcraft_geom::Affine;
 
 use super::{nodi_scelti, selezione_spenta, StatoFamiglia};
 use crate::apertura::Copia;
@@ -39,6 +50,9 @@ impl StatoFamiglia for Stato {
     /// ha, o bloccato, spegne ogni comando; una copia di sola lettura spegne
     /// quelli che cambiano il disegno.
     fn spento(id: &str, copia: &Copia, selezione: &[String]) -> Option<DrawingDisabledReason> {
+        if id.starts_with("artboard.") {
+            return tavola_spenta(id, copia, selezione);
+        }
         if !id.starts_with("dimension.") {
             return None;
         }
@@ -70,7 +84,7 @@ impl StatoFamiglia for Stato {
     fn argomenti_della_copia(
         id: &str,
         copia: &Copia,
-        _selezione: &[String],
+        selezione: &[String],
         mut valore: Value,
     ) -> Result<Value, PluginError> {
         match id {
@@ -100,10 +114,124 @@ impl StatoFamiglia for Stato {
                     }
                 }
             }
+            // Dal menu Oggetto › Tavole arrivano senza tavola: VectorCraft passa
+            // la tavola attiva, Fub quella che ha il centro degli oggetti scelti,
+            // o la prima.
+            "artboard.fitToArt" | "artboard.fitToSelection"
+                if valore.get("index").is_none() && valore.get("indices").is_none() =>
+            {
+                let attiva = tavola_della_selezione(copia, selezione).unwrap_or(0);
+                if let Some(o) = valore.as_object_mut() {
+                    o.insert("index".into(), Value::from(attiva));
+                } else if valore.is_null() {
+                    valore = serde_json::json!({ "index": attiva });
+                }
+            }
+            "artboard.new" | "artboard.setProps" | "artboard.move" | "artboard.rearrange" => {
+                misure_nel_motore(&mut valore, copia.radice)?;
+                if let Some(tavole) = valore.get_mut("artboards").and_then(Value::as_array_mut) {
+                    for t in tavole {
+                        misure_nel_motore(t, copia.radice)?;
+                    }
+                }
+            }
             _ => {}
         }
         Ok(valore)
     }
+}
+
+/// La tavola che ha il centro del riquadro degli oggetti scelti.
+fn tavola_della_selezione(copia: &Copia, selezione: &[String]) -> Option<usize> {
+    let nodi = nodi_scelti(copia, selezione).ok()?;
+    let riquadro = copia.documento.bounds_of(&nodi, false)?;
+    copia.documento.artboard_at(riquadro.center())
+}
+
+/// Dice se un valore è quello di serie.
+type DiSerie = fn(&Value) -> bool;
+
+/// Le chiavi di una tavola che il file non tiene ancora, col loro valore di
+/// serie.
+const NON_NEL_FILE: [(&str, DiSerie); 6] = [
+    ("color", Value::is_null),
+    ("locked", |v| v == &Value::Bool(false)),
+    ("showCenterMark", |v| v == &Value::Bool(false)),
+    ("showCrossHairs", |v| v == &Value::Bool(false)),
+    ("showVideoSafeAreas", |v| v == &Value::Bool(false)),
+    ("videoRulerPixelAspectRatio", |v| v.as_f64() == Some(1.0)),
+];
+
+/// Le misure di una tavola (`x`, `y`, `width`, `height`, `dx`, `dy`) dal
+/// file al documento del motore; una chiave che il file non tiene, con un
+/// valore che non è quello di serie, è un argomento rifiutato.
+fn misure_nel_motore(valore: &mut Value, radice: Affine) -> Result<(), PluginError> {
+    let Some(o) = valore.as_object_mut() else {
+        return Ok(());
+    };
+    for (chiave, di_serie) in NON_NEL_FILE {
+        if o.get(chiave).is_some_and(|v| !di_serie(v)) {
+            return Err(PluginError::BadArgs(
+                format!(
+                    "«{chiave}»: il colore, il blocco e i segni di una tavola non si salvano ancora nel file."
+                )
+                .into(),
+            ));
+        }
+    }
+    let [a, b, c, d, e, f] = radice.as_coeffs();
+    if b.abs() > 1e-12 || c.abs() > 1e-12 {
+        return Err(PluginError::BadArgs(
+            "Il disegno è ruotato: le misure di una tavola non si portano nel motore.".into(),
+        ));
+    }
+    let mut porta = |chiave: &str, scala: f64, spostamento: f64| {
+        if let Some(v) = o.get(chiave).and_then(Value::as_f64) {
+            o.insert(chiave.into(), Value::from(v * scala + spostamento));
+        }
+    };
+    porta("x", a, e);
+    porta("y", d, f);
+    porta("width", a.abs(), 0.0);
+    porta("height", d.abs(), 0.0);
+    porta("dx", a, 0.0);
+    porta("dy", d, 0.0);
+    porta("spacing", a.abs(), 0.0);
+    Ok(())
+}
+
+/// Perché un comando delle tavole è spento: una copia di sola lettura spegne
+/// quelli che cambiano il disegno (copiare no); un file con le carte fuori
+/// regola tutti quelli che cambiano le tavole; Elimina, con una sola tavola,
+/// come in VectorCraft; Adatta alla selezione e Converti in tavole senza
+/// oggetti scelti.
+fn tavola_spenta(id: &str, copia: &Copia, selezione: &[String]) -> Option<DrawingDisabledReason> {
+    let sugli_oggetti = matches!(id, "artboard.fitToSelection" | "artboard.convertToArtboards");
+    if sugli_oggetti {
+        if selezione.is_empty() {
+            return Some(DrawingDisabledReason::NoSelection);
+        }
+        if let Some(r) = selezione_spenta(copia, selezione) {
+            return Some(r);
+        }
+    }
+    if id == "artboard.copy" {
+        return None;
+    }
+    if !copia.modificabile {
+        return Some(DrawingDisabledReason::ReadOnly);
+    }
+    if copia.tavole.fuori_regola {
+        return Some(DrawingDisabledReason::Other {
+            text: "Le carte del file non vanno con le loro tavole.".into(),
+        });
+    }
+    let una_sola = copia.documento.artboards.len() <= 1;
+    (una_sola && matches!(id, "artboard.delete" | "artboard.cut")).then(|| {
+        DrawingDisabledReason::Other {
+            text: "Una tavola resta sempre.".into(),
+        }
+    })
 }
 
 /// Il `node` di un riferimento a un lato o a un punto, come id del file,

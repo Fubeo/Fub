@@ -162,9 +162,11 @@ pub(crate) fn leggi(testo: &str, items: &[Item], base: Affine, doc: &mut Documen
         let rect = base.transform_rect_bbox(Rect::new(x, y, x + w, y + h));
         doc.artboards.push(Artboard {
             id: motore,
-            name: nome
-                .filter(|n| !n.trim().is_empty())
-                .unwrap_or_else(|| id.clone()),
+            name: nome_nel_motore(
+                &nome
+                    .filter(|n| !n.trim().is_empty())
+                    .unwrap_or_else(|| id.clone()),
+            ),
             rect,
             ..modello.clone()
         });
@@ -174,12 +176,40 @@ pub(crate) fn leggi(testo: &str, items: &[Item], base: Affine, doc: &mut Documen
 }
 
 /// Il nome di una tavola nel file: quelli che il motore dà alle tavole nuove
-/// in italiano.
-fn nome_nel_file(nome: &str) -> String {
-    match nome.strip_prefix("Artboard ") {
-        Some(n) if !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()) => format!("Tavola {n}"),
-        _ => nome.to_string(),
-    }
+/// (`Artboard 3`) e alle copie (`Retro copy`, `Retro copy 2`) in italiano
+/// (`Tavola 3`, `Retro copia`, `Retro copia 2`). [`nome_nel_motore`] fa il
+/// contrario all'apertura, così il motore riconosce i suoi nomi e non ne dà
+/// uno che il disegno ha già.
+pub(crate) fn nome_nel_file(nome: &str) -> String {
+    traduci(nome, "Artboard ", " copy", "Tavola ", " copia")
+}
+
+/// Il nome di una tavola del file nel motore: il contrario di
+/// [`nome_nel_file`].
+pub(crate) fn nome_nel_motore(nome: &str) -> String {
+    traduci(nome, "Tavola ", " copia", "Artboard ", " copy")
+}
+
+/// `nome` con il numero `da_numero N` scritto `a_numero N` e il suffisso
+/// `da_copia` (o `da_copia N`) scritto `a_copia`.
+fn traduci(nome: &str, da_numero: &str, da_copia: &str, a_numero: &str, a_copia: &str) -> String {
+    let cifre = |s: &str| !s.is_empty() && s.bytes().all(|b| b.is_ascii_digit());
+    let (base, coda) = match nome.rfind(da_copia) {
+        Some(i) => {
+            let dopo = &nome[i + da_copia.len()..];
+            match dopo.strip_prefix(' ') {
+                _ if dopo.is_empty() => (&nome[..i], a_copia.to_string()),
+                Some(n) if cifre(n) => (&nome[..i], format!("{a_copia} {n}")),
+                _ => (nome, String::new()),
+            }
+        }
+        None => (nome, String::new()),
+    };
+    let base = match base.strip_prefix(da_numero) {
+        Some(n) if cifre(n) => format!("{a_numero}{n}"),
+        _ => base.to_string(),
+    };
+    format!("{base}{coda}")
 }
 
 fn vicini(a: f64, b: f64) -> bool {
@@ -423,6 +453,27 @@ mod tests {
         assert_eq!(nome_nel_file("Artboard 3"), "Tavola 3");
         assert_eq!(nome_nel_file("Artboard"), "Artboard");
         assert_eq!(nome_nel_file("Copertina"), "Copertina");
+        assert_eq!(nome_nel_file("Retro copy"), "Retro copia");
+        assert_eq!(nome_nel_file("Retro copy 2"), "Retro copia 2");
+        assert_eq!(nome_nel_file("Artboard 2 copy"), "Tavola 2 copia");
+        assert_eq!(nome_nel_file("Retro copy due"), "Retro copy due");
+        assert_eq!(nome_nel_file(" copy"), " copia");
+    }
+
+    #[test]
+    fn i_nomi_tornano_al_motore_uguali() {
+        for nome in [
+            "Artboard 3",
+            "Retro copy",
+            "Retro copy 2",
+            "Artboard 2 copy",
+            "Copertina",
+            "Foto copiatrice",
+        ] {
+            assert_eq!(nome_nel_motore(&nome_nel_file(nome)), nome);
+        }
+        assert_eq!(nome_nel_motore("Tavola 4"), "Artboard 4");
+        assert_eq!(nome_nel_motore("Tavola"), "Tavola");
     }
 
     #[test]

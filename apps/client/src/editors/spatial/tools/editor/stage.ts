@@ -22,7 +22,7 @@ import { inlineChrome, type DrawChrome, type DrawPanelId, type DrawPanelPiece } 
 import { pannelliTab } from "./chrome/pannelli-tab";
 // La scheda Risorse (T10): il pannello, e i tipi del registro del Completo.
 import { createResourcesPanel, type PannelloRisorse } from "../resources-panel";
-import type { Selezione, Sezioni } from "../../completo/sezioni";
+import type { Selezione, Sezioni, TavoleDocumento } from "../../completo/sezioni";
 import type { MotoreDelDisegno } from "../../motore/gesti";
 import type { EditorContext } from "./context";
 import { nodeAtPath } from "./helpers";
@@ -142,6 +142,12 @@ export function installStage(ctx: EditorContext): void {
     const punti = id === null ? undefined : ctx.statoStrumento(id)?.anchors;
     return { numero: ctx.selectedUnits().length, punti: Array.isArray(punti) ? punti : [] };
   };
+  /// Le tavole per la sezione «Tavole» del Design: quelle del disegno, la tavola dove sta la vista.
+  const tavoleSezioni = (): TavoleDocumento => ({
+    elenco: ctx.boardsNow().map((b) => ({ id: b.id, nome: b.name, rect: b.rect })),
+    attuale: ctx.currentBoard()?.id ?? null,
+    visita: (indice) => void ctx.visitBoard(indice),
+  });
   const rileggiStrumento = (): void => {
     const id = ctx.motoreTool;
     if (id !== null && !ctx.disposed) ctx.rileggiStato(id);
@@ -233,7 +239,7 @@ export function installStage(ctx: EditorContext): void {
     completoAperto = sezioni !== null;
     resources.collega(sezioni, motore);
     // Il Design prende le sue sezioni dallo stesso registro.
-    panel.collegaSezioni(sezioni, motore, selezioneSezioni, rileggiStrumento);
+    panel.collegaSezioni(sezioni, motore, selezioneSezioni, rileggiStrumento, tavoleSezioni);
     stopStati?.();
     stopStati = null;
     if (sezioni !== null) {

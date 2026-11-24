@@ -280,12 +280,12 @@ motore	layer.collectInNew	Collect in New Layer	Window › Layers	livelli	F1	T15	
 motore	layer.selectAll	Select Art		livelli	F1	T15	fatto	ispettore/livelli	famiglia		Seleziona grafica
 motore	layer.move	Move Rows		livelli	F1	T15	da fare	ispettore/livelli	famiglia		Sposta righe
 motore	node.move	Reorder		livelli	F1	T15	da fare	ispettore/livelli	famiglia	aspetta T15, decisione: il motore lo dà disabilitato come id	Riordina
-motore	artboard.new	New Artboard	Window › Artboards	tavole	F2	T19	da fare	ispettore/design/documento	famiglia		Nuova tavola da disegno
-motore	artboard.delete	Delete Artboard	Window › Artboards	tavole	F2	T19	da fare	ispettore/design/documento	famiglia		Elimina tavola da disegno
-motore	artboard.deleteEmpty	Delete Empty Artboards	Window › Artboards	tavole	F2	T19	da fare	ispettore/design/documento	famiglia		Elimina tavole da disegno vuote
-motore	artboard.setProps	Artboard Options…	Window › Artboards	tavole	F2	T19	da fare	ispettore/design/documento	famiglia	finestra	Opzioni tavola da disegno…
-motore	artboard.fitToArt	Fit to Artwork Bounds	Object › Artboards	tavole	F2	T19	da fare	menu/oggetto	famiglia		Adatta ai limiti della grafica
-motore	artboard.fitToSelection	Fit to Selected Art	Object › Artboards	tavole	F2	T19	da fare	menu/oggetto	famiglia		Adatta alla grafica selezionata
+motore	artboard.new	New Artboard	Window › Artboards	tavole	F2	T19	fatto	ispettore/design/documento	famiglia	pulsante «Nuova tavola» della sezione Tavole del Design (senza oggetti scelti): una tavola nuova accanto all'ultima, che il file scrive come <svg> di tavola col suo foglio	Nuova tavola da disegno
+motore	artboard.delete	Delete Artboard	Window › Artboards	tavole	F2	T19	fatto	ispettore/design/documento	famiglia	pulsante «Elimina tavola» della sezione Tavole: toglie la tavola scelta nell'elenco; spento con una tavola sola («Una tavola resta sempre.»)	Elimina tavola da disegno
+motore	artboard.deleteEmpty	Delete Empty Artboards	Window › Artboards	tavole	F2	T19	fatto	ispettore/design/documento	famiglia	pulsante «Elimina le tavole vuote» della sezione Tavole: toglie in un passo le tavole senza disegno	Elimina tavole da disegno vuote
+motore	artboard.setProps	Artboard Options…	Window › Artboards	tavole	F2	T19	fatto	ispettore/design/documento	famiglia	nella sezione Tavole il nome, la larghezza e l'altezza della tavola scelta; il colore, il blocco e i segni restano fuori finché il file non li tiene (scelta di formato aperta)	Opzioni tavola da disegno…
+motore	artboard.fitToArt	Fit to Artwork Bounds	Object › Artboards	tavole	F2	T19	fatto	menu/oggetto/tavole	famiglia	la tavola si adatta al disegno visibile che la tocca; dal menu, senza tavola, prende quella che ha il centro degli oggetti scelti, o la prima (VectorCraft prende quella attiva); la carta va con lei e la pagina cresce (test famiglie, caso tavola-adatta-disegno)	Adatta ai limiti della grafica
+motore	artboard.fitToSelection	Fit to Selected Art	Object › Artboards	tavole	F2	T19	fatto	menu/oggetto/tavole	famiglia	la tavola si adatta agli oggetti scelti; dal menu prende quella che ha il loro centro, o la prima; spento senza selezione (test famiglie, casi tavola-adatta-selezione e tavola-adatta-selezione-menu)	Adatta alla grafica selezionata
 motore	layer.clippingMask.toggle	Make/Release Clipping Mask	Window › Layers	livelli	F1	T15	da fare	ispettore/livelli	famiglia	un livello che ritaglia non ha ancora una forma nel formato della scena (§3 scrive nome, occhio e lucchetto)	Crea/rilascia maschera di ritaglio
 motore	layer.target	Target		livelli	F1	T15	da fare	ispettore/livelli	famiglia		Destinazione
 motore	layer.pasteRemembersLayers	Paste Remembers Layers	Window › Layers	livelli	F1	T15	da fare	ispettore/livelli	famiglia		Incolla nei livelli originali
@@ -346,8 +346,8 @@ motore	object.cropImage	Crop Image	Object	immagini	F3	T20	da fare	menu/oggetto	f
 motore	object.maskImage	Mask		immagini	F3	T20	da fare	ispettore/design	famiglia		Maschera
 motore	object.createTrimMarks	Create Trim Marks	Object	stampa	F4	T25	da fare	menu/oggetto	famiglia		Crea segni di taglio
 motore	object.shape.convertToShape	Convert to Shape	Object › Shape	forme	F1	T13	da fare	menu/oggetto	famiglia	il motore la fa come forma viva (rettangolo, ellisse) e la scena non scrive una forma viva di quelle forme: fub:shape ha solo freccia, connettore, poligono, stella e spessore variabile (docs/reference/scene-format-shapes.md, scene-format.md); la forma viva è in Ricetta (scene-format-recipe.md)	Converti in forma
-motore	artboard.convertToArtboards	Convert to Artboards	Object › Artboards	tavole	F2	T19	da fare	menu/oggetto	famiglia		Converti in tavole da disegno
-motore	artboard.rearrange	Rearrange All Artboards…	Object › Artboards	tavole	F2	T19	da fare	menu/oggetto	famiglia	finestra	Ridisponi tutte le tavole da disegno…
+motore	artboard.convertToArtboards	Convert to Artboards	Object › Artboards	tavole	F2	T19	fatto	menu/oggetto/tavole	famiglia	ogni oggetto scelto diventa una tavola col suo riquadro, con la sua carta, e l'oggetto se ne va; spento senza selezione (test famiglie, caso tavola-converti)	Converti in tavole da disegno
+motore	artboard.rearrange	Rearrange All Artboards…	Object › Artboards	tavole	F2	T19	fatto	menu/oggetto/tavole	famiglia	la finestra chiede griglia, verso, colonne, distanza e se il disegno va con le tavole; la distanza è nelle misure del file (test famiglie, caso tavola-ridisponi)	Ridisponi tutte le tavole da disegno…
 motore	appearance.setNewArtBasic	New Art Has Basic Appearance	Window › Appearance	aspetto	F1	T15	da fare	ispettore/design	famiglia		La nuova grafica ha aspetto di base
 motore	appearance.newArt	New Art Appearance		aspetto	F1	T15	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Aspetto nuova grafica
 motore	file.newPresets	New Document Presets		formati	F3	T23	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Preset nuovo documento
@@ -385,10 +385,10 @@ motore	paint.lastColor	Apply Last Color		colore	F1	T14	fatto	ispettore/design	fa
 motore	paint.lastGradient	Apply Last Gradient		colore	F1	T14	fatto	ispettore/design/sfumatura	famiglia	il pulsante Sfumatura della sezione Colore, sul lato attivo	Applica ultima sfumatura
 motore	paint.recent	Recent Colors		colore	F1	T14	fatto	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Colori recenti
 motore	paint.proxies	Fill and Stroke		colore	F1	T14	fatto	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Riempimento e traccia
-motore	artboard.reorder	Move Artboard Up/Down		tavole	F2	T19	da fare	ispettore/design/documento	famiglia		Sposta tavola da disegno su/giù
-motore	artboard.duplicate	Duplicate Artboard	Window › Artboards	tavole	F2	T19	da fare	ispettore/design/documento	famiglia		Duplica tavola da disegno
-motore	artboard.copy	Copy Artboard		tavole	F2	T19	da fare	ispettore/design/documento	famiglia		Copia tavola da disegno
-motore	artboard.cut	Cut Artboard		tavole	F2	T19	da fare	ispettore/design/documento	famiglia		Taglia tavola da disegno
+motore	artboard.reorder	Move Artboard Up/Down		tavole	F2	T19	fatto	ispettore/design/documento	famiglia	pulsanti «Sposta su» e «Sposta giù» della sezione Tavole: cambiano l'ordine delle tavole nel file; spenti ai capi	Sposta tavola da disegno su/giù
+motore	artboard.duplicate	Duplicate Artboard	Window › Artboards	tavole	F2	T19	fatto	ispettore/design/documento	famiglia	pulsante «Duplica tavola» della sezione Tavole, col disegno se la casella «Il disegno va con la tavola» è spuntata; la copia si chiama «… copia»	Duplica tavola da disegno
+motore	artboard.copy	Copy Artboard		tavole	F2	T19	fatto	ispettore/design/documento	famiglia	pulsante «Copia tavola» della sezione Tavole (col disegno secondo la casella); poi Modifica › Incolla aggiunge la copia	Copia tavola da disegno
+motore	artboard.cut	Cut Artboard		tavole	F2	T19	fatto	ispettore/design/documento	famiglia	pulsante «Taglia tavola» della sezione Tavole; spento con una tavola sola	Taglia tavola da disegno
 motore	text.setFormat	Character / Paragraph		testo	F2	T16	da fare	ispettore/design	famiglia		Carattere / Paragrafo
 motore	text.convertListToText	Convert to Text		testo	F2	T16	da fare	ispettore/design	famiglia		Converti in testo
 motore	path.appendAnchor	Add Anchor (Pen)		tracciati	F1	T12	fatto	ispettore/design	famiglia		Aggiungi ancoraggio (Penna)
@@ -694,7 +694,7 @@ motore	webExport.presets.delete	Delete Save for Web Preset		web	F3	T22	da fare	i
 motore	object.distort	Free Distort		trasforma	F1	T13	fatto	ispettore/design	famiglia		Distorsione libera
 motore	paint.sampleColor	Sample Color		colore	F1	T14	fatto	ispettore/design	famiglia		Campiona colore
 motore	eyedropper.setOptions	Eyedropper Options		colore	F1	T14	fatto	ispettore/design	famiglia		Opzioni contagocce
-motore	artboard.move	Move Artboard		tavole	F2	T19	da fare	ispettore/design/documento	famiglia		Sposta tavola da disegno
+motore	artboard.move	Move Artboard		tavole	F2	T19	fatto	ispettore/design/documento	famiglia	campi X e Y della sezione Tavole: spostano la tavola scelta, col disegno se la casella è spuntata	Sposta tavola da disegno
 motore	addon.arrange.grid	Arrange in Grid	Object › Plug-ins › Arrange Tools	trasforma	F1	T13	fatto	menu/oggetto	famiglia		Disponi in griglia
 motore	addon.arrange.swap	Swap Objects	Object › Plug-ins › Arrange Tools	trasforma	F1	T13	fatto	menu/oggetto	famiglia		Scambia oggetti
 motore	addon.arrange.replace	Replace with Top Object	Object › Plug-ins › Arrange Tools	trasforma	F1	T13	fatto	menu/oggetto	famiglia		Sostituisci con l’oggetto superiore
@@ -1511,7 +1511,7 @@ effetto	pathfinder.softMix	Soft Mix	Effect › Pathfinder	effetti	F2	T18	da fare
 pannello	actions	Actions	Window	automazione	F4	T26	da fare	ispettore/cronologia	famiglia		Azioni
 pannello	align	Align	Window	trasforma	F1	T13	fatto	ispettore/design/allinea	famiglia		Allinea
 pannello	appearance	Appearance	Window	aspetto	F1	T15	da fare	ispettore/design	famiglia		Aspetto
-pannello	artboards	Artboards	Window	tavole	F2	T19	da fare	ispettore/design/documento	famiglia		Tavole da disegno
+pannello	artboards	Artboards	Window	tavole	F2	T19	fatto	ispettore/design/documento	famiglia	la sezione «Tavole» del Design senza oggetti scelti: elenco con la tavola attuale (un clic porta la vista lì), nome, X, Y, larghezza, altezza e i pulsanti del pannello	Tavole da disegno
 pannello	asset_export	Asset Export	Window	web	F3	T22	da fare	ispettore/design/documento	famiglia		Esportazione risorse
 pannello	attributes	Attributes	Window	dati	F4	T26	da fare	ispettore/design	famiglia		Attributi
 pannello	blend	Blend	Window	dinamici	F2	T21	fatto	ispettore/design/blend	famiglia	la sezione Fusione del Design: Crea, spaziatura, orientamento, andamento, rampa e spostamento colore della fusione scelta (o delle nuove), inverti, sostituisci dorso, espandi e rilascia	Fusione

@@ -47,6 +47,7 @@ import type {
   Sezioni,
   SfumaturaSelezione,
   SfumatureSelezione,
+  TavoleDocumento,
   TestoSelezione,
 } from "../completo/sezioni";
 import type { GradientSummary } from "./gradients";
@@ -341,6 +342,7 @@ export interface Properties {
     motore: MotoreDelDisegno | null,
     selezione: () => Selezione,
     rileggi?: () => void,
+    tavole?: () => TavoleDocumento,
   ): void;
   /// Lo stato dello strumento del motore è cambiato (i punti scelti): le
   /// sezioni del registro si rifanno, al più una volta per fotogramma.
@@ -1856,6 +1858,7 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
   let motoreCompleto: MotoreDelDisegno | null = null;
   let selezione: () => Selezione = () => ({ numero: 0, punti: [] });
   let rileggiStato: () => void = () => undefined;
+  let tavoleDiAdesso: (() => TavoleDocumento) | undefined;
   let stopRegistro: Teardown | null = null;
   registrate = createSezioniList(sezioniDesign, life, {
     elenco: () => registro?.di("design") ?? [],
@@ -1868,6 +1871,7 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
     rileggi: () => rileggiStato(),
     misure: () => misureDellaVista(view),
     colori: () => coloriDellaVista(view),
+    tavole: () => tavoleDiAdesso?.(),
   });
   life.add(() => {
     stopRegistro?.();
@@ -1878,7 +1882,7 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
     element,
     lead,
     update,
-    collegaSezioni(nuovo, motore, sceltaDiAdesso, rileggi) {
+    collegaSezioni(nuovo, motore, sceltaDiAdesso, rileggi, tavole) {
       stopRegistro?.();
       stopRegistro = null;
       registro = nuovo;
@@ -1887,6 +1891,7 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
       motoreCompleto = motore;
       selezione = sceltaDiAdesso;
       rileggiStato = rileggi ?? (() => undefined);
+      tavoleDiAdesso = nuovo === null ? undefined : tavole;
       // Ciò che nel Completo non c'è si toglie (o torna) subito, non al prossimo cambio.
       if (prima !== completoAperto) {
         for (const { id, label } of SECTIONS) sections.get(id)!.title.textContent = t(titoloDi(id, label));

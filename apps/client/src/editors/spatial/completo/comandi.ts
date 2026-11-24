@@ -180,6 +180,7 @@ const NOMI_PEZZO: Readonly<Record<string, DrawKey>> = {
   guide: "draw.completo.sotto.guide",
   elaborazione: "draw.completo.sotto.elaborazione",
   ritaglio: "draw.completo.sotto.ritaglio",
+  tavole: "draw.completo.sotto.tavole",
 };
 
 /// Dove sta un posto, come percorso leggibile: «Colonna › Disegna». Il
@@ -240,6 +241,13 @@ const FILE_RITAGLIO: readonly (readonly string[])[] = [
   ["object.clippingMask.make", "object.clippingMask.release", "object.clippingMask.editMask", "object.clippingMask.editContents"],
 ];
 
+/// La fila di Oggetto › Tavole, nell'ordine di VectorCraft (Object › Artboards): Converti, poi
+/// Ridisponi, poi i due Adatta.
+const FILE_TAVOLE: readonly (readonly string[])[] = [
+  ["artboard.convertToArtboards", "artboard.rearrange"],
+  ["artboard.fitToArt", "artboard.fitToSelection"],
+];
+
 /// Le file di Modifica › Modifica colori (K6 T14): le finestre che regolano i colori, le tre
 /// fusioni, le conversioni di spazio, e Inverti con Sovrastampa nero.
 const FILE_COLORI: readonly (readonly string[])[] = [
@@ -296,6 +304,7 @@ const FILE_DEI_MENU: Readonly<Record<string, readonly (readonly string[])[]>> = 
   "oggetto/tracciato": FILE_TRACCIATO,
   "oggetto/elaborazione": FILE_ELABORAZIONE,
   "oggetto/ritaglio": FILE_RITAGLIO,
+  "oggetto/tavole": FILE_TAVOLE,
   "modifica/colori": FILE_COLORI,
   "selezione/uguale": FILE_UGUALE,
   "selezione/oggetto": FILE_OGGETTO,

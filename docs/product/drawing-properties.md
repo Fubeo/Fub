@@ -141,6 +141,10 @@ quello di sempre.
   Orientamento della pagina, con le misure pronte; poi Larghezza e Altezza
   della pagina, l'unità di misura e la descrizione. Il titolo sta
   in cima al pannello.
+- **Tavole**, senza selezione, nel Disegno completo: l'elenco delle tavole,
+  il nome, la posizione e le misure di quella scelta, e i pulsanti per
+  crearne, duplicarne, eliminarne, riordinarle, copiarle e tagliarle
+  ([Disegni, tavole](drawing-boards.md)).
 - **Griglia**, senza selezione: le caselle della griglia, dell'aggancio e
   quella della barra della selezione, come in «Pagina e griglia».
 

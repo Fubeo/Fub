@@ -21,7 +21,7 @@ import { textButton } from "../../../kit";
 import { iconEl } from "../../../ui/icons";
 import { identifier } from "../../../ui/a11y";
 import { openLifetime, type Lifetime, type Teardown } from "../../../ui/lifetime";
-import type { CampioneDocumento, CampioniDocumento, ContestoSezione, ColoriSelezione, MisureSelezione, Selezione, Sezione, Sezioni } from "../completo/sezioni";
+import type { CampioneDocumento, CampioniDocumento, ContestoSezione, ColoriSelezione, MisureSelezione, Selezione, Sezione, Sezioni, TavoleDocumento } from "../completo/sezioni";
 import type { MotoreDelDisegno } from "../motore/gesti";
 import { elementChildren, type ContainerNode, type DocumentModel } from "../scene/model";
 import { t } from "../strings";
@@ -78,6 +78,14 @@ export interface OpzioniSezioniList {
   readonly colori?: () => ColoriSelezione;
   /// I campioni del documento per le sezioni (K6 T14, giro 2); senza, non ce ne sono.
   readonly campioni?: () => CampioniDocumento;
+  /// Le tavole del disegno per le sezioni; senza, non ce ne sono.
+  readonly tavole?: () => TavoleDocumento | undefined;
+}
+
+/// Le tavole per il contesto di una sezione, se l'elenco le ha.
+function tavoleDi(opzioni: OpzioniSezioniList): { tavole?: TavoleDocumento } {
+  const tavole = opzioni.tavole?.();
+  return tavole === undefined ? {} : { tavole };
 }
 
 /// Una sezione montata: il suo elemento, il giro che la disegna e ciò che
@@ -284,6 +292,7 @@ export function createSezioniList(host: HTMLElement, life: Lifetime, opzioni: Op
       misure: opzioni.misure?.() ?? {},
       colori: opzioni.colori?.() ?? {},
       ...(opzioni.campioni === undefined ? {} : { campioni: opzioni.campioni() }),
+      ...tavoleDi(opzioni),
       aggiorna: () => pianifica(),
       rileggi: () => opzioni.rileggi?.(),
       vita: giro,

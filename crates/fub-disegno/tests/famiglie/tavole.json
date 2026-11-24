@@ -567,6 +567,679 @@
         ]
       },
       "dopo": "quota-applica.svg"
+    },
+    {
+      "$nota": "Nuova tavola: a destra dell'ultima, con la carta della pagina; la pagina si allarga.",
+      "id": "artboard.new",
+      "disegno": "due.svg",
+      "selezione": [],
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "after": "b3c3c3c3c"
+                },
+                "elem": {
+                  "tag": "view",
+                  "attrs": {
+                    "id": "bd8iis68k",
+                    "fub:role": "board",
+                    "viewBox": "620 0 200 200"
+                  },
+                  "children": [
+                    {
+                      "tag": "title",
+                      "attrs": {},
+                      "text": "Tavola 3"
+                    }
+                  ]
+                }
+              },
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "after": "c2b2b2b2b"
+                },
+                "elem": {
+                  "tag": "rect",
+                  "attrs": {
+                    "id": "cs8do7prf",
+                    "fub:role": "paper",
+                    "fub:board": "bd8iis68k",
+                    "x": "620",
+                    "y": "0",
+                    "width": "200",
+                    "height": "200",
+                    "fill": "#ffffff"
+                  }
+                }
+              },
+              {
+                "op": "page",
+                "viewBox": "0 0 956 300"
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "tavola-nuova.svg"
+    },
+    {
+      "$nota": "Nuova tavola col suo rettangolo e il suo nome.",
+      "id": "artboard.new",
+      "disegno": "due.svg",
+      "selezione": [],
+      "argomenti": {
+        "x": 0,
+        "y": 400,
+        "width": 100,
+        "height": 80,
+        "name": "Nuova"
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "after": "b3c3c3c3c"
+                },
+                "elem": {
+                  "tag": "view",
+                  "attrs": {
+                    "id": "b3qvr3wg0",
+                    "fub:role": "board",
+                    "viewBox": "0 400 100 80"
+                  },
+                  "children": [
+                    {
+                      "tag": "title",
+                      "attrs": {},
+                      "text": "Nuova"
+                    }
+                  ]
+                }
+              },
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "after": "c2b2b2b2b"
+                },
+                "elem": {
+                  "tag": "rect",
+                  "attrs": {
+                    "id": "csdszd7r9",
+                    "fub:role": "paper",
+                    "fub:board": "b3qvr3wg0",
+                    "x": "0",
+                    "y": "400",
+                    "width": "100",
+                    "height": "80",
+                    "fill": "#ffffff"
+                  }
+                }
+              },
+              {
+                "op": "page",
+                "viewBox": "0 0 700 556"
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "tavola-nuova-rettangolo.svg"
+    },
+    {
+      "$nota": "Elimina tavola: il view e la sua carta; gli oggetti restano.",
+      "id": "artboard.delete",
+      "disegno": "due.svg",
+      "selezione": [],
+      "argomenti": {
+        "index": 1
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "b3c3c3c3c"
+              },
+              {
+                "op": "remove",
+                "target": "c2b2b2b2b"
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "tavola-elimina.svg"
+    },
+    {
+      "$nota": "Elimina le tavole vuote: solo quella senza oggetti.",
+      "id": "artboard.deleteEmpty",
+      "disegno": "tre.svg",
+      "selezione": [],
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "b5e5e5e5e"
+              },
+              {
+                "op": "remove",
+                "target": "c4d4d4d4d"
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "tavola-elimina-vuote.svg"
+    },
+    {
+      "$nota": "Opzioni tavola: nome e larghezza; la carta segue.",
+      "id": "artboard.setProps",
+      "disegno": "due.svg",
+      "selezione": [],
+      "argomenti": {
+        "index": 1,
+        "name": "Dorso",
+        "width": 250
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "b3c3c3c3c"
+              },
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "after": "b1a1a1a1a"
+                },
+                "elem": {
+                  "tag": "view",
+                  "attrs": {
+                    "id": "b3c3c3c3c",
+                    "fub:role": "board",
+                    "viewBox": "400 0 250 200"
+                  },
+                  "children": [
+                    {
+                      "tag": "title",
+                      "attrs": {},
+                      "text": "Dorso"
+                    }
+                  ]
+                }
+              },
+              {
+                "op": "set",
+                "id": "c2b2b2b2b",
+                "attrs": {
+                  "x": "400",
+                  "y": "0",
+                  "width": "250",
+                  "height": "200"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "tavola-opzioni.svg"
+    },
+    {
+      "$nota": "Il colore di una tavola il file non lo tiene ancora: rifiutato.",
+      "id": "artboard.setProps",
+      "disegno": "due.svg",
+      "selezione": [],
+      "argomenti": {
+        "index": 1,
+        "color": [
+          255,
+          0,
+          0
+        ]
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "$nota": "Sposta la tavola in su: cambia l'ordine dei view.",
+      "id": "artboard.reorder",
+      "disegno": "due.svg",
+      "selezione": [],
+      "argomenti": {
+        "index": 1,
+        "to": 0
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "move",
+            "target": "b3c3c3c3c",
+            "parent": "#root",
+            "pos": {
+              "first": true
+            }
+          }
+        ]
+      },
+      "dopo": "tavola-ordine.svg"
+    },
+    {
+      "$nota": "Duplica tavola: la copia a destra dell'ultima, con i suoi oggetti, «Retro copia».",
+      "id": "artboard.duplicate",
+      "disegno": "due.svg",
+      "selezione": [],
+      "argomenti": {
+        "index": 1
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "last": true
+                },
+                "elem": {
+                  "tag": "path",
+                  "attrs": {
+                    "d": "M670 50 L730 50 L730 100 L670 100 Z",
+                    "fill": "#000000",
+                    "id": "owcnvjqlf"
+                  }
+                }
+              },
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "after": "b3c3c3c3c"
+                },
+                "elem": {
+                  "tag": "view",
+                  "attrs": {
+                    "id": "bkrmc0r3i",
+                    "fub:role": "board",
+                    "viewBox": "620 0 200 200"
+                  },
+                  "children": [
+                    {
+                      "tag": "title",
+                      "attrs": {},
+                      "text": "Retro copia"
+                    }
+                  ]
+                }
+              },
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "after": "c2b2b2b2b"
+                },
+                "elem": {
+                  "tag": "rect",
+                  "attrs": {
+                    "id": "cj9yhatgt",
+                    "fub:role": "paper",
+                    "fub:board": "bkrmc0r3i",
+                    "x": "620",
+                    "y": "0",
+                    "width": "200",
+                    "height": "200",
+                    "fill": "#ffffff"
+                  }
+                }
+              },
+              {
+                "op": "page",
+                "viewBox": "0 0 956 300"
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "tavola-duplica.svg"
+    },
+    {
+      "$nota": "Copia tavola: va negli appunti, il disegno non cambia.",
+      "id": "artboard.copy",
+      "disegno": "due.svg",
+      "selezione": [],
+      "argomenti": {
+        "index": 1
+      },
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "$nota": "Taglia tavola: la tavola, la sua carta e i suoi oggetti.",
+      "id": "artboard.cut",
+      "disegno": "due.svg",
+      "selezione": [],
+      "argomenti": {
+        "index": 1
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "ob2b2b2b2"
+              },
+              {
+                "op": "remove",
+                "target": "b3c3c3c3c"
+              },
+              {
+                "op": "remove",
+                "target": "c2b2b2b2b"
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "tavola-taglia.svg"
+    },
+    {
+      "$nota": "Sposta tavola con i suoi oggetti.",
+      "id": "artboard.move",
+      "disegno": "due.svg",
+      "selezione": [],
+      "argomenti": {
+        "index": 1,
+        "dx": 10,
+        "dy": 5,
+        "moveArt": true
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "set",
+                "id": "ob2b2b2b2",
+                "attrs": {
+                  "transform": "matrix(1 0 0 1 10 5)"
+                }
+              },
+              {
+                "op": "set",
+                "id": "b3c3c3c3c",
+                "attrs": {
+                  "viewBox": "410 5 200 200"
+                }
+              },
+              {
+                "op": "set",
+                "id": "c2b2b2b2b",
+                "attrs": {
+                  "x": "410",
+                  "y": "5",
+                  "width": "200",
+                  "height": "200"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "tavola-sposta.svg"
+    },
+    {
+      "$nota": "Adatta ai limiti del disegno.",
+      "id": "artboard.fitToArt",
+      "disegno": "due.svg",
+      "selezione": [],
+      "argomenti": {
+        "index": 1
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "set",
+                "id": "b3c3c3c3c",
+                "attrs": {
+                  "viewBox": "450 50 60 50"
+                }
+              },
+              {
+                "op": "set",
+                "id": "c2b2b2b2b",
+                "attrs": {
+                  "x": "450",
+                  "y": "50",
+                  "width": "60",
+                  "height": "50"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "tavola-adatta-disegno.svg"
+    },
+    {
+      "$nota": "Adatta ai limiti della selezione.",
+      "id": "artboard.fitToSelection",
+      "disegno": "due.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {
+        "index": 0
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "set",
+                "id": "b1a1a1a1a",
+                "attrs": {
+                  "viewBox": "50 50 100 50"
+                }
+              },
+              {
+                "op": "set",
+                "id": "fub-paper",
+                "attrs": {
+                  "x": "50",
+                  "y": "50",
+                  "width": "100",
+                  "height": "50"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "tavola-adatta-selezione.svg"
+    },
+    {
+      "$nota": "Converti in tavole: l'oggetto scelto diventa una tavola.",
+      "id": "artboard.convertToArtboards",
+      "disegno": "due.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "oa1a1a1a1"
+              },
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "after": "b3c3c3c3c"
+                },
+                "elem": {
+                  "tag": "view",
+                  "attrs": {
+                    "id": "by0b1dmd9",
+                    "fub:role": "board",
+                    "viewBox": "50 50 100 50"
+                  },
+                  "children": [
+                    {
+                      "tag": "title",
+                      "attrs": {},
+                      "text": "Tavola 3"
+                    }
+                  ]
+                }
+              },
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "after": "c2b2b2b2b"
+                },
+                "elem": {
+                  "tag": "rect",
+                  "attrs": {
+                    "id": "cb1y3n6x0",
+                    "fub:role": "paper",
+                    "fub:board": "by0b1dmd9",
+                    "x": "50",
+                    "y": "50",
+                    "width": "100",
+                    "height": "50",
+                    "fill": "#ffffff"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "tavola-converti.svg"
+    },
+    {
+      "$nota": "Ridisponi tutte le tavole: in colonna, con i loro oggetti.",
+      "id": "artboard.rearrange",
+      "disegno": "due.svg",
+      "selezione": [],
+      "argomenti": {
+        "layout": "column"
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "set",
+                "id": "ob2b2b2b2",
+                "attrs": {
+                  "transform": "matrix(1 0 0 1 -400 320)"
+                }
+              },
+              {
+                "op": "set",
+                "id": "b3c3c3c3c",
+                "attrs": {
+                  "viewBox": "0 320 200 200"
+                }
+              },
+              {
+                "op": "set",
+                "id": "c2b2b2b2b",
+                "attrs": {
+                  "x": "0",
+                  "y": "320",
+                  "width": "200",
+                  "height": "200"
+                }
+              },
+              {
+                "op": "page",
+                "viewBox": "0 0 700 556"
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "tavola-ridisponi.svg"
+    },
+    {
+      "$nota": "Adatta alla selezione dal menu, senza tavola: quella che ha il centro degli oggetti scelti (Retro), non la prima.",
+      "id": "artboard.fitToSelection",
+      "disegno": "due.svg",
+      "selezione": [
+        "ob2b2b2b2"
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "set",
+                "id": "b3c3c3c3c",
+                "attrs": {
+                  "viewBox": "450 50 60 50"
+                }
+              },
+              {
+                "op": "set",
+                "id": "c2b2b2b2b",
+                "attrs": {
+                  "x": "450",
+                  "y": "50",
+                  "width": "60",
+                  "height": "50"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "tavola-adatta-selezione-menu.svg"
+    },
+    {
+      "id": "artboards",
+      "fonte": "pannello",
+      "prova": "apps/client/src/editors/spatial/completo/famiglie/tavole/sezione.test.ts"
     }
   ]
 }

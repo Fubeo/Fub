@@ -20296,6 +20296,83 @@ button.draw-isolation-crumb:hover {
   min-width: 0;
 }
 
+/* ── K6 · La sezione «Tavole» del Design ─────────────────────────────────── */
+.draw-artboards {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+}
+.draw-artboards-list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 180px;
+  overflow-y: auto;
+}
+.draw-artboards-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  min-height: 28px;
+  padding: 0 var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+.draw-artboards-item:hover {
+  background: var(--bg-hover);
+}
+.draw-artboards-item[aria-pressed="true"] {
+  background: var(--bg-active);
+}
+.draw-artboards-number {
+  min-width: 2ch;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.draw-artboards-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.draw-artboards-current {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+.draw-artboards-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+.draw-artboards-fields[hidden] {
+  display: none;
+}
+.draw-artboards-name-field {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.draw-artboards-art {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.draw-artboards-bar {
+  gap: var(--space-1);
+}
+
 /* ── skin/media.css ─────────────────────────────────────────────────────── */
 
 /* Immagini, zoom, lightbox, SVG. */

@@ -563,6 +563,214 @@
     },
     {
       "fonte": "motore",
+      "id": "artboard.convertToArtboards",
+      "chiamata": {
+        "comando": "disegno.artboard.convertToArtboards"
+      },
+      "etichetta": {
+        "it": "Converti in tavole",
+        "en": "Convert to Artboards"
+      },
+      "posto": "menu/oggetto/tavole",
+      "famiglia": "tavole",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "artboard.copy",
+      "chiamata": {
+        "comando": "disegno.artboard.copy"
+      },
+      "etichetta": {
+        "it": "Copia tavola",
+        "en": "Copy Artboard"
+      },
+      "posto": "ispettore/design/documento",
+      "famiglia": "tavole",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "artboard.cut",
+      "chiamata": {
+        "comando": "disegno.artboard.cut"
+      },
+      "etichetta": {
+        "it": "Taglia tavola",
+        "en": "Cut Artboard"
+      },
+      "posto": "ispettore/design/documento",
+      "famiglia": "tavole",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "artboard.delete",
+      "chiamata": {
+        "comando": "disegno.artboard.delete"
+      },
+      "etichetta": {
+        "it": "Elimina tavola",
+        "en": "Delete Artboard"
+      },
+      "posto": "ispettore/design/documento",
+      "famiglia": "tavole",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "artboard.deleteEmpty",
+      "chiamata": {
+        "comando": "disegno.artboard.deleteEmpty"
+      },
+      "etichetta": {
+        "it": "Elimina tavole vuote",
+        "en": "Delete Empty Artboards"
+      },
+      "posto": "ispettore/design/documento",
+      "famiglia": "tavole",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "artboard.duplicate",
+      "chiamata": {
+        "comando": "disegno.artboard.duplicate"
+      },
+      "etichetta": {
+        "it": "Duplica tavola",
+        "en": "Duplicate Artboard"
+      },
+      "posto": "ispettore/design/documento",
+      "famiglia": "tavole",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "artboard.fitToArt",
+      "chiamata": {
+        "comando": "disegno.artboard.fitToArt"
+      },
+      "etichetta": {
+        "it": "Adatta ai limiti della grafica",
+        "en": "Fit to Artwork Bounds"
+      },
+      "posto": "menu/oggetto/tavole",
+      "famiglia": "tavole",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "artboard.fitToSelection",
+      "chiamata": {
+        "comando": "disegno.artboard.fitToSelection"
+      },
+      "etichetta": {
+        "it": "Adatta alla grafica selezionata",
+        "en": "Fit to Selected Art"
+      },
+      "posto": "menu/oggetto/tavole",
+      "famiglia": "tavole",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "artboard.move",
+      "chiamata": {
+        "comando": "disegno.artboard.move"
+      },
+      "etichetta": {
+        "it": "Sposta tavola",
+        "en": "Move Artboard"
+      },
+      "posto": "ispettore/design/documento",
+      "famiglia": "tavole",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "artboard.new",
+      "chiamata": {
+        "comando": "disegno.artboard.new"
+      },
+      "etichetta": {
+        "it": "Nuova tavola",
+        "en": "New Artboard"
+      },
+      "posto": "ispettore/design/documento",
+      "famiglia": "tavole",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "artboard.rearrange",
+      "chiamata": {
+        "comando": "disegno.artboard.rearrange"
+      },
+      "etichetta": {
+        "it": "Ridisponi tutte le tavole…",
+        "en": "Rearrange All Artboards…"
+      },
+      "posto": "menu/oggetto/tavole",
+      "famiglia": "tavole",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "motore",
+      "id": "artboard.reorder",
+      "chiamata": {
+        "comando": "disegno.artboard.reorder"
+      },
+      "etichetta": {
+        "it": "Sposta tavola su/giù",
+        "en": "Move Artboard Up/Down"
+      },
+      "posto": "ispettore/design/documento",
+      "famiglia": "tavole",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "artboard.setProps",
+      "chiamata": {
+        "comando": "disegno.artboard.setProps"
+      },
+      "etichetta": {
+        "it": "Opzioni tavola…",
+        "en": "Artboard Options…"
+      },
+      "posto": "ispettore/design/documento",
+      "famiglia": "tavole",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "motore",
       "id": "clipboard.conflicts",
       "chiamata": {
         "comando": "disegno.clipboard.conflicts"
@@ -8049,6 +8257,22 @@
       },
       "posto": "ispettore/design/allinea",
       "famiglia": "trasforma",
+      "tasto": null,
+      "effetto": "mostra",
+      "finestra": false
+    },
+    {
+      "fonte": "pannello",
+      "id": "artboards",
+      "chiamata": {
+        "client": "artboards"
+      },
+      "etichetta": {
+        "it": "Tavole",
+        "en": "Artboards"
+      },
+      "posto": "ispettore/design/documento",
+      "famiglia": "tavole",
       "tasto": null,
       "effetto": "mostra",
       "finestra": false

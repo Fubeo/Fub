@@ -357,6 +357,19 @@ fn una_selezione_con_un_elemento_non_mappato_non_cambia_niente() {
         "disegno.symbol.addFromLibrary",
         // Crea grafico prende il rettangolo dal valore.
         "disegno.graph.create",
+        // Le tavole (K6) prendono la tavola dal valore, non dalla scelta; Adatta al disegno
+        // guarda la scelta solo per sapere quale tavola, e senza va sulla prima.
+        "disegno.artboard.new",
+        "disegno.artboard.delete",
+        "disegno.artboard.deleteEmpty",
+        "disegno.artboard.setProps",
+        "disegno.artboard.fitToArt",
+        "disegno.artboard.rearrange",
+        "disegno.artboard.reorder",
+        "disegno.artboard.duplicate",
+        "disegno.artboard.copy",
+        "disegno.artboard.cut",
+        "disegno.artboard.move",
     ];
     let comandi = d.comandi(&["oa1a1a1a1".into(), "onessuno1".into()]);
     let accesi: Vec<&str> = comandi

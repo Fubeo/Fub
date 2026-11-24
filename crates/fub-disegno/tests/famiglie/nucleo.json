@@ -1030,6 +1030,91 @@
       "atteso": {
         "rifiuto": "empty"
       }
+    },
+    {
+      "$nota": "Incolla dopo Copia tavola: la tavola copiata a destra dell'ultima.",
+      "id": "edit.paste",
+      "disegno": "tavole-due.svg",
+      "selezione": [],
+      "prima": [
+        {
+          "id": "artboard.copy",
+          "argomenti": {
+            "index": 1
+          }
+        }
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "last": true
+                },
+                "elem": {
+                  "tag": "path",
+                  "attrs": {
+                    "d": "M670 50 L730 50 L730 100 L670 100 Z",
+                    "fill": "#000000",
+                    "id": "ofif51k3h"
+                  }
+                }
+              },
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "after": "b3c3c3c3c"
+                },
+                "elem": {
+                  "tag": "view",
+                  "attrs": {
+                    "id": "b3vja8e8x",
+                    "fub:role": "board",
+                    "viewBox": "620 0 200 200"
+                  },
+                  "children": [
+                    {
+                      "tag": "title",
+                      "attrs": {},
+                      "text": "Retro copia"
+                    }
+                  ]
+                }
+              },
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "after": "c2b2b2b2b"
+                },
+                "elem": {
+                  "tag": "rect",
+                  "attrs": {
+                    "id": "cys8bworv",
+                    "fub:role": "paper",
+                    "fub:board": "b3vja8e8x",
+                    "x": "620",
+                    "y": "0",
+                    "width": "200",
+                    "height": "200",
+                    "fill": "#ffffff"
+                  }
+                }
+              },
+              {
+                "op": "page",
+                "viewBox": "0 0 956 300"
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "tavola-incolla.svg"
     }
   ]
 }

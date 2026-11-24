@@ -1,5 +1,165 @@
 {
   "$generato": "File generato da crates/fub-disegno/tests/ts_indice.rs, non modificare a mano; rigenera con UPDATE_MIRROR=1 cargo test -p fub-disegno --test ts_indice",
   "famiglia": "tavole",
-  "finestre": []
+  "finestre": [
+    {
+      "fonte": "motore",
+      "id": "artboard.rearrange",
+      "campi": [
+        {
+          "nome": "layout",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "gridByRow",
+            "gridByColumn",
+            "row",
+            "column"
+          ],
+          "aperta": false,
+          "predefinito": "gridByRow"
+        },
+        {
+          "nome": "order",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "leftToRight",
+            "rightToLeft"
+          ],
+          "aperta": false,
+          "predefinito": "leftToRight"
+        },
+        {
+          "nome": "columns",
+          "tipo": "numero",
+          "facoltativo": false,
+          "minimo": 1.0,
+          "massimo": 1000.0,
+          "predefinito": 2.0
+        },
+        {
+          "nome": "spacing",
+          "tipo": "numero",
+          "facoltativo": false,
+          "minimo": -100000.0,
+          "massimo": 100000.0,
+          "predefinito": 20.0
+        },
+        {
+          "nome": "moveArtwork",
+          "tipo": "sino",
+          "facoltativo": false,
+          "predefinito": true
+        }
+      ]
+    },
+    {
+      "fonte": "motore",
+      "id": "artboard.setProps",
+      "campi": [
+        {
+          "nome": "index",
+          "tipo": "numero",
+          "facoltativo": false,
+          "unoFra": 0
+        },
+        {
+          "nome": "artboards",
+          "tipo": "json",
+          "facoltativo": false,
+          "unoFra": 0
+        },
+        {
+          "nome": "name",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "color",
+          "tipo": "scelta",
+          "facoltativo": true,
+          "valori": [
+            "color"
+          ],
+          "aperta": false
+        },
+        {
+          "nome": "locked",
+          "tipo": "sino",
+          "facoltativo": true
+        },
+        {
+          "nome": "showCenterMark",
+          "tipo": "sino",
+          "facoltativo": true
+        },
+        {
+          "nome": "showCrossHairs",
+          "tipo": "sino",
+          "facoltativo": true
+        },
+        {
+          "nome": "showVideoSafeAreas",
+          "tipo": "sino",
+          "facoltativo": true
+        },
+        {
+          "nome": "videoRulerPixelAspectRatio",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "x",
+          "tipo": "numero",
+          "facoltativo": true
+        },
+        {
+          "nome": "y",
+          "tipo": "numero",
+          "facoltativo": true
+        },
+        {
+          "nome": "width",
+          "tipo": "numero",
+          "facoltativo": true
+        },
+        {
+          "nome": "height",
+          "tipo": "numero",
+          "facoltativo": true
+        },
+        {
+          "nome": "moveArt",
+          "tipo": "sino",
+          "facoltativo": true
+        },
+        {
+          "nome": "scaleArt",
+          "tipo": "sino",
+          "facoltativo": true
+        },
+        {
+          "nome": "strokes",
+          "tipo": "sino",
+          "facoltativo": true
+        },
+        {
+          "nome": "corners",
+          "tipo": "sino",
+          "facoltativo": true
+        },
+        {
+          "nome": "patterns",
+          "tipo": "sino",
+          "facoltativo": true
+        },
+        {
+          "nome": "lockedAndHidden",
+          "tipo": "sino",
+          "facoltativo": true
+        }
+      ]
+    }
+  ]
 }

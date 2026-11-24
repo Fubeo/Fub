@@ -27,6 +27,22 @@ export type Scheda = "design" | "livelli" | "risorse" | "cronologia";
 
 /// Ciò che una sezione sa della selezione di adesso: quanti oggetti ci sono, e
 /// i punti di ancoraggio scelti dentro (T12, giro 4).
+/// Una tavola del disegno come la vede una sezione: l'id del suo `view`, il nome e il rettangolo
+/// (x, y, larghezza, altezza) nelle misure del file, nell'ordine in cui il disegno le tiene.
+export interface TavolaDocumento {
+  readonly id: string;
+  readonly nome: string;
+  readonly rect: readonly [number, number, number, number];
+}
+
+/// Le tavole del disegno aperto, quella attuale (dove sta la vista) e come andarci.
+export interface TavoleDocumento {
+  readonly elenco: readonly TavolaDocumento[];
+  readonly attuale: string | null;
+  /// Porta la vista sulla tavola di posto `indice`.
+  readonly visita: (indice: number) => void;
+}
+
 export interface Selezione {
   readonly numero: number;
   /// I punti scelti con lo strumento del motore di adesso (la Selezione diretta,
@@ -192,6 +208,8 @@ export interface ContestoSezione {
   /// I campioni del documento (K6 T14, giro 2): li dà la scheda Risorse, che ha il modello; altrove
   /// mancano.
   readonly campioni?: CampioniDocumento;
+  /// Le tavole del disegno (la sezione «Tavole»): le dà il Design, che ha l'editor; altrove mancano.
+  readonly tavole?: TavoleDocumento;
   /// Il disegno che la sezione mostra cambia: `aggiorna` la chiede di nuovo,
   /// al più una volta per fotogramma.
   readonly aggiorna: () => void;
