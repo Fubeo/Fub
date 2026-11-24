@@ -225,13 +225,13 @@ motore	effect.duplicate	Duplicate Effect		effetti	F2	T18	fatto	ispettore/design/
 motore	effect.move	Move Effect		effetti	F2	T18	fatto	ispettore/design/aspetto	famiglia		Sposta effetto
 motore	object.expand	Expand…	Object	tracciati	F1	T12	fatto	menu/oggetto	famiglia	finestra, con l'anteprima (T12, giro 3: i campi in catalogo::FINESTRE_SCRITTE)	Espandi…
 motore	object.expand.info	Expand Options		tracciati	F1	T12	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Opzioni di espansione
-motore	text.missingFonts	Missing Fonts		testo	F2	T16	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Font mancanti
+motore	text.missingFonts	Missing Fonts		testo	F2	T16	fatto	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Font mancanti
 motore	text.findFontFiles	Find Font Files		testo	F2	T16	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Trova file dei font
 motore	text.addFontFiles	Add Font Files		testo	F2	T16	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Aggiungi file dei font
-motore	text.fonts	Fonts in Document		testo	F2	T16	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Font nel documento
+motore	text.fonts	Fonts in Document		testo	F2	T16	fatto	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Font nel documento
 motore	text.replaceFont	Replace Font		testo	F2	T16	da fare	ispettore/design	famiglia		Sostituisci font
 motore	select.font	Select Text by Font		livelli	F1	T15	fatto	ispettore/livelli	famiglia	cerca i testi con il carattere (e lo stile, se c'è) in una delle loro parti, fra quelli visibili e sbloccati, dentro i gruppi e i livelli; la scelta della selezione non conta, e il comando non cambia il file. Un carattere che nel disegno non c'è, o c'è solo su testi nascosti o bloccati, è un errore con il perché (BadArgs)	Seleziona testo per font
-motore	text.fontList	Font List		testo	F2	T16	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Elenco font
+motore	text.fontList	Font List		testo	F2	T16	fatto	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Elenco font
 motore	text.rescanFonts	Refresh Font List		testo	F2	T16	da fare	ispettore/design	famiglia		Aggiorna elenco font
 motore	paint.freeform.addPoint	Add Freeform Point		colore	F1	T14	da fare	ispettore/design	famiglia	il formato della scena non ha punti né linee per una sfumatura libera: una sfumatura si scrive solo come linearGradient o radialGradient (docs/reference/scene-format-resources.md), e famiglie/colore.rs la rifiuta (sfumatura_fuori_dalla_scena)	Aggiungi punto libero
 motore	paint.freeform.setPoint	Edit Freeform Point		colore	F1	T14	da fare	ispettore/design	famiglia	il formato della scena non ha punti né linee per una sfumatura libera: una sfumatura si scrive solo come linearGradient o radialGradient (docs/reference/scene-format-resources.md), e famiglie/colore.rs la rifiuta (sfumatura_fuori_dalla_scena)	Modifica punto libero
@@ -601,7 +601,7 @@ motore	symbol.addFromLibrary	Add to Symbols	Window › Symbol Libraries	simboli	
 motore	symbol.saveLibrary	Save Symbol Library…	Window › Symbols	simboli	F3	T22	da fare	ispettore/risorse	famiglia	finestra	Salva libreria simboli…
 motore	symbol.loadLibrary	Other Library…	Window › Symbol Libraries	simboli	F3	T22	da fare	ispettore/risorse	famiglia	finestra	Altra libreria…
 motore	text.tabs.set	Set Tab Stops	Window › Tabs	testo	F2	T16	da fare	ispettore/design	famiglia		Imposta tabulazioni
-motore	text.tabs.get	Tab Stops		testo	F2	T16	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Tabulazioni
+motore	text.tabs.get	Tab Stops		testo	F2	T16	fatto	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Tabulazioni
 motore	text.tabs.clear	Clear All Tabs	Window › Tabs	testo	F2	T16	da fare	ispettore/design	famiglia		Cancella tutte le tabulazioni
 motore	text.editRange	Edit Text		testo	F2	T16	fatto	ispettore/design	famiglia		Modifica testo
 motore	text.startList	Bullets and Numbering		testo	F2	T16	da fare	ispettore/design	famiglia		Punti elenco e numerazione
@@ -626,7 +626,7 @@ motore	text.thread.add	Thread Text		testo	F2	T16	da fare	ispettore/design	famigl
 motore	text.thread.releaseSelection	Release Selection	Type › Threaded Text	testo	F2	T16	da fare	menu/testo	famiglia		Rilascia selezione
 motore	text.thread.remove	Remove Threading	Type › Threaded Text	testo	F2	T16	da fare	menu/testo	famiglia		Rimuovi concatenamento
 motore	text.thread.break	Break Thread		testo	F2	T16	da fare	ispettore/design	famiglia		Interrompi concatenamento
-motore	text.thread.info	Threads		testo	F2	T16	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Concatenamenti
+motore	text.thread.info	Threads		testo	F2	T16	fatto	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Concatenamenti
 motore	type.orientation.vertical	Vertical	Type › Orientation	testo	F2	T16	fatto	menu/testo	famiglia		Verticale
 motore	type.orientation.horizontal	Horizontal	Type › Orientation	testo	F2	T16	fatto	menu/testo	famiglia		Orizzontale
 motore	type.createOutlines	Create Outlines	Type	testo	F2	T16	fatto	menu/testo	famiglia		Crea contorni
@@ -681,7 +681,7 @@ motore	view.saved.new	New View…	View	vista	F1	T11	da fare	menu/visualizza	fami
 motore	view.saved.edit	Edit Views…	View	vista	F1	T11	da fare	menu/visualizza	famiglia	finestra; aspetta T27 perché le viste salvate stanno nel documento, e la tabella di ricetta.rs non le ha ancora	Modifica viste…
 motore	view.saved.list	Saved Views		vista	F1	T11	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Viste salvate
 motore	view.transparencyGrid	Show Transparency Grid	View	vista	F1	T11	fatto	menu/visualizza	famiglia		Mostra griglia trasparenza
-motore	view.snapToGlyph.options	Snap to Glyph Options		testo	F2	T16	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Opzioni di aggancio a glifo
+motore	view.snapToGlyph.options	Snap to Glyph Options		testo	F2	T16	fatto	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Opzioni di aggancio a glifo
 motore	select.magicWand	Magic Wand		livelli	F1	T15	fatto	ispettore/livelli	famiglia	il clic della Bacchetta magica; le opzioni sono della sessione del motore, come in VectorCraft (MenuState.wand): il client le ricorda per la corsa dell'app e le rimanda a ogni disegno aperto	Bacchetta magica
 motore	magicWand.set	Magic Wand Options	Window › Magic Wand	livelli	F1	T15	fatto	ispettore/design	famiglia	la fila della Bacchetta magica (testata): caselle e tolleranze, una lettura che non fa un passo di annulla	Opzioni bacchetta magica
 motore	magicWand.options	Magic Wand Settings		livelli	F1	T15	fatto	interno	famiglia	la fila della Bacchetta magica le legge	Impostazioni bacchetta magica

@@ -114,7 +114,11 @@ export type VoceDiStile = "type.bold" | "type.italic" | "type.underline";
 export const VOCI_DI_STILE: readonly VoceDiStile[] = ["type.bold", "type.italic", "type.underline"];
 
 /// Cosa manda la voce: il valore di `text.setRangeStyle`, o la frase del perché non cambia niente.
-export type PassoDiStile = { readonly valore: Readonly<Record<string, unknown>> } | { readonly perche: "famiglia"; readonly famiglia: string; readonly faccia: string };
+export type PassoDiStile =
+  | { readonly valore: Readonly<Record<string, unknown>> }
+  | { readonly perche: "famiglia"; readonly famiglia: string; readonly faccia: string }
+  /// La famiglia `testo` del motore non è pronta (`text.fontList` e `text.setRangeStyle` sono suoi).
+  | { readonly perche: "nonPronta" };
 
 /// Il passo della voce `voce` sul testo di carattere `carattere`, con le facce `stili` della sua
 /// famiglia (servono solo a Grassetto e Corsivo).
@@ -140,6 +144,8 @@ async function leggi(dipendenze: DipendenzeComando, id: string, value: unknown):
 /// Il passo della voce `voce` sul primo testo scelto adesso, letto dal motore; `null` se il motore
 /// non risponde o non c'è un testo scelto.
 export async function passoSulTesto(dipendenze: DipendenzeComando, voce: VoceDiStile): Promise<PassoDiStile | null> {
+  // I comandi del testo nel motore sono della famiglia `testo`: si prepara prima di leggerne le facce.
+  if ((await dipendenze.carica.famiglia("testo")).kind !== "pronta") return dipendenze.vita.closed ? null : { perche: "nonPronta" };
   let carattere: CarattereDelTesto | null = null;
   for (const id of dipendenze.selezione()) {
     carattere = primoCarattere(await leggi(dipendenze, "document.node", { id }));

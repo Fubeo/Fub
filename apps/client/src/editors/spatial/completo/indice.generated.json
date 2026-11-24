@@ -5715,6 +5715,54 @@
     },
     {
       "fonte": "motore",
+      "id": "text.fontList",
+      "chiamata": {
+        "comando": "disegno.text.fontList"
+      },
+      "etichetta": {
+        "it": "Elenco font",
+        "en": "Font List"
+      },
+      "posto": "interno",
+      "famiglia": "testo",
+      "tasto": null,
+      "effetto": "legge",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "text.fonts",
+      "chiamata": {
+        "comando": "disegno.text.fonts"
+      },
+      "etichetta": {
+        "it": "Font nel documento",
+        "en": "Fonts in Document"
+      },
+      "posto": "interno",
+      "famiglia": "testo",
+      "tasto": null,
+      "effetto": "legge",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "text.missingFonts",
+      "chiamata": {
+        "comando": "disegno.text.missingFonts"
+      },
+      "etichetta": {
+        "it": "Font mancanti",
+        "en": "Missing Fonts"
+      },
+      "posto": "interno",
+      "famiglia": "testo",
+      "tasto": null,
+      "effetto": "legge",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "text.setRangeStyle",
       "chiamata": {
         "comando": "disegno.text.setRangeStyle"
@@ -5743,6 +5791,38 @@
       "famiglia": "testo",
       "tasto": null,
       "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "text.tabs.get",
+      "chiamata": {
+        "comando": "disegno.text.tabs.get"
+      },
+      "etichetta": {
+        "it": "Tabulazioni",
+        "en": "Tab Stops"
+      },
+      "posto": "interno",
+      "famiglia": "testo",
+      "tasto": null,
+      "effetto": "legge",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "text.thread.info",
+      "chiamata": {
+        "comando": "disegno.text.thread.info"
+      },
+      "etichetta": {
+        "it": "Concatenamenti",
+        "en": "Threads"
+      },
+      "posto": "interno",
+      "famiglia": "testo",
+      "tasto": null,
+      "effetto": "legge",
       "finestra": false
     },
     {
@@ -6030,6 +6110,22 @@
       "posto": "menu/visualizza",
       "famiglia": "vista",
       "tasto": "Shift+D",
+      "effetto": "mostra",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "view.snapToGlyph.options",
+      "chiamata": {
+        "comando": "disegno.view.snapToGlyph.options"
+      },
+      "etichetta": {
+        "it": "Opzioni di aggancio a glifo",
+        "en": "Snap to Glyph Options"
+      },
+      "posto": "interno",
+      "famiglia": "testo",
+      "tasto": null,
       "effetto": "mostra",
       "finestra": false
     },

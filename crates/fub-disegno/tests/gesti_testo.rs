@@ -25,9 +25,11 @@ fn apri(testo: &str) -> (Disegno, fub_abi::DrawingOpen) {
         fili: Some(2),
         tetto: Tetto::fisso(256 * 1024 * 1024),
     });
-    let facce: [&'static [u8]; 2] = [
+    let facce: [&'static [u8]; 4] = [
         include_bytes!("../../fub-features/fonts/inter-400.ttf"),
         include_bytes!("../../fub-features/fonts/inter-700.ttf"),
+        include_bytes!("../../fub-features/fonts/inter-italic-400.ttf"),
+        include_bytes!("../../fub-features/fonts/inter-italic-700.ttf"),
     ];
     let generiche = Generiche {
         serif: "Inter".into(),
@@ -478,4 +480,76 @@ fn un_testo_preserve_si_sposta_senza_toccarne_il_contenuto() {
     for no in ["\"text\"", "tspan", "Ciao", "xml:space"] {
         assert!(!testo.contains(no), "{no} in {testo}");
     }
+}
+
+/// Grassetto e Corsivo del menu Testo (il client, `completo/facce-testo.ts`)
+/// leggono le facce della famiglia con `text.fontList` e mandano
+/// `text.setRangeStyle {style}`: col motore vero e le facce di Inter che Fub
+/// porta, la lettura è servita e la faccia nuova diventa `font-weight` e
+/// `font-style` del `<text>`.
+#[test]
+fn grassetto_e_corsivo_passano_alle_facce_della_famiglia() {
+    let svg = include_str!("famiglie/testo/base.svg");
+    let (mut d, _) = apri(svg);
+    let comando = |d: &mut Disegno, id: &str, valore: Value| {
+        d.comando(fub_abi::DrawingCommandRequest {
+            revision: d.revisione(),
+            id: format!("disegno.{id}"),
+            selection: vec!["ot1t1t1t1".into()],
+            value: valore,
+            preview: false,
+        })
+        .unwrap_or_else(|e| panic!("{id}: {e:?}"))
+    };
+    // Il client prepara la famiglia `testo` prima di leggerne le facce: nasce
+    // in sottofondo, e si chiede finché non è pronta.
+    let inizio = std::time::Instant::now();
+    loop {
+        let preparata = d
+            .comando(fub_abi::DrawingCommandRequest {
+                revision: d.revisione(),
+                id: fub_abi::DRAWING_COMMAND_FAMILY_PREPARE.into(),
+                selection: Vec::new(),
+                value: json!({ "famiglia": "testo" }),
+                preview: false,
+            })
+            .expect("la preparazione");
+        assert_eq!(preparata.refused, None, "{preparata:?}");
+        let stato = preparata.reading.as_ref().map(|l| l["stato"].clone());
+        if stato == Some(json!("pronta")) {
+            break;
+        }
+        assert!(
+            inizio.elapsed().as_secs() < 30,
+            "la famiglia non è pronta: {stato:?}"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    let lista = comando(&mut d, "text.fontList", json!({"family": "Inter"}))
+        .reading
+        .expect("le facce di Inter");
+    let stili: Vec<&str> = lista["styles"]
+        .as_array()
+        .expect("styles")
+        .iter()
+        .filter_map(Value::as_str)
+        .collect();
+    for faccia in ["Regular", "Bold", "Italic", "Bold Italic"] {
+        assert!(stili.contains(&faccia), "{faccia} in {stili:?}");
+    }
+    let esito = comando(&mut d, "text.setRangeStyle", json!({"style": "Bold"}));
+    assert_eq!(esito.refused, None);
+    let ops = ops_di(&esito).to_string();
+    assert!(
+        ops.contains(r#""font-weight":"bold""#) || ops.contains(r#""font-weight":"700""#),
+        "{ops}"
+    );
+    let esito = comando(
+        &mut d,
+        "text.setRangeStyle",
+        json!({"style": "Bold Italic"}),
+    );
+    assert_eq!(esito.refused, None);
+    let ops = ops_di(&esito).to_string();
+    assert!(ops.contains(r#""font-style":"italic""#), "{ops}");
 }

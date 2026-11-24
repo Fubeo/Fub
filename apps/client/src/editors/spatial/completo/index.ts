@@ -676,7 +676,12 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila" | "e
         void passoSulTesto(dipendenze, id).then((passo) => {
           if (passo === null || dipendenze.vita.closed) return;
           if ("perche" in passo) {
-            dipendenze.annuncia(t("draw.testo.facciaMancante", { famiglia: passo.famiglia, faccia: passo.faccia }));
+            if (passo.perche === "famiglia") dipendenze.annuncia(t("draw.testo.facciaMancante", { famiglia: passo.famiglia, faccia: passo.faccia }));
+            else
+              void indice().then((pronto) => {
+                const voce = pronto.voci.find((una) => una.id === id);
+                if (voce !== undefined && !chiuso) dipendenze.annuncia(t("draw.comando.nonPronto", { comando: nomeVoce(voce) }));
+              });
             return;
           }
           return eseguiPerId("text.setRangeStyle", passo.valore, { senzaFinestra: true });
