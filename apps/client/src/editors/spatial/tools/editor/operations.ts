@@ -2,6 +2,7 @@
 // createDrawEditor (`../editor.ts`): lavora sul contesto che i pezzi
 // condividono.
 
+import { CLIP_SHAPE_REFUSED, throughClipShapes } from "../clip-shapes";
 import { describe, keyOf } from "../../describe";
 import type { InkPointerType } from "../../../../ink/input/pointer";
 import type { Bounds } from "../../scene/geometry";
@@ -96,6 +97,13 @@ export function installOperations(ctx: EditorContext): void {
   /// sua ragione, a parole.
   const attempt = (label: StepLabel, op: Op | null): Applied | string | null => {
     if (op === null || !editable()) return null;
+    // Un gesto sulla forma di una maschera di ritaglio scrive il suo `clipPath`.
+    const through = throughClipShapes(op, (id) => ctx.engine.holder(id));
+    if (through === CLIP_SHAPE_REFUSED) {
+      clearPreviews();
+      return t(CLIP_SHAPE_REFUSED);
+    }
+    op = through;
     // La misura del foglio si legge prima che il passo tocchi il disegno: dopo
     // le scritture costerebbe una rimisura ogni volta.
     const outcome = oneRound(() => {

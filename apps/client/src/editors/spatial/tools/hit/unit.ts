@@ -275,3 +275,14 @@ export interface Nested {
   /// sceglie, come oggetti: non si scelgono, ma dicono dove si vedono.
   copiesOf(container: ContainerNode): Unit[];
 }
+
+/// Il passo di percorso di un'unità che non è un figlio nel documento: la
+/// forma di una maschera di ritaglio, che sta nel suo `clipPath` e si mostra
+/// come un figlio del gruppo che ritaglia, messo prima degli altri.
+export const OUTSIDE_TREE = -1;
+
+/// Vero se `unit` non si trova seguendo il suo percorso: il suo nodo è
+/// `unit.node`, costruito apposta, e i gesti lo scrivono altrove.
+export function outsideTree(unit: { readonly path: readonly number[] }): boolean {
+  return unit.path[unit.path.length - 1] === OUTSIDE_TREE;
+}

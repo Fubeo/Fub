@@ -9,11 +9,12 @@ import {
   type ElementPart,
   type LeafNode,
 } from "../../scene/model";
+import { clipShapeNode, findClipShape } from "../clip-shapes";
 import type { PaintAttr } from "../../painter/paint";
 import { Clip } from "../clips";
 import type { Style } from "./base";
 import { hidden, styleOf, transformOf } from "./shapes";
-import type { ForeignBlock, Nested, Unit } from "./unit";
+import { type ForeignBlock, type Nested, OUTSIDE_TREE, type Unit } from "./unit";
 
 /// Dove stanno i figli di un contenitore: il suo percorso, il livello, la
 /// matrice dalle sue coordinate a quelle della scena, lo stile che trasmette
@@ -61,6 +62,7 @@ export class Lookup implements Nested {
 
   resolve(key: string): Unit | null {
     const node = key.startsWith("@") ? this.byPath(key.slice(1)) : this.byId(key);
+    if (node === null && !key.startsWith("@")) return this.clipShape(key);
     if (node === null || !pickable(node) || node.details!.locked === true) return null;
     const parent = node.parent;
     if (parent === null || (this.scope !== null && !within(node, this.scope))) return null;
@@ -71,6 +73,23 @@ export class Lookup implements Nested {
     const index = elementChildren(parent).indexOf(node);
     if (index < 0) return null;
     const unit = this.make(node, [...context.path, index], context.layer, context.matrix, context.style, context.clips);
+    return unit !== null && unit.key === key ? unit : null;
+  }
+
+  /// La forma di una maschera di ritaglio con l'id `key`, che «Modifica
+  /// maschera» sceglie: nelle coordinate del gruppo che ritaglia, come un suo
+  /// figlio messo prima degli altri. Si sceglie dove si sceglie il gruppo; i
+  /// ritagli non la tagliano, perché è lei il ritaglio.
+  private clipShape(key: string): Unit | null {
+    const shape = findClipShape(this.model, key);
+    if (shape === null) return null;
+    const group = shape.group;
+    if (this.scope !== null && group !== this.scope && !within(group, this.scope)) return null;
+    if (group.details?.locked === true) return null;
+    const context = this.contextOf(group);
+    const node = context === null ? null : clipShapeNode(shape);
+    if (context === null || node === null) return null;
+    const unit = this.make(node, [...context.path, OUTSIDE_TREE], context.layer, context.matrix, context.style, null);
     return unit !== null && unit.key === key ? unit : null;
   }
 

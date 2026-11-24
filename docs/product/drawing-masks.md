@@ -33,7 +33,10 @@ crearle, in un passo di Annulla ciascuna:
   un oggetto dentro. Si sposta, si ruota e si scala
   come ogni oggetto, e il ritaglio segue. Non si elimina da
   solo, perché il gruppo resterebbe con un ritaglio vuoto: lo dice e indica
-  Rilascia. La voce è spenta, e dice perché, se il ritaglio viene da un
+  Rilascia. Sul foglio la forma ha la sua cornice e le sue maniglie, e le
+  frecce, il trascinamento e le maniglie la cambiano dentro il `clipPath`;
+  un clic sulla zona ritagliata sceglie ancora il gruppo. La voce è spenta,
+  e dice perché, se il ritaglio viene da un
   altro programma o è condiviso: la sua forma allora non ha un id;
 - **≡ › Selezione › Oggetto › Maschere di ritaglio** sceglie tutte le
   maschere del disegno.

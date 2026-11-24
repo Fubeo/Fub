@@ -32,6 +32,7 @@
 // - **Allineare e distribuire** spostano soltanto, sui riquadri che si vedono,
 //   contorno compreso; gli spostamenti si arrotondano come quelli a mano.
 
+import { outsideTree } from "./hit/unit";
 import type { Bounds } from "../scene/geometry";
 import type { IdKind } from "../scene/ids";
 import { compose, IDENTITY, invert, type Matrix } from "../scene/matrix";
@@ -130,7 +131,8 @@ export class Plan {
 }
 
 /// Il nodo del modello di `unit`, o di una voce della scena col suo percorso.
-export function nodeOf(model: DocumentModel, unit: { readonly path: readonly number[] }): ElementPart {
+export function nodeOf(model: DocumentModel, unit: { readonly path: readonly number[]; readonly node?: ElementPart }): ElementPart {
+  if (unit.node !== undefined && outsideTree(unit)) return unit.node;
   let node: ElementPart = model.root;
   for (const at of unit.path) node = elementChildren(node as ContainerNode)[at]!;
   return node;

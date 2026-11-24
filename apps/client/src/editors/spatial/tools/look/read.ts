@@ -2,6 +2,7 @@
 // proprietà mostra, con gli attributi di un nodo e ciò che un contenitore
 // passa ai figli letti una volta sola (`../look.ts`).
 
+import { outsideTree } from "../hit/unit";
 import { formatNumber } from "../../number";
 import type { Role } from "../../scene/analysis";
 import { elementChildren, writtenOf, type ContainerNode, type DocumentModel, type ElementPart, type LeafNode } from "../../scene/model";
@@ -196,6 +197,7 @@ export interface Parts {
 export function nodesOf(model: DocumentModel, units: readonly Unit[]): ElementPart[] {
   const children = new Map<ElementPart, ElementPart[]>();
   return units.map((unit) => {
+    if (outsideTree(unit)) return unit.node;
     let node: ElementPart = model.root;
     for (const at of unit.path) {
       let list = children.get(node);
