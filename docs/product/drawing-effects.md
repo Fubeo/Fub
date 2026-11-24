@@ -143,9 +143,16 @@ Texture, Video, Deforma). Ogni voce aggiunge un **effetto dal vivo** agli
 oggetti scelti: la sua finestra (per esempio il Raggio di «Arrotonda angoli»)
 mostra l'anteprima sul disegno mentre si cambiano i valori, e OK lo aggiunge
 in un passo solo di Annulla. Le voci sono spente senza oggetti scelti, con un
-oggetto bloccato o su un disegno di sola lettura. Per ora c'è **Stilizza ›
-Arrotonda angoli**; gli altri effetti arrivano uno alla volta, e una voce non
-ancora pronta non si vede. Il file salva il risultato come grafica normale,
+oggetto bloccato o su un disegno di sola lettura. Oggi ci sono:
+
+- **Stilizza ›** Arrotonda angoli;
+- **Distorci e trasforma ›** Contrai e gonfia, Torci, Zig-zag, Irruvidisci,
+  Ritocca, Trasforma (con le copie), Distorsione libera;
+- **Tracciato ›** Sposta tracciato, Contorna oggetto;
+- **Converti in forma ›** Rettangolo, Rettangolo arrotondato, Ellisse.
+
+Gli altri effetti arrivano uno alla volta, e una voce non ancora pronta non si
+vede. Il file salva il risultato come grafica normale,
 leggibile da ogni programma, e la ricetta dell'effetto per poterlo cambiare
 ([Formato della scena, ricette](../reference/scene-format-recipe.md)).
 

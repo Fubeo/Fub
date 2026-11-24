@@ -38,6 +38,10 @@
 //!   elenchi di parole `a|b|c` (una scelta, aperta se finisce con `…`), le
 //!   alternative con `|` e con ` or `, una frase (il tipo della sua ultima
 //!   parola, se è una parola del tipo, se no testo), `null` (si ignora).
+//!   Un'unità di misura (`pt`, `px`, `mm`, `%`, `deg`, e `int`, `amount`,
+//!   `levels`) è un numero, come una frase che ne ha una o un intervallo
+//!   dentro (`pt 0.1..100`, `per inch 0..100`), e una nota sola con un
+//!   numero (`(10)`, il valore di serie) anche.
 //!   ` = …` e le note fra parentesi dopo un valore sono descrizioni; una nota
 //!   tutta maiuscola (`B4 (ISO)`) fa parte del valore.
 //! - Un campo senza valore prende il tipo dal lessico del motore (i nomi
@@ -654,6 +658,15 @@ fn pezzo(alternativa: &str, aperta: &mut bool, valori: &mut Vec<String>) -> Esit
         testo = prima.trim_end().to_owned();
     }
     let Some(prima) = testo.chars().next() else {
+        // `(10)`: il valore è solo la nota col valore di serie, un numero.
+        let nota = alternativa.trim();
+        let dentro = nota
+            .strip_prefix('(')
+            .and_then(|n| n.strip_suffix(')'))
+            .map(|n| n.split([';', ',']).next().unwrap_or("").trim());
+        if dentro.is_some_and(numerico) {
+            return Ok(Some(Pezzo::Certo(Tipo::Numero)));
+        }
         return Err(errore(alternativa, "un valore vuoto"));
     };
     let pezzo = match prima {
@@ -686,11 +699,24 @@ fn pezzo(alternativa: &str, aperta: &mut bool, valori: &mut Vec<String>) -> Esit
                         return Err(errore(alternativa, "una frase con dentro una struttura"));
                     }
                     let ultima = t.rsplit(' ').next().unwrap_or(t);
-                    let tipo = parola_del_tipo(ultima).map_or(Tipo::Testo, |(tipo, _)| tipo);
+                    // Una frase con un'unità o un intervallo dentro (`pt
+                    // 0.1..100`, `per inch 0..100`, `% distortion`) è un
+                    // numero.
+                    let di_numero = || t.split(' ').any(|p| numerico(p) || UNITA.contains(&p));
+                    let tipo = parola_del_tipo(ultima).map_or_else(
+                        || {
+                            if di_numero() {
+                                Tipo::Numero
+                            } else {
+                                Tipo::Testo
+                            }
+                        },
+                        |(tipo, _)| tipo,
+                    );
                     Pezzo::Frase(t.to_owned(), tipo)
-                } else if t
-                    .chars()
-                    .all(|c| c.is_alphanumeric() || matches!(c, '_' | '.' | '#' | '-' | '/'))
+                } else if UNITA.contains(&t)
+                    || t.chars()
+                        .all(|c| c.is_alphanumeric() || matches!(c, '_' | '.' | '#' | '-' | '/'))
                 {
                     Pezzo::Valore(t.to_owned())
                 } else {
@@ -744,6 +770,11 @@ fn tipo_del_campo(grezzo: &Grezzo, lessico: &[(&str, Tipo)]) -> Esito<Tipo> {
     Ok(affina(tipo, dal_lessico))
 }
 
+/// Le unità di misura e le parole che, da sole, dicono un numero (gli
+/// effetti di VectorCraft: `radius: pt (10)`, `seed: int (0)`, `h: amount
+/// (10)`).
+const UNITA: &[&str] = &["pt", "px", "mm", "%", "deg", "°", "int", "amount", "levels"];
+
 /// Il tipo di un valore dalle sue alternative.
 enum Combinato {
     Tipo(Tipo),
@@ -756,6 +787,14 @@ fn combina(nome: &str, pezzi: Vec<Pezzo>, espansi: Vec<String>, aperta: bool) ->
     let pezzi: Vec<Pezzo> = pezzi.into_iter().filter(|p| *p != Pezzo::Nullo).collect();
     if pezzi.is_empty() && espansi.is_empty() {
         return Err(errore(nome, "il valore non dice niente"));
+    }
+    // Un'unità di misura da sola è un numero in quell'unità (`radius: pt
+    // (10)`, `amount: % (0)`, `angle: deg`); fra altre parole
+    // (`pt|mm|in`) resta un valore di una scelta.
+    if let [Pezzo::Valore(unita)] = pezzi.as_slice() {
+        if UNITA.contains(&unita.as_str()) && espansi.is_empty() {
+            return Ok(Combinato::Tipo(Tipo::Numero));
+        }
     }
     // Una scelta: tutte parole (almeno una che non è del tipo) e frasi, o
     // tutte stringhe fra virgolette (almeno due, o aperta).

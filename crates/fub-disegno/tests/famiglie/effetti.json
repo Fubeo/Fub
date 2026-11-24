@@ -110,6 +110,666 @@
         ]
       },
       "dopo": "angoli-tondi.svg"
+    },
+    {
+      "id": "distort.puckerBloat",
+      "fonte": "effetto",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "ob2b2b2b2"
+      ],
+      "argomenti": {
+        "amount": 50
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "ob2b2b2b2"
+              },
+              {
+                "op": "remove",
+                "target": "oa1a1a1a1"
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<path id=\"oa1a1a1a1\" d=\"M112.5 106.25 C129.167 93.75 170.833 93.75 187.5 106.25 C212.5 114.583 212.5 135.417 187.5 143.75 C170.833 156.25 129.167 156.25 112.5 143.75 C87.5 135.417 87.5 114.583 112.5 106.25 Z\" fill=\"#000000\"/>"
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "last": true
+                },
+                "raw": "<path id=\"ob2b2b2b2\" d=\"M227.5 106.25 C237.5 93.75 262.5 93.75 272.5 106.25 C287.5 114.583 287.5 135.417 272.5 143.75 C262.5 156.25 237.5 156.25 227.5 143.75 C212.5 135.417 212.5 114.583 227.5 106.25 Z\" fill=\"#ff0000\"/>"
+              },
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<metadata><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"oa1a1a1a1\" hash=\"69b5b18a5e9190e6\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjoyLCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MC4wLCJnIjowLjAsImIiOjAuMH19fV0sImVmZmVjdHMiOlt7ImlkIjoiZGlzdG9ydC5wdWNrZXJCbG9hdCIsInBhcmFtcyI6eyJhbW91bnQiOjUwfSwidmlzaWJsZSI6dHJ1ZX1dfSwia2luZCI6eyJ0eXBlIjoicGF0aCIsInBhdGgiOnsic3VicGF0aHMiOlt7ImFuY2hvcnMiOlt7InAiOlsxMDAuMCwxMDAuMF19LHsicCI6WzIwMC4wLDEwMC4wXX0seyJwIjpbMjAwLjAsMTUwLjBdfSx7InAiOlsxMDAuMCwxNTAuMF19XSwiY2xvc2VkIjp0cnVlfV19fX19</vectorcraft:recipe><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"ob2b2b2b2\" hash=\"5f8b216b809b5a61\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjozLCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MS4wLCJnIjowLjAsImIiOjAuMH19fV0sImVmZmVjdHMiOlt7ImlkIjoiZGlzdG9ydC5wdWNrZXJCbG9hdCIsInBhcmFtcyI6eyJhbW91bnQiOjUwfSwidmlzaWJsZSI6dHJ1ZX1dfSwia2luZCI6eyJ0eXBlIjoicGF0aCIsInBhdGgiOnsic3VicGF0aHMiOlt7ImFuY2hvcnMiOlt7InAiOlsyMjAuMCwxMDAuMF19LHsicCI6WzI4MC4wLDEwMC4wXX0seyJwIjpbMjgwLjAsMTUwLjBdfSx7InAiOlsyMjAuMCwxNTAuMF19XSwiY2xvc2VkIjp0cnVlfV19fX19</vectorcraft:recipe></metadata>"
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "distort.puckerBloat.svg"
+    },
+    {
+      "id": "distort.twist",
+      "fonte": "effetto",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "ob2b2b2b2"
+      ],
+      "argomenti": {
+        "angle": 30
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "ob2b2b2b2"
+              },
+              {
+                "op": "remove",
+                "target": "oa1a1a1a1"
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<path id=\"oa1a1a1a1\" d=\"M100 100 C101.767 100.89 103.554 101.697 105.357 102.421 C107.177 103.062 109.009 103.62 110.854 104.095 C112.708 104.488 114.572 104.798 116.444 105.026 C118.322 105.173 120.208 105.239 122.1 105.226 C123.999 105.135 125.907 104.967 127.824 104.726 C129.754 104.415 131.7 104.036 133.664 103.596 C135.652 103.1 137.668 102.555 139.718 101.97 C141.805 101.355 143.935 100.721 146.111 100.08 C148.335 99.444 150.609 98.825 152.932 98.234 C155.304 97.682 157.722 97.179 160.185 96.733 C162.689 96.351 165.23 96.039 167.805 95.804 C170.411 95.649 173.043 95.579 175.698 95.596 C178.371 95.703 181.06 95.902 183.76 96.196 C186.468 96.585 189.18 97.071 191.893 97.655 C194.603 98.337 197.306 99.119 200 100 C199.805 101.663 199.655 103.357 199.547 105.084 C199.479 106.844 199.447 108.638 199.448 110.468 C199.478 112.334 199.534 114.237 199.611 116.178 C199.705 118.158 199.81 120.178 199.924 122.238 C200.039 124.338 200.152 126.479 200.256 128.661 C200.347 130.883 200.42 133.146 200.469 135.447 C200.489 137.786 200.477 140.162 200.426 142.573 C200.332 145.018 200.191 147.494 200 150 C198.233 149.11 196.446 148.303 194.643 147.579 C192.823 146.938 190.991 146.38 189.146 145.905 C187.292 145.512 185.428 145.202 183.556 144.974 C181.678 144.827 179.792 144.761 177.9 144.774 C176.001 144.865 174.093 145.033 172.176 145.274 C170.246 145.585 168.3 145.964 166.336 146.404 C164.348 146.9 162.332 147.445 160.282 148.03 C158.195 148.645 156.065 149.279 153.889 149.92 C151.665 150.556 149.391 151.175 147.068 151.766 C144.696 152.318 142.278 152.821 139.815 153.267 C137.311 153.649 134.77 153.961 132.195 154.196 C129.589 154.351 126.957 154.421 124.302 154.404 C121.629 154.297 118.94 154.098 116.24 153.804 C113.532 153.415 110.82 152.929 108.107 152.345 C105.397 151.663 102.694 150.881 100 150 C100.195 148.337 100.345 146.643 100.453 144.916 C100.521 143.156 100.553 141.362 100.552 139.532 C100.522 137.666 100.466 135.763 100.389 133.822 C100.295 131.842 100.19 129.822 100.076 127.762 C99.961 125.662 99.848 123.521 99.744 121.339 C99.653 119.117 99.58 116.854 99.531 114.553 C99.511 112.214 99.523 109.838 99.574 107.427 C99.668 104.982 99.809 102.506 100 100 Z\" fill=\"#000000\"/>"
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "last": true
+                },
+                "raw": "<path id=\"ob2b2b2b2\" d=\"M220 100 C221.15 100.449 222.315 100.846 223.495 101.191 C224.689 101.484 225.897 101.726 227.118 101.918 C228.353 102.06 229.603 102.153 230.866 102.2 C232.146 102.2 233.441 102.157 234.754 102.072 C236.085 101.948 237.437 101.788 238.812 101.596 C240.21 101.375 241.634 101.13 243.085 100.865 C244.566 100.586 246.077 100.298 247.62 100.007 C249.196 99.719 250.804 99.439 252.444 99.175 C254.117 98.93 255.822 98.711 257.556 98.523 C259.319 98.37 261.109 98.257 262.924 98.187 C264.762 98.165 266.62 98.193 268.497 98.275 C270.389 98.412 272.295 98.607 274.211 98.862 C276.136 99.178 278.066 99.557 280 100 C279.698 101.134 279.441 102.286 279.228 103.457 C279.059 104.646 278.931 105.853 278.844 107.081 C278.796 108.328 278.785 109.596 278.808 110.886 C278.864 112.199 278.948 113.536 279.059 114.898 C279.192 116.286 279.344 117.702 279.511 119.146 C279.688 120.62 279.871 122.124 280.056 123.659 C280.237 125.225 280.411 126.822 280.571 128.45 C280.714 130.109 280.835 131.797 280.93 133.514 C280.994 135.259 281.024 137.029 281.016 138.825 C280.966 140.642 280.873 142.481 280.731 144.338 C280.541 146.212 280.297 148.1 280 150 C278.85 149.551 277.685 149.154 276.505 148.809 C275.311 148.516 274.103 148.274 272.882 148.082 C271.647 147.94 270.397 147.847 269.134 147.8 C267.854 147.8 266.559 147.843 265.246 147.928 C263.915 148.052 262.563 148.212 261.188 148.404 C259.79 148.625 258.366 148.87 256.915 149.135 C255.434 149.414 253.923 149.702 252.38 149.993 C250.804 150.281 249.196 150.561 247.556 150.825 C245.883 151.07 244.178 151.289 242.444 151.477 C240.681 151.63 238.891 151.743 237.076 151.813 C235.238 151.835 233.38 151.807 231.503 151.725 C229.611 151.588 227.705 151.393 225.789 151.138 C223.864 150.822 221.934 150.443 220 150 C220.302 148.866 220.559 147.714 220.772 146.543 C220.941 145.354 221.069 144.147 221.156 142.919 C221.204 141.672 221.215 140.404 221.192 139.114 C221.136 137.801 221.052 136.464 220.941 135.102 C220.808 133.714 220.656 132.298 220.489 130.854 C220.312 129.38 220.129 127.876 219.944 126.341 C219.763 124.775 219.589 123.178 219.429 121.55 C219.286 119.891 219.165 118.203 219.07 116.486 C219.006 114.741 218.976 112.971 218.984 111.175 C219.034 109.358 219.127 107.519 219.269 105.662 C219.459 103.788 219.703 101.9 220 100 Z\" fill=\"#ff0000\"/>"
+              },
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<metadata><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"oa1a1a1a1\" hash=\"0217834ee522703a\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjoyLCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MC4wLCJnIjowLjAsImIiOjAuMH19fV0sImVmZmVjdHMiOlt7ImlkIjoiZGlzdG9ydC50d2lzdCIsInBhcmFtcyI6eyJhbmdsZSI6MzB9LCJ2aXNpYmxlIjp0cnVlfV19LCJraW5kIjp7InR5cGUiOiJwYXRoIiwicGF0aCI6eyJzdWJwYXRocyI6W3siYW5jaG9ycyI6W3sicCI6WzEwMC4wLDEwMC4wXX0seyJwIjpbMjAwLjAsMTAwLjBdfSx7InAiOlsyMDAuMCwxNTAuMF19LHsicCI6WzEwMC4wLDE1MC4wXX1dLCJjbG9zZWQiOnRydWV9XX19fX0=</vectorcraft:recipe><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"ob2b2b2b2\" hash=\"78f3ee2672ac8990\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjozLCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MS4wLCJnIjowLjAsImIiOjAuMH19fV0sImVmZmVjdHMiOlt7ImlkIjoiZGlzdG9ydC50d2lzdCIsInBhcmFtcyI6eyJhbmdsZSI6MzB9LCJ2aXNpYmxlIjp0cnVlfV19LCJraW5kIjp7InR5cGUiOiJwYXRoIiwicGF0aCI6eyJzdWJwYXRocyI6W3siYW5jaG9ycyI6W3sicCI6WzIyMC4wLDEwMC4wXX0seyJwIjpbMjgwLjAsMTAwLjBdfSx7InAiOlsyODAuMCwxNTAuMF19LHsicCI6WzIyMC4wLDE1MC4wXX1dLCJjbG9zZWQiOnRydWV9XX19fX0=</vectorcraft:recipe></metadata>"
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "distort.twist.svg"
+    },
+    {
+      "id": "distort.zigZag",
+      "fonte": "effetto",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "ob2b2b2b2"
+      ],
+      "argomenti": {
+        "size": 5,
+        "ridges": 4
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "ob2b2b2b2"
+              },
+              {
+                "op": "remove",
+                "target": "oa1a1a1a1"
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<path id=\"oa1a1a1a1\" d=\"M96.464 96.464 C101.179 91.75 113.333 105 120 105 C126.667 105 133.333 95 140 95 C146.667 95 153.333 105 160 105 C166.667 105 173.333 95 180 95 C186.667 95 191.75 98.821 196.464 103.536 C198.821 105.893 205 106.667 205 110 C205 113.333 195 116.667 195 120 C195 123.333 205 126.667 205 130 C205 133.333 195 136.667 195 140 C195 143.333 205.893 151.179 203.536 153.536 C198.821 158.25 186.667 145 180 145 C173.333 145 166.667 155 160 155 C153.333 155 146.667 145 140 145 C133.333 145 126.667 155 120 155 C113.333 155 108.25 151.179 103.536 146.464 C101.179 144.107 95 143.333 95 140 C95 136.667 105 133.333 105 130 C105 126.667 95 123.333 95 120 C95 116.667 105 113.333 105 110 C105 106.667 94.107 98.821 96.464 96.464 Z\" fill=\"#000000\"/>"
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "last": true
+                },
+                "raw": "<path id=\"ob2b2b2b2\" d=\"M216.464 96.464 C219.293 93.636 228 105 232 105 C236 105 240 95 244 95 C248 95 252 105 256 105 C260 105 264 95 268 95 C272 95 273.636 100.707 276.464 103.536 C278.821 105.893 285 106.667 285 110 C285 113.333 275 116.667 275 120 C275 123.333 285 126.667 285 130 C285 133.333 275 136.667 275 140 C275 143.333 285.893 151.179 283.536 153.536 C280.707 156.364 272 145 268 145 C264 145 260 155 256 155 C252 155 248 145 244 145 C240 145 236 155 232 155 C228 155 226.364 149.293 223.536 146.464 C221.179 144.107 215 143.333 215 140 C215 136.667 225 133.333 225 130 C225 126.667 215 123.333 215 120 C215 116.667 225 113.333 225 110 C225 106.667 214.107 98.821 216.464 96.464 Z\" fill=\"#ff0000\"/>"
+              },
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<metadata><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"oa1a1a1a1\" hash=\"15d13e03f429e815\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjoyLCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MC4wLCJnIjowLjAsImIiOjAuMH19fV0sImVmZmVjdHMiOlt7ImlkIjoiZGlzdG9ydC56aWdaYWciLCJwYXJhbXMiOnsic2l6ZSI6NSwicmVsYXRpdmUiOmZhbHNlLCJyaWRnZXMiOjQsInBvaW50cyI6InNtb290aCJ9LCJ2aXNpYmxlIjp0cnVlfV19LCJraW5kIjp7InR5cGUiOiJwYXRoIiwicGF0aCI6eyJzdWJwYXRocyI6W3siYW5jaG9ycyI6W3sicCI6WzEwMC4wLDEwMC4wXX0seyJwIjpbMjAwLjAsMTAwLjBdfSx7InAiOlsyMDAuMCwxNTAuMF19LHsicCI6WzEwMC4wLDE1MC4wXX1dLCJjbG9zZWQiOnRydWV9XX19fX0=</vectorcraft:recipe><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"ob2b2b2b2\" hash=\"db15987acbbfa09e\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjozLCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MS4wLCJnIjowLjAsImIiOjAuMH19fV0sImVmZmVjdHMiOlt7ImlkIjoiZGlzdG9ydC56aWdaYWciLCJwYXJhbXMiOnsic2l6ZSI6NSwicmVsYXRpdmUiOmZhbHNlLCJyaWRnZXMiOjQsInBvaW50cyI6InNtb290aCJ9LCJ2aXNpYmxlIjp0cnVlfV19LCJraW5kIjp7InR5cGUiOiJwYXRoIiwicGF0aCI6eyJzdWJwYXRocyI6W3siYW5jaG9ycyI6W3sicCI6WzIyMC4wLDEwMC4wXX0seyJwIjpbMjgwLjAsMTAwLjBdfSx7InAiOlsyODAuMCwxNTAuMF19LHsicCI6WzIyMC4wLDE1MC4wXX1dLCJjbG9zZWQiOnRydWV9XX19fX0=</vectorcraft:recipe></metadata>"
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "distort.zigZag.svg"
+    },
+    {
+      "id": "distort.roughen",
+      "fonte": "effetto",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "ob2b2b2b2"
+      ],
+      "argomenti": {
+        "size": 5,
+        "seed": 1
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "ob2b2b2b2"
+              },
+              {
+                "op": "remove",
+                "target": "oa1a1a1a1"
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<path id=\"oa1a1a1a1\" d=\"M103.094 101.869 C104.043 101.828 104.643 104.239 105.149 103.446 C105.656 102.653 104.607 97.63 106.133 97.111 C107.66 96.591 111.743 100.455 114.309 100.329 C116.875 100.202 119.58 96.703 121.53 96.353 C123.48 96.003 123.451 97.145 126.009 98.227 C128.567 99.309 133.421 102.121 136.877 102.845 C140.333 103.569 143.271 103.383 146.746 102.569 C150.22 101.755 154.172 98.385 157.723 97.96 C161.274 97.535 164.813 100.043 168.053 100.019 C171.294 99.995 173.345 98.431 177.166 97.817 C180.987 97.202 188.233 96.365 190.979 96.33 C193.726 96.296 191.843 97.126 193.646 97.609 C195.45 98.091 200.991 98.82 201.8 99.224 C202.61 99.629 198.725 98.937 198.501 100.034 C198.277 101.131 200.679 103.737 200.457 105.804 C200.235 107.871 197.566 110.549 197.168 112.435 C196.77 114.322 197.448 114.144 198.069 117.123 C198.689 120.102 200.925 126.476 200.89 130.307 C200.855 134.138 197.936 136.784 197.858 140.111 C197.781 143.438 200.309 148.827 200.424 150.269 C200.54 151.712 199.286 148.697 198.552 148.766 C197.818 148.835 196.856 150.251 196.018 150.685 C195.18 151.119 194.548 150.874 193.522 151.371 C192.496 151.869 192.57 154.169 189.864 153.67 C187.158 153.171 180.672 149.472 177.286 148.379 C173.901 147.287 172.719 146.864 169.55 147.114 C166.381 147.365 161.819 150.019 158.272 149.88 C154.726 149.742 151.138 145.915 148.272 146.285 C145.406 146.655 144.447 151.753 141.074 152.099 C137.702 152.445 131.649 149.042 128.039 148.36 C124.429 147.678 121.753 147.682 119.415 148.007 C117.076 148.331 116.878 150.002 114.01 150.306 C111.142 150.611 104.216 149.297 102.208 149.834 C100.199 150.371 102.803 154.09 101.957 153.528 C101.112 152.965 97.088 147.423 97.137 146.459 C97.187 145.495 101.777 149.036 102.255 147.745 C102.732 146.455 100.042 141.039 100.002 138.715 C99.962 136.391 101.98 136.51 102.017 133.801 C102.053 131.092 100.46 126.875 100.22 122.46 C99.98 118.046 100.7 110.44 100.574 107.312 C100.447 104.184 99.04 104.597 99.46 103.69 C99.881 102.783 102.146 101.909 103.094 101.869 Z\" fill=\"#000000\"/>"
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "last": true
+                },
+                "raw": "<path id=\"ob2b2b2b2\" d=\"M222.269 101.37 C223.114 101.573 223.808 103.108 224.765 102.527 C225.721 101.945 225.903 98.262 228.008 97.881 C230.112 97.5 234.346 100.334 237.39 100.241 C240.434 100.148 243.724 97.582 246.271 97.326 C248.818 97.069 249.947 97.907 252.673 98.7 C255.398 99.494 259.73 101.556 262.625 102.086 C265.519 102.617 267.845 102.481 270.041 101.884 C272.238 101.287 274.484 98.816 275.802 98.504 C277.121 98.193 277.62 99.57 277.952 100.014 C278.284 100.458 277.111 99.967 277.793 101.169 C278.475 102.37 281.775 104.429 282.044 107.222 C282.312 110.014 279.345 114.171 279.403 117.926 C279.46 121.681 282.473 126.054 282.389 129.752 C282.306 133.45 279.243 136.829 278.901 140.112 C278.558 143.396 280.498 147.499 280.335 149.455 C280.172 151.412 278.558 152.072 277.923 151.85 C277.289 151.628 277.333 148.435 276.526 148.125 C275.719 147.815 275.356 149.675 273.081 149.99 C270.805 150.305 265.839 149.644 262.874 150.017 C259.909 150.39 258.443 152.382 255.291 152.229 C252.138 152.075 247.556 149.383 243.959 149.095 C240.361 148.807 236.55 150.184 233.705 150.502 C230.859 150.821 228.62 150.641 226.884 151.006 C225.147 151.37 224.784 153.057 223.283 152.691 C221.783 152.326 218.587 150.074 217.882 148.811 C217.176 147.549 218.986 146.583 219.05 145.114 C219.113 143.646 218.316 142.919 218.263 140 C218.21 137.08 218.234 130.727 218.733 127.596 C219.232 124.466 221.183 124.366 221.258 121.218 C221.333 118.071 219.442 112.028 219.182 108.71 C218.922 105.392 219.184 102.531 219.699 101.308 C220.214 100.085 221.425 101.167 222.269 101.37 Z\" fill=\"#ff0000\"/>"
+              },
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<metadata><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"oa1a1a1a1\" hash=\"eba0404ddb30c699\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjoyLCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MC4wLCJnIjowLjAsImIiOjAuMH19fV0sImVmZmVjdHMiOlt7ImlkIjoiZGlzdG9ydC5yb3VnaGVuIiwicGFyYW1zIjp7InNpemUiOjUsInJlbGF0aXZlIjp0cnVlLCJkZXRhaWwiOjEwLjAsInBvaW50cyI6InNtb290aCIsInNlZWQiOjF9LCJ2aXNpYmxlIjp0cnVlfV19LCJraW5kIjp7InR5cGUiOiJwYXRoIiwicGF0aCI6eyJzdWJwYXRocyI6W3siYW5jaG9ycyI6W3sicCI6WzEwMC4wLDEwMC4wXX0seyJwIjpbMjAwLjAsMTAwLjBdfSx7InAiOlsyMDAuMCwxNTAuMF19LHsicCI6WzEwMC4wLDE1MC4wXX1dLCJjbG9zZWQiOnRydWV9XX19fX0=</vectorcraft:recipe><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"ob2b2b2b2\" hash=\"e209d5a00dc297bf\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjozLCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MS4wLCJnIjowLjAsImIiOjAuMH19fV0sImVmZmVjdHMiOlt7ImlkIjoiZGlzdG9ydC5yb3VnaGVuIiwicGFyYW1zIjp7InNpemUiOjUsInJlbGF0aXZlIjp0cnVlLCJkZXRhaWwiOjEwLjAsInBvaW50cyI6InNtb290aCIsInNlZWQiOjF9LCJ2aXNpYmxlIjp0cnVlfV19LCJraW5kIjp7InR5cGUiOiJwYXRoIiwicGF0aCI6eyJzdWJwYXRocyI6W3siYW5jaG9ycyI6W3sicCI6WzIyMC4wLDEwMC4wXX0seyJwIjpbMjgwLjAsMTAwLjBdfSx7InAiOlsyODAuMCwxNTAuMF19LHsicCI6WzIyMC4wLDE1MC4wXX1dLCJjbG9zZWQiOnRydWV9XX19fX0=</vectorcraft:recipe></metadata>"
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "distort.roughen.svg"
+    },
+    {
+      "id": "distort.tweak",
+      "fonte": "effetto",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "ob2b2b2b2"
+      ],
+      "argomenti": {
+        "seed": 1
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "ob2b2b2b2"
+              },
+              {
+                "op": "remove",
+                "target": "oa1a1a1a1"
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<path id=\"oa1a1a1a1\" d=\"M108.252 102.491 C109.836 98.639 206.301 95.383 204.206 99.697 C198.255 100.907 206.691 148.002 205.648 150.266 C200.334 153.176 113.661 150.98 109.731 148.485 C110.919 144.477 118.096 107.086 108.252 102.491 Z\" fill=\"#000000\"/>"
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "last": true
+                },
+                "raw": "<path id=\"ob2b2b2b2\" d=\"M224.951 102.491 C225.902 98.639 283.781 95.383 282.523 99.697 C278.953 100.907 284.015 148.002 283.389 150.266 C280.201 153.176 228.197 150.98 225.838 148.485 C226.551 144.477 230.858 107.086 224.951 102.491 Z\" fill=\"#ff0000\"/>"
+              },
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<metadata><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"oa1a1a1a1\" hash=\"f253a73e8b144056\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjoyLCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MC4wLCJnIjowLjAsImIiOjAuMH19fV0sImVmZmVjdHMiOlt7ImlkIjoiZGlzdG9ydC50d2VhayIsInBhcmFtcyI6eyJoIjoxMC4wLCJ2IjoxMC4wLCJyZWxhdGl2ZSI6dHJ1ZSwiYW5jaG9ycyI6dHJ1ZSwiaW4iOnRydWUsIm91dCI6dHJ1ZSwic2VlZCI6MX0sInZpc2libGUiOnRydWV9XX0sImtpbmQiOnsidHlwZSI6InBhdGgiLCJwYXRoIjp7InN1YnBhdGhzIjpbeyJhbmNob3JzIjpbeyJwIjpbMTAwLjAsMTAwLjBdfSx7InAiOlsyMDAuMCwxMDAuMF19LHsicCI6WzIwMC4wLDE1MC4wXX0seyJwIjpbMTAwLjAsMTUwLjBdfV0sImNsb3NlZCI6dHJ1ZX1dfX19fQ==</vectorcraft:recipe><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"ob2b2b2b2\" hash=\"1ffd448c11977c96\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjozLCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MS4wLCJnIjowLjAsImIiOjAuMH19fV0sImVmZmVjdHMiOlt7ImlkIjoiZGlzdG9ydC50d2VhayIsInBhcmFtcyI6eyJoIjoxMC4wLCJ2IjoxMC4wLCJyZWxhdGl2ZSI6dHJ1ZSwiYW5jaG9ycyI6dHJ1ZSwiaW4iOnRydWUsIm91dCI6dHJ1ZSwic2VlZCI6MX0sInZpc2libGUiOnRydWV9XX0sImtpbmQiOnsidHlwZSI6InBhdGgiLCJwYXRoIjp7InN1YnBhdGhzIjpbeyJhbmNob3JzIjpbeyJwIjpbMjIwLjAsMTAwLjBdfSx7InAiOlsyODAuMCwxMDAuMF19LHsicCI6WzI4MC4wLDE1MC4wXX0seyJwIjpbMjIwLjAsMTUwLjBdfV0sImNsb3NlZCI6dHJ1ZX1dfX19fQ==</vectorcraft:recipe></metadata>"
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "distort.tweak.svg"
+    },
+    {
+      "id": "distort.transform",
+      "fonte": "effetto",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "ob2b2b2b2"
+      ],
+      "argomenti": {
+        "rotate": 15,
+        "copies": 1
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "ob2b2b2b2"
+              },
+              {
+                "op": "remove",
+                "target": "oa1a1a1a1"
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<path id=\"oa1a1a1a1\" d=\"M100 100 L200 100 L200 150 L100 150 Z M95.233 113.793 L191.826 87.911 L204.767 136.207 L108.174 162.089 Z\" fill=\"#000000\"/>"
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "last": true
+                },
+                "raw": "<path id=\"ob2b2b2b2\" d=\"M220 100 L280 100 L280 150 L220 150 Z M214.552 108.616 L272.507 93.087 L285.448 141.384 L227.493 156.913 Z\" fill=\"#ff0000\"/>"
+              },
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<metadata><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"oa1a1a1a1\" hash=\"51f1d03e07f18ea7\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjoyLCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MC4wLCJnIjowLjAsImIiOjAuMH19fV0sImVmZmVjdHMiOlt7ImlkIjoiZGlzdG9ydC50cmFuc2Zvcm0iLCJwYXJhbXMiOnsic2NhbGVIIjoxMDAuMCwic2NhbGVWIjoxMDAuMCwibW92ZUgiOjAuMCwibW92ZVYiOjAuMCwicm90YXRlIjoxNSwiY29waWVzIjoxLCJyZWZsZWN0WCI6ZmFsc2UsInJlZmxlY3RZIjpmYWxzZSwicmVmZXJlbmNlIjo0LCJyYW5kb20iOmZhbHNlLCJvYmplY3RzIjp0cnVlLCJwYXR0ZXJucyI6ZmFsc2UsInN0cm9rZXMiOmZhbHNlfSwidmlzaWJsZSI6dHJ1ZX1dfSwia2luZCI6eyJ0eXBlIjoicGF0aCIsInBhdGgiOnsic3VicGF0aHMiOlt7ImFuY2hvcnMiOlt7InAiOlsxMDAuMCwxMDAuMF19LHsicCI6WzIwMC4wLDEwMC4wXX0seyJwIjpbMjAwLjAsMTUwLjBdfSx7InAiOlsxMDAuMCwxNTAuMF19XSwiY2xvc2VkIjp0cnVlfV19fX19</vectorcraft:recipe><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"ob2b2b2b2\" hash=\"42e8366c7b648037\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjozLCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MS4wLCJnIjowLjAsImIiOjAuMH19fV0sImVmZmVjdHMiOlt7ImlkIjoiZGlzdG9ydC50cmFuc2Zvcm0iLCJwYXJhbXMiOnsic2NhbGVIIjoxMDAuMCwic2NhbGVWIjoxMDAuMCwibW92ZUgiOjAuMCwibW92ZVYiOjAuMCwicm90YXRlIjoxNSwiY29waWVzIjoxLCJyZWZsZWN0WCI6ZmFsc2UsInJlZmxlY3RZIjpmYWxzZSwicmVmZXJlbmNlIjo0LCJyYW5kb20iOmZhbHNlLCJvYmplY3RzIjp0cnVlLCJwYXR0ZXJucyI6ZmFsc2UsInN0cm9rZXMiOmZhbHNlfSwidmlzaWJsZSI6dHJ1ZX1dfSwia2luZCI6eyJ0eXBlIjoicGF0aCIsInBhdGgiOnsic3VicGF0aHMiOlt7ImFuY2hvcnMiOlt7InAiOlsyMjAuMCwxMDAuMF19LHsicCI6WzI4MC4wLDEwMC4wXX0seyJwIjpbMjgwLjAsMTUwLjBdfSx7InAiOlsyMjAuMCwxNTAuMF19XSwiY2xvc2VkIjp0cnVlfV19fX19</vectorcraft:recipe></metadata>"
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "distort.transform.svg"
+    },
+    {
+      "id": "distort.freeDistort",
+      "fonte": "effetto",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "ob2b2b2b2"
+      ],
+      "argomenti": {
+        "corners": [
+          [
+            0.1,
+            0
+          ],
+          [
+            0.9,
+            0
+          ],
+          [
+            1,
+            1
+          ],
+          [
+            0,
+            1
+          ]
+        ]
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "ob2b2b2b2"
+              },
+              {
+                "op": "remove",
+                "target": "oa1a1a1a1"
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<path id=\"oa1a1a1a1\" d=\"M110 100 C111.778 100 113.556 100 115.333 100 C117.111 100 118.889 100 120.667 100 C122.444 100 124.222 100 126 100 C127.778 100 129.556 100 131.333 100 C133.111 100 134.889 100 136.667 100 C138.444 100 140.222 100 142 100 C143.778 100 145.556 100 147.333 100 C149.111 100 150.889 100 152.667 100 C154.444 100 156.222 100 158 100 C159.778 100 161.556 100 163.333 100 C165.111 100 166.889 100 168.667 100 C170.444 100 172.222 100 174 100 C175.778 100 177.556 100 179.333 100 C181.111 100 182.889 100 184.667 100 C186.444 100 188.222 100 190 100 C190.417 102.083 190.833 104.167 191.25 106.25 C191.667 108.333 192.083 110.417 192.5 112.5 C192.917 114.583 193.333 116.667 193.75 118.75 C194.167 120.833 194.583 122.917 195 125 C195.417 127.083 195.833 129.167 196.25 131.25 C196.667 133.333 197.083 135.417 197.5 137.5 C197.917 139.583 198.333 141.667 198.75 143.75 C199.167 145.833 199.583 147.917 200 150 C197.778 150 195.556 150 193.333 150 C191.111 150 188.889 150 186.667 150 C184.444 150 182.222 150 180 150 C177.778 150 175.556 150 173.333 150 C171.111 150 168.889 150 166.667 150 C164.444 150 162.222 150 160 150 C157.778 150 155.556 150 153.333 150 C151.111 150 148.889 150 146.667 150 C144.444 150 142.222 150 140 150 C137.778 150 135.556 150 133.333 150 C131.111 150 128.889 150 126.667 150 C124.444 150 122.222 150 120 150 C117.778 150 115.556 150 113.333 150 C111.111 150 108.889 150 106.667 150 C104.444 150 102.222 150 100 150 C100.417 147.917 100.833 145.833 101.25 143.75 C101.667 141.667 102.083 139.583 102.5 137.5 C102.917 135.417 103.333 133.333 103.75 131.25 C104.167 129.167 104.583 127.083 105 125 C105.417 122.917 105.833 120.833 106.25 118.75 C106.667 116.667 107.083 114.583 107.5 112.5 C107.917 110.417 108.333 108.333 108.75 106.25 C109.167 104.167 109.583 102.083 110 100 Z\" fill=\"#000000\"/>"
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "last": true
+                },
+                "raw": "<path id=\"ob2b2b2b2\" d=\"M226 100 C227.231 100 228.462 100 229.692 100 C230.923 100 232.154 100 233.385 100 C234.615 100 235.846 100 237.077 100 C238.308 100 239.538 100 240.769 100 C242 100 243.231 100 244.462 100 C245.692 100 246.923 100 248.154 100 C249.385 100 250.615 100 251.846 100 C253.077 100 254.308 100 255.538 100 C256.769 100 258 100 259.231 100 C260.462 100 261.692 100 262.923 100 C264.154 100 265.385 100 266.615 100 C267.846 100 269.077 100 270.308 100 C271.538 100 272.769 100 274 100 C274.182 101.515 274.364 103.03 274.545 104.545 C274.727 106.061 274.909 107.576 275.091 109.091 C275.273 110.606 275.455 112.121 275.636 113.636 C275.818 115.152 276 116.667 276.182 118.182 C276.364 119.697 276.545 121.212 276.727 122.727 C276.909 124.242 277.091 125.758 277.273 127.273 C277.455 128.788 277.636 130.303 277.818 131.818 C278 133.333 278.182 134.848 278.364 136.364 C278.545 137.879 278.727 139.394 278.909 140.909 C279.091 142.424 279.273 143.939 279.455 145.455 C279.636 146.97 279.818 148.485 280 150 C278.462 150 276.923 150 275.385 150 C273.846 150 272.308 150 270.769 150 C269.231 150 267.692 150 266.154 150 C264.615 150 263.077 150 261.538 150 C260 150 258.462 150 256.923 150 C255.385 150 253.846 150 252.308 150 C250.769 150 249.231 150 247.692 150 C246.154 150 244.615 150 243.077 150 C241.538 150 240 150 238.462 150 C236.923 150 235.385 150 233.846 150 C232.308 150 230.769 150 229.231 150 C227.692 150 226.154 150 224.615 150 C223.077 150 221.538 150 220 150 C220.182 148.485 220.364 146.97 220.545 145.455 C220.727 143.939 220.909 142.424 221.091 140.909 C221.273 139.394 221.455 137.879 221.636 136.364 C221.818 134.848 222 133.333 222.182 131.818 C222.364 130.303 222.545 128.788 222.727 127.273 C222.909 125.758 223.091 124.242 223.273 122.727 C223.455 121.212 223.636 119.697 223.818 118.182 C224 116.667 224.182 115.152 224.364 113.636 C224.545 112.121 224.727 110.606 224.909 109.091 C225.091 107.576 225.273 106.061 225.455 104.545 C225.636 103.03 225.818 101.515 226 100 Z\" fill=\"#ff0000\"/>"
+              },
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<metadata><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"oa1a1a1a1\" hash=\"3a2f55a35116eac4\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjoyLCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MC4wLCJnIjowLjAsImIiOjAuMH19fV0sImVmZmVjdHMiOlt7ImlkIjoiZGlzdG9ydC5mcmVlRGlzdG9ydCIsInBhcmFtcyI6eyJjb3JuZXJzIjpbWzAuMSwwXSxbMC45LDBdLFsxLDFdLFswLDFdXX0sInZpc2libGUiOnRydWV9XX0sImtpbmQiOnsidHlwZSI6InBhdGgiLCJwYXRoIjp7InN1YnBhdGhzIjpbeyJhbmNob3JzIjpbeyJwIjpbMTAwLjAsMTAwLjBdfSx7InAiOlsyMDAuMCwxMDAuMF19LHsicCI6WzIwMC4wLDE1MC4wXX0seyJwIjpbMTAwLjAsMTUwLjBdfV0sImNsb3NlZCI6dHJ1ZX1dfX19fQ==</vectorcraft:recipe><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"ob2b2b2b2\" hash=\"7bf1cad85a2795b4\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjozLCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MS4wLCJnIjowLjAsImIiOjAuMH19fV0sImVmZmVjdHMiOlt7ImlkIjoiZGlzdG9ydC5mcmVlRGlzdG9ydCIsInBhcmFtcyI6eyJjb3JuZXJzIjpbWzAuMSwwXSxbMC45LDBdLFsxLDFdLFswLDFdXX0sInZpc2libGUiOnRydWV9XX0sImtpbmQiOnsidHlwZSI6InBhdGgiLCJwYXRoIjp7InN1YnBhdGhzIjpbeyJhbmNob3JzIjpbeyJwIjpbMjIwLjAsMTAwLjBdfSx7InAiOlsyODAuMCwxMDAuMF19LHsicCI6WzI4MC4wLDE1MC4wXX0seyJwIjpbMjIwLjAsMTUwLjBdfV0sImNsb3NlZCI6dHJ1ZX1dfX19fQ==</vectorcraft:recipe></metadata>"
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "distort.freeDistort.svg"
+    },
+    {
+      "id": "path.offsetPath",
+      "fonte": "effetto",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "ob2b2b2b2"
+      ],
+      "argomenti": {
+        "offset": 5
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "ob2b2b2b2"
+              },
+              {
+                "op": "remove",
+                "target": "oa1a1a1a1"
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<rect id=\"oa1a1a1a1\" x=\"95\" y=\"95\" width=\"110\" height=\"60\" fill=\"#000000\"/>"
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "last": true
+                },
+                "raw": "<rect id=\"ob2b2b2b2\" x=\"215\" y=\"95\" width=\"70\" height=\"60\" fill=\"#ff0000\"/>"
+              },
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<metadata><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"oa1a1a1a1\" hash=\"d788e0a077e6bc7e\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjoyLCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MC4wLCJnIjowLjAsImIiOjAuMH19fV0sImVmZmVjdHMiOlt7ImlkIjoicGF0aC5vZmZzZXRQYXRoIiwicGFyYW1zIjp7Im9mZnNldCI6NSwiam9pbnMiOiJtaXRlciIsIm1pdGVyTGltaXQiOjQuMH0sInZpc2libGUiOnRydWV9XX0sImtpbmQiOnsidHlwZSI6InBhdGgiLCJwYXRoIjp7InN1YnBhdGhzIjpbeyJhbmNob3JzIjpbeyJwIjpbMTAwLjAsMTAwLjBdfSx7InAiOlsyMDAuMCwxMDAuMF19LHsicCI6WzIwMC4wLDE1MC4wXX0seyJwIjpbMTAwLjAsMTUwLjBdfV0sImNsb3NlZCI6dHJ1ZX1dfX19fQ==</vectorcraft:recipe><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"ob2b2b2b2\" hash=\"d225ddeafb5b3cff\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjozLCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MS4wLCJnIjowLjAsImIiOjAuMH19fV0sImVmZmVjdHMiOlt7ImlkIjoicGF0aC5vZmZzZXRQYXRoIiwicGFyYW1zIjp7Im9mZnNldCI6NSwiam9pbnMiOiJtaXRlciIsIm1pdGVyTGltaXQiOjQuMH0sInZpc2libGUiOnRydWV9XX0sImtpbmQiOnsidHlwZSI6InBhdGgiLCJwYXRoIjp7InN1YnBhdGhzIjpbeyJhbmNob3JzIjpbeyJwIjpbMjIwLjAsMTAwLjBdfSx7InAiOlsyODAuMCwxMDAuMF19LHsicCI6WzI4MC4wLDE1MC4wXX0seyJwIjpbMjIwLjAsMTUwLjBdfV0sImNsb3NlZCI6dHJ1ZX1dfX19fQ==</vectorcraft:recipe></metadata>"
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "path.offsetPath.svg"
+    },
+    {
+      "id": "path.outlineObject",
+      "fonte": "effetto",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "ob2b2b2b2"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "ob2b2b2b2"
+              },
+              {
+                "op": "remove",
+                "target": "oa1a1a1a1"
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<rect id=\"oa1a1a1a1\" x=\"100\" y=\"100\" width=\"100\" height=\"50\" fill=\"#000000\"/>"
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "last": true
+                },
+                "raw": "<rect id=\"ob2b2b2b2\" x=\"220\" y=\"100\" width=\"60\" height=\"50\" fill=\"#ff0000\"/>"
+              },
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<metadata><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"oa1a1a1a1\" hash=\"ff73d6c05dd491a8\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjoyLCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MC4wLCJnIjowLjAsImIiOjAuMH19fV0sImVmZmVjdHMiOlt7ImlkIjoicGF0aC5vdXRsaW5lT2JqZWN0IiwicGFyYW1zIjp7fSwidmlzaWJsZSI6dHJ1ZX1dfSwia2luZCI6eyJ0eXBlIjoicGF0aCIsInBhdGgiOnsic3VicGF0aHMiOlt7ImFuY2hvcnMiOlt7InAiOlsxMDAuMCwxMDAuMF19LHsicCI6WzIwMC4wLDEwMC4wXX0seyJwIjpbMjAwLjAsMTUwLjBdfSx7InAiOlsxMDAuMCwxNTAuMF19XSwiY2xvc2VkIjp0cnVlfV19fX19</vectorcraft:recipe><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"ob2b2b2b2\" hash=\"0a099154f201f708\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjozLCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MS4wLCJnIjowLjAsImIiOjAuMH19fV0sImVmZmVjdHMiOlt7ImlkIjoicGF0aC5vdXRsaW5lT2JqZWN0IiwicGFyYW1zIjp7fSwidmlzaWJsZSI6dHJ1ZX1dfSwia2luZCI6eyJ0eXBlIjoicGF0aCIsInBhdGgiOnsic3VicGF0aHMiOlt7ImFuY2hvcnMiOlt7InAiOlsyMjAuMCwxMDAuMF19LHsicCI6WzI4MC4wLDEwMC4wXX0seyJwIjpbMjgwLjAsMTUwLjBdfSx7InAiOlsyMjAuMCwxNTAuMF19XSwiY2xvc2VkIjp0cnVlfV19fX19</vectorcraft:recipe></metadata>"
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "path.outlineObject.svg"
+    },
+    {
+      "id": "convertToShape.rectangle",
+      "fonte": "effetto",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "ob2b2b2b2"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "ob2b2b2b2"
+              },
+              {
+                "op": "remove",
+                "target": "oa1a1a1a1"
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<rect id=\"oa1a1a1a1\" x=\"91\" y=\"91\" width=\"118\" height=\"68\" fill=\"#000000\"/>"
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "last": true
+                },
+                "raw": "<rect id=\"ob2b2b2b2\" x=\"211\" y=\"91\" width=\"78\" height=\"68\" fill=\"#ff0000\"/>"
+              },
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<metadata><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"oa1a1a1a1\" hash=\"a3a76dbe4e5eec6e\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjoyLCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MC4wLCJnIjowLjAsImIiOjAuMH19fV0sImVmZmVjdHMiOlt7ImlkIjoiY29udmVydFRvU2hhcGUucmVjdGFuZ2xlIiwicGFyYW1zIjp7InJlbGF0aXZlIjp0cnVlLCJleHRyYVciOjE4LjAsImV4dHJhSCI6MTguMCwid2lkdGgiOjEwMC4wLCJoZWlnaHQiOjEwMC4wfSwidmlzaWJsZSI6dHJ1ZX1dfSwia2luZCI6eyJ0eXBlIjoicGF0aCIsInBhdGgiOnsic3VicGF0aHMiOlt7ImFuY2hvcnMiOlt7InAiOlsxMDAuMCwxMDAuMF19LHsicCI6WzIwMC4wLDEwMC4wXX0seyJwIjpbMjAwLjAsMTUwLjBdfSx7InAiOlsxMDAuMCwxNTAuMF19XSwiY2xvc2VkIjp0cnVlfV19fX19</vectorcraft:recipe><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"ob2b2b2b2\" hash=\"a6c872b74a366bef\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjozLCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MS4wLCJnIjowLjAsImIiOjAuMH19fV0sImVmZmVjdHMiOlt7ImlkIjoiY29udmVydFRvU2hhcGUucmVjdGFuZ2xlIiwicGFyYW1zIjp7InJlbGF0aXZlIjp0cnVlLCJleHRyYVciOjE4LjAsImV4dHJhSCI6MTguMCwid2lkdGgiOjEwMC4wLCJoZWlnaHQiOjEwMC4wfSwidmlzaWJsZSI6dHJ1ZX1dfSwia2luZCI6eyJ0eXBlIjoicGF0aCIsInBhdGgiOnsic3VicGF0aHMiOlt7ImFuY2hvcnMiOlt7InAiOlsyMjAuMCwxMDAuMF19LHsicCI6WzI4MC4wLDEwMC4wXX0seyJwIjpbMjgwLjAsMTUwLjBdfSx7InAiOlsyMjAuMCwxNTAuMF19XSwiY2xvc2VkIjp0cnVlfV19fX19</vectorcraft:recipe></metadata>"
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "convertToShape.rectangle.svg"
+    },
+    {
+      "id": "convertToShape.roundedRectangle",
+      "fonte": "effetto",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "ob2b2b2b2"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "ob2b2b2b2"
+              },
+              {
+                "op": "remove",
+                "target": "oa1a1a1a1"
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<path id=\"oa1a1a1a1\" d=\"M100 91 L200 91 C204.971 91 209 95.029 209 100 L209 150 C209 154.971 204.971 159 200 159 L100 159 C95.029 159 91 154.971 91 150 L91 100 C91 95.029 95.029 91 100 91 Z\" fill=\"#000000\"/>"
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "last": true
+                },
+                "raw": "<path id=\"ob2b2b2b2\" d=\"M220 91 L280 91 C284.971 91 289 95.029 289 100 L289 150 C289 154.971 284.971 159 280 159 L220 159 C215.029 159 211 154.971 211 150 L211 100 C211 95.029 215.029 91 220 91 Z\" fill=\"#ff0000\"/>"
+              },
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<metadata><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"oa1a1a1a1\" hash=\"3b0a456afa4e3fce\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjoyLCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MC4wLCJnIjowLjAsImIiOjAuMH19fV0sImVmZmVjdHMiOlt7ImlkIjoiY29udmVydFRvU2hhcGUucm91bmRlZFJlY3RhbmdsZSIsInBhcmFtcyI6eyJyZWxhdGl2ZSI6dHJ1ZSwiZXh0cmFXIjoxOC4wLCJleHRyYUgiOjE4LjAsIndpZHRoIjoxMDAuMCwiaGVpZ2h0IjoxMDAuMCwicmFkaXVzIjo5LjB9LCJ2aXNpYmxlIjp0cnVlfV19LCJraW5kIjp7InR5cGUiOiJwYXRoIiwicGF0aCI6eyJzdWJwYXRocyI6W3siYW5jaG9ycyI6W3sicCI6WzEwMC4wLDEwMC4wXX0seyJwIjpbMjAwLjAsMTAwLjBdfSx7InAiOlsyMDAuMCwxNTAuMF19LHsicCI6WzEwMC4wLDE1MC4wXX1dLCJjbG9zZWQiOnRydWV9XX19fX0=</vectorcraft:recipe><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"ob2b2b2b2\" hash=\"c92040fa6fdc049b\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjozLCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MS4wLCJnIjowLjAsImIiOjAuMH19fV0sImVmZmVjdHMiOlt7ImlkIjoiY29udmVydFRvU2hhcGUucm91bmRlZFJlY3RhbmdsZSIsInBhcmFtcyI6eyJyZWxhdGl2ZSI6dHJ1ZSwiZXh0cmFXIjoxOC4wLCJleHRyYUgiOjE4LjAsIndpZHRoIjoxMDAuMCwiaGVpZ2h0IjoxMDAuMCwicmFkaXVzIjo5LjB9LCJ2aXNpYmxlIjp0cnVlfV19LCJraW5kIjp7InR5cGUiOiJwYXRoIiwicGF0aCI6eyJzdWJwYXRocyI6W3siYW5jaG9ycyI6W3sicCI6WzIyMC4wLDEwMC4wXX0seyJwIjpbMjgwLjAsMTAwLjBdfSx7InAiOlsyODAuMCwxNTAuMF19LHsicCI6WzIyMC4wLDE1MC4wXX1dLCJjbG9zZWQiOnRydWV9XX19fX0=</vectorcraft:recipe></metadata>"
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "convertToShape.roundedRectangle.svg"
+    },
+    {
+      "id": "convertToShape.ellipse",
+      "fonte": "effetto",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "ob2b2b2b2"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "ob2b2b2b2"
+              },
+              {
+                "op": "remove",
+                "target": "oa1a1a1a1"
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<ellipse id=\"oa1a1a1a1\" cx=\"150\" cy=\"125\" rx=\"59\" ry=\"34\" fill=\"#000000\"/>"
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "last": true
+                },
+                "raw": "<ellipse id=\"ob2b2b2b2\" cx=\"250\" cy=\"125\" rx=\"39\" ry=\"34\" fill=\"#ff0000\"/>"
+              },
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<metadata><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"oa1a1a1a1\" hash=\"792f5b176a6ed44b\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjoyLCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MC4wLCJnIjowLjAsImIiOjAuMH19fV0sImVmZmVjdHMiOlt7ImlkIjoiY29udmVydFRvU2hhcGUuZWxsaXBzZSIsInBhcmFtcyI6eyJyZWxhdGl2ZSI6dHJ1ZSwiZXh0cmFXIjoxOC4wLCJleHRyYUgiOjE4LjAsIndpZHRoIjoxMDAuMCwiaGVpZ2h0IjoxMDAuMH0sInZpc2libGUiOnRydWV9XX0sImtpbmQiOnsidHlwZSI6InBhdGgiLCJwYXRoIjp7InN1YnBhdGhzIjpbeyJhbmNob3JzIjpbeyJwIjpbMTAwLjAsMTAwLjBdfSx7InAiOlsyMDAuMCwxMDAuMF19LHsicCI6WzIwMC4wLDE1MC4wXX0seyJwIjpbMTAwLjAsMTUwLjBdfV0sImNsb3NlZCI6dHJ1ZX1dfX19fQ==</vectorcraft:recipe><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"ob2b2b2b2\" hash=\"289c474f889644e6\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjozLCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MS4wLCJnIjowLjAsImIiOjAuMH19fV0sImVmZmVjdHMiOlt7ImlkIjoiY29udmVydFRvU2hhcGUuZWxsaXBzZSIsInBhcmFtcyI6eyJyZWxhdGl2ZSI6dHJ1ZSwiZXh0cmFXIjoxOC4wLCJleHRyYUgiOjE4LjAsIndpZHRoIjoxMDAuMCwiaGVpZ2h0IjoxMDAuMH0sInZpc2libGUiOnRydWV9XX0sImtpbmQiOnsidHlwZSI6InBhdGgiLCJwYXRoIjp7InN1YnBhdGhzIjpbeyJhbmNob3JzIjpbeyJwIjpbMjIwLjAsMTAwLjBdfSx7InAiOlsyODAuMCwxMDAuMF19LHsicCI6WzI4MC4wLDE1MC4wXX0seyJwIjpbMjIwLjAsMTUwLjBdfV0sImNsb3NlZCI6dHJ1ZX1dfX19fQ==</vectorcraft:recipe></metadata>"
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "convertToShape.ellipse.svg"
     }
   ]
 }

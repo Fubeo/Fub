@@ -4,16 +4,349 @@
   "finestre": [
     {
       "fonte": "effetto",
+      "id": "convertToShape.ellipse",
+      "campi": [
+        {
+          "nome": "relative",
+          "tipo": "sino",
+          "facoltativo": false
+        },
+        {
+          "nome": "extraW",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "extraH",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "width",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "height",
+          "tipo": "numero",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "convertToShape.rectangle",
+      "campi": [
+        {
+          "nome": "relative",
+          "tipo": "sino",
+          "facoltativo": false
+        },
+        {
+          "nome": "extraW",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "extraH",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "width",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "height",
+          "tipo": "numero",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "convertToShape.roundedRectangle",
+      "campi": [
+        {
+          "nome": "relative",
+          "tipo": "sino",
+          "facoltativo": false
+        },
+        {
+          "nome": "extraW",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "extraH",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "width",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "height",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "radius",
+          "tipo": "numero",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "distort.freeDistort",
+      "campi": [
+        {
+          "nome": "corners",
+          "tipo": "json",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "distort.puckerBloat",
+      "campi": [
+        {
+          "nome": "amount",
+          "tipo": "numero",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "distort.roughen",
+      "campi": [
+        {
+          "nome": "size",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "relative",
+          "tipo": "sino",
+          "facoltativo": false
+        },
+        {
+          "nome": "detail",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "points",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "smooth",
+            "corner"
+          ],
+          "aperta": false
+        },
+        {
+          "nome": "seed",
+          "tipo": "numero",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "distort.transform",
+      "campi": [
+        {
+          "nome": "scaleH",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "scaleV",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "moveH",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "moveV",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "rotate",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "copies",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "reflectX",
+          "tipo": "sino",
+          "facoltativo": false
+        },
+        {
+          "nome": "reflectY",
+          "tipo": "sino",
+          "facoltativo": false
+        },
+        {
+          "nome": "reference",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "random",
+          "tipo": "sino",
+          "facoltativo": false
+        },
+        {
+          "nome": "objects",
+          "tipo": "sino",
+          "facoltativo": false
+        },
+        {
+          "nome": "patterns",
+          "tipo": "sino",
+          "facoltativo": false
+        },
+        {
+          "nome": "strokes",
+          "tipo": "sino",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "distort.tweak",
+      "campi": [
+        {
+          "nome": "h",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "v",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "relative",
+          "tipo": "sino",
+          "facoltativo": false
+        },
+        {
+          "nome": "anchors",
+          "tipo": "sino",
+          "facoltativo": false
+        },
+        {
+          "nome": "in",
+          "tipo": "sino",
+          "facoltativo": false
+        },
+        {
+          "nome": "out",
+          "tipo": "sino",
+          "facoltativo": false
+        },
+        {
+          "nome": "seed",
+          "tipo": "numero",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "distort.twist",
+      "campi": [
+        {
+          "nome": "angle",
+          "tipo": "numero",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "distort.zigZag",
+      "campi": [
+        {
+          "nome": "size",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "relative",
+          "tipo": "sino",
+          "facoltativo": false
+        },
+        {
+          "nome": "ridges",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "points",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "smooth",
+            "corner"
+          ],
+          "aperta": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "path.offsetPath",
+      "campi": [
+        {
+          "nome": "offset",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "joins",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "miter",
+            "round",
+            "bevel"
+          ],
+          "aperta": false
+        },
+        {
+          "nome": "miterLimit",
+          "tipo": "numero",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
       "id": "stylize.roundCorners",
       "campi": [
         {
           "nome": "radius",
-          "tipo": "scelta",
-          "facoltativo": false,
-          "valori": [
-            "pt"
-          ],
-          "aperta": false
+          "tipo": "numero",
+          "facoltativo": false
         }
       ]
     }

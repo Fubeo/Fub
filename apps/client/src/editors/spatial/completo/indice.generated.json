@@ -6919,6 +6919,234 @@
     },
     {
       "fonte": "effetto",
+      "id": "convertToShape.ellipse",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "convertToShape.ellipse"
+        }
+      },
+      "etichetta": {
+        "it": "Ellisse…",
+        "en": "Ellipse…"
+      },
+      "posto": "menu/effetto/converti",
+      "famiglia": "effetti",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "convertToShape.rectangle",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "convertToShape.rectangle"
+        }
+      },
+      "etichetta": {
+        "it": "Rettangolo…",
+        "en": "Rectangle…"
+      },
+      "posto": "menu/effetto/converti",
+      "famiglia": "effetti",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "convertToShape.roundedRectangle",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "convertToShape.roundedRectangle"
+        }
+      },
+      "etichetta": {
+        "it": "Rettangolo arrotondato…",
+        "en": "Rounded Rectangle…"
+      },
+      "posto": "menu/effetto/converti",
+      "famiglia": "effetti",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "distort.freeDistort",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "distort.freeDistort"
+        }
+      },
+      "etichetta": {
+        "it": "Distorsione libera…",
+        "en": "Free Distort…"
+      },
+      "posto": "menu/effetto/distorci-trasforma",
+      "famiglia": "effetti",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "distort.puckerBloat",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "distort.puckerBloat"
+        }
+      },
+      "etichetta": {
+        "it": "Contrai e gonfia…",
+        "en": "Pucker & Bloat…"
+      },
+      "posto": "menu/effetto/distorci-trasforma",
+      "famiglia": "effetti",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "distort.roughen",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "distort.roughen"
+        }
+      },
+      "etichetta": {
+        "it": "Irruvidisci…",
+        "en": "Roughen…"
+      },
+      "posto": "menu/effetto/distorci-trasforma",
+      "famiglia": "effetti",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "distort.transform",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "distort.transform"
+        }
+      },
+      "etichetta": {
+        "it": "Trasforma…",
+        "en": "Transform…"
+      },
+      "posto": "menu/effetto/distorci-trasforma",
+      "famiglia": "effetti",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "distort.tweak",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "distort.tweak"
+        }
+      },
+      "etichetta": {
+        "it": "Ritocca…",
+        "en": "Tweak…"
+      },
+      "posto": "menu/effetto/distorci-trasforma",
+      "famiglia": "effetti",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "distort.twist",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "distort.twist"
+        }
+      },
+      "etichetta": {
+        "it": "Torci…",
+        "en": "Twist…"
+      },
+      "posto": "menu/effetto/distorci-trasforma",
+      "famiglia": "effetti",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "distort.zigZag",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "distort.zigZag"
+        }
+      },
+      "etichetta": {
+        "it": "Zig-zag…",
+        "en": "Zig Zag…"
+      },
+      "posto": "menu/effetto/distorci-trasforma",
+      "famiglia": "effetti",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "path.offsetPath",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "path.offsetPath"
+        }
+      },
+      "etichetta": {
+        "it": "Sposta tracciato…",
+        "en": "Offset Path…"
+      },
+      "posto": "menu/effetto/tracciato",
+      "famiglia": "effetti",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "path.outlineObject",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "path.outlineObject"
+        }
+      },
+      "etichetta": {
+        "it": "Contorna oggetto",
+        "en": "Outline Object"
+      },
+      "posto": "menu/effetto/tracciato",
+      "famiglia": "effetti",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "effetto",
       "id": "stylize.roundCorners",
       "chiamata": {
         "comando": "disegno.effect.apply",

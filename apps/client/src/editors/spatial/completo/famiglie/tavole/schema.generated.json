@@ -106,7 +106,7 @@
         },
         {
           "nome": "videoRulerPixelAspectRatio",
-          "tipo": "testo",
+          "tipo": "numero",
           "facoltativo": true
         },
         {
