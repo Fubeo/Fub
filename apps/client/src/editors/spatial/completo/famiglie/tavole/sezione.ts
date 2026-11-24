@@ -16,6 +16,7 @@
 import { languageCurrent } from "../../../../../i18n/strings";
 import { numberField } from "../../../../../kit/number-field";
 import type { ContestoCompleto } from "../../carica";
+import { chiediNuovaTavola, nuovaTavolaDiSerie, valoriNuovaTavola } from "./nuova";
 import { problemaDelNumero, type Etichette } from "../../opzioni";
 import type { ContestoSezione, Sezione, TavoleDocumento } from "../../sezioni";
 
@@ -260,6 +261,19 @@ function disegna(
   nota.className = "draw-properties-note";
   nota.id = `draw-artboards-note-${n}`;
   nota.hidden = true;
+  const nuovaConOpzioni = (): void => {
+    const diSerie = nuovaTavolaDiSerie(tavole);
+    const posto = elenco.length;
+    void chiediNuovaTavola(diSerie, parola).then((campi) => {
+      if (campi === null || vita.closed) return;
+      ricordo.scelta = null;
+      void esegui(COMANDI_TAVOLE.nuova, valoriNuovaTavola(campi, diSerie)).then(() => {
+        // La tavola nuova è l'ultima: diventa quella attuale, con la vista su di lei.
+        tavole?.visita(posto);
+        contesto.aggiorna();
+      });
+    });
+  };
   const pulsanti = AZIONI.map((azione, i) => {
     const control = document.createElement("button");
     control.type = "button";
@@ -277,8 +291,13 @@ function disegna(
         control.setAttribute("aria-describedby", nota.id);
       }
     }
-    vita.listen(control, "click", () => {
+    vita.listen(control, "click", (event) => {
       if (perche !== null || vita.closed) return;
+      // Alt+clic su Nuova: le Opzioni della tavola nuova, come in VectorCraft.
+      if (azione === "nuova" && event.altKey) {
+        nuovaConOpzioni();
+        return;
+      }
       const { id, valori } = comandoDi(azione, indice ?? 0, ricordo.art);
       // La tavola spostata resta quella scelta; una nuova, una copia o una tagliata no.
       if (azione !== "su" && azione !== "giu") ricordo.scelta = null;

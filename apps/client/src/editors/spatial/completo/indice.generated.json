@@ -6401,6 +6401,22 @@
     },
     {
       "fonte": "interfaccia",
+      "id": "ui.newArtboard",
+      "chiamata": {
+        "client": "ui.newArtboard"
+      },
+      "etichetta": {
+        "it": "Opzioni nuova tavola…",
+        "en": "New Artboard Options…"
+      },
+      "posto": "finestra",
+      "famiglia": "tavole",
+      "tasto": null,
+      "effetto": "mostra",
+      "finestra": true
+    },
+    {
+      "fonte": "interfaccia",
       "id": "ui.newColorGroup",
       "chiamata": {
         "client": "ui.newColorGroup"

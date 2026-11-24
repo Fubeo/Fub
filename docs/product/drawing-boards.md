@@ -53,7 +53,11 @@ pannello Tavole di VectorCraft:
   tavole vuote**, **Sposta su** e **Sposta giù** (l'ordine delle tavole nel
   file), **Copia tavola** e **Taglia tavola**, che poi Modifica › Incolla
   aggiunge a destra dell'ultima. Una tavola resta sempre: con una sola,
-  Elimina e Taglia sono spenti.
+  Elimina e Taglia sono spenti. **Alt+clic su Nuova tavola** apre «Opzioni
+  nuova tavola», come in VectorCraft: nome, X, Y, larghezza e altezza già
+  scritti come la farebbe il clic semplice (le misure dell'ultima tavola, 20
+  alla sua destra; senza tavole 612 × 792 nell'origine). OK la aggiunge e la
+  fa attuale, Annulla non aggiunge niente.
 
 Il colore di fondo di una tavola, il blocco e i segni (centro, mirino, aree
 video) il file non li tiene ancora: la sezione non li mostra, e un comando che

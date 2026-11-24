@@ -1260,6 +1260,11 @@
       "id": "document.switchUnits",
       "fonte": "motore",
       "prova": "apps/client/src/editors/spatial/tools/editor/chrome/unita.test.ts"
+    },
+    {
+      "id": "ui.newArtboard",
+      "fonte": "interfaccia",
+      "prova": "apps/client/src/editors/spatial/completo/famiglie/tavole/nuova.test.ts"
     }
   ]
 }

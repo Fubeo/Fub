@@ -160,6 +160,11 @@
           "facoltativo": true
         }
       ]
+    },
+    {
+      "fonte": "interfaccia",
+      "id": "ui.newArtboard",
+      "campi": []
     }
   ]
 }

@@ -47,5 +47,13 @@ export const TESTI: Readonly<Record<string, { readonly it: string; readonly en: 
   "tavole.passo.ordine": { it: "Ordine delle tavole", en: "Artboard order" },
   "tavole.ultima": { it: "Una tavola resta sempre.", en: "One artboard always stays." },
   "tavole.nessuna": { it: "Il disegno non ha tavole: «Nuova tavola» ne fa una.", en: "The drawing has no artboards: “New artboard” makes one." },
+  // Opzioni nuova tavola (VectorCraft: New Artboard Options…, Alt+clic su Nuova tavola).
+  "tavole.nuova.titolo": { it: "Opzioni nuova tavola", en: "New artboard options" },
+  "tavole.nuova.descrizione": {
+    it: "Il nome, il posto e le misure della tavola che si aggiunge. OK la aggiunge e la fa attuale.",
+    en: "The name, place and size of the artboard to add. OK adds it and makes it current.",
+  },
+  "tavole.nuova.ok": { it: "OK", en: "OK" },
+  "tavole.nuova.annulla": { it: "Annulla", en: "Cancel" },
   "tavole.misura": { it: "Scrivi un numero più grande di zero.", en: "Type a number greater than zero." },
 };
