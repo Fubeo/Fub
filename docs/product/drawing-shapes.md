@@ -124,6 +124,26 @@ piatta. La trama va nel file con la ricetta: riaperta, si modifica ancora. Un
 altro programma vede pezzi a tinta piatta, e dove i colori dei punti cambiano
 la sfumatura si approssima con tanti piccoli pezzi.
 
+La Fusione funziona come in VectorCraft. Lo strumento (`blend`) sta nella
+casella del Generatore forme:
+- un clic su un oggetto lo sceglie come primo; un clic su un altro fa la
+  fusione fra i due;
+- con una fusione scelta, un clic su un altro oggetto lo aggiunge in fondo
+  alla stessa fusione;
+- Alt-clic o doppio clic aprono le Opzioni fusione.
+
+Il menu Oggetto › Fusione offre Crea (almeno due oggetti scelti), Rilascia,
+Espandi, Sostituisci dorsale (una fusione e un tracciato), Inverti dorsale,
+Inverti davanti/dietro e i comandi sui punti della dorsale. Sono spenti, con
+la frase che dice perché, se fra gli oggetti scelti non c'è una fusione. La
+finestra «Opzioni fusione…» chiede la spaziatura (colore uniforme, passi da 1
+a 1000, distanza in punti), l'orientamento (alla pagina o al tracciato),
+l'andamento, la rampa (da 0 a 100 %) e lo spostamento del colore (da −100 a
+100). Parte dalle opzioni della fusione scelta; senza una fusione scelta
+cambia come nascono le fusioni nuove, e allora l'andamento e il colore restano
+fuori. La fusione va nel file con la ricetta: riaperta, si modifica ancora. Un
+altro programma vede gli oggetti chiave e i passi come forme normali.
+
 La sezione «Allinea», nella scheda Design dell'ispettore, offre gli allineamenti
 e le distribuzioni del motore. Alla selezione servono due oggetti; con «alla
 tavola» ne basta uno per allineare. Un pulsante spento dice perché. La famiglia

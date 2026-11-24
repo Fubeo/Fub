@@ -1,4 +1,4 @@
-// Le finestre che partono da com'è il disegno (K6, Pittura dinamica): prima di aprirsi leggono
+// Le finestre che partono da com'è il disegno (K6, Pittura dinamica e Fusione): prima di aprirsi leggono
 // dal motore e mettono nei campi ciò che l'oggetto scelto ha già, come VectorCraft. Una lettura
 // che non risponde lascia i valori di serie: la finestra si apre lo stesso.
 
@@ -28,7 +28,32 @@ function opzioniDegliSpazi(lettura: unknown): Readonly<Record<string, ValoreCamp
   return campi;
 }
 
+/// I campi della finestra delle Opzioni fusione che una lettura riempie, col loro tipo.
+const CAMPI_DELLA_FUSIONE: ReadonlyArray<readonly [string, "string" | "number"]> = [
+  ["spacing", "string"],
+  ["steps", "number"],
+  ["distance", "number"],
+  ["orientation", "string"],
+  ["easingType", "string"],
+  ["ramp", "number"],
+  ["colorShift", "number"],
+];
+
+/// Le Opzioni fusione (`object.blend.info`): quelle della fusione scelta, o, senza, quelle con cui
+/// partono le fusioni nuove (spaziatura e orientamento: l'andamento e il colore restano di serie).
+function opzioniDellaFusione(lettura: unknown): Readonly<Record<string, ValoreCampo>> {
+  if (typeof lettura !== "object" || lettura === null) return {};
+  const letti = lettura as Record<string, unknown>;
+  const campi: Record<string, ValoreCampo> = {};
+  for (const [nome, tipo] of CAMPI_DELLA_FUSIONE) {
+    const valore = letti[nome];
+    if (typeof valore === tipo) campi[nome] = valore as ValoreCampo;
+  }
+  return campi;
+}
+
 /// Le finestre che partono dal disegno, per id del comando.
 export const PARTENZE_LETTE: Readonly<Record<string, PartenzaLetta>> = {
   "livePaint.gapOptions": { lettura: "livePaint.info", campi: opzioniDegliSpazi },
+  "object.blend.options": { lettura: "object.blend.info", campi: opzioniDellaFusione },
 };

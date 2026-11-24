@@ -1747,6 +1747,214 @@
     },
     {
       "fonte": "motore",
+      "id": "object.blend.expand",
+      "chiamata": {
+        "comando": "disegno.object.blend.expand"
+      },
+      "etichetta": {
+        "it": "Espandi",
+        "en": "Expand"
+      },
+      "posto": "menu/oggetto",
+      "famiglia": "dinamici",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "object.blend.info",
+      "chiamata": {
+        "comando": "disegno.object.blend.info"
+      },
+      "etichetta": {
+        "it": "Informazioni fusione",
+        "en": "Blend Info"
+      },
+      "posto": "interno",
+      "famiglia": "dinamici",
+      "tasto": null,
+      "effetto": "legge",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "object.blend.make",
+      "chiamata": {
+        "comando": "disegno.object.blend.make"
+      },
+      "etichetta": {
+        "it": "Crea",
+        "en": "Make"
+      },
+      "posto": "menu/oggetto",
+      "famiglia": "dinamici",
+      "tasto": "Cmd+Alt+B",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "object.blend.options",
+      "chiamata": {
+        "comando": "disegno.object.blend.options"
+      },
+      "etichetta": {
+        "it": "Opzioni fusione…",
+        "en": "Blend Options…"
+      },
+      "posto": "menu/oggetto",
+      "famiglia": "dinamici",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "motore",
+      "id": "object.blend.release",
+      "chiamata": {
+        "comando": "disegno.object.blend.release"
+      },
+      "etichetta": {
+        "it": "Rilascia",
+        "en": "Release"
+      },
+      "posto": "menu/oggetto",
+      "famiglia": "dinamici",
+      "tasto": "Cmd+Alt+Shift+B",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "object.blend.replaceSpine",
+      "chiamata": {
+        "comando": "disegno.object.blend.replaceSpine"
+      },
+      "etichetta": {
+        "it": "Sostituisci dorsale",
+        "en": "Replace Spine"
+      },
+      "posto": "menu/oggetto",
+      "famiglia": "dinamici",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "object.blend.reverseFrontToBack",
+      "chiamata": {
+        "comando": "disegno.object.blend.reverseFrontToBack"
+      },
+      "etichetta": {
+        "it": "Inverti davanti/dietro",
+        "en": "Reverse Front to Back"
+      },
+      "posto": "menu/oggetto",
+      "famiglia": "dinamici",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "object.blend.reverseSpine",
+      "chiamata": {
+        "comando": "disegno.object.blend.reverseSpine"
+      },
+      "etichetta": {
+        "it": "Inverti dorsale",
+        "en": "Reverse Spine"
+      },
+      "posto": "menu/oggetto",
+      "famiglia": "dinamici",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "object.blend.spine.addAnchor",
+      "chiamata": {
+        "comando": "disegno.object.blend.spine.addAnchor"
+      },
+      "etichetta": {
+        "it": "Aggiungi punto alla dorsale",
+        "en": "Add Spine Point"
+      },
+      "posto": "menu/oggetto",
+      "famiglia": "dinamici",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "object.blend.spine.convertAnchor",
+      "chiamata": {
+        "comando": "disegno.object.blend.spine.convertAnchor"
+      },
+      "etichetta": {
+        "it": "Converti punto di ancoraggio",
+        "en": "Convert Anchor Point"
+      },
+      "posto": "menu/oggetto",
+      "famiglia": "dinamici",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "object.blend.spine.moveAnchor",
+      "chiamata": {
+        "comando": "disegno.object.blend.spine.moveAnchor"
+      },
+      "etichetta": {
+        "it": "Sposta punto dorsale",
+        "en": "Move Spine Point"
+      },
+      "posto": "menu/oggetto",
+      "famiglia": "dinamici",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "object.blend.spine.removeAnchor",
+      "chiamata": {
+        "comando": "disegno.object.blend.spine.removeAnchor"
+      },
+      "etichetta": {
+        "it": "Elimina punto della dorsale",
+        "en": "Delete Spine Point"
+      },
+      "posto": "menu/oggetto",
+      "famiglia": "dinamici",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "object.blend.spine.reshapeSegment",
+      "chiamata": {
+        "comando": "disegno.object.blend.spine.reshapeSegment"
+      },
+      "etichetta": {
+        "it": "Rimodella segmento della dorsale",
+        "en": "Reshape Spine Segment"
+      },
+      "posto": "menu/oggetto",
+      "famiglia": "dinamici",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "object.clippingMask.editContents",
       "chiamata": {
         "comando": "disegno.object.clippingMask.editContents"
@@ -5377,6 +5585,22 @@
     },
     {
       "fonte": "interfaccia",
+      "id": "ui.blendOptions",
+      "chiamata": {
+        "client": "ui.blendOptions"
+      },
+      "etichetta": {
+        "it": "Opzioni fusione…",
+        "en": "Blend Options…"
+      },
+      "posto": "finestra",
+      "famiglia": "dinamici",
+      "tasto": null,
+      "effetto": "mostra",
+      "finestra": true
+    },
+    {
+      "fonte": "interfaccia",
       "id": "ui.colorBalanceDialog",
       "chiamata": {
         "client": "ui.colorBalanceDialog"
@@ -6002,6 +6226,22 @@
       "posto": "colonna/misura",
       "famiglia": "tavole",
       "tasto": "Shift+O",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "strumento",
+      "id": "blend",
+      "chiamata": {
+        "strumento": "blend"
+      },
+      "etichetta": {
+        "it": "Strumento Fusione",
+        "en": "Blend Tool"
+      },
+      "posto": "colonna/oggetti",
+      "famiglia": "dinamici",
+      "tasto": "W",
       "effetto": "cambia",
       "finestra": false
     },

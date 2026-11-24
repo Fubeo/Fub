@@ -477,11 +477,14 @@ impl Lavoro<'_> {
     /// I tracciati composti fatti o sciolti dal gesto ([`Lavoro::liberati`],
     /// [`Lavoro::assorbiti`]).
     fn composti(&mut self, prima: &Posti<'_>, poi: &Posti<'_>) {
-        // Un tracciato composto o una forma composta (un gruppo segnato, che il
-        // file tiene come un solo elemento con la ricetta).
+        // Un tracciato composto, una forma composta (un gruppo segnato) o una
+        // fusione: il file li tiene come un solo elemento con la ricetta.
         let composto = |n: Option<&crate::mappa::Posto<'_>>| {
             n.is_some_and(|p| {
-                matches!(p.nodo.kind, NodeKind::Compound { .. }) || p.nodo.is_compound_shape()
+                matches!(
+                    p.nodo.kind,
+                    NodeKind::Compound { .. } | NodeKind::Blend { .. }
+                ) || p.nodo.is_compound_shape()
             })
         };
         for (id, dopo) in &poi.nodi {
@@ -501,7 +504,13 @@ impl Lavoro<'_> {
             let nel_sagomatore =
                 in_un_sagomatore(nuovo_genitore, poi, |g| !prima.nodi.contains_key(&g))
                     || (di_fub && fra_le_sorgenti_vive(dopo.genitore, poi));
-            if nel_sagomatore || (di_fub && composto(nuovo_genitore.and_then(|g| poi.nodi.get(&g))))
+            // Anche i pezzi di un composto di prima che passano in uno nuovo
+            // (una fusione che prende altre chiavi: le sue stanno nella
+            // ricetta di quella nuova).
+            let da_un_composto = composto(p.genitore.and_then(|g| prima.nodi.get(&g)));
+            if nel_sagomatore
+                || ((di_fub || da_un_composto)
+                    && composto(nuovo_genitore.and_then(|g| poi.nodi.get(&g))))
             {
                 self.assorbiti.insert(*id);
             } else if !di_fub

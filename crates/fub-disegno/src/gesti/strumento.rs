@@ -313,7 +313,8 @@ pub(crate) fn gesto(
     let scelti =
         vectorcraft_engine::guard::catch_panic(|| scelti_da_tenere(sessione, id, cx.vista))
             .ok()
-            .flatten();
+            .flatten()
+            .or_else(|| fusione_da_continuare(sessione, ponte, id));
     banco.scelti_dello_strumento = scelti.map(|punti| Scelti {
         strumento: id.to_string(),
         punti,
@@ -821,6 +822,27 @@ fn scelti_da_tenere(sessione: &mut Session, id: &str, vista: ViewInfo) -> Option
         })
         .collect();
     (!punti.is_empty()).then_some(punti)
+}
+
+/// La Fusione di VectorCraft continua la fusione appena fatta: il clic dopo
+/// la fonde con un altro oggetto (`BlendTool::chained`). Fub prepara lo
+/// strumento di nuovo a ogni gesto, e lo stato dello strumento si perde: il
+/// punto dell'ultimo clic, che ora cade sulla fusione (l'ultimo oggetto è una
+/// sua chiave), la sceglie di nuovo come primo oggetto. Solo se il gesto ha
+/// lasciato scelta una fusione sola, e lo strumento non ha niente in corso.
+fn fusione_da_continuare(sessione: &Session, ponte: &Ponte, id: &str) -> Option<Vec<Point>> {
+    if id != "blend" || sessione.tool_busy() {
+        return None;
+    }
+    let stato = sessione.doc().ok()?;
+    let [f] = stato.selection.objects.as_slice() else {
+        return None;
+    };
+    let fusione = stato
+        .doc
+        .node(*f)
+        .is_some_and(|n| matches!(n.kind, NodeKind::Blend { .. }));
+    fusione.then_some(vec![ponte.punto?])
 }
 
 /// I punti che lo strumento del motore ha scelti, con l'id e la vista del

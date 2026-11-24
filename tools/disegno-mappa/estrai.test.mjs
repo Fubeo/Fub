@@ -208,7 +208,10 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // gli spazi dal motore e li disegna sul foglio. Una riga in più.
   // La trama sfumatura (`object.mesh.*`: Crea, i cinque comandi sui punti, Espandi) e lo strumento
   // Trama sfumatura (`mesh`) diventano «fatto». Otto righe in più.
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 979, fub: 114, escluso: 12, fatto: 446 });
+  // La Fusione (`object.blend.*`: tredici comandi), la sua finestra (`ui.blendOptions`) e lo
+  // strumento Fusione (`blend`) diventano «fatto»: la fusione va nel file con la ricetta. Quindici
+  // righe in più.
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 964, fub: 114, escluso: 12, fatto: 461 });
 });
 
 // --- un motore finto ---------------------------------------------------------------

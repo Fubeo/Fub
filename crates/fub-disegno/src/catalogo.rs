@@ -609,6 +609,11 @@ pub const NOMI: &[(&str, Tipo)] = &[
     // Le opzioni degli spazi vuoti della Pittura dinamica: rileva, chiudi coi tracciati.
     ("detect", Tipo::SiNo),
     ("closeGaps", Tipo::SiNo),
+    // Le Opzioni fusione: passi, distanza, rampa e spostamento del colore.
+    ("steps", Tipo::Numero),
+    ("distance", Tipo::Numero),
+    ("ramp", Tipo::Numero),
+    ("colorShift", Tipo::Numero),
 ];
 
 /// Una finestra che Fub scrive da sé, perché lo schema del motore descrive i
@@ -706,6 +711,30 @@ pub const FINESTRE_SCRITTE: &[FinestraScritta] = &[
             ("closeGaps", "false"),
         ],
         limiti: &[("points", Some(0.01), Some(72.0))],
+    },
+    // Opzioni fusione, come in VectorCraft: la spaziatura (colore uniforme, passi o
+    // distanza), i passi da 1 a 1000 (5 di serie) e la distanza in punti (10 di serie),
+    // l'orientamento (sulla pagina o sul tracciato); l'andamento, la rampa (0..100) e lo
+    // spostamento del colore (-100..100) della fusione scelta. Senza una fusione scelta
+    // valgono per le fusioni nuove, e il ponte lascia l'andamento e il colore.
+    FinestraScritta {
+        id: "object.blend.options",
+        schema: "{spacing: smooth|steps|distance, steps, distance, orientation: page|path, easingType: easeIn|easeOut|easeInOut|easeOutIn, ramp, colorShift}",
+        predefiniti: &[
+            ("spacing", "smooth"),
+            ("steps", "5"),
+            ("distance", "10"),
+            ("orientation", "page"),
+            ("easingType", "easeIn"),
+            ("ramp", "0"),
+            ("colorShift", "0"),
+        ],
+        limiti: &[
+            ("steps", Some(1.0), Some(1000.0)),
+            ("distance", Some(0.01), Some(10000.0)),
+            ("ramp", Some(0.0), Some(100.0)),
+            ("colorShift", Some(-100.0), Some(100.0)),
+        ],
     },
     // Crea trama sfumatura, come in VectorCraft: righe e colonne da 1 a 50 (4 di serie),
     // l'aspetto (piatto, chiaro al centro o al bordo) e quanto è chiara la luce, da 0 a 100.

@@ -130,6 +130,10 @@ export const MOTORE_PRONTO: ReadonlySet<string> = new Set([
   // facce; il gruppo va nel file con la ricetta.
   "livePaintBucket",
   "livePaintSelection",
+  // La Fusione: due clic fondono due oggetti in passi vivi, il clic dopo
+  // aggiunge un oggetto alla stessa fusione; la fusione va nel file con la
+  // ricetta. Il doppio clic (o Alt+clic) apre le Opzioni fusione.
+  "blend",
   // La Trama sfumatura: il clic su un oggetto ne fa una trama, sulla trama
   // aggiunge una linea; i punti scelti prendono il colore e la trasparenza.
   "mesh",
@@ -188,6 +192,7 @@ export const ICONE_MOTORE: Readonly<Record<string, string>> = {
   reshape: "draw-reshape",
   width: "draw-width-tool",
   livePaintBucket: "draw-live-paint-bucket",
+  blend: "draw-blend",
   livePaintSelection: "draw-live-paint-selection",
   mesh: "draw-mesh",
   warp: "draw-warp",
@@ -257,6 +262,10 @@ export interface ComandoDelClic {
   readonly x?: string;
   readonly y?: string;
   readonly sullaSelezione?: true;
+  /// Solo col doppio clic o con Alt+clic: il clic semplice è dello strumento
+  /// (la Fusione sceglie un oggetto). La finestra lavora sulla selezione di
+  /// adesso, e si apre anche senza.
+  readonly soloDoppio?: true;
 }
 
 export const COMANDO_DEL_CLIC: Readonly<Record<string, ComandoDelClic>> = {
@@ -273,6 +282,7 @@ export const COMANDO_DEL_CLIC: Readonly<Record<string, ComandoDelClic>> = {
   reflect: { comando: "object.reflect", sullaSelezione: true },
   scale: { comando: "object.scale", sullaSelezione: true },
   shear: { comando: "object.shear", sullaSelezione: true },
+  blend: { comando: "object.blend.options", soloDoppio: true },
 };
 
 /// L'icona di Fub per uno strumento del motore che il prototipo non disegna.

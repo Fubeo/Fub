@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:fub="https://fubeo.github.io/ns/scene/1" fub:version="1" viewBox="0 0 400 300" width="400" height="300">
+  <rect id="fub-paper" fub:role="paper" x="0" y="0" width="400" height="300" fill="#ffffff"/>
+  <metadata><vectorcraft:recipe xmlns:vectorcraft="urn:vectorcraft:editing" for="o1nt273zz" hash="f08dc67ded869e39" v="1">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjo3LCJrbm9ja291dCI6Im9uIiwia2luZCI6eyJ0eXBlIjoiYmxlbmQiLCJjaGlsZHJlbiI6W3siaWQiOjExLCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MS4wLCJnIjowLjAsImIiOjAuMH19fV19LCJraW5kIjp7InR5cGUiOiJwYXRoIiwicGF0aCI6eyJzdWJwYXRocyI6W3siYW5jaG9ycyI6W3sicCI6WzUwLjAsMTUwLjBdfSx7InAiOlsxMDAuMCwxNTAuMF19LHsicCI6WzEwMC4wLDIwMC4wXX0seyJwIjpbNTAuMCwyMDAuMF19XSwiY2xvc2VkIjp0cnVlfV19fX0seyJpZCI6MTIsImFwcGVhcmFuY2UiOnsiaXRlbXMiOlt7ImtpbmQiOiJmaWxsIiwicGFpbnQiOnsidHlwZSI6InNvbGlkIiwiY29sb3IiOnsibW9kZWwiOiJyZ2IiLCJyIjowLjAsImciOjAuMCwiYiI6MS4wfX19XX0sImtpbmQiOnsidHlwZSI6InBhdGgiLCJwYXRoIjp7InN1YnBhdGhzIjpbeyJhbmNob3JzIjpbeyJwIjpbMzAwLjAsMTAwLjBdfSx7InAiOlszNTAuMCwxMDAuMF19LHsicCI6WzM1MC4wLDE1MC4wXX0seyJwIjpbMzAwLjAsMTUwLjBdfV0sImNsb3NlZCI6dHJ1ZX1dfX19XSwic3BlYyI6eyJzcGFjaW5nIjp7InN0ZXBzIjozfSwib3JpZW50YXRpb24iOiJhbGlnblRvUGFnZSIsInNwaW5lIjp7InN1YnBhdGhzIjpbeyJhbmNob3JzIjpbeyJwIjpbNzUuMCwxNzUuMF19LHsicCI6WzMyNS4wLDEyNS4wXX1dLCJjbG9zZWQiOmZhbHNlfV19LCJrZXlBbmNob3JzIjpbMCwxXX19fX0=</vectorcraft:recipe></metadata>
+  <g id="l1a2b3c4d" fub:layer="Livello 1">
+    <g id="o1nt273zz"><rect id="ogt1kk0nh" x="50" y="150" width="50" height="50" fill="#ff0000"/><rect id="oyvz9hrd4" x="112.5" y="137.5" width="50" height="50" fill="#bf0040"/><rect id="oul269bgx" x="175" y="125" width="50" height="50" fill="#800080"/><rect id="o77bkfaqo" x="237.5" y="112.5" width="50" height="50" fill="#4000bf"/><rect id="om3nw9v7y" x="300" y="100" width="50" height="50" fill="#0000ff"/></g>
+    
+    
+    <path id="oc3c3c3c3" d="M75 250 C150 200 250 200 325 250" fill="none" stroke="#000000"/>
+  </g>
+</svg>

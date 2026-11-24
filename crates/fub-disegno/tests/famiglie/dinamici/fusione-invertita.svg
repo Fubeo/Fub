@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:fub="https://fubeo.github.io/ns/scene/1" fub:version="1" viewBox="0 0 400 300" width="400" height="300">
+  <rect id="fub-paper" fub:role="paper" x="0" y="0" width="400" height="300" fill="#ffffff"/>
+  <metadata><vectorcraft:recipe xmlns:vectorcraft="urn:vectorcraft:editing" for="o1nt273zz" hash="ebc0c262ca630763" v="1">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjo3LCJrbm9ja291dCI6Im9uIiwia2luZCI6eyJ0eXBlIjoiYmxlbmQiLCJjaGlsZHJlbiI6W3siaWQiOjEyLCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MC4wLCJnIjowLjAsImIiOjEuMH19fV19LCJraW5kIjp7InR5cGUiOiJwYXRoIiwicGF0aCI6eyJzdWJwYXRocyI6W3siYW5jaG9ycyI6W3sicCI6WzMwMC4wLDEwMC4wXX0seyJwIjpbMzUwLjAsMTAwLjBdfSx7InAiOlszNTAuMCwxNTAuMF19LHsicCI6WzMwMC4wLDE1MC4wXX1dLCJjbG9zZWQiOnRydWV9XX19fSx7ImlkIjoxMSwiYXBwZWFyYW5jZSI6eyJpdGVtcyI6W3sia2luZCI6ImZpbGwiLCJwYWludCI6eyJ0eXBlIjoic29saWQiLCJjb2xvciI6eyJtb2RlbCI6InJnYiIsInIiOjEuMCwiZyI6MC4wLCJiIjowLjB9fX1dfSwia2luZCI6eyJ0eXBlIjoicGF0aCIsInBhdGgiOnsic3VicGF0aHMiOlt7ImFuY2hvcnMiOlt7InAiOls1MC4wLDEwMC4wXX0seyJwIjpbMTAwLjAsMTAwLjBdfSx7InAiOlsxMDAuMCwxNTAuMF19LHsicCI6WzUwLjAsMTUwLjBdfV0sImNsb3NlZCI6dHJ1ZX1dfX19XSwic3BlYyI6eyJzcGFjaW5nIjp7InN0ZXBzIjozfSwib3JpZW50YXRpb24iOiJhbGlnblRvUGFnZSJ9fX19</vectorcraft:recipe></metadata>
+  <g id="l1a2b3c4d" fub:layer="Livello 1">
+    <g id="o1nt273zz"><rect id="oym6a1ndq" x="300" y="100" width="50" height="50" fill="#0000ff"/><rect id="oswrh6zvp" x="237.5" y="100" width="50" height="50" fill="#4000bf"/><rect id="o6rfoiwpu" x="175" y="100" width="50" height="50" fill="#800080"/><rect id="ofzkpbcxv" x="112.5" y="100" width="50" height="50" fill="#bf0040"/><rect id="oftmvuvni" x="50" y="100" width="50" height="50" fill="#ff0000"/></g>
+    
+    
+    <path id="oc3c3c3c3" d="M75 250 C150 200 250 200 325 250" fill="none" stroke="#000000"/>
+  </g>
+</svg>

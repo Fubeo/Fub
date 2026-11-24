@@ -1,5 +1,85 @@
 {
   "$generato": "File generato da crates/fub-disegno/tests/ts_indice.rs, non modificare a mano; rigenera con UPDATE_MIRROR=1 cargo test -p fub-disegno --test ts_indice",
   "famiglia": "dinamici",
-  "finestre": []
+  "finestre": [
+    {
+      "fonte": "motore",
+      "id": "object.blend.options",
+      "campi": [
+        {
+          "nome": "spacing",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "smooth",
+            "steps",
+            "distance"
+          ],
+          "aperta": false,
+          "predefinito": "smooth"
+        },
+        {
+          "nome": "steps",
+          "tipo": "numero",
+          "facoltativo": false,
+          "minimo": 1.0,
+          "massimo": 1000.0,
+          "predefinito": 5.0
+        },
+        {
+          "nome": "distance",
+          "tipo": "numero",
+          "facoltativo": false,
+          "minimo": 0.01,
+          "massimo": 10000.0,
+          "predefinito": 10.0
+        },
+        {
+          "nome": "orientation",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "page",
+            "path"
+          ],
+          "aperta": false,
+          "predefinito": "page"
+        },
+        {
+          "nome": "easingType",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "easeIn",
+            "easeOut",
+            "easeInOut",
+            "easeOutIn"
+          ],
+          "aperta": false,
+          "predefinito": "easeIn"
+        },
+        {
+          "nome": "ramp",
+          "tipo": "numero",
+          "facoltativo": false,
+          "minimo": 0.0,
+          "massimo": 100.0,
+          "predefinito": 0.0
+        },
+        {
+          "nome": "colorShift",
+          "tipo": "numero",
+          "facoltativo": false,
+          "minimo": -100.0,
+          "massimo": 100.0,
+          "predefinito": 0.0
+        }
+      ]
+    },
+    {
+      "fonte": "interfaccia",
+      "id": "ui.blendOptions",
+      "campi": []
+    }
+  ]
 }

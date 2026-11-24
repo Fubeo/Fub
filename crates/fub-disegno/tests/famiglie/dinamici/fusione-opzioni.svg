@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:fub="https://fubeo.github.io/ns/scene/1" fub:version="1" viewBox="0 0 400 300" width="400" height="300">
+  <rect id="fub-paper" fub:role="paper" x="0" y="0" width="400" height="300" fill="#ffffff"/>
+  <metadata><vectorcraft:recipe xmlns:vectorcraft="urn:vectorcraft:editing" for="o1nt273zz" hash="3aa596bf9f99285c" v="1">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjo3LCJrbm9ja291dCI6Im9uIiwia2luZCI6eyJ0eXBlIjoiYmxlbmQiLCJjaGlsZHJlbiI6W3siaWQiOjExLCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MS4wLCJnIjowLjAsImIiOjAuMH19fV19LCJraW5kIjp7InR5cGUiOiJwYXRoIiwicGF0aCI6eyJzdWJwYXRocyI6W3siYW5jaG9ycyI6W3sicCI6WzUwLjAsMTAwLjBdfSx7InAiOlsxMDAuMCwxMDAuMF19LHsicCI6WzEwMC4wLDE1MC4wXX0seyJwIjpbNTAuMCwxNTAuMF19XSwiY2xvc2VkIjp0cnVlfV19fX0seyJpZCI6MTIsImFwcGVhcmFuY2UiOnsiaXRlbXMiOlt7ImtpbmQiOiJmaWxsIiwicGFpbnQiOnsidHlwZSI6InNvbGlkIiwiY29sb3IiOnsibW9kZWwiOiJyZ2IiLCJyIjowLjAsImciOjAuMCwiYiI6MS4wfX19XX0sImtpbmQiOnsidHlwZSI6InBhdGgiLCJwYXRoIjp7InN1YnBhdGhzIjpbeyJhbmNob3JzIjpbeyJwIjpbMzAwLjAsMTAwLjBdfSx7InAiOlszNTAuMCwxMDAuMF19LHsicCI6WzM1MC4wLDE1MC4wXX0seyJwIjpbMzAwLjAsMTUwLjBdfV0sImNsb3NlZCI6dHJ1ZX1dfX19XSwic3BlYyI6eyJzcGFjaW5nIjp7InN0ZXBzIjo1fSwib3JpZW50YXRpb24iOiJhbGlnblRvUGFnZSJ9fX19</vectorcraft:recipe></metadata>
+  <g id="l1a2b3c4d" fub:layer="Livello 1">
+    <g id="o1nt273zz"><rect id="o2tzpag87" x="50" y="100" width="50" height="50" fill="#ff0000"/><rect id="oivnbzp97" x="91.667" y="100" width="50" height="50" fill="#d5002b"/><rect id="o4zlvgi4r" x="133.333" y="100" width="50" height="50" fill="#aa0055"/><rect id="o93uikxd9" x="175" y="100" width="50" height="50" fill="#800080"/><rect id="odw45mqmo" x="216.667" y="100" width="50" height="50" fill="#5500aa"/><rect id="o6xanl9zd" x="258.333" y="100" width="50" height="50" fill="#2b00d5"/><rect id="op605u5kp" x="300" y="100" width="50" height="50" fill="#0000ff"/></g>
+    
+    
+    <path id="oc3c3c3c3" d="M75 250 C150 200 250 200 325 250" fill="none" stroke="#000000"/>
+  </g>
+</svg>

@@ -73,6 +73,11 @@ import type { ArgomentiRifiutati, GestoMotore, MotoreAssente, SessioneMotore } f
 import { cursoreDelloStrumento, motoreDelloStrumento, StatiStrumenti } from "./strumento";
 import { Scrittura, STRUMENTI_CHE_SCRIVONO } from "./scrittura";
 import { A_PIU_CLIC, segniComeForma, STRUMENTI_DEI_TRACCIATI } from "./tracciati";
+
+/// Gli strumenti che scelgono un oggetto a clic e restano aperti fra un clic e
+/// l'altro finché il motore dice `busy`: la Fusione (il primo oggetto, poi il
+/// secondo che fa la fusione). Il doppio clic e l'Alt+clic aprono le opzioni.
+const SCELGONO_A_CLIC: ReadonlySet<string> = new Set(["blend"]);
 import { toScreen } from "../view";
 
 /// Quanto un gesto aspetta il motore che si sta ancora aprendo.
@@ -494,7 +499,9 @@ export interface GestiMotoreContext {
   /// Un clic senza trascinare con uno strumento del motore (il suo id e il punto
   /// del clic nel disegno): il Completo apre la finestra della forma, se la
   /// forma ne ha una. Di serie non fa niente.
-  clicStrumento: (strumento: string, punto: { readonly x: number; readonly y: number }) => void;
+  /// `doppio`: il doppio clic o l'Alt+clic di uno strumento che sceglie a clic
+  /// (la Fusione apre le sue opzioni).
+  clicStrumento: (strumento: string, punto: { readonly x: number; readonly y: number }, doppio?: boolean) => void;
   /// Invio o Esc, quando nessun gesto è in corso: chiude il tracciato aperto
   /// della penna (il tasto va al motore, che lo chiude a modo suo); senza
   /// tracciato aperto, Esc con uno strumento dei tracciati torna alla
@@ -1205,6 +1212,19 @@ export function installGestiMotore(ctx: EditorContext): void {
     for (const pezzo of pezzi.slice(0, -1)) void send(g, "preview", pezzo);
     // Il secondo clic vicino al primo: dopo il suo rilascio, il doppio clic.
     const doppio = doppioClicDi(g);
+    if (typeof g.tool === "object" && SCELGONO_A_CLIC.has(g.tool.engine.id)) {
+      // Il primo oggetto scelto resta aperto finché il motore dice `busy`; il
+      // doppio clic o l'Alt+clic chiudono la scelta (nel motore) e aprono la
+      // finestra delle opzioni dello strumento.
+      const strumento = g.tool.engine.id;
+      const giu = interni.get(g)!.from;
+      const conAlt = pezzi.flat().some((e) => e.kind === "down" && e.alt);
+      tieniAperto(g, pezzi[pezzi.length - 1] ?? []);
+      if (doppio !== null) mandaDoppioClic(g, doppio);
+      const punto = doppio ?? (conAlt && giu !== null ? { x: giu[0], y: giu[1] } : null);
+      if (punto !== null) void ultimo.finally(() => ctx.clicStrumento(strumento, punto, true));
+      return;
+    }
     if (typeof g.tool === "object" && (A_PIU_CLIC.has(g.tool.engine.id) || STRUMENTI_CHE_SCRIVONO.has(g.tool.engine.id))) {
       tieniAperto(g, pezzi[pezzi.length - 1] ?? []);
       if (doppio !== null) mandaDoppioClic(g, doppio);

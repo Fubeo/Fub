@@ -117,7 +117,9 @@ export interface Completo {
   /// Il clic senza trascinare di uno strumento del motore (T13, giro 2 e 5): se la forma
   /// ha una finestra delle misure, la apre col punto del clic; una trasformazione apre la
   /// sua finestra sulla selezione, e senza selezione dice perché. Altrimenti non fa niente.
-  clicStrumento(strumento: string, punto: { readonly x: number; readonly y: number }): void;
+  /// Con `doppio` (il doppio clic o l'Alt+clic della Fusione) apre la finestra
+  /// delle opzioni dello strumento, sulla selezione di adesso.
+  clicStrumento(strumento: string, punto: { readonly x: number; readonly y: number }, doppio?: boolean): void;
   /// Canc con dei punti scelti (Selezione diretta, Punto di ancoraggio): toglie quei
   /// punti (`path.deleteAnchors`), non l'oggetto. `true` se c'erano punti scelti e il
   /// comando è partito; `false` senza punti, e Canc resta quello dell'editor.
@@ -751,12 +753,17 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila" | "e
     parole(elemento, testo) {
       void eseguiPerId("text.editRange", { element: elemento, text: testo }, { senzaFinestra: true });
     },
-    clicStrumento(strumento, punto) {
+    clicStrumento(strumento, punto, doppio = false) {
       if (chiuso) return;
       const clic = COMANDO_DEL_CLIC[strumento];
       if (clic === undefined || indiceArrivato === null) return;
+      if ((clic.soloDoppio === true) !== doppio) return;
       const voce = indiceArrivato.voci.find((one) => one.id === clic.comando);
       if (voce === undefined || !("comando" in voce.chiamata)) return;
+      if (clic.soloDoppio === true) {
+        void eseguiVoce(voce, dipendenze);
+        return;
+      }
       // Una trasformazione lavora sulla selezione di adesso: senza, la finestra non si
       // apre e si dice perché (il motivo che la finestra usa già).
       if (clic.sullaSelezione === true) {

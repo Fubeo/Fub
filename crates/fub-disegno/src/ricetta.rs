@@ -556,9 +556,11 @@ pub struct Ricette {
     blocchi: Vec<Blocco>,
     /// Gli id degli elementi con una ricetta applicata.
     applicate: HashSet<String>,
-    /// Gli oggetti che il motore riconosce dal nome (i gruppi della Pittura
-    /// dinamica), col nome della loro ricetta: [`nomi_di_ruolo`].
-    nomi: Vec<(NodeId, String)>,
+    /// Gli oggetti che riprendono il nome della loro ricetta dopo la mappa
+    /// ([`nomi_di_ruolo`]): i gruppi della Pittura dinamica, che il motore
+    /// riconosce dal nome, e le fusioni, che il motore tiene come gruppo a
+    /// Rilascia se hanno un nome (`None`: la ricetta non ne ha).
+    nomi: Vec<(NodeId, Option<String>)>,
 }
 
 impl Ricette {
@@ -873,7 +875,7 @@ fn applica(
     e: &Elemento,
     nodo: Result<NodeId, Option<Posto>>,
     byte: &[u8],
-) -> Result<Option<(NodeId, String)>, Rifiutata> {
+) -> Result<Option<(NodeId, Option<String>)>, Rifiutata> {
     let manca = || Rifiutata::Motivo("non trova il suo oggetto nel motore".into());
     if matches!(nodo, Err(None)) {
         return Err(manca());
@@ -926,7 +928,12 @@ fn applica(
         n.transform(ctm, Scaling::from(true));
         n.visible = visibile;
         n.locked = bloccato;
-        return Ok(ruolo.map(|r| (nodo, r)));
+        // Una fusione col nome del file sarebbe una fusione con un nome:
+        // Rilascia la terrebbe come gruppo. Riprende quello della ricetta.
+        if ruolo.is_none() && matches!(letto.kind, NodeKind::Blend { .. }) {
+            return Ok(Some((nodo, letto.name.clone())));
+        }
+        return Ok(ruolo.map(|r| (nodo, Some(r))));
     }
     Ok(None)
 }
@@ -937,7 +944,7 @@ fn applica(
 pub(crate) fn nomi_di_ruolo(ricette: &Ricette, doc: &mut Document) {
     for (nodo, nome) in &ricette.nomi {
         if let Some(n) = doc.node_mut(*nodo) {
-            n.name = Some(nome.clone());
+            n.name.clone_from(nome);
         }
     }
 }
