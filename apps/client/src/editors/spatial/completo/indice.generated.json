@@ -4115,6 +4115,38 @@
     },
     {
       "fonte": "motore",
+      "id": "shaper.scribble",
+      "chiamata": {
+        "comando": "disegno.shaper.scribble"
+      },
+      "etichetta": {
+        "it": "Shaper",
+        "en": "Shaper"
+      },
+      "posto": "colonna/forme",
+      "famiglia": "forme",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "shaper.select",
+      "chiamata": {
+        "comando": "disegno.shaper.select"
+      },
+      "etichetta": {
+        "it": "Seleziona faccia Shaper",
+        "en": "Select Shaper Face"
+      },
+      "posto": "colonna/forme",
+      "famiglia": "forme",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "stroke.set",
       "chiamata": {
         "comando": "disegno.stroke.set"
@@ -6402,6 +6434,22 @@
       "posto": "colonna/forme",
       "famiglia": "forme",
       "tasto": "Shift+M",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "strumento",
+      "id": "shaper",
+      "chiamata": {
+        "strumento": "shaper"
+      },
+      "etichetta": {
+        "it": "Strumento Sagomatore",
+        "en": "Shaper Tool"
+      },
+      "posto": "colonna/forme",
+      "famiglia": "forme",
+      "tasto": "Shift+N",
       "effetto": "cambia",
       "finestra": false
     },

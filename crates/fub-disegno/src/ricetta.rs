@@ -962,15 +962,34 @@ fn risorse_presenti(doc: &Document, n: &Node) -> Result<(), Rifiutata> {
 }
 
 /// Toglie i nomi agli oggetti dentro `n`: vengono dal documento in cui la
-/// ricetta è nata e non devono confondersi con gli elementi di questo.
+/// ricetta è nata e non devono confondersi con gli elementi di questo. Restano
+/// i nomi che per il motore sono un ruolo ([`nome_di_ruolo`]).
 fn senza_nomi_dentro(n: &mut Node) {
+    let shaper = n.extras().shaper.is_some();
+    let grafico = n.extras().graph.is_some();
     if let Some(figli) = n.children_mut() {
         for c in figli.iter_mut() {
             let c = std::sync::Arc::make_mut(c);
-            c.name = None;
+            if !c
+                .name
+                .as_deref()
+                .is_some_and(|nome| nome_di_ruolo(shaper, grafico, nome))
+            {
+                c.name = None;
+            }
             senza_nomi_dentro(c);
         }
     }
+}
+
+/// Vero se `nome`, sul figlio di un gruppo del Sagomatore (`shaper`) o di un
+/// grafico (`grafico`), è il ruolo che il motore cerca per nome: le sorgenti e
+/// i pezzi del Sagomatore, gli assi e la legenda del grafico.
+fn nome_di_ruolo(shaper: bool, grafico: bool, nome: &str) -> bool {
+    use vectorcraft_doc::shaper::{FILL_PREFIX, SOURCES, STROKE_PREFIX};
+    (shaper
+        && (nome == SOURCES || nome.starts_with(FILL_PREFIX) || nome.starts_with(STROKE_PREFIX)))
+        || (grafico && matches!(nome, "Axes" | "Legend"))
 }
 
 // ---------------------------------------------------------------------------

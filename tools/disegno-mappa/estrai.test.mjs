@@ -198,7 +198,9 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // T11 guide e agganci del motore: `view.smartGuides`, `view.snapToPoint` e `view.snapToGlyph` diventano
   // «fatto», con le prove in vista.json e testo.json: il gesto porta i tre interruttori (`snap.guides`,
   // `snap.points`, `snap.glyphs`) alla vista del motore. Tre righe in più.
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1003, fub: 114, escluso: 12, fatto: 422 });
+  // Il Sagomatore (`shaper`) e i suoi `shaper.scribble` e `shaper.select` diventano «fatto»: il gruppo
+  // Shaper va nel file con la ricetta. Tre righe in più.
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1000, fub: 114, escluso: 12, fatto: 425 });
 });
 
 // --- un motore finto ---------------------------------------------------------------

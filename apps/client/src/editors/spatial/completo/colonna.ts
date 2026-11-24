@@ -145,6 +145,9 @@ export const MOTORE_PRONTO: ReadonlySet<string> = new Set([
   "artboard",
   // La Forma parametrica: una forma viva, coi suoi numeri nella ricetta del file.
   "parametricShape",
+  // Il Sagomatore: un tratto a mano diventa una forma pulita, uno scarabocchio
+  // toglie o unisce le forme in un gruppo vivo, con la sua ricetta nel file.
+  "shaper",
 ]);
 
 /// L'icona di uno strumento del motore nella colonna e nel cassetto: quella
@@ -166,6 +169,7 @@ export const ICONE_MOTORE: Readonly<Record<string, string>> = {
   measure: "draw-measure",
   artboard: "draw-artboard",
   parametricShape: "draw-parametric",
+  shaper: "draw-to-shape",
   rotate: "draw-rotate",
   reflect: "draw-flip-h",
   scale: "draw-scale",

@@ -493,10 +493,19 @@ impl Lavoro<'_> {
             }
             let di_fub = self.copia.mappa.del_nodo(*id).is_some();
             let nuovo_genitore = dopo.genitore.filter(|g| !prima.nodi.contains_key(g));
-            if !di_fub && composto(p.genitore.and_then(|g| prima.nodi.get(&g))) {
-                self.liberati.insert(*id);
-            } else if di_fub && composto(nuovo_genitore.and_then(|g| poi.nodi.get(&g))) {
+            // Le sorgenti di un gruppo del Sagomatore nuovo sono nella sua
+            // ricetta, anche quelle che venivano da un gruppo di prima (che
+            // nel file non erano elementi).
+            let nel_sagomatore =
+                in_un_sagomatore(nuovo_genitore, poi, |g| !prima.nodi.contains_key(&g));
+            if nel_sagomatore || (di_fub && composto(nuovo_genitore.and_then(|g| poi.nodi.get(&g))))
+            {
                 self.assorbiti.insert(*id);
+            } else if !di_fub
+                && (composto(p.genitore.and_then(|g| prima.nodi.get(&g)))
+                    || in_un_sagomatore(p.genitore, prima, |_| true))
+            {
+                self.liberati.insert(*id);
             }
         }
     }
@@ -2357,6 +2366,27 @@ fn ha_pezzi_di_prima(n: &Node, prima: &Posti<'_>) -> bool {
             .iter()
             .any(|c| prima.nodi.contains_key(&c.id) || ha_pezzi_di_prima(c, prima))
     })
+}
+
+/// Vero se `genitore` è un gruppo del Sagomatore, o sta dentro uno (le
+/// sorgenti stanno nel gruppo «Shaper Sources» del gruppo), salendo solo per i
+/// gruppi che `vale` accetta: il file tiene il gruppo come un solo elemento con
+/// la ricetta, e le sorgenti non sono elementi suoi.
+fn in_un_sagomatore(
+    mut genitore: Option<NodeId>,
+    posti: &Posti<'_>,
+    vale: impl Fn(NodeId) -> bool,
+) -> bool {
+    while let Some(g) = genitore.filter(|g| vale(*g)) {
+        let Some(p) = posti.nodi.get(&g) else {
+            return false;
+        };
+        if p.nodo.extras().shaper.is_some() {
+            return true;
+        }
+        genitore = p.genitore;
+    }
+    false
 }
 
 /// Come [`ha_pezzi_di_prima`], senza i pezzi assorbiti in un composto nuovo

@@ -56,6 +56,22 @@ riprende con le sue maniglie, che la ridimensionano, la girano e ne cambiano i
 numeri. Un doppio clic sul vuoto ne mette una con gli ultimi numeri usati. Un
 altro programma la legge come un tracciato qualunque.
 
+Il Sagomatore (`shaper`) sta nello stesso gruppo, dopo la Forma parametrica,
+e funziona come in VectorCraft. Un tratto a mano che somiglia a una forma
+diventa quella forma pulita: rettangolo, ellisse, poligono o linea. Uno
+scarabocchio sopra le forme le cambia:
+- su una forma sola la toglie;
+- su più forme le unisce, col colore di quella dove parte;
+- su un gruppo del Sagomatore ne toglie o ne unisce le facce.
+
+Le forme toccate finiscono in un gruppo del Sagomatore. Il file lo tiene come un
+solo elemento, con la ricetta del disegno; dentro ci sono le forme di partenza,
+trasparenti, e i pezzi che si vedono. Riaperto il file, il gruppo si scarabocchia
+ancora. Un altro programma vede i pezzi come forme normali. Un clic sceglie una
+faccia del gruppo; il doppio clic sceglie la forma di partenza sotto il
+puntatore e passa alla Selezione. Mancano ancora i comandi del menu Oggetto ›
+Shaper: rilascia, espandi e togli dal gruppo.
+
 Il doppio clic funziona come in VectorCraft con ogni strumento del motore: con
 la Selezione su un testo passa allo strumento Testo.
 

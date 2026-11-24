@@ -524,11 +524,11 @@ motore	select.object.strayPoints	Stray Points	Select › Object	livelli	F1	T15	f
 motore	select.object.openPaths	Open Paths	Select › Object	livelli	F1	T15	fatto	menu/selezione/oggetto	famiglia		Tracciati aperti
 motore	select.same.graphicStyle	Graphic Style	Select › Same	livelli	F1	T15	da fare	menu/selezione	famiglia	aspetta T15 Aspetto	Stile grafico
 motore	select.same.appearanceAttribute	Appearance Attribute	Select › Same	livelli	F1	T15	da fare	menu/selezione	famiglia	aspetta T15 Aspetto	Attributo aspetto
-motore	shaper.scribble	Shaper		forme	F1	T13	da fare	ispettore/design	famiglia	il motore unisce o toglie le regioni di tracciati sorgente e lascia un gruppo Shaper, che il formato non sa riaprire; una forma semplice (rettangolo, ellisse, linea, triangolo) è un riconoscitore di Fub, da decidere	Shaper
-motore	shaper.select	Select Shaper Face		forme	F1	T13	da fare	ispettore/design	famiglia	sceglie una faccia del gruppo Shaper: il gruppo non sta nel formato (la sua specifica vive solo in memoria), quindi dopo la riapertura non c'è niente da scegliere	Seleziona faccia Shaper
-motore	shaper.release	Release Shaper Group	Object › Shaper	forme	F1	T13	da fare	menu/oggetto	famiglia	rilascia un gruppo Shaper: il gruppo non sta nel formato, e dopo la riapertura il motore non lo riconosce più	Rilascia gruppo Shaper
-motore	shaper.expand	Expand Shaper Group	Object › Shaper	forme	F1	T13	da fare	menu/oggetto	famiglia	espande un gruppo Shaper: il gruppo non sta nel formato, e dopo la riapertura il motore non lo riconosce più	Espandi gruppo Shaper
-motore	shaper.releaseSource	Remove from Shaper Group		forme	F1	T13	da fare	ispettore/design	famiglia	toglie una forma sorgente dal gruppo Shaper: il gruppo non sta nel formato, e dopo la riapertura il motore non lo riconosce più	Rimuovi dal gruppo Shaper
+motore	shaper.scribble	Shaper		forme	F1	T13	fatto	colonna/forme	famiglia	dallo strumento Sagomatore: il gruppo Shaper va nel file come un elemento con la ricetta, le sorgenti dentro trasparenti, e riaperto si scarabocchia ancora	Shaper
+motore	shaper.select	Select Shaper Face		forme	F1	T13	fatto	colonna/forme	famiglia	dallo strumento Sagomatore: il clic sceglie una faccia del gruppo, il doppio clic la sorgente e passa alla Selezione	Seleziona faccia Shaper
+motore	shaper.release	Release Shaper Group	Object › Shaper	forme	F1	T13	da fare	menu/oggetto	famiglia	il gruppo Shaper ora sta nel file con la ricetta; manca il comando nel menu Oggetto › Shaper	Rilascia gruppo Shaper
+motore	shaper.expand	Expand Shaper Group	Object › Shaper	forme	F1	T13	da fare	menu/oggetto	famiglia	il gruppo Shaper ora sta nel file con la ricetta; manca il comando nel menu Oggetto › Shaper	Espandi gruppo Shaper
+motore	shaper.releaseSource	Remove from Shaper Group		forme	F1	T13	da fare	ispettore/design	famiglia	il gruppo Shaper ora sta nel file con la ricetta; manca il comando nel menu Oggetto › Shaper	Rimuovi dal gruppo Shaper
 motore	shortcutSet.read	Read Shortcut Set File		fub	—	T9	fub	fub	—	Impostazioni › Scorciatoie › Disegno completo: importa un insieme (D7 a)	Leggi file di set di scelte rapide
 motore	object.slice.make	Make	Object › Slice	web	F3	T22	da fare	menu/oggetto	famiglia		Crea
 motore	object.slice.release	Release	Object › Slice	web	F3	T22	da fare	menu/oggetto	famiglia		Rilascia
@@ -1308,7 +1308,7 @@ strumento	star	Star Tool		forme	F1	T13	fatto	colonna/forme	famiglia	riquadro «r
 strumento	flare	Flare Tool		forme	F1	T13	da fare	colonna/forme	famiglia	aspetta T27 (l'alone è un g senza id che la scena del client non applica)	Strumento Riflesso
 strumento	paintbrush	Paintbrush Tool		pennelli	F2	T17	fatto	colonna/disegna	famiglia	riquadro «paintbrush»; path.freehand con lo stile pennello: contorno senza riempimento; la pressione della penna resta nella ricetta, lo spessore variabile non si disegna ancora	Strumento Pennello
 strumento	blobBrush	Blob Brush Tool		pennelli	F2	T17	fatto	colonna/disegna	famiglia	colonna «Matita», Maiusc+B; un colpo a rilascio col colore di adesso (path.blob); test in completo/pennello-strumento.test.ts e motore/pennello-tondo*.test.ts	Strumento Pennello tondo
-strumento	shaper	Shaper Tool		forme	F1	T13	da fare	colonna/forme	famiglia	riquadro «shaper»	Strumento Sagomatore
+strumento	shaper	Shaper Tool		forme	F1	T13	fatto	colonna/forme	famiglia	riquadro «rectangle», dopo la Forma parametrica; un tratto a mano diventa rettangolo, ellisse, poligono o linea; uno scarabocchio toglie o unisce le forme in un gruppo Shaper, scritto con la ricetta e le sorgenti trasparenti; il doppio clic sceglie la sorgente e passa alla Selezione	Strumento Sagomatore
 strumento	pencil	Pencil Tool		tracciati	F1	T12	fatto	colonna/disegna	famiglia	riquadro «shaper»	Strumento Matita
 strumento	smooth	Smooth Tool		tracciati	F1	T12	fatto	colonna/disegna	famiglia	riquadro «shaper»	Strumento Smussa
 strumento	pathEraser	Path Eraser Tool		tracciati	F1	T12	fatto	colonna/disegna	famiglia	riquadro «shaper»	Strumento Gomma tracciato

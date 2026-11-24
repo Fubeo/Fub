@@ -20,8 +20,8 @@ const STRUMENTI_FORME = VOCI.filter((voce) => voce.famiglia === "forme" && voce.
 const FORME_PRONTO: ReadonlySet<string> = new Set(STRUMENTI_FORME);
 
 describe("la famiglia forme nella colonna", () => {
-  it("ha dodici strumenti fatti: le otto forme, le due griglie, il Generatore (T13 giro 7) e la Forma parametrica; senza il riflesso (aspetta T27)", () => {
-    expect([...STRUMENTI_FORME].sort()).toEqual(["arc", "ellipse", "lineSegment", "parametricShape", "polarGrid", "polygon", "rectangle", "rectangularGrid", "roundedRectangle", "shapeBuilder", "spiral", "star"]);
+  it("ha tredici strumenti fatti: le otto forme, le due griglie, il Generatore (T13 giro 7), la Forma parametrica e il Sagomatore; senza il riflesso (aspetta T27)", () => {
+    expect([...STRUMENTI_FORME].sort()).toEqual(["arc", "ellipse", "lineSegment", "parametricShape", "polarGrid", "polygon", "rectangle", "rectangularGrid", "roundedRectangle", "shapeBuilder", "shaper", "spiral", "star"]);
   });
 
   it("ogni strumento fatto ha il nome corto nelle due lingue nel catalogo della colonna, l'icona e un posto nel motore", () => {
