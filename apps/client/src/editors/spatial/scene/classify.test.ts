@@ -70,7 +70,7 @@ describe("la classificazione (§4)", () => {
 
   it("ogni attributo dell'elenco è ammesso", () => {
     const presentation =
-      'id="o1" fill="#ff0000" fill-opacity="0.5" stroke="none" stroke-width="2" ' +
+      'id="o1" fill="#ff0000" fill-opacity="0.5" fill-rule="evenodd" stroke="none" stroke-width="2" ' +
       'stroke-opacity="1" stroke-linecap="round" stroke-linejoin="bevel" ' +
       'stroke-dasharray="4 2" stroke-dashoffset="-1.5mm" stroke-miterlimit="10" opacity="0" display="inline" transform="rotate(45)" ' +
       'font-family="Inter, sans-serif" font-size="12" font-weight="bold" font-style="italic" ' +
@@ -86,6 +86,7 @@ describe("la classificazione (§4)", () => {
       'onclick="alert(1)"',
       'stroke-miterlimit="0.5"',
       'stroke-dashoffset="10%"',
+      'fill-rule="inherit"',
       'filter="blur(2px)"',
       'mask-type="alpha"',
       'data-x="1"',

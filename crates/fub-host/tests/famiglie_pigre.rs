@@ -43,7 +43,7 @@ const DEL_NUCLEO: &str = "disegno.edit.duplicate";
 const DEI_TRACCIATI: &str = "disegno.object.expand";
 
 /// Un comando dei tracciati la cui riga della mappa è ancora da fare.
-const DEI_TRACCIATI_DA_FARE: &str = "disegno.path.setFillRule";
+const DEI_TRACCIATI_DA_FARE: &str = "disegno.object.pathfinder.trap";
 
 const ATTESA: Duration = Duration::from_secs(20);
 

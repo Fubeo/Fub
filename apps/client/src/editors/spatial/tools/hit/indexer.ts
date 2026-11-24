@@ -759,7 +759,7 @@ export class SceneIndexer {
     // riquadro.
     const fill = tag === "line" ? false : tag === "text" || tag === "image" ? true : style.fill;
     const radius = style.stroke && tag !== "text" && tag !== "image" ? style.strokeWidth / 2 : 0;
-    return { leaf, segments, matrix, frameMatrix: frame, fill, radius, cache, flat: null, host: null, regions, via };
+    return { leaf, segments, matrix, frameMatrix: frame, fill, radius, evenodd: style.evenodd, cache, flat: null, host: null, regions, via };
   }
 
   /// I marcatori di `host`, una forma con gli attributi `attrs` e lo stile

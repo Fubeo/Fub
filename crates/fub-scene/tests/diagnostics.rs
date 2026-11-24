@@ -414,6 +414,35 @@ fn s009_a_text_that_fades_into_what_lies_under_it() {
 }
 
 #[test]
+fn s009_a_text_in_an_evenodd_hole_lies_on_the_paper() {
+    // Un quadrato nero col buco nello stesso verso, intorno all'inizio della
+    // riga: con `evenodd`, scritta o ereditata, il testo bianco sta sulla
+    // carta bianca; con `nonzero` sta sul nero.
+    let holed = |attributes: &str| {
+        format!(
+            r##"<path d="M0 0 H100 V100 H0 Z M10 30 H60 V70 H10 Z" fill="#000000" {attributes}/>{}"##,
+            label(r##"fill="#ffffff""##, "Neve")
+        )
+    };
+    for body in [
+        holed(r#"fill-rule="evenodd""#),
+        format!(r#"<g fill-rule="evenodd">{}</g>"#, holed("")),
+    ] {
+        assert_eq!(
+            details(&on_paper("#ffffff", &body), Code::S009),
+            ["1.00"],
+            "{body}"
+        );
+    }
+    for body in [holed(""), holed(r#"fill-rule="nonzero""#)] {
+        assert!(
+            of(&on_paper("#ffffff", &body), Code::S009).is_empty(),
+            "{body}"
+        );
+    }
+}
+
+#[test]
 fn s009_and_s013_a_text_on_a_path_is_seen_where_it_starts_on_the_side_of_the_glyphs() {
     // Il tracciato va da sinistra a destra a metà altezza, o al contrario; il
     // rettangolo nero copre la metà di sopra.

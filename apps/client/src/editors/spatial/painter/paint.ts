@@ -310,6 +310,7 @@ export interface ImageFrame {
 export const PAINTED_ATTRIBUTES: ReadonlySet<string> = new Set([
   "fill",
   "fill-opacity",
+  "fill-rule",
   "stroke",
   "stroke-width",
   "stroke-opacity",
@@ -436,6 +437,7 @@ export const RESOURCE_TAGS: ReadonlySet<string> = new Set(["linearGradient", "ra
 export const ROOT_PRESENTATION: readonly string[] = [
   "fill",
   "fill-opacity",
+  "fill-rule",
   "stroke",
   "stroke-width",
   "stroke-opacity",

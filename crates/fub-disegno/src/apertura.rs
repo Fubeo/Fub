@@ -414,6 +414,7 @@ fn elementi(testo: &str, items: &[Item], base: Affine) -> Vec<Elemento> {
         ctm: Option<Affine>,
         in_risorsa: bool,
         indice: Option<usize>,
+        evenodd: bool,
     }
     let mut visti: HashMap<Vec<usize>, Visto> = HashMap::new();
     for item in items {
@@ -423,13 +424,16 @@ fn elementi(testo: &str, items: &[Item], base: Affine) -> Vec<Elemento> {
             .split_last()
             .map(|(_, g)| g.to_vec())
             .unwrap_or_default();
-        let (ctm_genitore, risorsa_genitore, indice_genitore) = match visti.get(&genitore) {
-            Some(v) => (v.ctm, v.in_risorsa, v.indice),
-            None => (Some(base), false, None),
-        };
+        let (ctm_genitore, risorsa_genitore, indice_genitore, evenodd_genitore) =
+            match visti.get(&genitore) {
+                Some(v) => (v.ctm, v.in_risorsa, v.indice, v.evenodd),
+                None => (Some(base), false, None, false),
+            };
         let attr = attributi(testo, e.span.bytes[0])
             .map(|(_, a)| a)
             .unwrap_or_default();
+        let evenodd =
+            valore(&attr, "fill-rule").map_or(evenodd_genitore, |r| r.trim() == "evenodd");
         let propria = match valore(&attr, "transform") {
             Some(t) => leggi_trasformazione(t),
             None => Some(Affine::IDENTITY),
@@ -477,6 +481,7 @@ fn elementi(testo: &str, items: &[Item], base: Affine) -> Vec<Elemento> {
                 }),
                 privato: valore(&attr, "fub:role") == Some("private"),
                 ritaglia: false,
+                evenodd,
             });
         }
         // La forma di un `clipPath` privato: la scena non scende in una
@@ -512,6 +517,7 @@ fn elementi(testo: &str, items: &[Item], base: Affine) -> Vec<Elemento> {
                     ritaglio: None,
                     privato: false,
                     ritaglia: false,
+                    evenodd: false,
                 });
             }
         }
@@ -521,6 +527,7 @@ fn elementi(testo: &str, items: &[Item], base: Affine) -> Vec<Elemento> {
                 ctm,
                 in_risorsa,
                 indice: indice.or(indice_genitore),
+                evenodd,
             },
         );
     }

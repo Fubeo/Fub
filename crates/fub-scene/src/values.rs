@@ -207,7 +207,7 @@ pub(crate) fn keyword(name: &str, value: &str) -> bool {
         "markerUnits" => &["strokeWidth", "userSpaceOnUse"],
         "primitiveUnits" => &["userSpaceOnUse"],
         "color-interpolation-filters" => &["auto", "sRGB", "linearRGB"],
-        "clip-rule" => &["nonzero", "evenodd"],
+        "clip-rule" | "fill-rule" => &["nonzero", "evenodd"],
         _ => &[],
     };
     allowed.contains(&value)

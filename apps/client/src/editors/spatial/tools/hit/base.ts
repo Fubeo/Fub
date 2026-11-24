@@ -139,9 +139,11 @@ export interface Style {
   readonly family: string | null;
   readonly weight: string | null;
   readonly color: string | null;
+  /// Vero con `fill-rule="evenodd"`, ereditata: i buchi si contano dispari.
+  readonly evenodd: boolean;
 }
 
-export const INITIAL: Style = { fill: true, stroke: false, strokeWidth: 1, fontSize: 16, spacing: 0, anchor: "start", family: null, weight: null, color: null };
+export const INITIAL: Style = { fill: true, stroke: false, strokeWidth: 1, fontSize: 16, spacing: 0, anchor: "start", family: null, weight: null, color: null, evenodd: false };
 
 /// L'elemento che porta un id nel documento indicizzato, o il blocco
 /// estraneo che lo contiene: ciò a cui rimanda un `use` estraneo.

@@ -290,10 +290,16 @@ Le file e il sottomenu sono del client (`FILE_TRACCIATO` e
 `apps/client/src/editors/spatial/completo/comandi.ts`); il posto
 `menu/oggetto/tracciato` è nella mappa del motore.
 
-Il buco di un tracciato composto viene dal verso dei suoi pezzi, come vuole
-la regola `nonzero` di SVG: Inverti e Rilascia lo rispettano, e il file torna
-uguale dopo due Inverti. Un tracciato di un altro programma con la regola
-`evenodd` resta com'è: questi comandi non lo cambiano e lo dicono. Un
+Il buco di un tracciato composto viene dal verso dei suoi pezzi, con la
+regola **Diversa da zero** (`nonzero`, quella di SVG), o da ogni pezzo che
+sta dentro un altro, con **Pari-dispari** (`evenodd`). La regola si sceglie
+nella sezione **Attributi** del Design, come nel pannello Attributi di
+VectorCraft: i due pulsanti dicono quella dei tracciati scelti, propria o
+ereditata dal gruppo (nessuno premuto se sono diverse), e il clic la cambia
+in un passo di annulla. Nel file è `fill-rule`, scritto solo dove cambia
+quella del gruppo. Inverti e Rilascia tengono la regola, e il file torna
+uguale dopo due Inverti. Scritta in `style` da un altro programma la regola
+rende il tracciato estraneo: i comandi non lo cambiano e lo dicono. Un
 comando che non trova niente da fare (Dividi gli oggetti sotto senza niente
 sotto, Angolo su punti già angoli) non cambia il file e lo dice. Come gli
 strumenti, i comandi non toccano i tratti dell'Inchiostro: con un tratto a

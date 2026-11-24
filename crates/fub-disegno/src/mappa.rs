@@ -98,6 +98,9 @@ pub struct Elemento {
     /// La forma del `clipPath` privato di un gruppo di ritaglio, legata al
     /// tracciato che ritaglia del motore ([`Mappa::lega_i_ritagli`]).
     pub ritaglia: bool,
+    /// La `fill-rule` in vigore è `evenodd`: scritta sull'elemento o, se
+    /// non c'è, ereditata dal genitore.
+    pub evenodd: bool,
 }
 
 /// Ciò che la differenza sa di un `<text>` del file per scriverne le parole

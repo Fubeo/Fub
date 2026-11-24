@@ -115,7 +115,7 @@ Radice di un documento nuovo:
 
 **Attributi di presentazione ammessi:**
 
-- riempimento e contorno: `fill`, `fill-opacity`, `stroke`, `stroke-width`,
+- riempimento e contorno: `fill`, `fill-opacity`, `fill-rule`, `stroke`, `stroke-width`,
   `stroke-opacity`, `stroke-linecap`, `stroke-linejoin`, `stroke-dasharray`,
   `stroke-dashoffset`, `stroke-miterlimit`;
 - visibilità, [fusione](scene-format-effects.md) e trasformazione: `opacity`, `style`, `display`, `transform`;
@@ -169,7 +169,11 @@ Radice di un documento nuovo:
   modificato. Ogni altra forma (`rgb()`, `hsl()`, `currentColor`,
   `transparent`, `inherit`) rende l'elemento estraneo.
 - **Opacità:** un numero SVG da 0 a 1, senza percentuale.
-- **Parole chiave:** `display` ammette `none` e `inline`; `stroke-linecap`
+- **Parole chiave:** `display` ammette `none` e `inline`; `fill-rule`
+  `nonzero` ed `evenodd` (con `evenodd` un buco si fa anche coi
+  sottotracciati nello stesso verso; senza l'attributo vale `nonzero`, come
+  in SVG; il Disegno completo la scrive solo dove cambia quella ereditata,
+  quindi `nonzero` soltanto dentro un genitore `evenodd`); `stroke-linecap`
   `butt`, `round` e `square`; `stroke-linejoin` `miter`, `round` e `bevel`;
   `font-weight` `normal`, `bold` e le centinaia da `100` a `900`; `font-style`
   `normal`, `italic` e `oblique`; `text-anchor` `start`, `middle` e `end`; `preserveAspectRatio` la grammatica
@@ -297,7 +301,7 @@ non converte `d`. Solo i valori nuovi seguono le regole sui numeri.
    2. `fub:layer`, `fub:role`, `fub:name`, `fub:source`, `fub:repeat`, `fub:style`, `fub:marker`, `fub:board`, `fub:tool`, `fub:shape`, `fub:geom`,
       `fub:from`, `fub:to`, `fub:along`, `fub:inside`, `fub:wrap`, `fub:join`, `fub:leading`, `fub:locked`, `fub:guide`, `fub:at`, `fub:brush`;
    3. geometria: `x y dy cx cy r width height rx ry x1 y1 x2 y2 points d startOffset`;
-   4. presentazione: `fill fill-opacity stroke stroke-width stroke-opacity stroke-linecap
+   4. presentazione: `fill fill-opacity fill-rule stroke stroke-width stroke-opacity stroke-linecap
       stroke-linejoin stroke-dasharray stroke-dashoffset stroke-miterlimit opacity style display font-family font-size font-weight
       font-style letter-spacing text-decoration text-anchor preserveAspectRatio`;
    5. `transform`, poi `href`;

@@ -27,6 +27,7 @@ import { registraAllinea } from "./allinea";
 import { registraElaborazione } from "./elaborazione";
 import { pileDaLettura, postoDel3D, registraAspetto } from "./aspetto-sezione";
 import { infoDaLettura, registraFusione, COMANDI_FUSIONE } from "./fusione-sezione";
+import { regolaDaLettura, registraAttributi, COMANDO_REGOLA } from "./attributi-sezione";
 import { eGruppoSulTracciato, registraOggettiSulTracciato, STRUMENTO_OGGETTI_SUL_TRACCIATO } from "./oggetti-sul-tracciato-sezione";
 import { registraTrasforma } from "./trasforma-sezione";
 // La Quota (K6, tavole): la sezione del Design delle quote scelte.
@@ -561,6 +562,20 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila" | "e
       if (info === null) return null;
       const accesi = new Set(COMANDI_FUSIONE.filter((id) => stato.per?.get(`disegno.${id}`)?.enabled === true));
       return { info, accesi };
+    },
+  });
+  // La sezione «Attributi»: la regola di riempimento dei tracciati scelti, letta dal motore
+  // (`attributes.info`, propria o ereditata) e cambiata con `path.setFillRule`, senza finestra.
+  registraAttributi(sezioni, {
+    esegui: (id, valori) => eseguiPerId(id, valori, { senzaFinestra: true }),
+    leggi: async () => {
+      const selezione = dipendenze.selezione();
+      const [esito, stato] = await Promise.all([
+        chiama(dipendenze, "disegno.attributes.info", {}, false).catch(() => null),
+        statoComandi(ctx.motore, selezione),
+      ]);
+      if (esito === null || esito.refused !== null) return null;
+      return { regola: regolaDaLettura(esito.reading), acceso: stato.per?.get(`disegno.${COMANDO_REGOLA}`)?.enabled === true };
     },
   });
   // La sezione «Aspetto»: la pila degli effetti degli oggetti scelti (`effect.list`), coi nomi delle

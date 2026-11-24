@@ -196,6 +196,7 @@ const KEYWORDS: ReadonlyMap<string, readonly string[]> = new Map([
   ["primitiveUnits", ["userSpaceOnUse"]],
   ["color-interpolation-filters", ["auto", "sRGB", "linearRGB"]],
   ["clip-rule", ["nonzero", "evenodd"]],
+  ["fill-rule", ["nonzero", "evenodd"]],
 ]);
 
 /// Una parola chiave fra quelle elencate per `name`.

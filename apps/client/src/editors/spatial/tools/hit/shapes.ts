@@ -42,7 +42,8 @@ export function styleOf(parent: Style, attrs: readonly PaintAttr[]): Style {
   const family = attr(attrs, "font-family");
   const weight = attr(attrs, "font-weight");
   const spacing = attr(attrs, "letter-spacing");
-  if (fill === undefined && stroke === undefined && width === undefined && size === undefined && anchor === undefined && family === undefined && weight === undefined && spacing === undefined) {
+  const rule = attr(attrs, "fill-rule");
+  if (fill === undefined && stroke === undefined && width === undefined && size === undefined && anchor === undefined && family === undefined && weight === undefined && spacing === undefined && rule === undefined) {
     return parent;
   }
   return {
@@ -55,6 +56,7 @@ export function styleOf(parent: Style, attrs: readonly PaintAttr[]): Style {
     family: family === undefined ? parent.family : family.trim(),
     weight: weight === undefined ? parent.weight : weight.trim(),
     color: fill === undefined ? parent.color : fill.trim(),
+    evenodd: rule === undefined ? parent.evenodd : rule.trim() === "evenodd",
   };
 }
 

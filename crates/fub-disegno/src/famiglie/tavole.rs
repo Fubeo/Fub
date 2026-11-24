@@ -51,6 +51,13 @@ impl StatoFamiglia for Stato {
     /// quelli che cambiano il disegno.
     fn spento(id: &str, copia: &Copia, selezione: &[String]) -> Option<DrawingDisabledReason> {
         if e_delle_guide(id) {
+            // Crea guide prende i tracciati scelti: un pezzo che il motore
+            // non ha, o bloccato, lo spegne come gli altri comandi.
+            if id == "view.guides.make" {
+                if let Some(r) = selezione_spenta(copia, selezione) {
+                    return Some(r);
+                }
+            }
             return guida_spenta(id, copia);
         }
         if id.starts_with("artboard.") {

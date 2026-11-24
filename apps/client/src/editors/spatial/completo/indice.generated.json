@@ -771,6 +771,22 @@
     },
     {
       "fonte": "motore",
+      "id": "attributes.info",
+      "chiamata": {
+        "comando": "disegno.attributes.info"
+      },
+      "etichetta": {
+        "it": "Attributi",
+        "en": "Attributes"
+      },
+      "posto": "interno",
+      "famiglia": "dati",
+      "tasto": null,
+      "effetto": "legge",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "clipboard.conflicts",
       "chiamata": {
         "comando": "disegno.clipboard.conflicts"
@@ -4538,6 +4554,22 @@
       "etichetta": {
         "it": "Imposta punti di ancoraggio",
         "en": "Set Anchors"
+      },
+      "posto": "ispettore/design",
+      "famiglia": "tracciati",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "path.setFillRule",
+      "chiamata": {
+        "comando": "disegno.path.setFillRule"
+      },
+      "etichetta": {
+        "it": "Regola di riempimento",
+        "en": "Fill Rule"
       },
       "posto": "ispettore/design",
       "famiglia": "tracciati",

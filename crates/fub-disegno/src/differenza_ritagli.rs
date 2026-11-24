@@ -298,7 +298,7 @@ fn forma_che_ritaglia(c: &Node, locale: Affine) -> Result<Value, Rifiuto> {
         } => {
             let mut senza = c.clone();
             senza.appearance = Appearance::default().into();
-            let (tag, attrs) = elem(&senza, locale, &Default::default())?;
+            let (tag, attrs) = elem(&senza, locale, &Default::default(), false)?;
             (tag, attrs, *rule)
         }
         NodeKind::Text(_) => return Err(no(TESTO_CHE_RITAGLIA)),

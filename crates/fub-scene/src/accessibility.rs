@@ -116,6 +116,8 @@ struct Painted {
     bounds: Bounds,
     /// I poligoni nella radice, calcolati alla prima domanda.
     polygons: OnceCell<Vec<Vec<[f64; 2]>>>,
+    /// Vero con `fill-rule="evenodd"`: un buco nello stesso verso non copre.
+    evenodd: bool,
     /// Il colore con la sua opacità totale; `None` se non si sa, come per
     /// un'immagine.
     paint: Option<(Rgb, f64)>,
@@ -127,15 +129,18 @@ impl Painted {
     /// Vero se la figura copre il punto `p` della radice.
     fn covers(&self, p: [f64; 2]) -> bool {
         let Bounds { min, max } = self.bounds;
-        p[0] >= min[0]
-            && p[0] <= max[0]
-            && p[1] >= min[1]
-            && p[1] <= max[1]
-            && winding(
+        p[0] >= min[0] && p[0] <= max[0] && p[1] >= min[1] && p[1] <= max[1] && {
+            let turns = winding(
                 self.polygons
                     .get_or_init(|| flatten(&self.segments, &self.matrix)),
                 p,
-            ) != 0
+            );
+            if self.evenodd {
+                turns % 2 != 0
+            } else {
+                turns != 0
+            }
+        }
     }
 }
 
@@ -233,7 +238,7 @@ impl Legibility {
                 }
                 if !in_symbol {
                     let r = rect_path(at("x"), at("y"), at("width"), at("height"), 0.0, 0.0);
-                    self.paint(r, m, None, span);
+                    self.paint(r, m, None, false, span);
                 }
                 return;
             }
@@ -262,9 +267,9 @@ impl Legibility {
         }
         match context.fill_paint() {
             // Un riempimento ignoto copre come un'immagine.
-            None => self.paint(shape, m, None, span),
+            None => self.paint(shape, m, None, context.evenodd(), span),
             Some(Some((rgb, alpha))) if alpha > 0.0 => {
-                self.paint(shape, m, Some((rgb, alpha)), span)
+                self.paint(shape, m, Some((rgb, alpha)), context.evenodd(), span)
             }
             Some(_) => {}
         }
@@ -281,6 +286,7 @@ impl Legibility {
             matrix,
             bounds: NOWHERE,
             polygons: OnceCell::new(),
+            evenodd: false,
             paint: None,
             span,
         });
@@ -299,6 +305,7 @@ impl Legibility {
         segments: Vec<Segment>,
         matrix: Matrix,
         paint: Option<(Rgb, f64)>,
+        evenodd: bool,
         span: Span,
     ) {
         let mut bounds = BoundsBuilder::default();
@@ -309,6 +316,7 @@ impl Legibility {
                 matrix,
                 bounds,
                 polygons: OnceCell::new(),
+                evenodd,
                 paint,
                 span,
             });
@@ -415,6 +423,7 @@ impl Legibility {
                     matrix: m,
                     bounds: covered,
                     polygons: OnceCell::new(),
+                    evenodd: false,
                     paint: None,
                     span,
                 };

@@ -115,9 +115,10 @@ const SOLO_COI_PUNTI: [&str; 5] = [
 ];
 
 /// I comandi di Oggetto › Tracciato senza finestra, sui tracciati scelti.
-const SUGLI_OGGETTI: [&str; 20] = [
+const SUGLI_OGGETTI: [&str; 21] = [
     "addon.pathtools.addPoints",
     "path.reverse",
+    "path.setFillRule",
     "object.path.outlineStroke",
     "object.path.addAnchorPoints",
     "object.path.divideObjectsBelow",

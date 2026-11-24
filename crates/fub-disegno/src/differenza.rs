@@ -41,8 +41,8 @@
 //!   regola `nonzero`). Crea composto toglie i tracciati assorbiti e
 //!   aggiunge il composto come un `<path>` nuovo; Rilascia toglie il
 //!   composto e aggiunge i suoi tracciati liberati; Inverti o punti aggiunti
-//!   su un composto sono un `set` del `d`. Cambiare la regola di riempimento
-//!   è `unsupported`: `fill-rule` non è un attributo della scena.
+//!   su un composto sono un `set` del `d`. La regola di riempimento è
+//!   `fill-rule`, scritta solo dove cambia quella ereditata dal genitore.
 //! - **Forme composte**: una forma composta del motore (un gruppo segnato)
 //!   assorbe e libera i suoi membri come un composto, ma si scrive come un
 //!   oggetto ricco: il `g` col disegno espanso e la ricetta. Un oggetto ricco
@@ -93,12 +93,6 @@ mod testo;
 pub(crate) use righe::righe_scritte;
 use testo::{da_riscrivere, riscrittura, sul_tracciato_cambiato, testo_cambiato, TestoRiscritto};
 pub(crate) use testo::{figlio_sul_tracciato, peso_e_corsivo};
-
-/// `fill-rule` non è un attributo della scena (`docs/reference/scene-format.md`
-/// §4): un elemento che lo scrive diventerebbe estraneo, e i buchi si fanno
-/// col verso dei sottotracciati, con la regola `nonzero` di SVG.
-const REGOLA_FUORI: &str =
-    "la regola di riempimento evenodd non è un attributo della scena: i buchi vanno col verso";
 
 /// Tolleranza relativa con cui due documenti del motore sono uguali: le
 /// matrici composte dagli strumenti e quella ritrovata qui differiscono
@@ -703,6 +697,27 @@ impl Lavoro<'_> {
         false
     }
 
+    /// Vero se il genitore dell'elemento `e` dà ai figli la regola `evenodd`.
+    fn evenodd_ereditato(&self, e: &Elemento) -> bool {
+        e.genitore
+            .and_then(|g| self.copia.mappa.elemento(g))
+            .is_some_and(|p| p.evenodd)
+    }
+
+    /// Vero se l'oggetto del motore `genitore`, dove va un oggetto nuovo, dà
+    /// ai figli la regola `evenodd`: un elemento del file la sua, un gruppo
+    /// nuovo quella del suo genitore, la radice e un livello nuovo `nonzero`.
+    fn evenodd_dentro(&self, genitore: Option<NodeId>) -> bool {
+        let mut corrente = genitore;
+        while let Some(id) = corrente {
+            if let Some(e) = self.elemento(id) {
+                return e.evenodd;
+            }
+            corrente = self.gruppi_nuovi.get(&id).copied().flatten();
+        }
+        false
+    }
+
     fn id_nuovo(&mut self, specie: Specie) -> Result<String, Rifiuto> {
         let mappa = &self.copia.mappa;
         let dati = &self.dati;
@@ -1134,7 +1149,12 @@ impl Lavoro<'_> {
             } else {
                 let (tag, mut attrs) = match scritto {
                     Some(e) => e,
-                    None => elem(nodo, locale, &self.riferimenti)?,
+                    None => elem(
+                        nodo,
+                        locale,
+                        &self.riferimenti,
+                        self.evenodd_dentro(genitore),
+                    )?,
                 };
                 attrs.insert("id".into(), json!(id));
                 if e_guida(nodo) {
@@ -1878,7 +1898,10 @@ impl Lavoro<'_> {
             attrs.insert("d".into(), json!(scrivi_d(&trasformato(&pa, locale))));
         }
         if rb != ra {
-            return Err(no(REGOLA_FUORI));
+            attrs.insert(
+                "fill-rule".into(),
+                scrivi_regola(ra, self.evenodd_ereditato(e)),
+            );
         }
         Ok(Some(attrs))
     }
@@ -1964,6 +1987,20 @@ impl Lavoro<'_> {
             }
             None => b,
         };
+        // La regola di riempimento cambiata (Attributi): `fill-rule`, e il
+        // confronto va avanti con la regola nuova.
+        let con_regola;
+        let b = match (regola(b), regola(a)) {
+            (Some(rb), Some(ra)) if rb != ra => {
+                attrs.insert(
+                    "fill-rule".into(),
+                    scrivi_regola(ra, self.evenodd_ereditato(e)),
+                );
+                con_regola = con_la_regola(b, ra);
+                &con_regola
+            }
+            _ => b,
+        };
         // Una matrice che schiaccia (Media che allinea tutti i punti su una
         // retta) non è uno spostamento: il tracciato si riscrive col suo `d`.
         let m = self
@@ -2009,22 +2046,14 @@ impl Lavoro<'_> {
                 return Err(no("il tracciato cambia anche in altro"));
             }
             c
-        } else if let (
-            NodeKind::Path { rule: rb, .. },
-            NodeKind::Path {
-                path: pa, rule: ra, ..
-            },
-            Some(geometria),
-        ) = (&b.kind, &a.kind, geometria_della_forma(e))
+        } else if let (NodeKind::Path { .. }, NodeKind::Path { path: pa, .. }, Some(geometria)) =
+            (&b.kind, &a.kind, geometria_della_forma(e))
         {
             // Una forma semplice deformata (Trasformazione libera con Ctrl,
             // Selezione diretta): come in VectorCraft diventa un tracciato.
             // Il `set` con `tag` la riscrive al suo posto, con gli stessi
             // attributi meno la geometria di prima (scene-operations, «Il
             // tipo di una forma»).
-            if rb != ra {
-                return Err(no(REGOLA_FUORI));
-            }
             let locale = (g * t).inverse();
             if !locale.is_finite() {
                 return Err(no("l'elemento ha una transform che non si inverte"));
@@ -2884,16 +2913,18 @@ fn elem(
     n: &Node,
     locale: Affine,
     r: &Riferimenti,
+    evenodd_genitore: bool,
 ) -> Result<(String, Map<String, Value>), Rifiuto> {
     // Un tracciato composto fatto di tracciati: un solo `<path>` con tutti i
     // sottotracciati, come lo legge la scena.
     if let Some((path, regola)) = tracciato_composto(n) {
         let mut attrs = Map::new();
         attrs.insert("d".into(), json!(scrivi_d(&trasformato(&path, locale))));
-        if regola != FillRule::NonZero {
-            return Err(no(REGOLA_FUORI));
-        }
         scrivi_aspetto(n, locale, "path", r, &mut attrs)?;
+        let valore = scrivi_regola(regola, evenodd_genitore);
+        if !valore.is_null() {
+            attrs.insert("fill-rule".into(), valore);
+        }
         return Ok(("path".to_string(), attrs));
     }
     let NodeKind::Path { path, live, .. } = &n.kind else {
@@ -2950,7 +2981,42 @@ fn elem(
         attrs.insert("d".into(), json!(scrivi_d(&p)));
     }
     scrivi_aspetto(n, locale, tag, r, &mut attrs)?;
+    if let NodeKind::Path { rule, .. } = &n.kind {
+        let valore = scrivi_regola(*rule, evenodd_genitore);
+        if !valore.is_null() {
+            attrs.insert("fill-rule".into(), valore);
+        }
+    }
     Ok((tag.to_string(), attrs))
+}
+
+/// La regola di riempimento di un tracciato o di un tracciato composto del
+/// motore; `None` per gli altri oggetti.
+fn regola(n: &Node) -> Option<FillRule> {
+    match &n.kind {
+        NodeKind::Path { rule, .. } | NodeKind::Compound { rule, .. } => Some(*rule),
+        _ => None,
+    }
+}
+
+/// `n` con la regola di riempimento `r`.
+fn con_la_regola(n: &Node, r: FillRule) -> Node {
+    let mut c = n.clone();
+    if let NodeKind::Path { rule, .. } | NodeKind::Compound { rule, .. } = &mut c.kind {
+        *rule = r;
+    }
+    c
+}
+
+/// Il valore di `fill-rule` per la regola `r` in un genitore che dà ai figli
+/// `evenodd` o no: `null` se è già quella ereditata, come la esporta
+/// VectorCraft (solo `evenodd`, ma qui anche `nonzero` dentro un `evenodd`).
+fn scrivi_regola(r: FillRule, evenodd_genitore: bool) -> Value {
+    match (r, evenodd_genitore) {
+        (FillRule::EvenOdd, false) => json!("evenodd"),
+        (FillRule::NonZero, true) => json!("nonzero"),
+        _ => Value::Null,
+    }
 }
 
 /// Il riempimento e il tratto di un oggetto nuovo, come li scrive il client.

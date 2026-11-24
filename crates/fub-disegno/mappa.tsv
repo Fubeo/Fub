@@ -21,7 +21,7 @@ motore	assets.list	Assets		web	F3	T22	da fare	interno	famiglia	lettura del motor
 motore	assets.export	Export Assets		web	F3	T22	da fare	ispettore/design/documento	famiglia		Esporta risorse
 motore	assets.settings.set	Asset Export Settings		web	F3	T22	da fare	ispettore/design/documento	famiglia		Impostazioni esportazione risorse
 motore	attributes.set	Attributes		dati	F4	T26	da fare	ispettore/design/documento	famiglia		Attributi
-motore	path.setFillRule	Fill Rule		tracciati	F1	T12	da fare	ispettore/design	famiglia	il motore tiene la regola, ma il formato della scena non ha fill-rule sui tracciati (scene-format.md: nessun attributo; clip-rule solo nelle risorse), e differenza.rs:93 rifiuta `fill-rule` come unsupported; resta finché il formato non la scrive	Regola di riempimento
+motore	path.setFillRule	Fill Rule		tracciati	F1	T12	fatto	ispettore/design	famiglia	fill-rule sul tracciato, scritto solo dove cambia quello ereditato dal genitore (null se torna uguale, nonzero dentro un gruppo evenodd); Inverti e Rilascia su un composto evenodd la tengono; letto con attributes.info nella sezione Attributi del Design (test regola_di_riempimento, casi in tracciati.json)	Regola di riempimento
 motore	brush.libraries	Brush Libraries		pennelli	F2	T17	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Librerie pennelli
 motore	brush.library	Brush Library		pennelli	F2	T17	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Libreria pennelli
 motore	brush.addFromLibrary	Add to Brushes	Window › Brush Libraries	pennelli	F2	T17	da fare	ispettore/risorse	famiglia		Aggiungi ai pennelli
@@ -370,7 +370,7 @@ motore	transparency.info	Transparency Info		aspetto	F1	T15	fatto	interno	famigli
 motore	transparency.togglePageIsolatedBlending	Page Isolated Blending	Window › Transparency	aspetto	F1	T15	da fare	ispettore/design	famiglia	l'isolamento o il gruppo a foratura della pagina sono un flag del documento del motore, e il formato ha solo la regola «il disegno è isolato», senza un interruttore (K6 T15 giro maschere)	Fusione isolata pagina
 motore	transparency.togglePageKnockoutGroup	Page Knockout Group	Window › Transparency	aspetto	F1	T15	da fare	ispettore/design	famiglia	l'isolamento o il gruppo a foratura della pagina sono un flag del documento del motore, e il formato ha solo la regola «il disegno è isolato», senza un interruttore (K6 T15 giro maschere)	Gruppo foratura pagina
 motore	object.setOverprint	Overprint		stampa	F4	T25	da fare	menu/file	famiglia		Sovrastampa
-motore	attributes.info	Attributes		dati	F4	T26	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Attributi
+motore	attributes.info	Attributes		dati	F4	T26	fatto	interno	famiglia	lettura del motore per l'ispettore, non una voce: gli ids tornano con l'id del file e un id del motore nel valore non passa (vale la selezione); la sezione Attributi del Design ne usa fillRule (test regola_di_riempimento). Sovrastampa, url e nota sono del motore: il file non li scrive (righe attributes.set e object.setOverprint)	Attributi
 motore	file.package	Package		formati	F3	T23	da fare	menu/file	famiglia		Crea pacchetto
 motore	paint.setFill	Fill		colore	F1	T14	fatto	ispettore/design	famiglia		Riempimento
 motore	paint.setStroke	Stroke		colore	F1	T14	fatto	ispettore/design	famiglia		Traccia
@@ -1513,7 +1513,7 @@ pannello	align	Align	Window	trasforma	F1	T13	fatto	ispettore/design/allinea	fami
 pannello	appearance	Appearance	Window	aspetto	F1	T15	da fare	ispettore/design	famiglia		Aspetto
 pannello	artboards	Artboards	Window	tavole	F2	T19	fatto	ispettore/design/documento	famiglia	la sezione «Tavole» del Design senza oggetti scelti: elenco con la tavola attuale (un clic porta la vista lì), nome, X, Y, larghezza, altezza e i pulsanti del pannello	Tavole da disegno
 pannello	asset_export	Asset Export	Window	web	F3	T22	da fare	ispettore/design/documento	famiglia		Esportazione risorse
-pannello	attributes	Attributes	Window	dati	F4	T26	da fare	ispettore/design	famiglia		Attributi
+pannello	attributes	Attributes	Window	dati	F4	T26	da fare	ispettore/design	famiglia	la sezione Attributi del Design (completo/attributi-sezione.ts) ha la regola di riempimento; restano sovrastampa, mappa immagine, url e nota, che il file non scrive	Attributi
 pannello	blend	Blend	Window	dinamici	F2	T21	fatto	ispettore/design/blend	famiglia	la sezione Fusione del Design: Crea, spaziatura, orientamento, andamento, rampa e spostamento colore della fusione scelta (o delle nuove), inverti, sostituisci dorso, espandi e rilascia	Fusione
 pannello	brushes	Brushes	Window	pennelli	F2	T17	da fare	ispettore/risorse	famiglia		Pennelli
 pannello	character	Character	Window	testo	F2	T16	fatto	ispettore/design	famiglia		Carattere

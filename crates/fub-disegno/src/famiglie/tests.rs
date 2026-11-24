@@ -250,20 +250,20 @@ fn il_filtro_lascia_passare_le_righe_giuste() {
     };
     // Nessuna riga è fatta: con `Fatte` una riga da fare è `Unserved`.
     assert!(unserved(riga_del_comando(
-        "disegno.path.setFillRule",
+        "disegno.object.pathfinder.trap",
         Filtro::Fatte
     )));
-    let (riga, famiglia) = riga_del_comando("disegno.path.setFillRule", Filtro::Tutte)
+    let (riga, famiglia) = riga_del_comando("disegno.object.pathfinder.trap", Filtro::Tutte)
         .unwrap()
         .unwrap();
-    assert_eq!(riga.id, "path.setFillRule");
+    assert_eq!(riga.id, "object.pathfinder.trap");
     assert_eq!(famiglia, Famiglia::Tracciati);
     // Una riga `fub` o esclusa non arriva al motore, con nessun filtro.
     assert!(riga_del_comando("disegno.file.new", Filtro::Tutte)
         .unwrap()
         .is_none());
     // Un id senza il prefisso, o che la mappa non ha.
-    assert!(riga_del_comando("path.setFillRule", Filtro::Tutte)
+    assert!(riga_del_comando("object.pathfinder.trap", Filtro::Tutte)
         .unwrap()
         .is_none());
     assert!(riga_del_comando("disegno.non.esiste", Filtro::Tutte)

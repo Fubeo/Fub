@@ -428,7 +428,12 @@ describe("che cosa si vede in un punto", () => {
     `${LAYER}<rect id="r" x="0" y="0" width="40" height="40" fill="#0072b2" stroke="#000000" stroke-width="4"/>` +
       // Il buco gira al contrario: con `nonzero` non si riempie.
       '<path id="o" d="M50 0 H90 V40 H50 Z M60 10 V30 H80 V10 Z" fill="#d55e00"/>' +
-      '<g id="g" transform="translate(0 50)"><path id="n" d="M0 0 H40 V40 H0 Z"/><polyline id="p" points="50 0 90 0 90 40" fill="none" stroke="#000000" stroke-width="2"/></g></g>',
+      '<g id="g" transform="translate(0 50)"><path id="n" d="M0 0 H40 V40 H0 Z"/><polyline id="p" points="50 0 90 0 90 40" fill="none" stroke="#000000" stroke-width="2"/></g>' +
+      // Il buco gira nello stesso verso: lo fa la regola `evenodd`, scritta
+      // sul tracciato o ereditata dal gruppo.
+      '<path id="e" d="M100 0 H140 V40 H100 Z M110 10 H130 V30 H110 Z" fill="#d55e00" fill-rule="evenodd"/>' +
+      '<g id="h" fill-rule="evenodd"><path id="i" d="M150 0 H190 V40 H150 Z M160 10 H180 V30 H160 Z"/></g>' +
+      '<path id="z" d="M200 0 H240 V40 H200 Z M210 10 H230 V30 H210 Z" fill-rule="nonzero"/></g>',
   );
   const at = (key: string, p: [number, number], tolerance = 0): [string | null, string] | null => {
     const sampled = open(SEEN).index.get(key)!.sampleAt(p, tolerance);
@@ -448,6 +453,14 @@ describe("che cosa si vede in un punto", () => {
     expect(at("o", [70, 20])).toBeNull();
     expect(at("o", [61, 20], 2)).toEqual(["o", "fill"]);
     expect(at("g", [20, 70])).toEqual(["n", "fill"]);
+  });
+
+  it("con la regola evenodd, scritta o ereditata, un buco nello stesso verso lascia vedere sotto", () => {
+    expect(at("e", [105, 20])).toEqual(["e", "fill"]);
+    expect(at("e", [120, 20])).toBeNull();
+    expect(at("h", [155, 20])).toEqual(["i", "fill"]);
+    expect(at("h", [170, 20])).toBeNull();
+    expect(at("z", [220, 20])).toEqual(["z", "fill"]);
   });
 
   it("il contorno di una spezzata aperta non ha il lato che la chiude, e dà la sua geometria", () => {

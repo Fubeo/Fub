@@ -280,8 +280,8 @@ fn svg_attribute(tag: Tag, name: &str, value: &str, resolve: Resolve<'_>) -> boo
         "style" => tag.is_drawn() && blend_style(value, matches!(tag, Tag::G | Tag::A)).is_some(),
         "fill-opacity" | "stroke-opacity" | "opacity" => opacity(value).is_some(),
         "stroke-width" | "font-size" => non_negative_length(value).is_some(),
-        "stroke-linecap" | "stroke-linejoin" | "display" | "font-weight" | "font-style"
-        | "text-anchor" => keyword(name, value),
+        "fill-rule" | "stroke-linecap" | "stroke-linejoin" | "display" | "font-weight"
+        | "font-style" | "text-anchor" => keyword(name, value),
         "letter-spacing" => letter_spacing(value).is_some(),
         // Il verso del testo: soltanto sul `text` (formato della scena, testo §10).
         "writing-mode" => tag == Tag::Text && keyword(name, value),

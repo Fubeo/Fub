@@ -163,6 +163,7 @@ export function svgAttribute(tag: Tag, name: string, value: string, resolve: Res
     case "stroke-width":
     case "font-size":
       return nonNegativeLength(value) !== null;
+    case "fill-rule":
     case "stroke-linecap":
     case "stroke-linejoin":
     case "display":

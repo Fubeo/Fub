@@ -167,6 +167,8 @@ pub(crate) struct Context<'s> {
     fill: Option<Paint>,
     /// Il `fill-opacity` in vigore, come `fill`.
     fill_opacity: Option<f64>,
+    /// La `fill-rule` in vigore è `evenodd`: i buchi si contano dispari.
+    evenodd: bool,
     /// Il prodotto delle `opacity` dei contenitori: l'opacità di gruppo
     /// compone come una moltiplicazione.
     opacity: f64,
@@ -197,8 +199,8 @@ pub(crate) struct Context<'s> {
 const EFFECTS: [&str; 3] = ["clip-path", "mask", "filter"];
 
 impl<'s> Context<'s> {
-    /// Il contesto dei figli della radice. Della radice contano solo `fill` e
-    /// `fill-opacity`, che si ereditano: le coordinate della radice sono
+    /// Il contesto dei figli della radice. Della radice contano solo `fill`,
+    /// `fill-opacity` e `fill-rule`, che si ereditano: le coordinate della radice sono
     /// quelle in cui si misura, e il resto vale anche per la carta.
     pub fn root(root: &Element<'_>, swatches: &'s Swatches) -> Context<'s> {
         Context {
@@ -212,6 +214,9 @@ impl<'s> Context<'s> {
             fill_opacity: root
                 .value(NS_NONE, "fill-opacity")
                 .map_or(Some(1.0), opacity),
+            evenodd: root
+                .value(NS_NONE, "fill-rule")
+                .is_some_and(|rule| trim(rule) == "evenodd"),
             opacity: 1.0,
             font_size: root
                 .value(NS_NONE, "font-size")
@@ -242,6 +247,9 @@ impl<'s> Context<'s> {
         }
         if let Some(alpha) = value("fill-opacity") {
             context.fill_opacity = opacity(alpha);
+        }
+        if let Some(rule) = value("fill-rule") {
+            context.evenodd = trim(rule) == "evenodd";
         }
         if let Some(alpha) = value("opacity").and_then(opacity) {
             context.opacity *= alpha;
@@ -310,6 +318,11 @@ impl<'s> Context<'s> {
 
     pub fn bold(&self) -> bool {
         self.bold
+    }
+
+    /// Vero se la `fill-rule` in vigore è `evenodd`.
+    pub fn evenodd(&self) -> bool {
+        self.evenodd
     }
 
     /// Il colore del riempimento con la sua opacità totale; `None` se non si

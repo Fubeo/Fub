@@ -294,6 +294,7 @@ const RESOURCE_ORDER = [
 const PRESENTATION_ORDER = [
   "fill",
   "fill-opacity",
+  "fill-rule",
   "stroke",
   "stroke-width",
   "stroke-opacity",
