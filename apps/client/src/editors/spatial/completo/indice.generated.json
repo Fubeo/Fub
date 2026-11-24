@@ -1523,6 +1523,134 @@
     },
     {
       "fonte": "motore",
+      "id": "livePaint.expand",
+      "chiamata": {
+        "comando": "disegno.livePaint.expand"
+      },
+      "etichetta": {
+        "it": "Espandi",
+        "en": "Expand"
+      },
+      "posto": "menu/oggetto",
+      "famiglia": "trame",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "livePaint.fill",
+      "chiamata": {
+        "comando": "disegno.livePaint.fill"
+      },
+      "etichetta": {
+        "it": "Secchiello pittura dinamica",
+        "en": "Live Paint Bucket"
+      },
+      "posto": "interno",
+      "famiglia": "trame",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "livePaint.gapOptions",
+      "chiamata": {
+        "comando": "disegno.livePaint.gapOptions"
+      },
+      "etichetta": {
+        "it": "Opzioni spazi vuoti",
+        "en": "Gap Options"
+      },
+      "posto": "interno",
+      "famiglia": "trame",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "livePaint.info",
+      "chiamata": {
+        "comando": "disegno.livePaint.info"
+      },
+      "etichetta": {
+        "it": "Informazioni pittura dinamica",
+        "en": "Live Paint Info"
+      },
+      "posto": "interno",
+      "famiglia": "trame",
+      "tasto": null,
+      "effetto": "legge",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "livePaint.make",
+      "chiamata": {
+        "comando": "disegno.livePaint.make"
+      },
+      "etichetta": {
+        "it": "Crea",
+        "en": "Make"
+      },
+      "posto": "menu/oggetto",
+      "famiglia": "trame",
+      "tasto": "Cmd+Alt+X",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "livePaint.merge",
+      "chiamata": {
+        "comando": "disegno.livePaint.merge"
+      },
+      "etichetta": {
+        "it": "Fondi",
+        "en": "Merge"
+      },
+      "posto": "menu/oggetto",
+      "famiglia": "trame",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "livePaint.release",
+      "chiamata": {
+        "comando": "disegno.livePaint.release"
+      },
+      "etichetta": {
+        "it": "Rilascia",
+        "en": "Release"
+      },
+      "posto": "menu/oggetto",
+      "famiglia": "trame",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "livePaint.strokeEdge",
+      "chiamata": {
+        "comando": "disegno.livePaint.strokeEdge"
+      },
+      "etichetta": {
+        "it": "Secchiello pittura dinamica (tratto)",
+        "en": "Live Paint Bucket (Stroke)"
+      },
+      "posto": "interno",
+      "famiglia": "trame",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "object.align",
       "chiamata": {
         "comando": "disegno.object.align"
@@ -6050,6 +6178,38 @@
       "posto": "colonna/forme",
       "famiglia": "forme",
       "tasto": "\\",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "strumento",
+      "id": "livePaintBucket",
+      "chiamata": {
+        "strumento": "livePaintBucket"
+      },
+      "etichetta": {
+        "it": "Secchiello pittura dinamica",
+        "en": "Live Paint Bucket"
+      },
+      "posto": "colonna/colore",
+      "famiglia": "trame",
+      "tasto": "K",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "strumento",
+      "id": "livePaintSelection",
+      "chiamata": {
+        "strumento": "livePaintSelection"
+      },
+      "etichetta": {
+        "it": "Strumento Selezione pittura dinamica",
+        "en": "Live Paint Selection Tool"
+      },
+      "posto": "colonna/colore",
+      "famiglia": "trame",
+      "tasto": "Shift+L",
       "effetto": "cambia",
       "finestra": false
     },

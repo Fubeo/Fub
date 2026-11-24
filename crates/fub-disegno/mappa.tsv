@@ -61,14 +61,14 @@ motore	symbol.spray	Symbol Sprayer		simboli	F3	T22	da fare	ispettore/risorse	fam
 motore	symbol.adjust	Symbolism Tool		simboli	F3	T22	da fare	ispettore/risorse	famiglia		Strumento Simbolismo
 motore	shapeBuilder.merge	Shape Builder		forme	F1	T13	fatto	ispettore/design	famiglia		Generatore forme
 motore	shapeBuilder.regions	Shape Builder Regions		forme	F1	T13	fatto	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Aree del Generatore forme
-motore	livePaint.make	Make	Object › Live Paint	trame	F2	T21	da fare	menu/oggetto	famiglia		Crea
-motore	livePaint.merge	Merge	Object › Live Paint	trame	F2	T21	da fare	menu/oggetto	famiglia		Fondi
-motore	livePaint.release	Release	Object › Live Paint	trame	F2	T21	da fare	menu/oggetto	famiglia		Rilascia
-motore	livePaint.expand	Expand	Object › Live Paint	trame	F2	T21	da fare	menu/oggetto	famiglia		Espandi
-motore	livePaint.gapOptions	Gap Options		trame	F2	T21	da fare	ispettore/design	famiglia		Opzioni spazi vuoti
-motore	livePaint.fill	Live Paint Bucket		trame	F2	T21	da fare	ispettore/design	famiglia		Secchiello pittura dinamica
-motore	livePaint.strokeEdge	Live Paint Bucket (Stroke)		trame	F2	T21	da fare	ispettore/design	famiglia		Secchiello pittura dinamica (traccia)
-motore	livePaint.info	Live Paint Info		trame	F2	T21	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Informazioni pittura dinamica
+motore	livePaint.make	Make	Object › Live Paint	trame	F2	T21	fatto	menu/oggetto	famiglia	i tracciati scelti diventano un gruppo vivo; il gruppo va nel file con la ricetta e si riapre vivo	Crea
+motore	livePaint.merge	Merge	Object › Live Paint	trame	F2	T21	fatto	menu/oggetto	famiglia	porta i tracciati scelti nel gruppo vivo scelto, che tiene il suo id	Fondi
+motore	livePaint.release	Release	Object › Live Paint	trame	F2	T21	fatto	menu/oggetto	famiglia	rende i tracciati di partenza e toglie la ricetta	Rilascia
+motore	livePaint.expand	Expand	Object › Live Paint	trame	F2	T21	fatto	menu/oggetto	famiglia	lascia un gruppo semplice coi pezzi dipinti	Espandi
+motore	livePaint.gapOptions	Gap Options		trame	F2	T21	fatto	interno	famiglia	le opzioni delle aperture restano nel file con la ricetta; la finestra è «ui.livePaintGapOptions»	Opzioni spazi vuoti
+motore	livePaint.fill	Live Paint Bucket		trame	F2	T21	fatto	interno	famiglia	lo usa il Secchiello: colora la faccia sotto il punto (fa vivi i tracciati scelti se serve)	Secchiello pittura dinamica
+motore	livePaint.strokeEdge	Live Paint Bucket (Stroke)		trame	F2	T21	fatto	interno	famiglia	lo usa il Secchiello: colora il bordo vicino al punto	Secchiello pittura dinamica (traccia)
+motore	livePaint.info	Live Paint Info		trame	F2	T21	fatto	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Informazioni pittura dinamica
 motore	imageTrace.make	Make	Object › Image Trace	immagini	F3	T20	da fare	menu/oggetto	famiglia		Crea
 motore	imageTrace.makeAndExpand	Make and Expand	Object › Image Trace	immagini	F3	T20	da fare	menu/oggetto	famiglia		Crea ed espandi
 motore	imageTrace.release	Release	Object › Image Trace	immagini	F3	T20	da fare	menu/oggetto	famiglia		Rilascia
@@ -1335,8 +1335,8 @@ strumento	wrinkle	Wrinkle Tool		pennelli	F2	T17	fatto	colonna/disegna	famiglia	r
 strumento	freeTransform	Free Transform Tool		trasforma	F1	T13	fatto	colonna/trasforma	famiglia	riquadro «freeTransform»	Strumento Trasformazione libera
 strumento	puppetWarp	Puppet Warp Tool		trasforma	F1	T13	fatto	colonna/trasforma	famiglia	riquadro «freeTransform»	Strumento Alterazione marionetta
 strumento	shapeBuilder	Shape Builder Tool		forme	F1	T13	fatto	colonna/forme	famiglia	riquadro «shapeBuilder»	Strumento Generatore forme
-strumento	livePaintBucket	Live Paint Bucket		trame	F2	T21	da fare	colonna/colore	famiglia	riquadro «shapeBuilder»	Secchiello pittura dinamica
-strumento	livePaintSelection	Live Paint Selection Tool		trame	F2	T21	da fare	colonna/colore	famiglia	riquadro «shapeBuilder»	Strumento Selezione pittura dinamica
+strumento	livePaintBucket	Live Paint Bucket		trame	F2	T21	fatto	colonna/colore	famiglia	riquadro «shapeBuilder»; clic colora la faccia col riempimento di Fub (fa vivi i tracciati scelti), i bordi con «paintStrokes», Alt prende il colore	Secchiello pittura dinamica
+strumento	livePaintSelection	Live Paint Selection Tool		trame	F2	T21	fatto	colonna/colore	famiglia	riquadro «shapeBuilder»; clic sceglie una faccia (Maiusc aggiunge), trascinato sceglie quelle toccate; le facce hanno l'id del file e il pannello colore le riempie; i bordi scritti con stroke-miterlimit restano estranei alla scena e non si scelgono	Strumento Selezione pittura dinamica
 strumento	perspectiveGrid	Perspective Grid Tool		prospettiva	F4	T25	da fare	colonna/prospettiva	famiglia	riquadro «perspectiveGrid»	Strumento Griglia prospettica
 strumento	perspectiveSelection	Perspective Selection Tool		prospettiva	F4	T25	da fare	colonna/prospettiva	famiglia	riquadro «perspectiveGrid»	Strumento Selezione prospettica
 strumento	mesh	Mesh Tool		trame	F2	T21	da fare	colonna/colore	famiglia	riquadro «mesh»	Strumento Trama

@@ -200,7 +200,9 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // `snap.points`, `snap.glyphs`) alla vista del motore. Tre righe in più.
   // Il Sagomatore (`shaper`) e i suoi `shaper.scribble` e `shaper.select` diventano «fatto»: il gruppo
   // Shaper va nel file con la ricetta. Tre righe in più.
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 999, fub: 114, escluso: 12, fatto: 426 });
+  // La Pittura dinamica (`livePaint.*` e i suoi due strumenti) diventa «fatto»: il gruppo vivo va
+  // nel file con la ricetta, le facce hanno l'id del file. Dieci righe in più.
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 989, fub: 114, escluso: 12, fatto: 436 });
 });
 
 // --- un motore finto ---------------------------------------------------------------

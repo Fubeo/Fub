@@ -82,6 +82,22 @@ composte o gruppi di tracciati: un'immagine o un testo non entrano, e un oggetto
 bloccato spegne il gesto. Le regioni che il motore calcola si mostrano come aree
 evidenziate mentre si trascina.
 
+La Pittura dinamica funziona come in VectorCraft. Nella stessa casella del
+Generatore forme ci sono due strumenti:
+- il Secchiello pittura dinamica (`livePaintBucket`) colora col riempimento
+  di Fub la faccia sotto il clic; sui tracciati scelti li fa prima diventare
+  un gruppo vivo. Alt prende il colore della faccia; i bordi si colorano con
+  l'opzione dello strumento per i contorni (`paintStrokes`);
+- la Selezione pittura dinamica (`livePaintSelection`) sceglie una faccia con
+  un clic (Maiusc la aggiunge) e quelle toccate con un trascinamento. Una
+  faccia scelta si colora dal pannello del colore. I bordi non si scelgono
+  ancora come oggetti del file.
+
+Il menu Oggetto offre «Crea», «Unisci», «Rilascia» ed «Espandi». Il gruppo
+vivo va nel file con la ricetta: riaperto, si dipinge ancora; un altro
+programma vede le facce e i bordi come forme normali. Mancano ancora la
+finestra «Opzioni aperture» e la vista che mostra le aperture.
+
 La sezione «Allinea», nella scheda Design dell'ispettore, offre gli allineamenti
 e le distribuzioni del motore. Alla selezione servono due oggetti; con «alla
 tavola» ne basta uno per allineare. Un pulsante spento dice perché. La famiglia

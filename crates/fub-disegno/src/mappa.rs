@@ -200,6 +200,45 @@ impl Mappa {
         }
     }
 
+    /// Lega le facce e i bordi di ogni gruppo della Pittura dinamica agli
+    /// elementi figli del suo elemento, per posizione: il file li scrive come
+    /// il motore li tiene, senza il gruppo nascosto delle sorgenti, e il
+    /// figlio `k` del file (contando anche gli estranei) è il pezzo `k`. Così
+    /// la Selezione pittura li sceglie con l'id del file, e i comandi (il
+    /// colore, Elimina) li trovano come ogni altro oggetto. Gli elementi
+    /// restano [`crate::ricetta::COPERTO`]: la ricetta del gruppo li riscrive,
+    /// e non sono perdite. Un bordo che la scena tiene estraneo (il motore lo
+    /// scrive con `stroke-miterlimit`) non è un elemento e resta senza legame.
+    /// Se un figlio sta oltre i pezzi del motore (un file cambiato a mano)
+    /// non se ne lega nessuno, e il gruppo si sceglie intero.
+    pub(crate) fn lega_le_facce(&mut self, doc: &Document) {
+        use vectorcraft_tools::builder::{is_live_paint, SOURCES_NAME};
+        let gruppi: Vec<(usize, NodeId)> = self.per_nodo.iter().map(|(n, i)| (*i, *n)).collect();
+        for (i, nodo) in gruppi {
+            let Some(n) = doc.node(nodo).filter(|n| is_live_paint(n)) else {
+                continue;
+            };
+            let pezzi: Vec<NodeId> = n
+                .children()
+                .into_iter()
+                .flatten()
+                .filter(|c| c.name.as_deref() != Some(SOURCES_NAME))
+                .map(|c| c.id)
+                .collect();
+            let figli: Vec<(usize, usize)> = (0..self.elementi.len())
+                .filter(|j| self.elementi[*j].genitore == Some(i))
+                .filter_map(|j| Some((j, *self.elementi[j].percorso.last()?)))
+                .collect();
+            if figli.iter().any(|(_, k)| *k >= pezzi.len()) {
+                continue;
+            }
+            for (j, k) in figli {
+                self.elementi[j].nodo = Some(pezzi[k]);
+                self.per_nodo.insert(pezzi[k], j);
+            }
+        }
+    }
+
     /// Ogni elemento candidato, mappato o no.
     pub fn elementi(&self) -> &[Elemento] {
         &self.elementi

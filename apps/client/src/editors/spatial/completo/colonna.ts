@@ -125,6 +125,11 @@ export const MOTORE_PRONTO: ReadonlySet<string> = new Set([
   // La Larghezza: trascinata dal contorno allarga una linea in un punto; il
   // profilo dello spessore va nel file con la ricetta.
   "width",
+  // La Pittura dinamica: il Secchiello colora le facce e i bordi di un gruppo
+  // vivo (o fa vivi i tracciati scelti), la Selezione pittura ne sceglie le
+  // facce; il gruppo va nel file con la ricetta.
+  "livePaintBucket",
+  "livePaintSelection",
   // I pennelli che deformano (la casella «Larghezza»): un comando, `object.liquify`.
   "warp",
   "twirl",
@@ -179,6 +184,8 @@ export const ICONE_MOTORE: Readonly<Record<string, string>> = {
   shear: "draw-shear",
   reshape: "draw-reshape",
   width: "draw-width-tool",
+  livePaintBucket: "draw-live-paint-bucket",
+  livePaintSelection: "draw-live-paint-selection",
   warp: "draw-warp",
   twirl: "draw-twirl",
   pucker: "draw-pucker",

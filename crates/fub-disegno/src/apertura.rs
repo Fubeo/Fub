@@ -185,6 +185,8 @@ pub(crate) fn importa(testo: &str, revisione: u64) -> Result<Copia, ErroreApertu
     let mut mappa = Mappa::nuova(elementi, &mut documento);
     spazi_fra_le_righe(&mappa, &mut documento);
     testi_in_area(&mappa, &mut documento);
+    crate::ricetta::nomi_di_ruolo(&ricette, &mut documento);
+    mappa.lega_le_facce(&documento);
     mappa.ricette = ricette;
     campioni::nel_motore(&campioni_del_file, &usi, &mappa, &mut documento);
     perdite::classifica(&mut perdite, testo, &scena.items, &mappa);

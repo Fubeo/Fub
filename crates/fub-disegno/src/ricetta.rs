@@ -447,7 +447,12 @@ pub fn costrutti(n: &Node) -> Vec<Costrutto> {
             intertwine.is_some() || !intertwine_tiers.is_empty(),
             Intreccio,
         ),
-        (live_paint_gaps.is_some(), PitturaViva),
+        // Un gruppo della Pittura dinamica si riconosce dal nome e dal gruppo
+        // delle sorgenti (`is_live_paint`), anche senza Opzioni spazi.
+        (
+            live_paint_gaps.is_some() || vectorcraft_tools::builder::is_live_paint(n),
+            PitturaViva,
+        ),
         (objects_on_path.is_some(), OggettiSulTracciato),
         (colorize.is_some(), Colorazione),
         (
@@ -551,6 +556,9 @@ pub struct Ricette {
     blocchi: Vec<Blocco>,
     /// Gli id degli elementi con una ricetta applicata.
     applicate: HashSet<String>,
+    /// Gli oggetti che il motore riconosce dal nome (i gruppi della Pittura
+    /// dinamica), col nome della loro ricetta: [`nomi_di_ruolo`].
+    nomi: Vec<(NodeId, String)>,
 }
 
 impl Ricette {
@@ -690,7 +698,8 @@ pub(crate) fn leggi(
             Some(_) => Err(None),
         };
         match applica(doc, &elementi[i], nodo, &byte) {
-            Ok(()) => {
+            Ok(ruolo) => {
+                ricette.nomi.extend(ruolo);
                 voce.stato = Stato::Valida;
                 ricette.applicate.insert(v.for_id.clone());
                 coperti.push(elementi[i].percorso.clone());
@@ -864,7 +873,7 @@ fn applica(
     e: &Elemento,
     nodo: Result<NodeId, Option<Posto>>,
     byte: &[u8],
-) -> Result<(), Rifiutata> {
+) -> Result<Option<(NodeId, String)>, Rifiutata> {
     let manca = || Rifiutata::Motivo("non trova il suo oggetto nel motore".into());
     if matches!(nodo, Err(None)) {
         return Err(manca());
@@ -900,12 +909,37 @@ fn applica(
         });
     }
     if let Some(n) = doc.node_mut(nodo) {
+        // Il motore riconosce un gruppo della Pittura dinamica dal nome: il
+        // gruppo riprende quello della ricetta al posto dell'id del file
+        // quando la mappa lo ha legato al suo elemento per nodo
+        // (`nomi_di_ruolo`, dopo la mappa); qui conta per i nomi dentro.
+        let ruolo = letto
+            .name
+            .clone()
+            .filter(|_| vectorcraft_tools::builder::is_live_paint(&letto));
+        let nome_del_file = n.name.clone();
+        if ruolo.is_some() {
+            n.name.clone_from(&ruolo);
+        }
         senza_nomi_dentro(n);
+        n.name = nome_del_file;
         n.transform(ctm, Scaling::from(true));
         n.visible = visibile;
         n.locked = bloccato;
+        return Ok(ruolo.map(|r| (nodo, r)));
     }
-    Ok(())
+    Ok(None)
+}
+
+/// Dà ai gruppi della Pittura dinamica il nome della loro ricetta, che il
+/// motore cerca (`is_live_paint`), dopo che la mappa li ha legati ai loro
+/// elementi col nome del file ([`crate::mappa::Mappa::nuova`]).
+pub(crate) fn nomi_di_ruolo(ricette: &Ricette, doc: &mut Document) {
+    for (nodo, nome) in &ricette.nomi {
+        if let Some(n) = doc.node_mut(*nodo) {
+            n.name = Some(nome.clone());
+        }
+    }
 }
 
 /// Rifiuta una ricetta che porta un file: un'immagine, un documento
@@ -967,13 +1001,14 @@ fn risorse_presenti(doc: &Document, n: &Node) -> Result<(), Rifiutata> {
 fn senza_nomi_dentro(n: &mut Node) {
     let shaper = n.extras().shaper.is_some();
     let grafico = n.extras().graph.is_some();
+    let pittura = vectorcraft_tools::builder::is_live_paint(n);
     if let Some(figli) = n.children_mut() {
         for c in figli.iter_mut() {
             let c = std::sync::Arc::make_mut(c);
             if !c
                 .name
                 .as_deref()
-                .is_some_and(|nome| nome_di_ruolo(shaper, grafico, nome))
+                .is_some_and(|nome| nome_di_ruolo(shaper, grafico, pittura, nome))
             {
                 c.name = None;
             }
@@ -982,14 +1017,17 @@ fn senza_nomi_dentro(n: &mut Node) {
     }
 }
 
-/// Vero se `nome`, sul figlio di un gruppo del Sagomatore (`shaper`) o di un
-/// grafico (`grafico`), è il ruolo che il motore cerca per nome: le sorgenti e
-/// i pezzi del Sagomatore, gli assi e la legenda del grafico.
-fn nome_di_ruolo(shaper: bool, grafico: bool, nome: &str) -> bool {
+/// Vero se `nome`, sul figlio di un gruppo del Sagomatore (`shaper`), di un
+/// grafico (`grafico`) o della Pittura dinamica (`pittura`), è il ruolo che il
+/// motore cerca per nome: le sorgenti e i pezzi del Sagomatore, gli assi e la
+/// legenda del grafico, le sorgenti, le facce e i bordi della Pittura dinamica.
+fn nome_di_ruolo(shaper: bool, grafico: bool, pittura: bool, nome: &str) -> bool {
     use vectorcraft_doc::shaper::{FILL_PREFIX, SOURCES, STROKE_PREFIX};
+    use vectorcraft_tools::builder::{EDGE_NAME, FACE_NAME, SOURCES_NAME};
     (shaper
         && (nome == SOURCES || nome.starts_with(FILL_PREFIX) || nome.starts_with(STROKE_PREFIX)))
         || (grafico && matches!(nome, "Axes" | "Legend"))
+        || (pittura && (nome == SOURCES_NAME || nome == FACE_NAME || nome == EDGE_NAME))
 }
 
 // ---------------------------------------------------------------------------
@@ -997,10 +1035,14 @@ fn nome_di_ruolo(shaper: bool, grafico: bool, nome: &str) -> bool {
 // ---------------------------------------------------------------------------
 
 /// I byte della ricetta di `n`, nello spazio del suo elemento (`locale`
-/// porta dal documento del motore lì), senza i nomi degli oggetti dentro.
+/// porta dal documento del motore lì), senza i nomi degli oggetti dentro. Il
+/// nome di un gruppo della Pittura dinamica resta: è il suo ruolo, e senza il
+/// motore non lo riconoscerebbe alla riapertura (`is_live_paint`).
 pub(crate) fn codifica(n: &Node, locale: Affine) -> Result<Vec<u8>, String> {
     let mut copia = n.clone();
-    copia.name = None;
+    if !vectorcraft_tools::builder::is_live_paint(&copia) {
+        copia.name = None;
+    }
     senza_nomi_dentro(&mut copia);
     copia.transform(locale, Scaling::from(true));
     let byte = vectorcraft_svg::recipe_of(&copia);

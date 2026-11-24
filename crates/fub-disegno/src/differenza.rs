@@ -495,9 +495,12 @@ impl Lavoro<'_> {
             let nuovo_genitore = dopo.genitore.filter(|g| !prima.nodi.contains_key(g));
             // Le sorgenti di un gruppo del Sagomatore nuovo sono nella sua
             // ricetta, anche quelle che venivano da un gruppo di prima (che
-            // nel file non erano elementi).
+            // nel file non erano elementi). Un elemento del file che va fra
+            // le sorgenti di un gruppo di prima (Unisci della Pittura
+            // dinamica) entra nella ricetta del gruppo, riscritto.
             let nel_sagomatore =
-                in_un_sagomatore(nuovo_genitore, poi, |g| !prima.nodi.contains_key(&g));
+                in_un_sagomatore(nuovo_genitore, poi, |g| !prima.nodi.contains_key(&g))
+                    || (di_fub && fra_le_sorgenti_vive(dopo.genitore, poi));
             if nel_sagomatore || (di_fub && composto(nuovo_genitore.and_then(|g| poi.nodi.get(&g))))
             {
                 self.assorbiti.insert(*id);
@@ -2381,12 +2384,25 @@ fn in_un_sagomatore(
         let Some(p) = posti.nodi.get(&g) else {
             return false;
         };
-        if p.nodo.extras().shaper.is_some() {
+        if p.nodo.extras().shaper.is_some() || vectorcraft_tools::builder::is_live_paint(p.nodo) {
             return true;
         }
         genitore = p.genitore;
     }
     false
+}
+
+/// Vero se `genitore` è il gruppo delle sorgenti di un gruppo della Pittura
+/// dinamica: un elemento che ci finisce (Unisci) non è più un elemento del
+/// file, ma una sorgente nella ricetta del gruppo.
+fn fra_le_sorgenti_vive(genitore: Option<NodeId>, posti: &Posti<'_>) -> bool {
+    use vectorcraft_tools::builder::{is_live_paint, SOURCES_NAME};
+    genitore
+        .and_then(|g| posti.nodi.get(&g))
+        .filter(|p| p.nodo.name.as_deref() == Some(SOURCES_NAME))
+        .and_then(|p| p.genitore)
+        .and_then(|g| posti.nodi.get(&g))
+        .is_some_and(|p| is_live_paint(p.nodo))
 }
 
 /// Come [`ha_pezzi_di_prima`], senza i pezzi assorbiti in un composto nuovo

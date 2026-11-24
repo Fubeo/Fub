@@ -93,8 +93,9 @@ pub(crate) trait StatoFamiglia: Send + Sync + 'static {
     }
 
     /// La lettura di un comando che non cambia il documento, nella forma di
-    /// `DrawingOutcome.reading`. Di serie è il risultato del motore.
-    fn lettura(&self, _id: &str, risultato: Value) -> Value {
+    /// `DrawingOutcome.reading`, sulla copia aperta (per tradurre i nodi del
+    /// motore negli id del file). Di serie è il risultato del motore.
+    fn lettura(&self, _id: &str, _copia: &Copia, risultato: Value) -> Value {
         risultato
     }
 
@@ -1312,7 +1313,7 @@ pub(crate) fn esegui(
             if !legge || risultato.is_null() {
                 return Ok(rifiuta(DrawingRefusal::Empty));
             }
-            let lettura = nata.stato().lettura(&riga.id, risultato);
+            let lettura = nata.stato().lettura(&riga.id, copia, risultato);
             let byte = serde_json::to_vec(&lettura).map_or(usize::MAX, |b| b.len());
             if byte > MAX_DRAWING_OPS_BYTES {
                 return Ok(rifiuta(DrawingRefusal::TooLarge));
