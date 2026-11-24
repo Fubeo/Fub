@@ -1541,6 +1541,42 @@ button.draw-isolation-crumb:hover {
   color: var(--danger);
 }
 
+/* ── K6 · Le guide del righello (`guide-linee.ts`) ───────────────────────── */
+/* Sopra il disegno e sotto i righelli di bordo; il puntatore le attraversa (i gesti
+   li prende la superficie). Il colore di serie delle guide di VectorCraft (#4affff,
+   linee piene), più scuro di poco perché si legga anche sulla carta bianca; una
+   guida bloccata nel file è tratteggiata, quella che si prende o si trascina più
+   spessa. */
+.draw-guides {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+  overflow: hidden;
+  pointer-events: none;
+}
+.draw-guide-line {
+  stroke: #1fc8e0;
+  stroke-width: 1px;
+  shape-rendering: crispEdges;
+  vector-effect: non-scaling-stroke;
+}
+.draw-guide-line-locked {
+  stroke-dasharray: 4 3;
+}
+.draw-guide-line-hot {
+  stroke-width: 2px;
+}
+/* Sopra una guida che si prende il cursore dice dove va, anche sopra quello dello
+   strumento (scritto sulla superficie da `motore/gesti.ts`). */
+.draw-surface[data-guida-sotto="x"] {
+  cursor: ew-resize !important;
+}
+.draw-surface[data-guida-sotto="y"] {
+  cursor: ns-resize !important;
+}
+
 /* ── K6 · I righelli di bordo del foglio (T11, giro E) ───────────────────── */
 /* Due righe dentro il foglio, sul suo bordo in alto e a sinistra: sopra il disegno,
    e il puntatore le attraversa. Le misure, 20 px la riga e 28 px la colonna, sono

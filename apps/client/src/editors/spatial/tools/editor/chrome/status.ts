@@ -112,6 +112,8 @@ export function statoClienteCompleto(ctx: EditorContext, id: string): boolean | 
 const COMANDI_DI_FUB: Readonly<Record<string, (ctx: EditorContext) => void>> = {
   "disegno.object.unlockAll": (ctx) => ctx.unflagAll("locked"),
   "disegno.object.showAll": (ctx) => ctx.unflagAll("hidden"),
+  // Blocca guide è della vista, come in VectorCraft: le guide le prende il client (`guide-linee.ts`).
+  "disegno.view.guides.lock": (ctx) => ctx.setGuidesLocked(!ctx.guidesLocked),
 };
 
 /// Fa il comando del motore `id` con la regola di Fub, se è uno di quelli

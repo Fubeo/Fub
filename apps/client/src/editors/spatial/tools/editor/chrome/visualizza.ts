@@ -5,7 +5,8 @@
 // al pixel è la stessa scrittura, col passo di un pixel (`snapPixel`); guide sensibili,
 // aggancio al punto e ai glifi li fa il motore, e il gesto gli porta lo stato
 // (`snap.guides`, `snap.points`, `snap.glyphs`, accesi e spenti come in VectorCraft); il
-// contorno è la vista del contorno; i righelli di bordo stanno in `edge-rulers.ts`;
+// contorno è la vista del contorno; i righelli di bordo stanno in `edge-rulers.ts`, e
+// Nascondi guide e Blocca guide (la spunta di `disegno.view.guides.lock`) in `guide-linee.ts`;
 // la rotazione è quella della vista; la griglia di trasparenza, i bordi e il
 // riquadro di delimitazione li disegnano `view.ts` e `marks.ts`; gli spazi vuoti della
 // pittura dinamica li legge dal motore `../spazi-pittura.ts`; le tavole nascoste sono un attributo
@@ -27,6 +28,7 @@ export const COMANDI_VISUALIZZA = [
   "view.transparencyGrid",
   "view.outline",
   "view.rulers",
+  "view.guides",
   "view.edges",
   "view.boundingBox",
   "view.artboards",
@@ -40,13 +42,15 @@ export type ComandoVisualizza = (typeof COMANDI_VISUALIZZA)[number];
 
 /// Le file di ≡ › Visualizza, in ordine, con una riga di separazione fra l'una e
 /// l'altra: griglia e aggancio, poi le guide sensibili e gli agganci del motore, poi come si vede la carta e il disegno (la griglia di
-/// trasparenza, contorno, righelli), poi ciò che si nasconde attorno agli oggetti
+/// trasparenza, contorno, righelli), poi le guide del righello (le altre voci della fila sono del
+/// motore: `FILE_DEI_MENU` in `completo/comandi.ts`), poi ciò che si nasconde attorno agli oggetti
 /// scelti (bordi, riquadro) e le tavole, poi i cursori di precisione, poi la rotazione della vista,
 /// poi la tavola da inquadrare.
 export const FILE_VISUALIZZA: readonly (readonly ComandoVisualizza[])[] = [
   ["view.grid", "view.snapToGrid", "view.snapToPixel"],
   ["view.smartGuides", "view.snapToPoint", "view.snapToGlyph"],
   ["view.transparencyGrid", "view.outline", "view.rulers"],
+  ["view.guides"],
   ["view.edges", "view.boundingBox", "view.artboards", "view.livePaintGaps"],
   ["view.preciseCursors"],
   ["view.rotate", "view.rotateReset"],
@@ -93,6 +97,10 @@ export function statoVisualizza(ctx: EditorContext, id: string): boolean | undef
       return ctx.outline;
     case "view.rulers":
       return ctx.edgeRulers;
+    case "view.guides":
+      return ctx.guidesHidden;
+    case "disegno.view.guides.lock":
+      return ctx.guidesLocked;
     case "view.edges":
       return ctx.grid.hideEdges === true;
     case "view.boundingBox":
@@ -138,6 +146,9 @@ export function comandoVisualizza(ctx: EditorContext, id: ComandoVisualizza): vo
       return;
     case "view.rulers":
       ctx.setEdgeRulers(!ctx.edgeRulers);
+      return;
+    case "view.guides":
+      ctx.setGuidesHidden(!ctx.guidesHidden);
       return;
     case "view.edges":
       ctx.changeGrid({ ...ctx.grid, hideEdges: ctx.grid.hideEdges !== true });

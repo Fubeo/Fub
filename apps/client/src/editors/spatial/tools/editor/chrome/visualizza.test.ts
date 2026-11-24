@@ -33,6 +33,9 @@ function fingi(angle = 0, tavole: readonly { id: string; name: string }[] = [{ i
     changeGrid: vi.fn(),
     setOutline: vi.fn(),
     setEdgeRulers: vi.fn(),
+    guidesHidden: false,
+    guidesLocked: false,
+    setGuidesHidden: vi.fn(),
     turnView: vi.fn(),
     preciseCursors: false,
     setPreciseCursors: vi.fn(),
@@ -52,6 +55,7 @@ describe("le righe view.* di ≡ › Visualizza del Disegno completo", () => {
       "view.transparencyGrid",
       "view.outline",
       "view.rulers",
+      "view.guides",
       "view.edges",
       "view.boundingBox",
       "view.artboards",
@@ -76,7 +80,7 @@ describe("le righe view.* di ≡ › Visualizza del Disegno completo", () => {
 
   it("le file del menu portano ognuna voce una volta sola, nell'ordine dei comandi", () => {
     expect(FILE_VISUALIZZA.flat()).toEqual([...COMANDI_VISUALIZZA]);
-    expect(FILE_VISUALIZZA.map((file) => file.length)).toEqual([3, 3, 3, 4, 1, 2, 1]);
+    expect(FILE_VISUALIZZA.map((file) => file.length)).toEqual([3, 3, 3, 1, 4, 1, 2, 1]);
   });
 
   it("una voce che il client fa è attiva; rotateReset è spenta col perché se la vista non è girata", () => {
@@ -115,6 +119,14 @@ describe("le righe view.* di ≡ › Visualizza del Disegno completo", () => {
     expect(statoVisualizza(editor, "view.snapToGrid")).toBe(false);
     expect(statoVisualizza(editor, "view.outline")).toBe(true);
     expect(statoVisualizza(editor, "view.rulers")).toBe(true);
+    // Nascondi guide ha la spunta con le guide nascoste; Blocca guide (del motore, fatta dal
+    // client) con le guide bloccate.
+    expect(statoVisualizza(editor, "view.guides")).toBe(false);
+    expect(statoVisualizza(editor, "disegno.view.guides.lock")).toBe(false);
+    ctx.guidesHidden = true;
+    ctx.guidesLocked = true;
+    expect(statoVisualizza(editor, "view.guides")).toBe(true);
+    expect(statoVisualizza(editor, "disegno.view.guides.lock")).toBe(true);
     expect(statoVisualizza(editor, "view.rotateReset")).toBeUndefined();
   });
 
@@ -210,6 +222,8 @@ describe("le righe view.* di ≡ › Visualizza del Disegno completo", () => {
     expect(ctx.setOutline).toHaveBeenCalledWith(true);
     comandoVisualizza(editor, "view.rulers");
     expect(ctx.setEdgeRulers).toHaveBeenCalledWith(true);
+    comandoVisualizza(editor, "view.guides");
+    expect(ctx.setGuidesHidden).toHaveBeenCalledWith(true);
     comandoVisualizza(editor, "view.edges");
     expect(ctx.changeGrid).toHaveBeenLastCalledWith({ shown: false, snap: false, hideEdges: true });
     comandoVisualizza(editor, "view.boundingBox");

@@ -537,6 +537,8 @@ export function installControls(ctx: EditorContext): void {
     syncControls();
     if (ctx.hotGuide !== null && (ctx.scene.root.guides?.[ctx.hotGuide] === undefined || ctx.scene.root.guides[ctx.hotGuide]!.locked)) ctx.hotGuide = null;
     showHandles();
+    // Le guide del righello stanno nella radice: si ridisegnano con la scena.
+    ctx.showGuides();
     syncTree();
     syncProperties();
   };

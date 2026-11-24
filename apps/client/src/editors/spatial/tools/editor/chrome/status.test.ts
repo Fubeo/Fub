@@ -232,4 +232,16 @@ describe("i comandi del motore che il Completo fa con la regola di Fub", () => {
     expect(comandoDiFub(ctx, "disegno.object.lock")).toBe(false);
     expect(unflagAll).toHaveBeenCalledTimes(2);
   });
+
+  it("Blocca guide è della vista: il client accende e spegne il blocco delle sue guide", () => {
+    const setGuidesLocked = vi.fn();
+    const ctx = { guidesLocked: false, setGuidesLocked } as unknown as EditorContext;
+    expect(comandoDiFub(ctx, "disegno.view.guides.lock")).toBe(true);
+    expect(setGuidesLocked).toHaveBeenLastCalledWith(true);
+    (ctx as { guidesLocked: boolean }).guidesLocked = true;
+    comandoDiFub(ctx, "disegno.view.guides.lock");
+    expect(setGuidesLocked).toHaveBeenLastCalledWith(false);
+    // Le altre voci delle guide cambiano il file: vanno al motore.
+    expect(comandoDiFub(ctx, "disegno.view.guides.clear")).toBe(false);
+  });
 });

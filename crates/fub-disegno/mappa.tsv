@@ -1042,7 +1042,7 @@ interfaccia	view.template	Hide Template		vista	F1	T11	da fare	menu/visualizza	fa
 interfaccia	view.rulers	Show Rulers		vista	F1	T11	fatto	menu/visualizza	famiglia		Mostra righelli
 interfaccia	view.videoRulers	Show Video Rulers		stampa	F4	T25	da fare	menu/visualizza	famiglia		Mostra righelli video
 interfaccia	view.boundingBox	Hide Bounding Box		vista	F1	T11	fatto	menu/visualizza	famiglia		Nascondi riquadro di delimitazione
-interfaccia	view.guides	Hide Guides		tavole	F2	T19	da fare	menu/visualizza	famiglia		Nascondi guide
+interfaccia	view.guides	Hide Guides		tavole	F2	T19	fatto	menu/visualizza	famiglia	della vista, non del file: le guide non si vedono né si prendono (guide-linee.ts)	Nascondi guide
 interfaccia	view.smartGuides	Smart Guides		vista	F1	T11	fatto	menu/visualizza	famiglia		Guide sensibili
 interfaccia	view.grid	Show Grid		vista	F1	T11	fatto	menu/visualizza	famiglia		Mostra griglia
 interfaccia	view.snapToGrid	Snap to Grid		vista	F1	T11	fatto	menu/visualizza	famiglia		Aggancia alla griglia

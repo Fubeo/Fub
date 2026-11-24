@@ -7511,6 +7511,22 @@
     },
     {
       "fonte": "interfaccia",
+      "id": "view.guides",
+      "chiamata": {
+        "client": "view.guides"
+      },
+      "etichetta": {
+        "it": "Nascondi guide",
+        "en": "Hide Guides"
+      },
+      "posto": "menu/visualizza",
+      "famiglia": "tavole",
+      "tasto": "Cmd+;",
+      "effetto": "mostra",
+      "finestra": false
+    },
+    {
+      "fonte": "interfaccia",
       "id": "view.livePaintGaps",
       "chiamata": {
         "client": "view.livePaintGaps"

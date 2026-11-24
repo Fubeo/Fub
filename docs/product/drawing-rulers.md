@@ -9,10 +9,27 @@
 Il [disegno](drawing.md) ha la sua unità di misura, che vale per i campi e
 per ciò che l'editor dice. Le **guide del documento**, linee orizzontali e
 verticali scritte nel file, restano dove sono quando un disegno le porta,
-scritte da un altro programma o da una versione precedente, ma Fub non le
-mostra, non le crea e non le cambia: i righelli e le guide se ne sono andati
-con lo Standard (decisione 0231). Le unità sono in
+scritte da un altro programma o da una versione precedente. Lo Standard non
+le mostra, non le crea e non le cambia: i righelli e le guide se ne sono
+andati con lui (decisione 0231). Le unità sono in
 `apps/client/src/editors/spatial/tools/rulers.ts`.
+
+Il **Completo** col motore le riporta come in VectorCraft
+(`apps/client/src/editors/spatial/tools/editor/guide-linee.ts`):
+
+- si vedono sopra il disegno, in ciano; una guida di tavola corre solo
+  sulla sua tavola, una bloccata nel file è tratteggiata, e la guida di un
+  livello nascosto non si vede;
+- una guida nuova si tira dal righello in alto (orizzontale) o a sinistra
+  (verticale), con qualunque strumento; con Alt cambia asse, con Maiusc si
+  aggancia alle tacche del righello; con lo strumento Tavola è della tavola
+  sotto il puntatore; lasciata sopra un righello non nasce;
+- con gli strumenti di selezione una guida si prende e si sposta (il
+  cursore lo dice), con Alt se ne lascia una copia, e lasciata sopra un
+  righello si toglie;
+- in Visualizza, **Guide** le nasconde e le rimostra, e **Blocca guide** le
+  lascia vedere senza che si prendano; tutte e due valgono per la sessione,
+  non per il file.
 
 ## L'unità del documento
 

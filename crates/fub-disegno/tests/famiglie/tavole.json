@@ -1257,6 +1257,11 @@
       "prova": "apps/client/src/editors/spatial/tools/editor/chrome/visualizza.test.ts"
     },
     {
+      "id": "view.guides",
+      "fonte": "interfaccia",
+      "prova": "apps/client/src/editors/spatial/tools/editor/guide-linee.test.ts"
+    },
+    {
       "id": "document.switchUnits",
       "fonte": "motore",
       "prova": "apps/client/src/editors/spatial/tools/editor/chrome/unita.test.ts"
@@ -1285,7 +1290,8 @@
             }
           }
         ]
-      }
+      },
+      "dopo": "guida-aggiungi-1.svg"
     },
     {
       "$nota": "Nuova guida della seconda tavola, in un disegno senza guide.",
@@ -1307,7 +1313,8 @@
             }
           }
         ]
-      }
+      },
+      "dopo": "guida-aggiungi-2.svg"
     },
     {
       "$nota": "Le guide con gli id del file e il blocco di ognuna.",
@@ -1370,7 +1377,8 @@
             }
           }
         ]
-      }
+      },
+      "dopo": "guida-sposta-1.svg"
     },
     {
       "$nota": "Una guida bloccata nel file non si sposta.",
@@ -1409,7 +1417,8 @@
             }
           }
         ]
-      }
+      },
+      "dopo": "guida-sposta-2.svg"
     },
     {
       "$nota": "Togli una guida.",
@@ -1429,7 +1438,8 @@
             }
           }
         ]
-      }
+      },
+      "dopo": "guida-togli.svg"
     },
     {
       "$nota": "Togli le guide scelte: una bloccata fra loro rifiuta.",
@@ -1465,7 +1475,8 @@
             }
           }
         ]
-      }
+      },
+      "dopo": "guida-livello.svg"
     },
     {
       "$nota": "Cancella guide: tutte, anche le bloccate.",
@@ -1482,7 +1493,8 @@
             }
           }
         ]
-      }
+      },
+      "dopo": "guide-cancella.svg"
     },
     {
       "$nota": "Blocca guide: il blocco della sessione, il file non cambia.",
@@ -1541,7 +1553,8 @@
             ]
           }
         ]
-      }
+      },
+      "dopo": "tavola-sposta-guide.svg"
     },
     {
       "$nota": "Una guida della tavola se ne va con la sua tavola.",
@@ -1574,7 +1587,8 @@
             ]
           }
         ]
-      }
+      },
+      "dopo": "tavola-elimina-guide.svg"
     },
     {
       "$nota": "Libera una guida: diventa un tracciato senza colori lungo tutte le tavole.",
@@ -1602,7 +1616,7 @@
                     "y1": "0",
                     "x2": "120",
                     "y2": "300",
-                    "id": "@1"
+                    "id": "og1a2b3c4"
                   }
                 }
               },
@@ -1616,7 +1630,8 @@
             ]
           }
         ]
-      }
+      },
+      "dopo": "guide-libera.svg"
     }
   ]
 }

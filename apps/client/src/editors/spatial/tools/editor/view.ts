@@ -17,6 +17,7 @@ import { fitView, placedAt, toScene, toScreen, turnTo, viewTransform, zoomAt, ty
 import { DRAW_SCALE_LIMITS, FIT_PAD, OPEN_MARGIN_PX } from "./constants";
 import type { EditorContext } from "./context";
 import { installEdgeRulers } from "./edge-rulers";
+import { installGuideLines } from "./guide-linee";
 import { union } from "./helpers";
 
 /// Sotto questa larghezza sullo schermo, in pixel, una tavola non mostra il
@@ -69,6 +70,13 @@ export interface ViewContext {
   /// I righelli di bordo del foglio sono accesi (K6 T11, giro E: ≡ › Visualizza del Completo).
   edgeRulers: boolean;
   setEdgeRulers: (on: boolean) => void;
+  /// Nascondi guide e Blocca guide del Completo (`guide-linee.ts`): della vista, non del file.
+  guidesHidden: boolean;
+  setGuidesHidden: (hidden: boolean) => void;
+  guidesLocked: boolean;
+  setGuidesLocked: (locked: boolean) => void;
+  /// Ridisegna le guide del righello, dopo un cambio della scena.
+  showGuides: () => void;
   /// «Usa cursori di precisione» (K6 T11, cursori): la croce al posto del cursore degli strumenti che disegnano.
   preciseCursors: boolean;
   setPreciseCursors: (on: boolean) => void;
@@ -84,6 +92,8 @@ export function installView(ctx: EditorContext): void {
   } = ctx;
   // I righelli di bordo: spenti finché il Completo non li accende.
   installEdgeRulers(ctx);
+  // Le guide del righello, sotto i righelli di bordo.
+  installGuideLines(ctx);
   // --- Annunci ------------------------------------------------------------
 
   let echo = false;

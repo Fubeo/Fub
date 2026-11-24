@@ -322,7 +322,11 @@ const FILE_ELABORAZIONE: readonly (readonly string[])[] = [
 /// della fila, e una riga di separazione fra una fila e l'altra. Un sottomenu
 /// che non è qui tiene l'ordine dell'indice.
 const FILE_DEI_MENU: Readonly<Record<string, readonly (readonly string[])[]>> = {
-  visualizza: FILE_VISUALIZZA,
+  // Le guide del righello in una fila, come Visualizza › Guide di VectorCraft: Nascondi guide è
+  // del client, le altre del motore (Blocca guide con la regola del client).
+  visualizza: FILE_VISUALIZZA.map((fila) =>
+    fila[0] === "view.guides" ? [...fila, "view.guides.lock", "view.guides.make", "view.guides.release", "view.guides.clear"] : fila,
+  ),
   "oggetto/tracciato": FILE_TRACCIATO,
   "oggetto/elaborazione": FILE_ELABORAZIONE,
   "oggetto/ritaglio": FILE_RITAGLIO,
@@ -409,8 +413,10 @@ export function menuComando(indice: Indice, stato: StatoComandi, esegui: EseguiV
       ...(perche === undefined ? {} : { description: perche }),
       run: () => esegui(voce),
     };
-    // Una voce del client con la spunta mostra lo stato vero della superficie.
-    const spunta = "client" in voce.chiamata ? stato.clientStato?.(voce.chiamata.client) : undefined;
+    // Una voce del client con la spunta mostra lo stato vero della superficie; così una voce
+    // del motore che il client fa con la sua regola (Blocca guide, `disegno.view.guides.lock`).
+    const conSpunta = "client" in voce.chiamata ? voce.chiamata.client : "comando" in voce.chiamata ? voce.chiamata.comando : undefined;
+    const spunta = conSpunta === undefined ? undefined : stato.clientStato?.(conSpunta);
     if (typeof spunta === "boolean") {
       riga.choice = "checkbox";
       riga.checked = spunta;

@@ -221,7 +221,7 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // Le funzioni di base come VectorCraft (tratto, tracciati, pannello Trasforma, forme vive) e gli
   // strumenti del testo (Testo, Testo in area e su tracciato, i due rimodella, Elimina il testo
   // vuoto, le opzioni del testo in area e su tracciato) diventano «fatto». Trenta righe in più.
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 709, fub: 114, escluso: 12, fatto: 716 });
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 708, fub: 114, escluso: 12, fatto: 717 });
 });
 
 // --- un motore finto ---------------------------------------------------------------

@@ -175,7 +175,7 @@ describe("le voci del client con la spunta (K6 T11, giro E)", () => {
     expect(righe[0]).toMatchObject({ choice: "checkbox", checked: true, disabled: false });
   });
 
-  it("≡ › Visualizza ha le sue file: griglia e aggancio, trasparenza, contorno e righelli, bordi e riquadro, rotazione", () => {
+  it("≡ › Visualizza ha le sue file: griglia e aggancio, trasparenza, contorno e righelli, guide, bordi e riquadro, rotazione", () => {
     const client = (id: string) => voce(id, "menu/visualizza", { fonte: "interfaccia", chiamata: { client: id } });
     // L'indice le dà in ordine di id, e una voce che nessuna fila nomina va in fondo.
     const voci = [
@@ -184,6 +184,9 @@ describe("le voci del client con la spunta (K6 T11, giro E)", () => {
       "view.outline",
       "view.rotateReset",
       "view.rulers",
+      "view.guides.clear",
+      "view.guides",
+      "view.guides.lock",
       "view.snapToGrid",
       "view.transparencyGrid",
       "view.edges",
@@ -198,6 +201,9 @@ describe("le voci del client con la spunta (K6 T11, giro E)", () => {
       [nome("view.transparencyGrid"), true],
       [nome("view.outline"), false],
       [nome("view.rulers"), false],
+      [nome("view.guides"), true],
+      [nome("view.guides.lock"), false],
+      [nome("view.guides.clear"), false],
       [nome("view.edges"), true],
       [nome("view.boundingBox"), false],
       [nome("view.rotateReset"), true],
