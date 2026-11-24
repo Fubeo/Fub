@@ -5043,6 +5043,262 @@
     },
     {
       "fonte": "motore",
+      "id": "symbol.addFromLibrary",
+      "chiamata": {
+        "comando": "disegno.symbol.addFromLibrary"
+      },
+      "etichetta": {
+        "it": "Aggiungi ai simboli",
+        "en": "Add to Symbols"
+      },
+      "posto": "ispettore/risorse",
+      "famiglia": "simboli",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "symbol.adjust",
+      "chiamata": {
+        "comando": "disegno.symbol.adjust"
+      },
+      "etichetta": {
+        "it": "Strumento Simbolismo",
+        "en": "Symbolism Tool"
+      },
+      "posto": "ispettore/risorse",
+      "famiglia": "simboli",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "symbol.breakLink",
+      "chiamata": {
+        "comando": "disegno.symbol.breakLink"
+      },
+      "etichetta": {
+        "it": "Interrompi collegamento al simbolo",
+        "en": "Break Link to Symbol"
+      },
+      "posto": "ispettore/risorse",
+      "famiglia": "simboli",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "symbol.delete",
+      "chiamata": {
+        "comando": "disegno.symbol.delete"
+      },
+      "etichetta": {
+        "it": "Elimina simbolo",
+        "en": "Delete Symbol"
+      },
+      "posto": "ispettore/risorse",
+      "famiglia": "simboli",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "symbol.duplicate",
+      "chiamata": {
+        "comando": "disegno.symbol.duplicate"
+      },
+      "etichetta": {
+        "it": "Duplica simbolo",
+        "en": "Duplicate Symbol"
+      },
+      "posto": "ispettore/risorse",
+      "famiglia": "simboli",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "symbol.libraries",
+      "chiamata": {
+        "comando": "disegno.symbol.libraries"
+      },
+      "etichetta": {
+        "it": "Librerie simboli",
+        "en": "Symbol Libraries"
+      },
+      "posto": "interno",
+      "famiglia": "simboli",
+      "tasto": null,
+      "effetto": "legge",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "symbol.library",
+      "chiamata": {
+        "comando": "disegno.symbol.library"
+      },
+      "etichetta": {
+        "it": "Libreria simboli",
+        "en": "Symbol Library"
+      },
+      "posto": "interno",
+      "famiglia": "simboli",
+      "tasto": null,
+      "effetto": "legge",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "symbol.list",
+      "chiamata": {
+        "comando": "disegno.symbol.list"
+      },
+      "etichetta": {
+        "it": "Simboli",
+        "en": "Symbols"
+      },
+      "posto": "interno",
+      "famiglia": "simboli",
+      "tasto": null,
+      "effetto": "legge",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "symbol.new",
+      "chiamata": {
+        "comando": "disegno.symbol.new"
+      },
+      "etichetta": {
+        "it": "Nuovo simbolo…",
+        "en": "New Symbol…"
+      },
+      "posto": "ispettore/risorse",
+      "famiglia": "simboli",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "motore",
+      "id": "symbol.options",
+      "chiamata": {
+        "comando": "disegno.symbol.options"
+      },
+      "etichetta": {
+        "it": "Opzioni simbolo…",
+        "en": "Symbol Options…"
+      },
+      "posto": "ispettore/risorse",
+      "famiglia": "simboli",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "motore",
+      "id": "symbol.place",
+      "chiamata": {
+        "comando": "disegno.symbol.place"
+      },
+      "etichetta": {
+        "it": "Inserisci istanza simbolo",
+        "en": "Place Symbol Instance"
+      },
+      "posto": "ispettore/risorse",
+      "famiglia": "simboli",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "symbol.replace",
+      "chiamata": {
+        "comando": "disegno.symbol.replace"
+      },
+      "etichetta": {
+        "it": "Sostituisci simbolo",
+        "en": "Replace Symbol"
+      },
+      "posto": "ispettore/risorse",
+      "famiglia": "simboli",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "symbol.selectInstances",
+      "chiamata": {
+        "comando": "disegno.symbol.selectInstances"
+      },
+      "etichetta": {
+        "it": "Seleziona tutte le istanze",
+        "en": "Select All Instances"
+      },
+      "posto": "interno",
+      "famiglia": "simboli",
+      "tasto": null,
+      "effetto": "legge",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "symbol.spray",
+      "chiamata": {
+        "comando": "disegno.symbol.spray"
+      },
+      "etichetta": {
+        "it": "Spruzzo simboli",
+        "en": "Symbol Sprayer"
+      },
+      "posto": "ispettore/risorse",
+      "famiglia": "simboli",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "symbol.unused",
+      "chiamata": {
+        "comando": "disegno.symbol.unused"
+      },
+      "etichetta": {
+        "it": "Seleziona tutti gli elementi non usati",
+        "en": "Select All Unused"
+      },
+      "posto": "interno",
+      "famiglia": "simboli",
+      "tasto": null,
+      "effetto": "legge",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "symbol.update",
+      "chiamata": {
+        "comando": "disegno.symbol.update"
+      },
+      "etichetta": {
+        "it": "Ridefinisci simbolo",
+        "en": "Redefine Symbol"
+      },
+      "posto": "ispettore/risorse",
+      "famiglia": "simboli",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "text.editRange",
       "chiamata": {
         "comando": "disegno.text.editRange"

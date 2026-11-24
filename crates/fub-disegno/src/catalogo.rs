@@ -614,6 +614,8 @@ pub const NOMI: &[(&str, Tipo)] = &[
     ("distance", Tipo::Numero),
     ("ramp", Tipo::Numero),
     ("colorShift", Tipo::Numero),
+    // I simboli (K6): le opzioni dei simboli e degli strumenti dei simboli.
+    ("newName", Tipo::Testo),
 ];
 
 /// Una finestra che Fub scrive da sé, perché lo schema del motore descrive i

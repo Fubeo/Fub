@@ -1,5 +1,123 @@
 {
   "$generato": "File generato da crates/fub-disegno/tests/ts_indice.rs, non modificare a mano; rigenera con UPDATE_MIRROR=1 cargo test -p fub-disegno --test ts_indice",
   "famiglia": "simboli",
-  "finestre": []
+  "finestre": [
+    {
+      "fonte": "motore",
+      "id": "symbol.new",
+      "campi": [
+        {
+          "nome": "name",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "ids",
+          "tipo": "json",
+          "facoltativo": true,
+          "unoFra": 0
+        },
+        {
+          "nome": "id",
+          "tipo": "testo",
+          "facoltativo": true,
+          "unoFra": 0
+        },
+        {
+          "nome": "registration",
+          "tipo": "numero",
+          "facoltativo": true
+        },
+        {
+          "nome": "exportType",
+          "tipo": "scelta",
+          "facoltativo": true,
+          "valori": [
+            "movieClip",
+            "graphic"
+          ],
+          "aperta": false
+        },
+        {
+          "nome": "nineSlice",
+          "tipo": "sino",
+          "facoltativo": true
+        },
+        {
+          "nome": "nineSliceGuides",
+          "tipo": "scelta",
+          "facoltativo": true,
+          "valori": [
+            "array"
+          ],
+          "aperta": false
+        },
+        {
+          "nome": "type",
+          "tipo": "scelta",
+          "facoltativo": true,
+          "valori": [
+            "static",
+            "dynamic"
+          ],
+          "aperta": false
+        }
+      ]
+    },
+    {
+      "fonte": "motore",
+      "id": "symbol.options",
+      "campi": [
+        {
+          "nome": "name",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "newName",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "registration",
+          "tipo": "numero",
+          "facoltativo": true
+        },
+        {
+          "nome": "exportType",
+          "tipo": "scelta",
+          "facoltativo": true,
+          "valori": [
+            "movieClip",
+            "graphic"
+          ],
+          "aperta": false
+        },
+        {
+          "nome": "nineSlice",
+          "tipo": "sino",
+          "facoltativo": true
+        },
+        {
+          "nome": "nineSliceGuides",
+          "tipo": "scelta",
+          "facoltativo": true,
+          "valori": [
+            "array"
+          ],
+          "aperta": false
+        },
+        {
+          "nome": "type",
+          "tipo": "scelta",
+          "facoltativo": true,
+          "valori": [
+            "static",
+            "dynamic"
+          ],
+          "aperta": false
+        }
+      ]
+    }
+  ]
 }

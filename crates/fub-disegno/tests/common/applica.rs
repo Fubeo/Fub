@@ -1,6 +1,6 @@
 //! Un applicatore piccolo delle operazioni della scena sul testo, solo per
 //! le forme che la differenza scrive nelle prove (`batch`, `remove` per id o
-//! del blocco delle ricette, `add` di `raw` o `elem` coi figli, `move`, `set`
+//! per percorso e tag, `add` di `raw` o `elem` coi figli, `move`, `set`
 //! anche con `tag`, `ident`): il motore delle operazioni vero è quello del client
 //! (`apps/client/src/editors/spatial/completo/casi.test.ts` lo prova sugli
 //! stessi casi, byte per byte).
@@ -122,16 +122,21 @@ fn applica_op(testo: &mut String, op: &Value) -> Result<(), String> {
                 None => {
                     let percorso: Vec<usize> = serde_json::from_value(t["path"].clone())
                         .map_err(|e| format!("un percorso che non si legge: {e}"))?;
-                    if t["tag"] != "metadata" {
-                        return Err(format!(
-                            "l'applicatore toglie per percorso solo i metadati: {op}"
-                        ));
+                    if t["tag"] == "metadata" {
+                        let m = vectorcraft_svg::recipes(testo)
+                            .into_iter()
+                            .find(|r| r.metadata_path == percorso)
+                            .ok_or("il blocco delle ricette non c'è")?;
+                        [m.metadata.start, m.metadata.end]
+                    } else {
+                        // Un elemento senza id, col suo percorso e il suo
+                        // tag: il titolo di un simbolo rinominato.
+                        elementi(testo)?
+                            .into_iter()
+                            .find(|e| e.path == percorso && t["tag"] == e.tag)
+                            .map(|e| e.span.bytes)
+                            .ok_or_else(|| format!("il bersaglio non c'è: {op}"))?
                     }
-                    let m = vectorcraft_svg::recipes(testo)
-                        .into_iter()
-                        .find(|r| r.metadata_path == percorso)
-                        .ok_or("il blocco delle ricette non c'è")?;
-                    [m.metadata.start, m.metadata.end]
                 }
             };
             testo.replace_range(da..a, "");

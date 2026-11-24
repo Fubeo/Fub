@@ -288,6 +288,10 @@ fn una_selezione_con_un_elemento_non_mappato_non_cambia_niente() {
         "disegno.swatch.move",
         // L'ordine per specie guarda i campioni del documento, non la scelta (K6 T14, campioni).
         "disegno.swatch.sortByKind",
+        // La Bacchetta magica sceglie dal punto del clic, e le sue opzioni sono della sessione.
+        "disegno.select.magicWand",
+        "disegno.magicWand.set",
+        "disegno.magicWand.options",
         "disegno.select.all",
         "disegno.select.inverse",
         "disegno.select.none",
@@ -338,6 +342,19 @@ fn una_selezione_con_un_elemento_non_mappato_non_cambia_niente() {
         "disegno.swatch.ungroup",
         "disegno.swatch.editGroup",
         "disegno.swatch.resetDefaults",
+        // I simboli (K6) che non leggono la scelta: prendono il simbolo o i punti dal valore,
+        // o leggono il documento. Nuovo, scollega, aggiorna, sostituisci e regola la leggono.
+        "disegno.symbol.list",
+        "disegno.symbol.options",
+        "disegno.symbol.place",
+        "disegno.symbol.delete",
+        "disegno.symbol.duplicate",
+        "disegno.symbol.unused",
+        "disegno.symbol.selectInstances",
+        "disegno.symbol.spray",
+        "disegno.symbol.libraries",
+        "disegno.symbol.library",
+        "disegno.symbol.addFromLibrary",
     ];
     let comandi = d.comandi(&["oa1a1a1a1".into(), "onessuno1".into()]);
     let accesi: Vec<&str> = comandi

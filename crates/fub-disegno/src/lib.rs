@@ -45,6 +45,7 @@ mod profilo;
 pub mod ricetta;
 /// Le sfumature del motore scritte come risorse private della scena.
 mod sfumature;
+mod simboli;
 /// La sincronia fra il documento del motore e il file sul disco.
 pub mod sincronia;
 mod tavole;

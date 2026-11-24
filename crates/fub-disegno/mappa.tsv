@@ -41,24 +41,24 @@ motore	brush.unused	Select All Unused		pennelli	F2	T17	da fare	interno	famiglia	
 motore	brush.options	Brush Options…		pennelli	F2	T17	da fare	ispettore/risorse	famiglia	finestra	Opzioni pennello…
 motore	object.expandBrush	Expand Brush Strokes		pennelli	F2	T17	da fare	ispettore/risorse	famiglia		Espandi tracce pennello
 motore	brush.freehand	Paintbrush		pennelli	F2	T17	da fare	ispettore/risorse	famiglia		Pennello
-motore	symbol.list	Symbols		simboli	F3	T22	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Simboli
-motore	symbol.new	New Symbol…		simboli	F3	T22	da fare	ispettore/risorse	famiglia	finestra	Nuovo simbolo…
-motore	symbol.options	Symbol Options…		simboli	F3	T22	da fare	ispettore/risorse	famiglia	finestra	Opzioni simbolo…
-motore	symbol.place	Place Symbol Instance		simboli	F3	T22	da fare	ispettore/risorse	famiglia		Inserisci istanza simbolo
-motore	symbol.breakLink	Break Link to Symbol		simboli	F3	T22	da fare	ispettore/risorse	famiglia		Interrompi collegamento al simbolo
+motore	symbol.list	Symbols		simboli	F3	T22	fatto	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Simboli
+motore	symbol.new	New Symbol…		simboli	F3	T22	fatto	ispettore/risorse	famiglia	finestra	Nuovo simbolo…
+motore	symbol.options	Symbol Options…		simboli	F3	T22	fatto	ispettore/risorse	famiglia	finestra	Opzioni simbolo…
+motore	symbol.place	Place Symbol Instance		simboli	F3	T22	fatto	ispettore/risorse	famiglia		Inserisci istanza simbolo
+motore	symbol.breakLink	Break Link to Symbol		simboli	F3	T22	fatto	ispettore/risorse	famiglia		Interrompi collegamento al simbolo
 motore	symbol.edit	Edit Symbol		simboli	F3	T22	da fare	ispettore/risorse	famiglia		Modifica simbolo
 motore	symbol.exitEditing	Exit Symbol Editing Mode		simboli	F3	T22	da fare	ispettore/risorse	famiglia		Esci dalla modalità modifica simbolo
-motore	symbol.update	Redefine Symbol		simboli	F3	T22	da fare	ispettore/risorse	famiglia		Ridefinisci simbolo
-motore	symbol.delete	Delete Symbol		simboli	F3	T22	da fare	ispettore/risorse	famiglia		Elimina simbolo
-motore	symbol.duplicate	Duplicate Symbol		simboli	F3	T22	da fare	ispettore/risorse	famiglia		Duplica simbolo
-motore	symbol.replace	Replace Symbol		simboli	F3	T22	da fare	ispettore/risorse	famiglia		Sostituisci simbolo
+motore	symbol.update	Redefine Symbol		simboli	F3	T22	fatto	ispettore/risorse	famiglia		Ridefinisci simbolo
+motore	symbol.delete	Delete Symbol		simboli	F3	T22	fatto	ispettore/risorse	famiglia		Elimina simbolo
+motore	symbol.duplicate	Duplicate Symbol		simboli	F3	T22	fatto	ispettore/risorse	famiglia		Duplica simbolo
+motore	symbol.replace	Replace Symbol		simboli	F3	T22	fatto	ispettore/risorse	famiglia		Sostituisci simbolo
 motore	symbol.instance.setAppearance	Symbol Instance Appearance		simboli	F3	T22	da fare	ispettore/risorse	famiglia		Aspetto dell'istanza di simbolo
 motore	symbol.instance.reset	Reset Symbol Instance		simboli	F3	T22	da fare	ispettore/risorse	famiglia		Reimposta istanza di simbolo
-motore	symbol.setCurrent	Current Symbol		simboli	F3	T22	da fare	ispettore/risorse	famiglia		Simbolo corrente
-motore	symbol.unused	Select All Unused		simboli	F3	T22	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Seleziona tutti gli elementi non usati
-motore	symbol.selectInstances	Select All Instances		simboli	F3	T22	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Seleziona tutte le istanze
-motore	symbol.spray	Symbol Sprayer		simboli	F3	T22	da fare	ispettore/risorse	famiglia		Spruzzo simboli
-motore	symbol.adjust	Symbolism Tool		simboli	F3	T22	da fare	ispettore/risorse	famiglia		Strumento Simbolismo
+motore	symbol.setCurrent	Current Symbol		simboli	F3	T22	da fare	ispettore/risorse	famiglia	il simbolo corrente lo tiene la fila degli strumenti dei simboli e lo passa a ogni comando	Simbolo corrente
+motore	symbol.unused	Select All Unused		simboli	F3	T22	fatto	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Seleziona tutti gli elementi non usati
+motore	symbol.selectInstances	Select All Instances		simboli	F3	T22	fatto	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Seleziona tutte le istanze
+motore	symbol.spray	Symbol Sprayer		simboli	F3	T22	fatto	ispettore/risorse	famiglia		Spruzzo simboli
+motore	symbol.adjust	Symbolism Tool		simboli	F3	T22	fatto	ispettore/risorse	famiglia		Strumento Simbolismo
 motore	shapeBuilder.merge	Shape Builder		forme	F1	T13	fatto	ispettore/design	famiglia		Generatore forme
 motore	shapeBuilder.regions	Shape Builder Regions		forme	F1	T13	fatto	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Aree del Generatore forme
 motore	livePaint.make	Make	Object › Live Paint	trame	F2	T21	fatto	menu/oggetto	famiglia	i tracciati scelti diventano un gruppo vivo; il gruppo va nel file con la ricetta e si riapre vivo	Crea
@@ -595,9 +595,9 @@ motore	swatch.resetDefaults	Default Swatches	Window › Swatch Libraries	colore	
 motore	swatch.library.save	Save Swatch Library…	Window › Swatches	colore	F1	T14	da fare	ispettore/risorse	famiglia	lettura pronta nel motore: il contenuto torna nella risposta, senza percorso né cartella utente. Da fare: l'indice del client non legge lo schema (path e data senza tipo, crates/fub-motori/src/modulo.rs)	Salva libreria campioni…
 motore	swatch.library.load	Other Library…	Window › Swatch Libraries	colore	F1	T14	da fare	ispettore/risorse	famiglia	lettura pronta nel motore: carica dai dati passati (data o dataBase64), mai da un percorso. Da fare: stessa causa dello schema (path e data senza tipo); la finestra è window.swatchLibrary.other	Altra libreria…
 motore	swatch.library.copyToUser	Copy to User Defined	Window › Swatch Libraries	colore	F1	T14	da fare	ispettore/risorse	famiglia	scrive la cartella utente del desktop, cioè su disco: il motore non lo fa (D11, 21/11: le librerie dell'utente stanno in .fub/plugins/fub.draw/librerie/, scritte da Fub)	Copia in Definito dall'utente
-motore	symbol.libraries	Symbol Libraries		simboli	F3	T22	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Librerie simboli
-motore	symbol.library	Symbol Library		simboli	F3	T22	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Libreria simboli
-motore	symbol.addFromLibrary	Add to Symbols	Window › Symbol Libraries	simboli	F3	T22	da fare	ispettore/risorse	famiglia		Aggiungi ai simboli
+motore	symbol.libraries	Symbol Libraries		simboli	F3	T22	fatto	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Librerie simboli
+motore	symbol.library	Symbol Library		simboli	F3	T22	fatto	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Libreria simboli
+motore	symbol.addFromLibrary	Add to Symbols	Window › Symbol Libraries	simboli	F3	T22	fatto	ispettore/risorse	famiglia		Aggiungi ai simboli
 motore	symbol.saveLibrary	Save Symbol Library…	Window › Symbols	simboli	F3	T22	da fare	ispettore/risorse	famiglia	finestra	Salva libreria simboli…
 motore	symbol.loadLibrary	Other Library…	Window › Symbol Libraries	simboli	F3	T22	da fare	ispettore/risorse	famiglia	finestra	Altra libreria…
 motore	text.tabs.set	Set Tab Stops	Window › Tabs	testo	F2	T16	da fare	ispettore/design	famiglia		Imposta tabulazioni

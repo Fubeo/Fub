@@ -60,6 +60,8 @@ pub(crate) struct Copia {
     pub campioni: CampioniDelFile,
     /// Le tavole del file, che il motore ha come sue tavole.
     pub tavole: crate::tavole::Tavole,
+    /// I simboli del file, che il motore ha come suoi simboli.
+    pub simboli: crate::simboli::Simboli,
 }
 
 impl Copia {
@@ -157,6 +159,11 @@ pub(crate) fn importa(testo: &str, revisione: u64) -> Result<Copia, ErroreApertu
         }
     };
     let mut documento = documento;
+    let simboli = crate::simboli::leggi(&scena.items, &mut documento);
+    let legate = crate::simboli::istanze_legate(&scena.items, &simboli, &documento);
+    for e in elementi.iter_mut().filter(|e| legate.contains(&e.percorso)) {
+        e.motivo = None;
+    }
     let tavole = crate::tavole::leggi(testo, &scena.items, base, &mut documento);
     gruppi_di_fub(&elementi, &mut documento);
     livelli_vuoti(&elementi, &mut documento);
@@ -200,6 +207,7 @@ pub(crate) fn importa(testo: &str, revisione: u64) -> Result<Copia, ErroreApertu
         radice: base,
         campioni: campioni_del_file,
         tavole,
+        simboli,
     })
 }
 
@@ -815,6 +823,9 @@ fn copia_per_l_import(
             modifiche.push((da, a, String::new()));
             e.motivo = Some(CARTA_FUORI);
         }
+    }
+    for (dove, uso) in crate::simboli::usi_provvisori(testo, items) {
+        modifiche.push((dove, dove, uso));
     }
     let mut n = 0usize;
     let mut sintetici = Vec::new();

@@ -472,3 +472,87 @@ fn seleziona_per_font_e_opzioni_dicono_il_perche_in_italiano() {
         "Le tavole vanno indicate con «all» o con un intervallo, per esempio 1, 3-5."
     );
 }
+
+/// I simboli scritti si rileggono come il motore li ha lasciati: le operazioni
+/// di Fub, applicate al file, si riaprono coi simboli e le istanze che il
+/// caso vuole (l'ordine non conta: il motore li elenca in ordine di nome).
+#[test]
+fn i_simboli_scritti_si_rileggono() {
+    let disegni = disegni_di_prova();
+    let casi = leggi_file(&cartella_famiglie().join("simboli.json")).expect("i casi si leggono");
+    type Istanze<'a> = &'a [(&'a str, u64)];
+    let attesi: &[(&str, &str, Istanze)] = &[
+        (
+            "symbol.new",
+            "",
+            &[("Presa", 2), ("Vite", 0), ("Mattone", 1)],
+        ),
+        ("symbol.place", "", &[("Presa", 3), ("Vite", 0)]),
+        ("symbol.breakLink", "", &[("Presa", 1), ("Vite", 0)]),
+        (
+            "symbol.duplicate",
+            "",
+            &[("Presa", 2), ("Vite", 0), ("Presa copy", 0)],
+        ),
+        ("symbol.options", "", &[("Spina", 2), ("Vite", 0)]),
+        ("symbol.delete", "false", &[("Vite", 0)]),
+        ("symbol.delete", "true", &[("Vite", 0)]),
+        ("symbol.update", "", &[("Presa", 3), ("Vite", 0)]),
+        ("symbol.replace", "", &[("Presa", 1), ("Vite", 1)]),
+        ("symbol.spray", "", &[("Presa", 4), ("Vite", 0)]),
+        (
+            "symbol.addFromLibrary",
+            "",
+            &[("Presa", 2), ("Vite", 0), ("Star", 0)],
+        ),
+    ];
+    let mut provati = 0;
+    for caso in casi.iter().filter(|c| matches!(c.atteso, Atteso::Ops(_))) {
+        let chiave = caso.argomenti["expandInstances"]
+            .as_bool()
+            .map_or(String::new(), |b| b.to_string());
+        let Some((_, _, simboli)) = attesi
+            .iter()
+            .find(|(id, k, _)| *id == caso.id && *k == chiave)
+        else {
+            continue;
+        };
+        let nome = caso.nome();
+        let ops = ops_scritte(&disegni, caso).unwrap_or_else(|e| panic!("{e}"));
+        let scritto = common::applica::applica(&caso.disegno, &ops)
+            .unwrap_or_else(|e| panic!("{nome}: le operazioni non si applicano: {e}"));
+        let (mut d, _) = fub_disegno::motore::Disegno::apri_con(&disegni, &scritto)
+            .unwrap_or_else(|e| panic!("{nome}: il file scritto non si apre: {e}"));
+        let letto = d
+            .comando(fub_abi::DrawingCommandRequest {
+                revision: d.revisione(),
+                id: "disegno.symbol.list".into(),
+                selection: vec![],
+                value: json!({}),
+                preview: false,
+            })
+            .expect("l'elenco dei simboli")
+            .reading
+            .expect("una lettura");
+        let mut trovati: Vec<(String, u64)> = letto["symbols"]
+            .as_array()
+            .expect("i simboli")
+            .iter()
+            .map(|s| {
+                (
+                    s["name"].as_str().unwrap_or_default().to_string(),
+                    s["instances"].as_u64().unwrap_or_default(),
+                )
+            })
+            .collect();
+        trovati.sort();
+        let mut attesi: Vec<(String, u64)> = simboli
+            .iter()
+            .map(|(n, i)| ((*n).to_string(), *i))
+            .collect();
+        attesi.sort();
+        assert_eq!(trovati, attesi, "{nome}");
+        provati += 1;
+    }
+    assert_eq!(provati, attesi.len(), "ogni caso atteso c'è");
+}

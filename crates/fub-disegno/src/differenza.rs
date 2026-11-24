@@ -221,6 +221,7 @@ pub(crate) fn differenza(
         assorbiti: HashSet::new(),
         riferimenti: Riferimenti::default(),
         sfumature: Vec::new(),
+        simboli: Default::default(),
     };
     // I campioni per primi: gli id dei campioni nuovi servono a chi li usa.
     let dei_campioni = {
@@ -241,6 +242,25 @@ pub(crate) fn differenza(
         })?
     };
     lavoro.riferimenti = dei_campioni.riferimenti;
+    // I simboli prima delle istanze: un'istanza nuova vuole l'id del suo.
+    lavoro.simboli = {
+        let mappa = &copia.mappa;
+        let dati = &mut lavoro.dati;
+        let mut stampo = None;
+        crate::simboli::operazioni(
+            &copia.simboli,
+            &copia.documento,
+            dopo,
+            &mut stampo,
+            &mut |specie| {
+                let id = id::nuovo(specie, &|id| mappa.id_preso(id) || dati.contains(id))
+                    .ok_or_else(|| "nessun id nuovo libero".to_string())?;
+                dati.insert(id.clone());
+                Ok(id)
+            },
+        )
+        .map_err(no)?
+    };
     lavoro.composti(&prima, &poi);
     lavoro.ritagli(&prima, &poi);
     // Il confronto per primo: dice quali oggetti si riscrivono interi
@@ -292,6 +312,7 @@ pub(crate) fn differenza(
         ids,
         ricette: scritte,
         sfumature,
+        simboli,
         ..
     } = lavoro;
     // Il blocco delle ricette cambia solo con un gesto che scrive.
@@ -333,19 +354,71 @@ pub(crate) fn differenza(
     // `fub-defs`) e prima di chi le usa; le vecchie le toglie la scena con
     // il loro ultimo riferimento.
     let sfumature = ops_delle_sfumature(copia, &dei_campioni.davanti, sfumature);
-    let mut ops = if dei_campioni.davanti.is_empty() && sfumature.is_empty() {
-        ops
-    } else {
-        let mut tutte = dei_campioni.davanti;
-        tutte.extend(sfumature);
-        tutte.extend(ops);
-        tutte
-    };
+    // I simboli nuovi e cambiati dopo le risorse (che possono aver fatto la
+    // `fub-defs`) e prima delle istanze; quelli tolti per ultimi, quando
+    // nessuna istanza li usa più.
+    let dei_simboli = ops_dei_simboli(copia, &dei_campioni.davanti, &sfumature, &simboli);
+    let mut ops =
+        if dei_campioni.davanti.is_empty() && sfumature.is_empty() && dei_simboli.is_empty() {
+            ops
+        } else {
+            let mut tutte = dei_campioni.davanti;
+            tutte.extend(sfumature);
+            tutte.extend(dei_simboli);
+            tutte.extend(ops);
+            tutte
+        };
     ops.extend(dei_campioni.in_fondo);
+    ops.extend(simboli.tolti);
     if ops.len() > MAX_DRAWING_OPS {
         return Err(Rifiuto::TroppoGrande);
     }
     Ok(Differenza { ops, ids })
+}
+
+/// Gli attributi del `use` di un'istanza nuova (o riscritta) `nodo`, con
+/// la matrice `transform` e il simbolo del file `rid`. Ciò che un'istanza
+/// del formato non porta si rifiuta.
+fn attributi_dell_istanza(
+    nodo: &Node,
+    id: &str,
+    transform: Affine,
+    rid: &str,
+) -> Result<Map<String, Value>, Rifiuto> {
+    if !transform.is_finite() {
+        return Err(no("l'istanza ha una transform che non si scrive"));
+    }
+    if !nodo.appearance.items.is_empty() || !nodo.extras().symbol_overrides.is_empty() {
+        return Err(no(
+            "un'istanza con un aspetto suo o con parti cambiate non si scrive nel file",
+        ));
+    }
+    if nodo.extras().mask.is_some() {
+        return Err(no(
+            "un'istanza con una maschera non si scrive ancora nel file",
+        ));
+    }
+    if nodo.blend != vectorcraft_color::BlendMode::Normal {
+        return Err(no(
+            "un'istanza con una fusione non si scrive ancora nel file",
+        ));
+    }
+    if nodo.locked {
+        return Err(no("un'istanza bloccata non si scrive ancora nel file"));
+    }
+    let mut attrs = Map::new();
+    attrs.insert("id".into(), json!(id));
+    if !vicina_all_identita(transform) {
+        attrs.insert("transform".into(), json!(scrivi_matrice(transform)));
+    }
+    attrs.insert("href".into(), json!(format!("#{rid}")));
+    if nodo.opacity < 1.0 {
+        attrs.insert("opacity".into(), json!(numero(f64::from(nodo.opacity), 3)));
+    }
+    if !nodo.visible {
+        attrs.insert("display".into(), json!("none"));
+    }
+    Ok(attrs)
 }
 
 /// Divide i `move` in quelli che portano fuori un oggetto da un elemento tolto,
@@ -416,6 +489,39 @@ fn ops_delle_sfumature(copia: &Copia, campioni: &[Value], elems: Vec<Value>) -> 
     }
 }
 
+/// Gli `add` dei simboli nuovi nella `fub-defs` (quella del file, quella
+/// che le risorse del gesto fanno, o una nuova vuota in testa alla radice),
+/// poi i cambi di quelli che c'erano.
+fn ops_dei_simboli(
+    copia: &Copia,
+    campioni: &[Value],
+    sfumature: &[Value],
+    simboli: &crate::simboli::ScritturaDeiSimboli,
+) -> Vec<Value> {
+    let mut fuori = Vec::new();
+    if !simboli.nuovi.is_empty() {
+        let fatta = campioni.iter().chain(sfumature).any(|op| {
+            op["elem"]["tag"] == "defs" && op["elem"]["attrs"]["id"] == campioni::DEFS_DI_FUB
+        });
+        if copia.campioni.defs.is_none() && !fatta {
+            fuori.push(json!({
+                "op": "add", "parent": "#root", "pos": { "first": true },
+                "elem": { "tag": "defs", "attrs": { "id": campioni::DEFS_DI_FUB } },
+            }));
+        }
+        let defs = copia
+            .campioni
+            .defs
+            .clone()
+            .unwrap_or_else(|| campioni::DEFS_DI_FUB.to_string());
+        for raw in &simboli.nuovi {
+            fuori.push(json!({ "op": "add", "parent": defs, "pos": { "last": true }, "raw": raw }));
+        }
+    }
+    fuori.extend(simboli.cambi.iter().cloned());
+    fuori
+}
+
 /// Gli `add` delle risorse nuove `elems` di un gesto, come quelle delle
 /// sfumature: nella `fub-defs` del file, o in quella che le `ops` del gesto
 /// fanno, se no in una nuova.
@@ -471,6 +577,9 @@ struct Lavoro<'a> {
     /// Le sfumature private nuove del gesto, da aggiungere alla `fub-defs`
     /// prima di chi le usa ([`crate::sfumature`]).
     sfumature: Vec<Value>,
+    /// I simboli del gesto (`crate::simboli`): gli id del file dei simboli
+    /// del motore, per le istanze nuove.
+    simboli: crate::simboli::ScritturaDeiSimboli,
 }
 
 impl Lavoro<'_> {
@@ -839,15 +948,20 @@ impl Lavoro<'_> {
             // Un gruppo semplice nuovo fatto solo di pezzi nuovi (i pezzi che
             // l'Elaborazione tracciati lascia divisi): il `g`, poi ogni pezzo
             // dentro, subito dopo, ciascuno con il suo `add`.
-            if !riscritto && gruppo_tutto_nuovo(nodo, prima, &self.copia.mappa) {
+            if let Some(nome) = (!riscritto)
+                .then(|| gruppo_tutto_nuovo(nodo, prima, &self.copia.mappa))
+                .flatten()
+            {
                 let id = self.id_nuovo(Specie::Oggetto)?;
                 self.ids.insert(nodo.id, id.clone());
                 self.gruppi_nuovi.insert(nodo.id, genitore);
                 let pos = self.posto(genitore, &fratelli, i)?;
-                self.add.push(json!({
-                    "op": "add", "parent": parent, "pos": pos,
-                    "elem": { "tag": "g", "attrs": { "id": id } },
-                }));
+                let mut elem = json!({ "tag": "g", "attrs": { "id": id } });
+                if let Some(nome) = nome {
+                    elem["children"] = json!([{ "tag": "title", "attrs": {}, "text": nome }]);
+                }
+                self.add
+                    .push(json!({ "op": "add", "parent": parent, "pos": pos, "elem": elem }));
                 if let Some(figli) = nodo.children() {
                     let figli: Vec<&Arc<Node>> = figli.iter().collect();
                     let dentro = (0..figli.len()).map(|j| (Some(nodo.id), figli.clone(), j));
@@ -873,6 +987,42 @@ impl Lavoro<'_> {
                     "elem": { "tag": "text", "attrs": attrs, "children": testo.righe },
                 }));
                 continue;
+            }
+            // Un'istanza di un simbolo del file: un `use`.
+            // Come in VectorCraft, solo se il `<symbol>` sotto la sua
+            // transform disegna come il motore: se no, la sua copia dell'arte.
+            if let NodeKind::SymbolInstance { symbol, xf } = &nodo.kind {
+                let scala = self
+                    .simboli
+                    .scale
+                    .get(symbol)
+                    .copied()
+                    .unwrap_or(Affine::IDENTITY);
+                let rid = self
+                    .simboli
+                    .ids
+                    .get(symbol)
+                    .filter(|_| self.simboli.si_riusa(symbol, *xf * scala.inverse()))
+                    .cloned();
+                if let Some(rid) = rid {
+                    let vecchio = riscritto
+                        .then(|| self.elemento(nodo.id).and_then(Elemento::id_del_file))
+                        .flatten()
+                        .map(str::to_string);
+                    let id = match vecchio {
+                        Some(id) => id,
+                        None => self.id_nuovo(Specie::Oggetto)?,
+                    };
+                    let attrs =
+                        attributi_dell_istanza(nodo, &id, locale * *xf * scala.inverse(), &rid)?;
+                    self.ids.insert(nodo.id, id.clone());
+                    let pos = self.posto(genitore, &fratelli, i)?;
+                    self.add.push(json!({
+                        "op": "add", "parent": parent, "pos": pos,
+                        "elem": { "tag": "use", "attrs": attrs },
+                    }));
+                    continue;
+                }
             }
             // Un oggetto riscritto tiene il suo id se è già della forma nuova.
             let vecchio = riscritto
@@ -1252,6 +1402,11 @@ impl Lavoro<'_> {
         } else {
             self.elemento(a.id).cloned()
         };
+        if let Some(e) = &oggetto {
+            if let Some(fatto) = self.istanza(e, b, a)? {
+                return Ok(fatto);
+            }
+        }
         if let Some(e) = oggetto {
             let con_ricetta =
                 e.id.as_deref()
@@ -1312,6 +1467,87 @@ impl Lavoro<'_> {
             }
         }
         self.confronta_comune(b, a, prima, radice, livello)
+    }
+
+    /// Un'istanza scritta come `use` di un simbolo del file, che resta
+    /// un'istanza: la sua `transform`, il suo simbolo (`href`) e l'opacità
+    /// si scrivono come attributi. `None` se non è un'istanza così.
+    fn istanza(&mut self, e: &Elemento, b: &Node, a: &Node) -> Result<Option<()>, Rifiuto> {
+        let (
+            NodeKind::SymbolInstance { symbol: sb, xf: xb },
+            NodeKind::SymbolInstance { symbol: sa, xf: xa },
+        ) = (&b.kind, &a.kind)
+        else {
+            return Ok(None);
+        };
+        if e.tag != "use" {
+            return Ok(None);
+        }
+        let (Some(prima), Some(dopo)) = (
+            self.copia.simboli.del_nome(sb).map(|s| s.id.clone()),
+            self.simboli.ids.get(sa).cloned(),
+        ) else {
+            return Ok(None);
+        };
+        // Sotto una transform dove il `<symbol>` non disegna come il motore
+        // si riscrive intero, con la sua copia dell'arte.
+        let scala = self
+            .simboli
+            .scale
+            .get(sa)
+            .copied()
+            .unwrap_or(Affine::IDENTITY);
+        if !self.simboli.si_riusa(sa, *xa * scala.inverse()) {
+            self.riscritti.insert(a.id);
+            return Ok(Some(()));
+        }
+        let x = a.extras();
+        if !a.appearance.items.is_empty()
+            || !x.symbol_overrides.is_empty()
+            || a.appearance != b.appearance
+            || x.mask != b.extras().mask
+            || a.blend != b.blend
+        {
+            return Err(no(
+                "un'istanza con un aspetto suo, una maschera, una fusione o parti cambiate non si scrive nel file",
+            ));
+        }
+        let mut attrs = Map::new();
+        // La `transform` del `use` porta il contenuto scritto dove il motore
+        // disegna l'arte: l'`xf` nello spazio del genitore, meno la misura
+        // con cui il file tiene un'arte ridefinita.
+        let cambiata = scala != Affine::IDENTITY
+            || (xa.as_coeffs().iter().zip(xb.as_coeffs())).any(|(p, q)| (p - q).abs() > 1e-9);
+        if cambiata {
+            let g = e
+                .ctm_genitore
+                .ok_or_else(|| no("una transform di un antenato non si legge"))?;
+            let t = g.inverse() * *xa * scala.inverse();
+            if !t.is_finite() {
+                return Err(no("la transform nuova non è finita"));
+            }
+            let uguale = e.propria.is_some_and(|p| {
+                p.as_coeffs()
+                    .iter()
+                    .zip(t.as_coeffs())
+                    .all(|(x, y)| (x - y).abs() < 1e-6)
+            });
+            if !uguale {
+                attrs.insert("transform".into(), json!(scrivi_matrice(t)));
+            }
+        }
+        if prima != dopo {
+            attrs.insert("href".into(), json!(format!("#{dopo}")));
+        }
+        if (a.opacity - b.opacity).abs() > 1e-6 {
+            attrs.insert("opacity".into(), json!(numero(f64::from(a.opacity), 3)));
+        }
+        if !attrs.is_empty() {
+            let id = self.bersaglio(a.id)?;
+            self.set
+                .push(json!({ "op": "set", "id": id, "attrs": attrs }));
+        }
+        Ok(Some(()))
     }
 
     /// Il confronto di un oggetto che non si riscrive intero.
@@ -1778,26 +2014,30 @@ fn gruppo_di_prima(n: &Node, prima: &Posti<'_>, riscritti: &HashSet<NodeId>) -> 
 ///
 /// Il nome che il motore copia da un oggetto della copia (Crea profili dà al
 /// gruppo dei contorni il nome del testo, che è il suo id nel file) non è una
-/// proprietà del gruppo: il gruppo prende un id nuovo.
-fn gruppo_tutto_nuovo(n: &Node, prima: &Posti<'_>, mappa: &Mappa) -> bool {
-    let senza_nome;
-    let n = match &n.name {
-        Some(nome) if mappa.dell_id(nome).is_some() => {
-            let mut c = n.clone();
-            c.name = None;
-            senza_nome = c;
-            &senza_nome
-        }
-        _ => n,
-    };
+/// proprietà del gruppo: il gruppo prende un id nuovo. Un altro nome (il
+/// «Symbol Set» dello Spruzzatore di simboli) è il `title` del gruppo.
+///
+/// `Some` col nome da scrivere, se ce n'è uno.
+fn gruppo_tutto_nuovo<'n>(
+    n: &'n Node,
+    prima: &Posti<'_>,
+    mappa: &Mappa,
+) -> Option<Option<&'n str>> {
+    let nome = n
+        .name
+        .as_deref()
+        .filter(|nome| mappa.dell_id(nome).is_none() && !nome.trim().is_empty());
+    let mut senza_nome = n.clone();
+    senza_nome.name = None;
+    let n = &senza_nome;
     let NodeKind::Group {
         children,
         clip: false,
     } = &n.kind
     else {
-        return false;
+        return None;
     };
-    !children.is_empty()
+    let si = !children.is_empty()
         && children
             .iter()
             .all(|c| !prima.nodi.contains_key(&c.id) && !ha_pezzi_di_prima(c, prima))
@@ -1810,7 +2050,8 @@ fn gruppo_tutto_nuovo(n: &Node, prima: &Posti<'_>, mappa: &Mappa) -> bool {
                     clip: false,
                 },
             ),
-        )
+        );
+    si.then_some(nome)
 }
 
 /// `transform = G⁻¹·M·G·T`.

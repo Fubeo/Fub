@@ -1,3 +1,795 @@
 {
-  "casi": []
+  "$nota": "I simboli: il simbolo è un `symbol` nelle definizioni, l'istanza un `use` (docs/reference/scene-format-symbols.md).",
+  "casi": [
+    {
+      "$nota": "L'elenco dei simboli del file, coi loro usi: «Vite» non ha istanze.",
+      "id": "symbol.list",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": {
+        "lettura": {
+          "symbols": [
+            {
+              "name": "Presa",
+              "instances": 2,
+              "size": [
+                20.0,
+                20.0
+              ],
+              "registration": 4,
+              "exportType": "movieClip",
+              "nineSlice": null,
+              "type": "static"
+            },
+            {
+              "name": "Vite",
+              "instances": 0,
+              "size": [
+                20.0,
+                20.0
+              ],
+              "registration": 4,
+              "exportType": "movieClip",
+              "nineSlice": null,
+              "type": "static"
+            }
+          ],
+          "current": "Presa"
+        }
+      }
+    },
+    {
+      "$nota": "Un simbolo nuovo dalla selezione: il simbolo va nelle definizioni alla sua misura, e al posto dell'oggetto c'è la sua istanza.",
+      "id": "symbol.new",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {
+        "name": "Mattone"
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "add",
+                "parent": "fub-defs",
+                "pos": {
+                  "last": true
+                },
+                "raw": "<symbol id=\"rtexwnlys\" overflow=\"visible\">\n      <title>Mattone</title>\n      <rect id=\"o7olrf231\" x=\"-50\" y=\"-25\" width=\"100\" height=\"50\" fill=\"#ff0000\"/>\n    </symbol>"
+              },
+              {
+                "op": "remove",
+                "target": "oa1a1a1a1"
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "first": true
+                },
+                "elem": {
+                  "tag": "use",
+                  "attrs": {
+                    "id": "on4i6z0cr",
+                    "transform": "matrix(1 0 0 1 150 125)",
+                    "href": "#rtexwnlys"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "symbol-new-dopo.svg"
+    },
+    {
+      "$nota": "Un'istanza posata: un `use` nel livello corrente.",
+      "id": "symbol.place",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "name": "Presa",
+        "x": 200,
+        "y": 50
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "add",
+            "parent": "l1a2b3c4d",
+            "pos": {
+              "last": true
+            },
+            "elem": {
+              "tag": "use",
+              "attrs": {
+                "id": "o5saixo9s",
+                "transform": "matrix(1 0 0 1 200 50)",
+                "href": "#r4k7m2p9q"
+              }
+            }
+          }
+        ]
+      },
+      "dopo": "symbol-place-dopo.svg"
+    },
+    {
+      "$nota": "Staccare l'istanza: un gruppo col contenuto del simbolo al suo posto.",
+      "id": "symbol.breakLink",
+      "disegno": "base.svg",
+      "selezione": [
+        "o2n3p4q5r"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "o2n3p4q5r"
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "after": "oa1a1a1a1"
+                },
+                "elem": {
+                  "tag": "g",
+                  "attrs": {
+                    "id": "oqh0v9y98"
+                  }
+                }
+              },
+              {
+                "op": "add",
+                "parent": "oqh0v9y98",
+                "pos": {
+                  "first": true
+                },
+                "elem": {
+                  "tag": "path",
+                  "attrs": {
+                    "d": "M340 180 C340 191.05 331.05 200 320 200 C308.95 200 300 191.05 300 180 C300 168.95 308.95 160 320 160 C331.05 160 340 168.95 340 180 Z",
+                    "fill": "#ffffff",
+                    "stroke": "#1a1a1a",
+                    "stroke-width": "2",
+                    "id": "ojxqa4tof"
+                  }
+                }
+              },
+              {
+                "op": "add",
+                "parent": "oqh0v9y98",
+                "pos": {
+                  "last": true
+                },
+                "elem": {
+                  "tag": "line",
+                  "attrs": {
+                    "x1": "312",
+                    "y1": "174",
+                    "x2": "312",
+                    "y2": "186",
+                    "fill": "#000000",
+                    "stroke": "#1a1a1a",
+                    "stroke-width": "2",
+                    "id": "o89dutp4s"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "symbol-breakLink-dopo.svg"
+    },
+    {
+      "$nota": "Un simbolo copiato: un simbolo nuovo con «copy» nel nome e oggetti con id nuovi.",
+      "id": "symbol.duplicate",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "name": "Presa"
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "add",
+            "parent": "fub-defs",
+            "pos": {
+              "last": true
+            },
+            "raw": "<symbol id=\"rqp3dy2pk\" overflow=\"visible\">\n      <title>Presa copy</title>\n      <circle id=\"obca1zxa6\" cx=\"0\" cy=\"0\" r=\"20\" fill=\"#ffffff\" stroke=\"#1a1a1a\" stroke-width=\"2\"/>\n      <line id=\"occyq3f58\" x1=\"-8\" y1=\"-6\" x2=\"-8\" y2=\"6\" fill=\"#000000\" stroke=\"#1a1a1a\" stroke-width=\"2\"/>\n    </symbol>"
+          }
+        ]
+      },
+      "dopo": "symbol-duplicate-dopo.svg"
+    },
+    {
+      "$nota": "Rinominare cambia solo il titolo: le istanze restano legate.",
+      "id": "symbol.options",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "name": "Presa",
+        "newName": "Spina"
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": {
+                  "path": [
+                    0,
+                    0,
+                    0
+                  ],
+                  "tag": "title"
+                }
+              },
+              {
+                "op": "add",
+                "parent": "r4k7m2p9q",
+                "pos": {
+                  "first": true
+                },
+                "elem": {
+                  "tag": "title",
+                  "attrs": {},
+                  "text": "Spina"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "symbol-options-dopo.svg"
+    },
+    {
+      "$nota": "Togliere un simbolo usato toglie prima le istanze, poi il simbolo.",
+      "id": "symbol.delete",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "name": "Presa",
+        "expandInstances": false
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "o6s7t8u9v"
+              },
+              {
+                "op": "remove",
+                "target": "o2n3p4q5r"
+              },
+              {
+                "op": "remove",
+                "target": "r4k7m2p9q"
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "symbol-delete-false-dopo.svg"
+    },
+    {
+      "$nota": "Con le istanze espanse ogni istanza diventa un gruppo.",
+      "id": "symbol.delete",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "name": "Presa",
+        "expandInstances": true
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "o6s7t8u9v"
+              },
+              {
+                "op": "remove",
+                "target": "o2n3p4q5r"
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "after": "oa1a1a1a1"
+                },
+                "elem": {
+                  "tag": "g",
+                  "attrs": {
+                    "id": "opyldeg3w"
+                  }
+                }
+              },
+              {
+                "op": "add",
+                "parent": "opyldeg3w",
+                "pos": {
+                  "first": true
+                },
+                "elem": {
+                  "tag": "path",
+                  "attrs": {
+                    "d": "M340 180 C340 191.05 331.05 200 320 200 C308.95 200 300 191.05 300 180 C300 168.95 308.95 160 320 160 C331.05 160 340 168.95 340 180 Z",
+                    "fill": "#ffffff",
+                    "stroke": "#1a1a1a",
+                    "stroke-width": "2",
+                    "id": "o0zfnvmw9"
+                  }
+                }
+              },
+              {
+                "op": "add",
+                "parent": "opyldeg3w",
+                "pos": {
+                  "last": true
+                },
+                "elem": {
+                  "tag": "line",
+                  "attrs": {
+                    "x1": "312",
+                    "y1": "174",
+                    "x2": "312",
+                    "y2": "186",
+                    "fill": "#000000",
+                    "stroke": "#1a1a1a",
+                    "stroke-width": "2",
+                    "id": "ostxn6xx9"
+                  }
+                }
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "last": true
+                },
+                "elem": {
+                  "tag": "g",
+                  "attrs": {
+                    "id": "o3ceczaqb"
+                  }
+                }
+              },
+              {
+                "op": "add",
+                "parent": "o3ceczaqb",
+                "pos": {
+                  "first": true
+                },
+                "elem": {
+                  "tag": "path",
+                  "attrs": {
+                    "d": "M60 80 C48.95 80 40 71.05 40 60 C40 48.95 48.95 40 60 40 C71.05 40 80 48.95 80 60 C80 71.05 71.05 80 60 80 Z",
+                    "fill": "#ffffff",
+                    "stroke": "#1a1a1a",
+                    "stroke-width": "2",
+                    "id": "omeottdse"
+                  }
+                }
+              },
+              {
+                "op": "add",
+                "parent": "o3ceczaqb",
+                "pos": {
+                  "last": true
+                },
+                "elem": {
+                  "tag": "line",
+                  "attrs": {
+                    "x1": "66",
+                    "y1": "52",
+                    "x2": "54",
+                    "y2": "52",
+                    "fill": "#000000",
+                    "stroke": "#1a1a1a",
+                    "stroke-width": "2",
+                    "id": "ohsyw5zte"
+                  }
+                }
+              },
+              {
+                "op": "remove",
+                "target": "r4k7m2p9q"
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "symbol-delete-true-dopo.svg"
+    },
+    {
+      "$nota": "Ridefinire un simbolo ne cambia il contenuto; le istanze restano dove sono.",
+      "id": "symbol.update",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {
+        "name": "Presa"
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "o5e6f7g8h"
+              },
+              {
+                "op": "remove",
+                "target": "o1a2b3c4d"
+              },
+              {
+                "op": "add",
+                "parent": "r4k7m2p9q",
+                "pos": {
+                  "last": true
+                },
+                "raw": "<rect id=\"ouctj5eb6\" x=\"-50\" y=\"-25\" width=\"100\" height=\"50\" fill=\"#ff0000\"/>"
+              },
+              {
+                "op": "remove",
+                "target": "oa1a1a1a1"
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "first": true
+                },
+                "elem": {
+                  "tag": "use",
+                  "attrs": {
+                    "id": "oz2whkkfw",
+                    "transform": "matrix(1 0 0 1 150 125)",
+                    "href": "#r4k7m2p9q"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "symbol-update-dopo.svg"
+    },
+    {
+      "$nota": "Sostituire cambia solo il simbolo a cui punta l'istanza.",
+      "id": "symbol.replace",
+      "disegno": "base.svg",
+      "selezione": [
+        "o2n3p4q5r"
+      ],
+      "argomenti": {
+        "name": "Vite"
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "o2n3p4q5r",
+            "attrs": {
+              "href": "#r9x8w7v6u"
+            }
+          }
+        ]
+      },
+      "dopo": "symbol-replace-dopo.svg"
+    },
+    {
+      "$nota": "Lo Spruzzatore: un insieme di simboli, un gruppo «Symbol Set» con le istanze. Le istanze spruzzate hanno una misura loro e il simbolo un contorno: ognuna si scrive con la sua copia dell'arte e la ricetta, come l'istanza scalata del Ridimensionatore. Le istanze spruzzate hanno una misura loro e il simbolo un contorno, che il motore non scala: come in VectorCraft ognuna si scrive con la sua copia dell'arte, e la ricetta la riapre istanza.",
+      "id": "symbol.spray",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "name": "Presa",
+        "points": [
+          [
+            100,
+            100
+          ],
+          [
+            120,
+            110
+          ]
+        ],
+        "radius": 30,
+        "density": 5
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "last": true
+                },
+                "elem": {
+                  "tag": "g",
+                  "attrs": {
+                    "id": "ofo4jwgcw"
+                  },
+                  "children": [
+                    {
+                      "tag": "title",
+                      "attrs": {},
+                      "text": "Symbol Set"
+                    }
+                  ]
+                }
+              },
+              {
+                "op": "add",
+                "parent": "ofo4jwgcw",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<g id=\"o60iynh0f\"><g id=\"o2mzg3p5n\"><circle id=\"odwmag9ov\" cx=\"98.363\" cy=\"102.638\" r=\"21.541\" fill=\"#ffffff\" stroke=\"#1a1a1a\" stroke-width=\"2\"/><line id=\"odniq4ov9\" x1=\"89.747\" y1=\"96.176\" x2=\"89.747\" y2=\"109.101\" fill=\"#000000\" stroke=\"#1a1a1a\" stroke-width=\"2\"/></g></g>"
+              },
+              {
+                "op": "add",
+                "parent": "ofo4jwgcw",
+                "pos": {
+                  "last": true
+                },
+                "raw": "<g id=\"occhncq6m\"><g id=\"ofbqrsr1c\"><circle id=\"oaxzqzgrj\" cx=\"122.835\" cy=\"120.014\" r=\"21.539\" fill=\"#ffffff\" stroke=\"#1a1a1a\" stroke-width=\"2\"/><line id=\"owfwsj6fp\" x1=\"114.22\" y1=\"113.552\" x2=\"114.22\" y2=\"126.476\" fill=\"#000000\" stroke=\"#1a1a1a\" stroke-width=\"2\"/></g></g>"
+              },
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<metadata><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"o60iynh0f\" hash=\"f1a3919e507c3c5c\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjoxNCwia2luZCI6eyJ0eXBlIjoic3ltYm9saW5zdGFuY2UiLCJzeW1ib2wiOiJQcmVzYSIsInhmIjpbMS4wNzcwNDczNzkyNjI5ODkzLDAuMCwwLjAsMS4wNzcwNDczNzkyNjI5ODkzLDk4LjM2MzI0MTAxNjI1MDg1LDEwMi42MzgzNjExODEwNDgzXX19fQ==</vectorcraft:recipe><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"occhncq6m\" hash=\"e5b28ecb886a09d6\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjoxNSwia2luZCI6eyJ0eXBlIjoic3ltYm9saW5zdGFuY2UiLCJzeW1ib2wiOiJQcmVzYSIsInhmIjpbMS4wNzY5NDY2Njk3MTg0NzEsMC4wLDAuMCwxLjA3Njk0NjY2OTcxODQ3MSwxMjIuODM1MjAyNTYzNTE1NjgsMTIwLjAxMzk2MjAwNTAzNTQ4XX19fQ==</vectorcraft:recipe></metadata>"
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "symbol-spray-dopo.svg"
+    },
+    {
+      "$nota": "Il Ridimensionatore ingrandisce le istanze sotto il pennello. Il simbolo ha un contorno, che il motore non scala: come in VectorCraft l'istanza scalata non si scrive come `use` ma con la sua copia dell'arte, e la ricetta la riapre istanza.",
+      "id": "symbol.adjust",
+      "disegno": "base.svg",
+      "selezione": [
+        "o2n3p4q5r"
+      ],
+      "argomenti": {
+        "tool": "size",
+        "points": [
+          [
+            320,
+            180
+          ]
+        ],
+        "radius": 50,
+        "intensity": 10
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "o2n3p4q5r"
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "after": "oa1a1a1a1"
+                },
+                "raw": "<g id=\"o2n3p4q5r\"><g id=\"ogflwdn18\"><circle id=\"ore8kg8ah\" cx=\"320\" cy=\"180\" r=\"21.6\" fill=\"#ffffff\" stroke=\"#1a1a1a\" stroke-width=\"2\"/><line id=\"ocl7o5wda\" x1=\"311.36\" y1=\"173.52\" x2=\"311.36\" y2=\"186.48\" fill=\"#000000\" stroke=\"#1a1a1a\" stroke-width=\"2\"/></g></g>"
+              },
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<metadata><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"o2n3p4q5r\" hash=\"76f21b3c0e66994b\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjo2LCJraW5kIjp7InR5cGUiOiJzeW1ib2xpbnN0YW5jZSIsInN5bWJvbCI6IlByZXNhIiwieGYiOlsxLjA4LDAuMCwwLjAsMS4wOCwzMjAuMCwxODAuMF19fX0=</vectorcraft:recipe></metadata>"
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "symbol-adjust-size-dopo.svg"
+    },
+    {
+      "$nota": "Il Coloratore colora le istanze: il formato non scrive ancora il colore di un'istanza.",
+      "id": "symbol.adjust",
+      "disegno": "base.svg",
+      "selezione": [
+        "o2n3p4q5r"
+      ],
+      "argomenti": {
+        "tool": "stain",
+        "points": [
+          [
+            320,
+            180
+          ]
+        ],
+        "color": "#ff0000",
+        "intensity": 10
+      },
+      "atteso": {
+        "rifiuto": "unsupported"
+      }
+    },
+    {
+      "$nota": "Lo Schermatore rende le istanze più trasparenti.",
+      "id": "symbol.adjust",
+      "disegno": "base.svg",
+      "selezione": [
+        "o2n3p4q5r"
+      ],
+      "argomenti": {
+        "tool": "screen",
+        "points": [
+          [
+            320,
+            180
+          ]
+        ],
+        "intensity": 10
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "o2n3p4q5r",
+            "attrs": {
+              "opacity": "0.9"
+            }
+          }
+        ]
+      },
+      "dopo": "symbol-adjust-screen-dopo.svg"
+    },
+    {
+      "$nota": "Il Rotatore gira le istanze sotto il pennello.",
+      "id": "symbol.adjust",
+      "disegno": "base.svg",
+      "selezione": [
+        "o2n3p4q5r"
+      ],
+      "argomenti": {
+        "tool": "spin",
+        "points": [
+          [
+            320,
+            180
+          ]
+        ],
+        "intensity": 10
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "o2n3p4q5r",
+            "attrs": {
+              "transform": "matrix(0.9988 0.05 -0.05 0.9988 320 180)"
+            }
+          }
+        ]
+      },
+      "dopo": "symbol-adjust-spin-dopo.svg"
+    },
+    {
+      "$nota": "I simboli senza istanze.",
+      "id": "symbol.unused",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": {
+        "lettura": {
+          "names": [
+            "Vite"
+          ]
+        }
+      }
+    },
+    {
+      "$nota": "Sceglie tutte le istanze di un simbolo.",
+      "id": "symbol.selectInstances",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "name": "Presa"
+      },
+      "atteso": {
+        "selezione": [
+          "o2n3p4q5r",
+          "o6s7t8u9v"
+        ]
+      }
+    },
+    {
+      "$nota": "Le librerie di simboli del motore: oggi solo le forme di base.",
+      "id": "symbol.libraries",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": {
+        "lettura": {
+          "libraries": [
+            {
+              "id": "basic-shapes",
+              "name": "Basic Shapes",
+              "category": "builtIn",
+              "count": 9,
+              "path": null
+            }
+          ],
+          "userFolder": null
+        }
+      }
+    },
+    {
+      "$nota": "Un simbolo preso da una libreria va nelle definizioni del file.",
+      "id": "symbol.addFromLibrary",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "library": "basic-shapes",
+        "name": "Star"
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "add",
+            "parent": "fub-defs",
+            "pos": {
+              "last": true
+            },
+            "raw": "<symbol id=\"r8rtis48j\" overflow=\"visible\">\n      <title>Star</title>\n      <g id=\"o07cmcdb0\"><polygon id=\"oacdkjn8r\" points=\"0,-18.995 5.29,-5.276 19.972,-4.484 8.56,4.786 12.343,18.995 0,11.005 -12.343,18.995 -8.56,4.786 -19.972,-4.484 -5.29,-5.276\" fill=\"#f2c233\" stroke=\"#91741f\" stroke-width=\"1.948\" stroke-miterlimit=\"10\"/></g>\n    </symbol>"
+          }
+        ]
+      },
+      "dopo": "symbol-addFromLibrary-dopo.svg"
+    },
+    {
+      "$nota": "Una libreria di simboli, coi suoi nomi.",
+      "id": "symbol.library",
+      "disegno": "base.svg",
+      "argomenti": {
+        "library": "basic-shapes"
+      },
+      "atteso": {
+        "lettura_parziale": {
+          "id": "basic-shapes"
+        }
+      }
+    }
+  ]
 }

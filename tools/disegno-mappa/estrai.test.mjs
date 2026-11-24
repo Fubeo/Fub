@@ -212,7 +212,7 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // strumento Fusione (`blend`) diventano «fatto»: la fusione va nel file con la ricetta. Quindici
   // righe in più.
   // Il pannello Fusione (`blend`) diventa «fatto»: la sezione Fusione del Design. Una riga in più.
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 946, fub: 114, escluso: 12, fatto: 479 });
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 930, fub: 114, escluso: 12, fatto: 495 });
 });
 
 // --- un motore finto ---------------------------------------------------------------

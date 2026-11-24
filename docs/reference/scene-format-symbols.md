@@ -11,10 +11,12 @@
 > prova da 84 a 88 ([operazioni sulla scena](scene-operations.md), §9);
 > l'SVG pulito in `crates/fub-scene/src/export/clean.rs`.
 
-I simboli non si creano più: se ne sono andati col livello Esperto, con
-la porta della libreria ([decisione 0231](../decisions/0231-la-chiusura-di-fubdraw.md)).
-Quelli dei file si leggono, si vedono, si aprono per guardarli, restano
-identici e si esportano.
+Lo Standard non crea simboli: se ne sono andati col livello Esperto, con
+la porta della libreria ([decisione 0231](../decisions/0231-la-chiusura-di-fubdraw.md)),
+e quelli dei file si leggono, si vedono, si aprono per guardarli, restano
+identici e si esportano. Il [Disegno completo](../architecture/disegno-completo.md)
+li crea e li cambia coi comandi di VectorCraft, e li scrive come dice il
+§10.
 
 Una parte del [formato della scena](scene-format.md), §4, e delle sue
 [risorse](scene-format-resources.md). Un simbolo è un disegno piccolo che
@@ -192,3 +194,32 @@ Un lettore che non conosce i simboli vede estranei il `symbol` nella
 `defs` e ogni `use`: li conserva byte per byte e disegna le istanze come
 strati immagine, che si vedono e non si modificano. `fub:source` è per lui
 un attributo `fub:*` che non conosce. La versione resta 1.
+
+## 10. La scrittura del Disegno completo
+
+Il motore del Completo tiene i simboli nel documento; la differenza
+(`crates/fub-disegno/src/simboli.rs` e `differenza.rs`) li porta nel file
+con le operazioni del §6, in un solo `batch`:
+
+- **Un simbolo nuovo** è un `symbol` con un id da risorsa nuovo,
+  `overflow="visible"`, il nome nel `title` e l'arte del motore portata
+  alla sua misura naturale; entra in fondo alla `defs` di Fub, prima delle
+  istanze. Un simbolo che cambia nome riscrive il `title`; uno che cambia
+  arte riscrive il contenuto; uno tolto se ne va per ultimo.
+- **Un'istanza** è un `use` col `transform`, l'`href` e l'opacità, se il
+  `symbol` sotto quella trasformazione si disegna come lo disegna il
+  motore. Il motore trasforma la geometria dell'arte e lascia com'è lo
+  spessore dei contorni, gli effetti, i motivi e le maschere non legate:
+  come VectorCraft (`Reuse`), uno spostamento va sempre, una rotazione o
+  un riflesso no con effetti o pennelli, ogni altra trasformazione no con
+  contorni o oggetti vivi. Altrimenti l'istanza si scrive con la sua copia
+  dell'arte e la ricetta `symbolinstance` nei metadati, che alla
+  riapertura ne fa di nuovo un'istanza; un altro programma vede la copia.
+- **Si rifiuta**, `unsupported`, ciò che il formato non dice ancora: il
+  colore del Coloratore e le parti cambiate di un'istanza, l'aspetto
+  proprio, la maschera, la fusione e il blocco di un'istanza, le opzioni
+  di un simbolo diverse da quelle di serie (registrazione al centro, tipo
+  statico, niente guide a 9 sezioni) e un simbolo dentro un altro.
+- **Il simbolo corrente** non sta nel file: lo tiene la fila degli
+  strumenti, e lo passa a ogni comando.
+
