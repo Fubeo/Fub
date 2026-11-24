@@ -163,7 +163,7 @@ export const TASTI_DELLA_FINESTRA: readonly string[] = [
   "Mod-s", "Mod-w", "Mod-Shift-w", "Mod-p", "Mod-Shift-p", "Mod-k", "Mod-o", "Mod-n", "Mod-,",
   "Ctrl-Tab", "Ctrl-Shift-Tab", "Mod-PageUp", "Mod-PageDown", "F6", "Shift-F6",
   "Mod-z", "Mod-Shift-z", "Mod-y", "Mod-c", "Mod-x", "Mod-v", "Mod-Shift-v",
-  "Mod-'", "Mod-0", "Mod-Alt-0", "Mod-1", "Mod-=", "Mod--", "Mod-Shift-h",
+  "Mod-'", "Mod-Shift-'", "Mod-0", "Mod-Alt-0", "Mod-1", "Mod-=", "Mod--", "Mod-Shift-h",
   "Mod-Alt-Shift-u",
 ];
 

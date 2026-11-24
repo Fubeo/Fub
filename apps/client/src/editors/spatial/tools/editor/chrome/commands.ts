@@ -104,12 +104,16 @@ export function azioniVoci(ctx: EditorContext, riprova: () => void): AzioniVociC
     // Una voce del client: la banda e ≡ › Visualizza del Completo (`status.ts`). Le
     // altre non sono collegate, e lo stato le dice spente (`statoVoce`), quindi non
     // arrivano qui.
-    client: (id) => {
-      if (id === CAMBIA_UNITA) cambiaUnita(ctx);
-      else if (isComandoBanda(id)) ctx.comandoVista(id);
-    },
+    client: (id) => eseguiVoceClient(ctx, id),
     riprova,
   };
+}
+
+/// Una voce del client che l'editor fa (la banda, ≡ › Visualizza, Cambia unità): dalla ricerca,
+/// dal menu o dal suo tasto (`OpzioniTastiCompleto.client`). Le altre non le conosce.
+export function eseguiVoceClient(ctx: EditorContext, id: string): void {
+  if (id === CAMBIA_UNITA) cambiaUnita(ctx);
+  else if (isComandoBanda(id)) ctx.comandoVista(id);
 }
 
 export function installCommands(ctx: EditorContext): void {

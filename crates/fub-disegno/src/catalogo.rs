@@ -39,6 +39,9 @@ const MAPPA: &str = include_str!("../mappa.tsv");
 
 /// Il glossario, letto dal sorgente.
 const GLOSSARIO: &str = include_str!("../glossario.tsv");
+/// I tasti delle voci `interfaccia` (`id<TAB>tasto`), estratti da `UI_COMMANDS` di VectorCraft con
+/// `tools/disegno-mappa/estrai.mjs`: il catalogo del motore e quello degli strumenti non li hanno.
+const TASTI_INTERFACCIA: &str = include_str!("../tasti-interfaccia.tsv");
 
 // ---------------------------------------------------------------------------
 // La mappa intera
@@ -1345,13 +1348,20 @@ pub fn schema_di(riga: &RigaMappa) -> String {
     }
 }
 
-/// Il tasto del motore per la riga, se ne ha uno.
+/// Il tasto della riga, se ne ha uno: del motore, dello strumento o della voce
+/// dell'interfaccia ([`TASTI_INTERFACCIA`]).
 pub fn tasto_di(riga: &RigaMappa) -> Option<&'static str> {
     match riga.fonte {
         FonteMappa::Motore => vectorcraft_engine::find_command(&riga.id).and_then(|c| c.shortcut),
         FonteMappa::Strumento => {
             vectorcraft_tools::catalog::tool_info(&riga.id).and_then(|t| t.shortcut)
         }
+        FonteMappa::Interfaccia => TASTI_INTERFACCIA
+            .lines()
+            .filter(|riga| !riga.starts_with('#'))
+            .filter_map(|riga| riga.split_once('\t'))
+            .find(|(id, _)| *id == riga.id)
+            .map(|(_, tasto)| tasto),
         _ => None,
     }
 }

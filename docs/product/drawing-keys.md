@@ -26,6 +26,15 @@ quel tasto. Vale questo ordine:
   aggiunge un riempimento. I tasti dell'editor di Fub senza un pari in
   VectorCraft (immagine, collegamento, isola, allinea con `Alt`) non valgono.
   Senza motore (non ancora caricato) i tasti sono quelli dello Standard.
+- **Le voci del menu che non sono comandi del motore** prendono anch'esse il
+  tasto di VectorCraft e partono come dal menu, solo se la voce è accesa:
+  `Ctrl+R` righelli, `Ctrl+U` guide sensibili, `Ctrl+H` bordi,
+  `Ctrl+Maiusc+B` riquadro di selezione, `Ctrl+Maiusc+D` griglia di
+  trasparenza, `Ctrl+Alt+'` aggancio ai punti, `Ctrl+Maiusc+1` toglie la
+  rotazione della vista, `Ctrl+4` ripete l'elaborazione tracciati,
+  `Ctrl+Maiusc+E` applica l'ultimo effetto e `Ctrl+Alt+Maiusc+E` lo riapre
+  con la sua finestra. I tasti delle voci di vista che l'editor tiene (sopra)
+  restano suoi.
 - **Due comandi del motore con lo stesso tasto**: vince l'ultimo assegnato, e
   l'altro resta senza tasto.
 - **Un comando con parametri** apre la sua finestra; **gli altri girano

@@ -82,7 +82,7 @@ function comandiNudi(voci: Iterable<VoceIndice>): Map<string, string> {
 }
 
 export function montaTasti(opzioni: OpzioniMontaggioTasti): MontaggioTasti {
-  // Solo i comandi del motore: gli strumenti e i pezzi del client non partono qui.
+  // I comandi del motore, gli strumenti col tasto e le voci del client col tasto.
   let comandi: Map<string, VoceIndice> | null = null;
   let regola: RegolaTasti | null = null;
   // I comandi di un tasto nudo, tasto → comando.
@@ -108,7 +108,12 @@ export function montaTasti(opzioni: OpzioniMontaggioTasti): MontaggioTasti {
       (indice) => {
         richiesta = null;
         if (chiuso) return;
-        comandi = new Map(indice.voci.filter((voce) => "comando" in voce.chiamata || tastoDiStrumento(voce)).map((voce) => [voce.id, voce]));
+        // Le voci del client con un tasto (Righelli, Applica ultimo effetto…) partono come i comandi.
+        comandi = new Map(
+          indice.voci
+            .filter((voce) => "comando" in voce.chiamata || tastoDiStrumento(voce) || ("client" in voce.chiamata && voce.tasto !== null))
+            .map((voce) => [voce.id, voce]),
+        );
         nudi = comandiNudi(comandi.values());
         ricalcola();
       },

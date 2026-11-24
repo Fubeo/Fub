@@ -45,6 +45,11 @@ node tools/disegno-mappa/estrai.mjs            # riscrive la mappa
 node tools/disegno-mappa/estrai.mjs --stampa   # la scrive sullo standard output
 ```
 
+Lo stesso script riscrive `crates/fub-disegno/tasti-interfaccia.tsv`: i tasti
+delle voci `interfaccia` (il terzo elemento di `UI_COMMANDS`), che il catalogo
+dà all'indice come fa coi tasti del motore e degli strumenti. La guardia
+controlla che il file sia quello che l'estrazione scrive.
+
 Dopo un aggiornamento di `vendor/vectorcraft/`: le colonne scritte a mano
 restano, una riga nuova nasce «da fare» senza famiglia, e lo script stampa le
 righe nuove e quelle sparite. Una costante di `UI_COMMANDS` che non si trova

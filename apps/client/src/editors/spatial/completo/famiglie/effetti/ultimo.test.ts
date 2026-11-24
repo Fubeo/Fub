@@ -1,3 +1,4 @@
+// @vitest-environment happy-dom
 // «Applica ultimo effetto» e «Ultimo effetto…» (menu Effetto): voci del client, come in
 // VectorCraft. Spente col perché finché non c'è un effetto applicato dal menu; poi la prima lo
 // rifà sugli oggetti scelti adesso, la seconda lo rilancia (con la sua finestra, se ne ha una).
@@ -14,7 +15,7 @@ import indiceGenerato from "../../indice.generated.json";
 
 const giro = (): Promise<void> => new Promise((risolto) => setTimeout(risolto, 0));
 
-function completoVero(rifiuto: string | null = null, pila: unknown = null) {
+function completoVero(rifiuto: string | null = null, pila: unknown = null, radice: HTMLElement | null = null) {
   const esito = { revision: "1", preview: null, ops: rifiuto === null ? "[]" : null, selection: ["k1"], losses: [], refused: rifiuto, frame: null };
   const comando = vi.fn((passo: { readonly id: string; readonly value?: unknown }) =>
     Promise.resolve(passo.id === "disegno.effect.list" ? { ...esito, ops: null, reading: pila } : esito),
@@ -28,7 +29,7 @@ function completoVero(rifiuto: string | null = null, pila: unknown = null) {
       indice: () => Promise.resolve(indiceDi(indiceGenerato as never)),
       prepara: () => Promise.resolve("pronta"),
       moduli: { "./famiglie/effetti/index.ts": () => Promise.resolve({ default: { registra: () => undefined } }) },
-      tasti: { selezione: () => ["k1"], annuncia, leggi: () => [], commit: () => true, seleziona: () => undefined } as never,
+      tasti: { ...(radice === null ? {} : { radice }), selezione: () => ["k1"], annuncia, leggi: () => [], commit: () => true, seleziona: () => undefined } as never,
     } as never,
   );
   const voce = async (id: string) =>
@@ -90,5 +91,25 @@ describe("Predefinito illuminazione 3D dal menu", () => {
     await vi.waitFor(() => expect(annuncia).toHaveBeenCalledWith(t("draw.lightingPreset.none")));
     expect(comando.mock.calls.map(([passo]) => passo.id)).toEqual(["disegno.effect.list"]);
     completo.chiudi();
+  });
+});
+
+describe("Applica ultimo effetto dal suo tasto (Ctrl+Maiusc+E)", () => {
+  it("spenta non fa niente; dopo un effetto lo rifà", async () => {
+    const radice = document.createElement("div");
+    document.body.append(radice);
+    const { completo, comando, voce } = completoVero(null, null, radice);
+    const premi = () => radice.dispatchEvent(new KeyboardEvent("keydown", { key: "E", code: "KeyE", ctrlKey: true, shiftKey: true, bubbles: true, cancelable: true }));
+    await giro();
+    premi();
+    await giro();
+    expect(comando).not.toHaveBeenCalled();
+    (await voce("addon.color.invert")).run();
+    await vi.waitFor(() => expect(comando).toHaveBeenCalledTimes(1));
+    premi();
+    await vi.waitFor(() => expect(comando).toHaveBeenCalledTimes(2));
+    expect(comando.mock.calls[1]![0]).toMatchObject({ id: "disegno.effect.apply", value: { effect: "addon.color.invert" } });
+    completo.chiudi();
+    radice.remove();
   });
 });

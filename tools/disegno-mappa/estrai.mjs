@@ -34,6 +34,9 @@ import { fileURLToPath } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 export const VECTORCRAFT = path.join(ROOT, "vendor", "vectorcraft");
 export const MAPPA = path.join(ROOT, "crates", "fub-disegno", "mappa.tsv");
+/// I tasti delle voci `interfaccia` (il terzo elemento di `UI_COMMANDS`): il motore e gli
+/// strumenti li danno da sé al catalogo, queste voci solo dal sorgente dell'interfaccia.
+export const TASTI_INTERFACCIA = path.join(ROOT, "crates", "fub-disegno", "tasti-interfaccia.tsv");
 
 export const COLONNE = [
   "fonte",
@@ -293,7 +296,7 @@ export function comandiInterfaccia(vc) {
       j = elemento.lastIndex;
       if (corpo[j] === ",") j++;
     }
-    out.push({ fonte: "interfaccia", id: valori[0], etichetta: valori[1], menu: [] });
+    out.push({ fonte: "interfaccia", id: valori[0], etichetta: valori[1], menu: [], tasto: valori[2] });
     i = corpo.indexOf(")", j) + 1;
   }
   return out;
@@ -427,6 +430,7 @@ export function estrai(vc = VECTORCRAFT) {
     etichetta: r.etichetta,
     menu: r.menu.join(" › "),
     etichetta_it: it.get(r.etichetta) ?? r.etichetta,
+    ...(r.tasto ? { tasto: r.tasto } : {}),
   }));
 }
 
@@ -473,6 +477,19 @@ export function leggiMappa(testo) {
   return { rev, righe: out, errori };
 }
 
+/// `tasti-interfaccia.tsv`: `id<TAB>tasto` per ogni voce `interfaccia` che ha un tasto, nell'ordine
+/// di `UI_COMMANDS`, come VectorCraft lo scrive (`Cmd+Shift+E`).
+export function scriviTastiInterfaccia(rev, estratte) {
+  const righe = estratte.filter((e) => e.fonte === "interfaccia" && e.tasto).map((e) => `${e.id}\t${e.tasto}`);
+  return (
+    [
+      `# Tasti delle voci interfaccia di VectorCraft ${rev}, da UI_COMMANDS di crates/ui-egui/src/menus/ui_commands.rs.`,
+      "# Si rigenera con `node tools/disegno-mappa/estrai.mjs`, mai a mano; lo legge tasto_di di crates/fub-disegno/src/catalogo.rs.",
+      ...righe,
+    ].join("\n") + "\n"
+  );
+}
+
 function campo(v) {
   return String(v ?? "").replace(/[\t\r\n]+/g, " ");
 }
@@ -513,6 +530,7 @@ function main(args) {
     return;
   }
   fs.writeFileSync(MAPPA, testo);
+  fs.writeFileSync(TASTI_INTERFACCIA, scriviTastiInterfaccia(rev, estratte));
   console.log(`crates/fub-disegno/mappa.tsv: ${righe.length} righe da VectorCraft ${rev.slice(0, 12)}.`);
   for (const k of nuove) console.log(`nuova, da fare e senza famiglia: ${k.replace("\t", " ")}`);
   for (const k of sparite) console.log(`sparita dal motore, tolta: ${k.replace("\t", " ")}`);

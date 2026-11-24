@@ -239,6 +239,9 @@ export interface OpzioniTastiCompleto extends AzioniEsito {
   /// Fa rileggere al motore lo stato dello strumento di adesso, dopo un comando
   /// sui punti scelti (i punti cambiano, o non ci sono più).
   readonly rileggiStato?: () => void;
+  /// Fa una voce del client dell'editor (la banda, ≡ › Visualizza) quando parte dal suo tasto,
+  /// come `AzioniVociCompleto.client` dalla ricerca e dal menu.
+  readonly client?: (id: string) => void;
   /// Le modifiche dell'utente; senza, il Completo segue `draw.keys` da sé
   /// (`segui-tasti.ts`), e un cambio vale subito.
   readonly modifiche?: () => ModificheTasti;
@@ -910,6 +913,16 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila" | "e
       // Uno strumento del motore con tasto (Maiusc+B) lo sceglie l'editor, come dalla colonna.
       if ("strumento" in voce.chiamata) {
         opzioni.tasti?.strumento?.(voce.chiamata.strumento);
+        return;
+      }
+      // Una voce del client col tasto di VectorCraft (Righelli Ctrl+R, Applica ultimo effetto
+      // Ctrl+Maiusc+E…): parte se è accesa, come dal menu; una spenta non fa niente.
+      if ("client" in voce.chiamata) {
+        const id = voce.chiamata.client;
+        const propria = vociDelCompleto.get(id);
+        if (propria !== undefined) {
+          if (propria.stato() === null) propria.esegui();
+        } else if (opzioni.clientVoce?.(id) === null) opzioni.tasti?.client?.(id);
         return;
       }
       void lancia(voce);

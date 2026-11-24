@@ -21,6 +21,7 @@ import { IDENTITY } from "../../../scene/matrix";
 import type { Sezioni } from "../../../completo/sezioni";
 import { railLayout } from "./rail";
 import { comandoDiFub, statoClienteCompleto, voceClienteCompleto } from "./status";
+import { eseguiVoceClient } from "./commands";
 import type { Completo } from "../../../completo";
 import type { EffettiSpazio, SchedaSpazio } from "../../../completo/spazi";
 
@@ -261,6 +262,7 @@ export function installWorkspace(ctx: EditorContext): void {
               commit: (ops, nome) => ctx.commit({ name: nome }, gesture(ops)) !== null,
               annuncia: (testo) => ctx.announce(testo),
               diFub: (id) => comandoDiFub(ctx, id),
+              client: (id) => eseguiVoceClient(ctx, id),
             },
             // Le voci del client che il Completo fa: la banda, e ≡ › Visualizza.
             clientVoce: (id) => voceClienteCompleto(ctx, id),

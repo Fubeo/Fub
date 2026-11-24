@@ -6363,7 +6363,7 @@
       },
       "posto": "menu/effetto",
       "famiglia": "effetti",
-      "tasto": null,
+      "tasto": "Cmd+Shift+E",
       "effetto": "cambia",
       "finestra": false
     },
@@ -6395,7 +6395,7 @@
       },
       "posto": "menu/effetto",
       "famiglia": "effetti",
-      "tasto": null,
+      "tasto": "Cmd+Alt+Shift+E",
       "effetto": "cambia",
       "finestra": true
     },
@@ -6411,7 +6411,7 @@
       },
       "posto": "menu/oggetto/elaborazione",
       "famiglia": "forme",
-      "tasto": null,
+      "tasto": "Cmd+4",
       "effetto": "cambia",
       "finestra": false
     },
@@ -6721,7 +6721,7 @@
       },
       "posto": "banda",
       "famiglia": "vista",
-      "tasto": null,
+      "tasto": "Cmd+1",
       "effetto": "mostra",
       "finestra": false
     },
@@ -6737,7 +6737,7 @@
       },
       "posto": "menu/visualizza",
       "famiglia": "tavole",
-      "tasto": null,
+      "tasto": "Cmd+Shift+H",
       "effetto": "mostra",
       "finestra": false
     },
@@ -6753,7 +6753,7 @@
       },
       "posto": "menu/visualizza",
       "famiglia": "vista",
-      "tasto": null,
+      "tasto": "Cmd+Shift+B",
       "effetto": "mostra",
       "finestra": false
     },
@@ -6769,7 +6769,7 @@
       },
       "posto": "menu/visualizza",
       "famiglia": "vista",
-      "tasto": null,
+      "tasto": "Cmd+H",
       "effetto": "mostra",
       "finestra": false
     },
@@ -6785,7 +6785,7 @@
       },
       "posto": "banda",
       "famiglia": "vista",
-      "tasto": null,
+      "tasto": "Cmd+Alt+0",
       "effetto": "mostra",
       "finestra": false
     },
@@ -6801,7 +6801,7 @@
       },
       "posto": "banda",
       "famiglia": "tavole",
-      "tasto": null,
+      "tasto": "Cmd+0",
       "effetto": "mostra",
       "finestra": false
     },
@@ -6833,7 +6833,7 @@
       },
       "posto": "menu/visualizza",
       "famiglia": "vista",
-      "tasto": null,
+      "tasto": "Cmd+'",
       "effetto": "mostra",
       "finestra": false
     },
@@ -6865,7 +6865,7 @@
       },
       "posto": "menu/visualizza",
       "famiglia": "vista",
-      "tasto": null,
+      "tasto": "Cmd+Y",
       "effetto": "mostra",
       "finestra": false
     },
@@ -6913,7 +6913,7 @@
       },
       "posto": "menu/visualizza",
       "famiglia": "vista",
-      "tasto": null,
+      "tasto": "Cmd+Shift+1",
       "effetto": "mostra",
       "finestra": false
     },
@@ -6929,7 +6929,7 @@
       },
       "posto": "menu/visualizza",
       "famiglia": "vista",
-      "tasto": null,
+      "tasto": "Cmd+R",
       "effetto": "mostra",
       "finestra": false
     },
@@ -6961,7 +6961,7 @@
       },
       "posto": "menu/visualizza",
       "famiglia": "vista",
-      "tasto": null,
+      "tasto": "Cmd+U",
       "effetto": "mostra",
       "finestra": false
     },
@@ -6993,7 +6993,7 @@
       },
       "posto": "menu/visualizza",
       "famiglia": "vista",
-      "tasto": null,
+      "tasto": "Cmd+Shift+'",
       "effetto": "mostra",
       "finestra": false
     },
@@ -7025,7 +7025,7 @@
       },
       "posto": "menu/visualizza",
       "famiglia": "vista",
-      "tasto": null,
+      "tasto": "Cmd+Alt+'",
       "effetto": "mostra",
       "finestra": false
     },
@@ -7041,7 +7041,7 @@
       },
       "posto": "banda",
       "famiglia": "vista",
-      "tasto": null,
+      "tasto": "Cmd+=",
       "effetto": "mostra",
       "finestra": false
     },
@@ -7057,7 +7057,7 @@
       },
       "posto": "banda",
       "famiglia": "vista",
-      "tasto": null,
+      "tasto": "Cmd+-",
       "effetto": "mostra",
       "finestra": false
     },

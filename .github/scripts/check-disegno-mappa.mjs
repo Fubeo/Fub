@@ -31,12 +31,14 @@ import {
   ESTRATTE,
   ErroreEstrazione,
   MAPPA,
+  TASTI_INTERFACCIA,
   VECTORCRAFT,
   chiave,
   estrai,
   leggiMappa,
   revisione,
   scriviMappa,
+  scriviTastiInterfaccia,
 } from "../../tools/disegno-mappa/estrai.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -285,6 +287,11 @@ function main(args) {
     return;
   }
   stampaConti(esito);
+  // I tasti delle voci interfaccia: il file che il catalogo legge è quello che l'estrazione scrive.
+  const tasti = fs.existsSync(TASTI_INTERFACCIA) ? fs.readFileSync(TASTI_INTERFACCIA, "utf8") : "";
+  if (tasti !== scriviTastiInterfaccia(revisione(vc), estrai(vc))) {
+    esito.errori.push("crates/fub-disegno/tasti-interfaccia.tsv non è quello che UI_COMMANDS dà: rigeneralo con node tools/disegno-mappa/estrai.mjs");
+  }
   if (esito.errori.length > 0) {
     console.error(`\ncrates/fub-disegno/mappa.tsv: ${esito.errori.length} errori:\n- ${esito.errori.join("\n- ")}`);
     process.exitCode = 1;

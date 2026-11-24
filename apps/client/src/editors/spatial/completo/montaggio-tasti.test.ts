@@ -41,6 +41,11 @@ const INDICE: Indice = indiceDi({
     voce("edit.undo", "Cmd+Z"), // Annulla di Fub: il tasto è di Fub, il comando non parte
     voce("shift.m", "Shift+M"), // una lettera con Maiusc: si scrive
     voce("tool.pen", "Cmd+Alt+T", { fonte: "strumento", chiamata: { strumento: "pen" } }),
+    // Voci del client col tasto di VectorCraft (tasti-interfaccia.tsv): Applica ultimo effetto
+    // parte; Adatta tavola (Ctrl+0) resta dell'editor, che la fa da sé; senza tasto niente.
+    voce("effect.applyLast", "Cmd+Shift+E", { fonte: "interfaccia", chiamata: { client: "effect.applyLast" } }),
+    voce("view.fitArtboard", "Cmd+0", { fonte: "interfaccia", chiamata: { client: "view.fitArtboard" } }),
+    voce("view.pixelPreview", null, { fonte: "interfaccia", chiamata: { client: "view.pixelPreview" } }),
   ],
 });
 
@@ -94,6 +99,17 @@ describe("montaTasti", () => {
     expect(esegui).toHaveBeenCalledTimes(1);
     expect(esegui.mock.calls[0]![0]).toMatchObject({ id: "shape.round" });
     expect(evento.defaultPrevented).toBe(true);
+  });
+
+  it("una voce del client parte dal suo tasto; una col tasto dell'editor no", async () => {
+    const { root, esegui } = await monta();
+    const evento = premi(root, { key: "E", code: "KeyE", ctrlKey: true, shiftKey: true });
+    expect(esegui).toHaveBeenCalledTimes(1);
+    expect(esegui.mock.calls[0]![0]).toMatchObject({ id: "effect.applyLast" });
+    expect(evento.defaultPrevented).toBe(true);
+    const zero = premi(root, { key: "0", code: "Digit0", ctrlKey: true });
+    expect(esegui).toHaveBeenCalledTimes(1);
+    expect(zero.defaultPrevented).toBe(false);
   });
 
   it("un tasto che non è di nessun comando non fa niente", async () => {
