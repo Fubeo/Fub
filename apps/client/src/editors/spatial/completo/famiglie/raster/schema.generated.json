@@ -1,5 +1,198 @@
 {
   "$generato": "File generato da crates/fub-disegno/tests/ts_indice.rs, non modificare a mano; rigenera con UPDATE_MIRROR=1 cargo test -p fub-disegno --test ts_indice",
   "famiglia": "raster",
-  "finestre": []
+  "finestre": [
+    {
+      "fonte": "effetto",
+      "id": "blur.gaussian",
+      "campi": [
+        {
+          "nome": "radius",
+          "tipo": "numero",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "stylize.dropShadow",
+      "campi": [
+        {
+          "nome": "mode",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "normal",
+            "darken",
+            "multiply",
+            "color-burn",
+            "lighten",
+            "screen",
+            "color-dodge",
+            "overlay",
+            "soft-light",
+            "hard-light",
+            "difference",
+            "exclusion",
+            "hue",
+            "saturation",
+            "color",
+            "luminosity"
+          ],
+          "aperta": false
+        },
+        {
+          "nome": "opacity",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "x",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "y",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "blur",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "shade",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "color",
+            "darkness"
+          ],
+          "aperta": false
+        },
+        {
+          "nome": "color",
+          "tipo": "testo",
+          "facoltativo": false
+        },
+        {
+          "nome": "darkness",
+          "tipo": "numero",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "stylize.feather",
+      "campi": [
+        {
+          "nome": "radius",
+          "tipo": "numero",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "stylize.innerGlow",
+      "campi": [
+        {
+          "nome": "mode",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "normal",
+            "darken",
+            "multiply",
+            "color-burn",
+            "lighten",
+            "screen",
+            "color-dodge",
+            "overlay",
+            "soft-light",
+            "hard-light",
+            "difference",
+            "exclusion",
+            "hue",
+            "saturation",
+            "color",
+            "luminosity"
+          ],
+          "aperta": false
+        },
+        {
+          "nome": "opacity",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "blur",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "color",
+          "tipo": "testo",
+          "facoltativo": false
+        },
+        {
+          "nome": "source",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "center",
+            "edge"
+          ],
+          "aperta": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "stylize.outerGlow",
+      "campi": [
+        {
+          "nome": "mode",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "normal",
+            "darken",
+            "multiply",
+            "color-burn",
+            "lighten",
+            "screen",
+            "color-dodge",
+            "overlay",
+            "soft-light",
+            "hard-light",
+            "difference",
+            "exclusion",
+            "hue",
+            "saturation",
+            "color",
+            "luminosity"
+          ],
+          "aperta": false
+        },
+        {
+          "nome": "opacity",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "blur",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "color",
+          "tipo": "testo",
+          "facoltativo": false
+        }
+      ]
+    }
+  ]
 }

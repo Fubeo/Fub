@@ -349,6 +349,62 @@
           "facoltativo": false
         }
       ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "stylize.scribble",
+      "campi": [
+        {
+          "nome": "angle",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "overlap",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "overlapVariation",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "strokeWidth",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "curviness",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "curvinessVariation",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "spacing",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "spacingVariation",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "variation",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "seed",
+          "tipo": "numero",
+          "facoltativo": false
+        }
+      ]
     }
   ]
 }

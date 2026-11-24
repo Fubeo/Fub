@@ -334,6 +334,23 @@ fn il_lessico_affina_un_valore_vago() {
 }
 
 #[test]
+fn il_lessico_dà_i_valori_di_una_frase() {
+    let fusione = [("mode", scelta(&["normal", "multiply"], false))];
+    let tipo = |schema: &str| {
+        Modulo::da_schema(schema, &fusione).unwrap().campi[0]
+            .tipo
+            .clone()
+    };
+    assert_eq!(
+        tipo("{mode: blend mode (\"multiply\")}"),
+        scelta(&["normal", "multiply"], false)
+    );
+    // Valori scritti nello schema o un numero restano quelli dello schema.
+    assert_eq!(tipo("{mode: \"a\"|\"b\"}"), scelta(&["a", "b"], false));
+    assert_eq!(tipo("{mode: pt (3)}"), Tipo::Numero);
+}
+
+#[test]
 fn null_si_ignora_e_i_tipi_diversi_sono_json() {
     assert_eq!(un_tipo("{numberFormat?: \"#,##0\" | null}"), Tipo::Testo);
     assert_eq!(

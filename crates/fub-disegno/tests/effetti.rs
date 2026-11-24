@@ -48,7 +48,7 @@ fn un_effetto_fatto_gira() {
 fn un_effetto_da_fare_non_e_servito() {
     let mut d = apri();
     for chiave in ["effect", "id"] {
-        let esito = applica(&mut d, json!({ chiave: "stylize.scribble" }));
+        let esito = applica(&mut d, json!({ chiave: "artistic.neonGlow" }));
         assert!(matches!(esito, Err(PluginError::Unserved(_))), "{esito:?}");
         assert!(
             format!("{esito:?}").contains("host.drawing.not_done"),

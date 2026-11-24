@@ -145,10 +145,13 @@ mostra l'anteprima sul disegno mentre si cambiano i valori, e OK lo aggiunge
 in un passo solo di Annulla. Le voci sono spente senza oggetti scelti, con un
 oggetto bloccato o su un disegno di sola lettura. Oggi ci sono:
 
-- **Stilizza ›** Arrotonda angoli;
+- **Stilizza ›** Arrotonda angoli, Ombra esterna, Bagliore interno, Bagliore
+  esterno, Sfuma bordi, Scarabocchio (il metodo di fusione dell'ombra e dei
+  bagliori si sceglie fra quelli del pannello Trasparenza);
+- **Sfocatura ›** Sfocatura gaussiana;
 - **Distorci e trasforma ›** Contrai e gonfia, Torci, Zig-zag, Irruvidisci,
   Ritocca, Trasforma (con le copie), Distorsione libera;
-- **Tracciato ›** Sposta tracciato, Contorna oggetto;
+- **Tracciato ›** Sposta tracciato, Contorna oggetto, Contorna traccia;
 - **Converti in forma ›** Rettangolo, Rettangolo arrotondato, Ellisse.
 
 Gli altri effetti arrivano uno alla volta, e una voce non ancora pronta non si

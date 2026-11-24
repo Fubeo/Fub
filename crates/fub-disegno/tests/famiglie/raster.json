@@ -1,3 +1,278 @@
 {
-  "casi": []
+  "$nota": "I casi della famiglia raster (K6): gli effetti del menu Effetto che il motore disegna con un filtro SVG (Ombra esterna, Bagliore interno ed esterno, Sfuma, Sfocatura gaussiana), uno per uno (`fonte: effetto`). Il disegno è raster/base.svg, lo stesso degli effetti: due rettangoli (oa1a1a1a1 nero, ob2b2b2b2 rosso) sul livello l1a2b3c4d, tutti e due scelti.",
+  "casi": [
+    {
+      "id": "stylize.dropShadow",
+      "fonte": "effetto",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "ob2b2b2b2"
+      ],
+      "argomenti": {
+        "x": 7,
+        "y": 7,
+        "blur": 5,
+        "opacity": 75
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "ob2b2b2b2"
+              },
+              {
+                "op": "remove",
+                "target": "oa1a1a1a1"
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<g id=\"oa1a1a1a1\"><defs><filter id=\"roga77u6i\" filterUnits=\"userSpaceOnUse\" x=\"83.5\" y=\"83.5\" width=\"133\" height=\"83\" data-vc-blend=\"multiply\" color-interpolation-filters=\"sRGB\"><feGaussianBlur in=\"SourceAlpha\" stdDeviation=\"2.5\"/><feOffset dx=\"7\" dy=\"7\" result=\"shadow\"/><feFlood flood-color=\"#000000\" flood-opacity=\"0.75\"/><feComposite in2=\"shadow\" operator=\"in\" result=\"paint\"/><feMerge><feMergeNode in=\"paint\"/><feMergeNode in=\"SourceGraphic\"/></feMerge></filter></defs><g id=\"otxrxdqph\" filter=\"url(#roga77u6i)\"><rect id=\"opg90jko1\" x=\"100\" y=\"100\" width=\"100\" height=\"50\" fill=\"#000000\"/></g></g>"
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "last": true
+                },
+                "raw": "<g id=\"ob2b2b2b2\"><defs><filter id=\"rnobo4a7u\" filterUnits=\"userSpaceOnUse\" x=\"203.5\" y=\"83.5\" width=\"93\" height=\"83\" data-vc-blend=\"multiply\" color-interpolation-filters=\"sRGB\"><feGaussianBlur in=\"SourceAlpha\" stdDeviation=\"2.5\"/><feOffset dx=\"7\" dy=\"7\" result=\"shadow\"/><feFlood flood-color=\"#000000\" flood-opacity=\"0.75\"/><feComposite in2=\"shadow\" operator=\"in\" result=\"paint\"/><feMerge><feMergeNode in=\"paint\"/><feMergeNode in=\"SourceGraphic\"/></feMerge></filter></defs><g id=\"ok4z45tb5\" filter=\"url(#rnobo4a7u)\"><rect id=\"oj04wojxi\" x=\"220\" y=\"100\" width=\"60\" height=\"50\" fill=\"#ff0000\"/></g></g>"
+              },
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<metadata><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"oa1a1a1a1\" hash=\"d7ab3d6762083d90\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjoyLCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MC4wLCJnIjowLjAsImIiOjAuMH19fV0sImVmZmVjdHMiOlt7ImlkIjoic3R5bGl6ZS5kcm9wU2hhZG93IiwicGFyYW1zIjp7Im1vZGUiOiJtdWx0aXBseSIsIm9wYWNpdHkiOjc1LCJ4Ijo3LCJ5Ijo3LCJibHVyIjo1LCJzaGFkZSI6ImNvbG9yIiwiY29sb3IiOiIjMDAwMDAwIiwiZGFya25lc3MiOjEwMC4wfSwidmlzaWJsZSI6dHJ1ZX1dfSwia2luZCI6eyJ0eXBlIjoicGF0aCIsInBhdGgiOnsic3VicGF0aHMiOlt7ImFuY2hvcnMiOlt7InAiOlsxMDAuMCwxMDAuMF19LHsicCI6WzIwMC4wLDEwMC4wXX0seyJwIjpbMjAwLjAsMTUwLjBdfSx7InAiOlsxMDAuMCwxNTAuMF19XSwiY2xvc2VkIjp0cnVlfV19fX19</vectorcraft:recipe><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"ob2b2b2b2\" hash=\"49ace46964717a9d\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjozLCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MS4wLCJnIjowLjAsImIiOjAuMH19fV0sImVmZmVjdHMiOlt7ImlkIjoic3R5bGl6ZS5kcm9wU2hhZG93IiwicGFyYW1zIjp7Im1vZGUiOiJtdWx0aXBseSIsIm9wYWNpdHkiOjc1LCJ4Ijo3LCJ5Ijo3LCJibHVyIjo1LCJzaGFkZSI6ImNvbG9yIiwiY29sb3IiOiIjMDAwMDAwIiwiZGFya25lc3MiOjEwMC4wfSwidmlzaWJsZSI6dHJ1ZX1dfSwia2luZCI6eyJ0eXBlIjoicGF0aCIsInBhdGgiOnsic3VicGF0aHMiOlt7ImFuY2hvcnMiOlt7InAiOlsyMjAuMCwxMDAuMF19LHsicCI6WzI4MC4wLDEwMC4wXX0seyJwIjpbMjgwLjAsMTUwLjBdfSx7InAiOlsyMjAuMCwxNTAuMF19XSwiY2xvc2VkIjp0cnVlfV19fX19</vectorcraft:recipe></metadata>"
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "stylize.dropShadow.svg"
+    },
+    {
+      "id": "stylize.innerGlow",
+      "fonte": "effetto",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "ob2b2b2b2"
+      ],
+      "argomenti": {
+        "blur": 5
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "ob2b2b2b2"
+              },
+              {
+                "op": "remove",
+                "target": "oa1a1a1a1"
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<g id=\"oa1a1a1a1\"><defs><filter id=\"r9r37yrbe\" filterUnits=\"userSpaceOnUse\" x=\"98\" y=\"98\" width=\"104\" height=\"54\" data-vc-blend=\"screen\" color-interpolation-filters=\"sRGB\"><feComponentTransfer in=\"SourceAlpha\"><feFuncA type=\"table\" tableValues=\"1 0\"/></feComponentTransfer><feGaussianBlur stdDeviation=\"2.5\" result=\"glow\"/><feFlood flood-color=\"#ffffff\" flood-opacity=\"0.75\"/><feComposite in2=\"glow\" operator=\"in\"/><feComposite in2=\"SourceAlpha\" operator=\"in\" result=\"paint\"/><feMerge><feMergeNode in=\"SourceGraphic\"/><feMergeNode in=\"paint\"/></feMerge></filter></defs><g id=\"oaq5um1uh\" filter=\"url(#r9r37yrbe)\"><rect id=\"o0w1b24ou\" x=\"100\" y=\"100\" width=\"100\" height=\"50\" fill=\"#000000\"/></g></g>"
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "last": true
+                },
+                "raw": "<g id=\"ob2b2b2b2\"><defs><filter id=\"rjs8pmfew\" filterUnits=\"userSpaceOnUse\" x=\"218\" y=\"98\" width=\"64\" height=\"54\" data-vc-blend=\"screen\" color-interpolation-filters=\"sRGB\"><feComponentTransfer in=\"SourceAlpha\"><feFuncA type=\"table\" tableValues=\"1 0\"/></feComponentTransfer><feGaussianBlur stdDeviation=\"2.5\" result=\"glow\"/><feFlood flood-color=\"#ffffff\" flood-opacity=\"0.75\"/><feComposite in2=\"glow\" operator=\"in\"/><feComposite in2=\"SourceAlpha\" operator=\"in\" result=\"paint\"/><feMerge><feMergeNode in=\"SourceGraphic\"/><feMergeNode in=\"paint\"/></feMerge></filter></defs><g id=\"o5mya16f1\" filter=\"url(#rjs8pmfew)\"><rect id=\"oh8k1k2yk\" x=\"220\" y=\"100\" width=\"60\" height=\"50\" fill=\"#ff0000\"/></g></g>"
+              },
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<metadata><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"oa1a1a1a1\" hash=\"c917f839feb31b42\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjoyLCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MC4wLCJnIjowLjAsImIiOjAuMH19fV0sImVmZmVjdHMiOlt7ImlkIjoic3R5bGl6ZS5pbm5lckdsb3ciLCJwYXJhbXMiOnsibW9kZSI6InNjcmVlbiIsIm9wYWNpdHkiOjc1LjAsImJsdXIiOjUsImNvbG9yIjoiI2ZmZmZmZiIsInNvdXJjZSI6ImVkZ2UifSwidmlzaWJsZSI6dHJ1ZX1dfSwia2luZCI6eyJ0eXBlIjoicGF0aCIsInBhdGgiOnsic3VicGF0aHMiOlt7ImFuY2hvcnMiOlt7InAiOlsxMDAuMCwxMDAuMF19LHsicCI6WzIwMC4wLDEwMC4wXX0seyJwIjpbMjAwLjAsMTUwLjBdfSx7InAiOlsxMDAuMCwxNTAuMF19XSwiY2xvc2VkIjp0cnVlfV19fX19</vectorcraft:recipe><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"ob2b2b2b2\" hash=\"1a4e9a7996b55dbb\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjozLCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MS4wLCJnIjowLjAsImIiOjAuMH19fV0sImVmZmVjdHMiOlt7ImlkIjoic3R5bGl6ZS5pbm5lckdsb3ciLCJwYXJhbXMiOnsibW9kZSI6InNjcmVlbiIsIm9wYWNpdHkiOjc1LjAsImJsdXIiOjUsImNvbG9yIjoiI2ZmZmZmZiIsInNvdXJjZSI6ImVkZ2UifSwidmlzaWJsZSI6dHJ1ZX1dfSwia2luZCI6eyJ0eXBlIjoicGF0aCIsInBhdGgiOnsic3VicGF0aHMiOlt7ImFuY2hvcnMiOlt7InAiOlsyMjAuMCwxMDAuMF19LHsicCI6WzI4MC4wLDEwMC4wXX0seyJwIjpbMjgwLjAsMTUwLjBdfSx7InAiOlsyMjAuMCwxNTAuMF19XSwiY2xvc2VkIjp0cnVlfV19fX19</vectorcraft:recipe></metadata>"
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "stylize.innerGlow.svg"
+    },
+    {
+      "id": "stylize.outerGlow",
+      "fonte": "effetto",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "ob2b2b2b2"
+      ],
+      "argomenti": {
+        "blur": 5
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "ob2b2b2b2"
+              },
+              {
+                "op": "remove",
+                "target": "oa1a1a1a1"
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<g id=\"oa1a1a1a1\"><defs><filter id=\"rrb8yb6sq\" filterUnits=\"userSpaceOnUse\" x=\"90.25\" y=\"90.25\" width=\"119.5\" height=\"69.5\" data-vc-blend=\"screen\" color-interpolation-filters=\"sRGB\"><feComponentTransfer in=\"SourceAlpha\"><feFuncA type=\"linear\" slope=\"255\"/></feComponentTransfer><feMorphology operator=\"dilate\" radius=\"0.25\"/><feGaussianBlur stdDeviation=\"2.5\" result=\"glow\"/><feFlood flood-color=\"#ffff00\" flood-opacity=\"0.75\"/><feComposite in2=\"glow\" operator=\"in\" result=\"paint\"/><feMerge><feMergeNode in=\"paint\"/><feMergeNode in=\"SourceGraphic\"/></feMerge></filter></defs><g id=\"obgtirj84\" filter=\"url(#rrb8yb6sq)\"><rect id=\"omp1jthc7\" x=\"100\" y=\"100\" width=\"100\" height=\"50\" fill=\"#000000\"/></g></g>"
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "last": true
+                },
+                "raw": "<g id=\"ob2b2b2b2\"><defs><filter id=\"rmtmdt7rh\" filterUnits=\"userSpaceOnUse\" x=\"210.25\" y=\"90.25\" width=\"79.5\" height=\"69.5\" data-vc-blend=\"screen\" color-interpolation-filters=\"sRGB\"><feComponentTransfer in=\"SourceAlpha\"><feFuncA type=\"linear\" slope=\"255\"/></feComponentTransfer><feMorphology operator=\"dilate\" radius=\"0.25\"/><feGaussianBlur stdDeviation=\"2.5\" result=\"glow\"/><feFlood flood-color=\"#ffff00\" flood-opacity=\"0.75\"/><feComposite in2=\"glow\" operator=\"in\" result=\"paint\"/><feMerge><feMergeNode in=\"paint\"/><feMergeNode in=\"SourceGraphic\"/></feMerge></filter></defs><g id=\"omo113q6a\" filter=\"url(#rmtmdt7rh)\"><rect id=\"og11zfare\" x=\"220\" y=\"100\" width=\"60\" height=\"50\" fill=\"#ff0000\"/></g></g>"
+              },
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<metadata><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"oa1a1a1a1\" hash=\"b7164d71c52e46a4\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjoyLCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MC4wLCJnIjowLjAsImIiOjAuMH19fV0sImVmZmVjdHMiOlt7ImlkIjoic3R5bGl6ZS5vdXRlckdsb3ciLCJwYXJhbXMiOnsibW9kZSI6InNjcmVlbiIsIm9wYWNpdHkiOjc1LjAsImJsdXIiOjUsImNvbG9yIjoiI2ZmZmYwMCJ9LCJ2aXNpYmxlIjp0cnVlfV19LCJraW5kIjp7InR5cGUiOiJwYXRoIiwicGF0aCI6eyJzdWJwYXRocyI6W3siYW5jaG9ycyI6W3sicCI6WzEwMC4wLDEwMC4wXX0seyJwIjpbMjAwLjAsMTAwLjBdfSx7InAiOlsyMDAuMCwxNTAuMF19LHsicCI6WzEwMC4wLDE1MC4wXX1dLCJjbG9zZWQiOnRydWV9XX19fX0=</vectorcraft:recipe><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"ob2b2b2b2\" hash=\"24f21267e5cdef75\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjozLCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MS4wLCJnIjowLjAsImIiOjAuMH19fV0sImVmZmVjdHMiOlt7ImlkIjoic3R5bGl6ZS5vdXRlckdsb3ciLCJwYXJhbXMiOnsibW9kZSI6InNjcmVlbiIsIm9wYWNpdHkiOjc1LjAsImJsdXIiOjUsImNvbG9yIjoiI2ZmZmYwMCJ9LCJ2aXNpYmxlIjp0cnVlfV19LCJraW5kIjp7InR5cGUiOiJwYXRoIiwicGF0aCI6eyJzdWJwYXRocyI6W3siYW5jaG9ycyI6W3sicCI6WzIyMC4wLDEwMC4wXX0seyJwIjpbMjgwLjAsMTAwLjBdfSx7InAiOlsyODAuMCwxNTAuMF19LHsicCI6WzIyMC4wLDE1MC4wXX1dLCJjbG9zZWQiOnRydWV9XX19fX0=</vectorcraft:recipe></metadata>"
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "stylize.outerGlow.svg"
+    },
+    {
+      "id": "stylize.feather",
+      "fonte": "effetto",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "ob2b2b2b2"
+      ],
+      "argomenti": {
+        "radius": 5
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "ob2b2b2b2"
+              },
+              {
+                "op": "remove",
+                "target": "oa1a1a1a1"
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<g id=\"oa1a1a1a1\"><defs><filter id=\"rqg7if9oz\" filterUnits=\"userSpaceOnUse\" x=\"98\" y=\"98\" width=\"104\" height=\"54\" color-interpolation-filters=\"sRGB\"><feGaussianBlur in=\"SourceAlpha\" stdDeviation=\"2.5\" result=\"soft\"/><feComposite in=\"SourceGraphic\" in2=\"soft\" operator=\"in\" result=\"f\"/><feComposite in=\"f\" in2=\"SourceAlpha\" operator=\"in\"/></filter></defs><g id=\"odrg86m7a\" filter=\"url(#rqg7if9oz)\"><rect id=\"oggpjps82\" x=\"100\" y=\"100\" width=\"100\" height=\"50\" fill=\"#000000\"/></g></g>"
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "last": true
+                },
+                "raw": "<g id=\"ob2b2b2b2\"><defs><filter id=\"rpbnc6ydp\" filterUnits=\"userSpaceOnUse\" x=\"218\" y=\"98\" width=\"64\" height=\"54\" color-interpolation-filters=\"sRGB\"><feGaussianBlur in=\"SourceAlpha\" stdDeviation=\"2.5\" result=\"soft\"/><feComposite in=\"SourceGraphic\" in2=\"soft\" operator=\"in\" result=\"f\"/><feComposite in=\"f\" in2=\"SourceAlpha\" operator=\"in\"/></filter></defs><g id=\"on3w4u59c\" filter=\"url(#rpbnc6ydp)\"><rect id=\"ou6kdytdu\" x=\"220\" y=\"100\" width=\"60\" height=\"50\" fill=\"#ff0000\"/></g></g>"
+              },
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<metadata><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"oa1a1a1a1\" hash=\"7622dcf7939842be\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjoyLCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MC4wLCJnIjowLjAsImIiOjAuMH19fV0sImVmZmVjdHMiOlt7ImlkIjoic3R5bGl6ZS5mZWF0aGVyIiwicGFyYW1zIjp7InJhZGl1cyI6NX0sInZpc2libGUiOnRydWV9XX0sImtpbmQiOnsidHlwZSI6InBhdGgiLCJwYXRoIjp7InN1YnBhdGhzIjpbeyJhbmNob3JzIjpbeyJwIjpbMTAwLjAsMTAwLjBdfSx7InAiOlsyMDAuMCwxMDAuMF19LHsicCI6WzIwMC4wLDE1MC4wXX0seyJwIjpbMTAwLjAsMTUwLjBdfV0sImNsb3NlZCI6dHJ1ZX1dfX19fQ==</vectorcraft:recipe><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"ob2b2b2b2\" hash=\"832a0d83feb53458\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjozLCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MS4wLCJnIjowLjAsImIiOjAuMH19fV0sImVmZmVjdHMiOlt7ImlkIjoic3R5bGl6ZS5mZWF0aGVyIiwicGFyYW1zIjp7InJhZGl1cyI6NX0sInZpc2libGUiOnRydWV9XX0sImtpbmQiOnsidHlwZSI6InBhdGgiLCJwYXRoIjp7InN1YnBhdGhzIjpbeyJhbmNob3JzIjpbeyJwIjpbMjIwLjAsMTAwLjBdfSx7InAiOlsyODAuMCwxMDAuMF19LHsicCI6WzI4MC4wLDE1MC4wXX0seyJwIjpbMjIwLjAsMTUwLjBdfV0sImNsb3NlZCI6dHJ1ZX1dfX19fQ==</vectorcraft:recipe></metadata>"
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "stylize.feather.svg"
+    },
+    {
+      "id": "blur.gaussian",
+      "fonte": "effetto",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "ob2b2b2b2"
+      ],
+      "argomenti": {
+        "radius": 5
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "ob2b2b2b2"
+              },
+              {
+                "op": "remove",
+                "target": "oa1a1a1a1"
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<g id=\"oa1a1a1a1\"><defs><filter id=\"r0442my5l\" filterUnits=\"userSpaceOnUse\" x=\"90.5\" y=\"90.5\" width=\"119\" height=\"69\" color-interpolation-filters=\"sRGB\"><feGaussianBlur in=\"SourceGraphic\" stdDeviation=\"2.5\"/></filter></defs><g id=\"ojm7uuly8\" filter=\"url(#r0442my5l)\"><rect id=\"ou5nbc6u1\" x=\"100\" y=\"100\" width=\"100\" height=\"50\" fill=\"#000000\"/></g></g>"
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "last": true
+                },
+                "raw": "<g id=\"ob2b2b2b2\"><defs><filter id=\"rihhru6xl\" filterUnits=\"userSpaceOnUse\" x=\"210.5\" y=\"90.5\" width=\"79\" height=\"69\" color-interpolation-filters=\"sRGB\"><feGaussianBlur in=\"SourceGraphic\" stdDeviation=\"2.5\"/></filter></defs><g id=\"ov69nj7qn\" filter=\"url(#rihhru6xl)\"><rect id=\"ox6pqc7br\" x=\"220\" y=\"100\" width=\"60\" height=\"50\" fill=\"#ff0000\"/></g></g>"
+              },
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<metadata><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"oa1a1a1a1\" hash=\"90583ce491cd633f\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjoyLCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MC4wLCJnIjowLjAsImIiOjAuMH19fV0sImVmZmVjdHMiOlt7ImlkIjoiYmx1ci5nYXVzc2lhbiIsInBhcmFtcyI6eyJyYWRpdXMiOjV9LCJ2aXNpYmxlIjp0cnVlfV19LCJraW5kIjp7InR5cGUiOiJwYXRoIiwicGF0aCI6eyJzdWJwYXRocyI6W3siYW5jaG9ycyI6W3sicCI6WzEwMC4wLDEwMC4wXX0seyJwIjpbMjAwLjAsMTAwLjBdfSx7InAiOlsyMDAuMCwxNTAuMF19LHsicCI6WzEwMC4wLDE1MC4wXX1dLCJjbG9zZWQiOnRydWV9XX19fX0=</vectorcraft:recipe><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"ob2b2b2b2\" hash=\"7ad524f972a97c4c\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjozLCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MS4wLCJnIjowLjAsImIiOjAuMH19fV0sImVmZmVjdHMiOlt7ImlkIjoiYmx1ci5nYXVzc2lhbiIsInBhcmFtcyI6eyJyYWRpdXMiOjV9LCJ2aXNpYmxlIjp0cnVlfV19LCJraW5kIjp7InR5cGUiOiJwYXRoIiwicGF0aCI6eyJzdWJwYXRocyI6W3siYW5jaG9ycyI6W3sicCI6WzIyMC4wLDEwMC4wXX0seyJwIjpbMjgwLjAsMTAwLjBdfSx7InAiOlsyODAuMCwxNTAuMF19LHsicCI6WzIyMC4wLDE1MC4wXX1dLCJjbG9zZWQiOnRydWV9XX19fX0=</vectorcraft:recipe></metadata>"
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "blur.gaussian.svg"
+    }
+  ]
 }

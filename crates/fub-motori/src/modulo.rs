@@ -46,7 +46,8 @@
 //!   tutta maiuscola (`B4 (ISO)`) fa parte del valore.
 //! - Un campo senza valore prende il tipo dal lessico del motore (i nomi
 //!   ricorrenti: `range`, `sheet`, `password`); un nome che il lessico non
-//!   conosce è un errore. Il lessico affina anche un valore vago: `sheet?:
+//!   conosce è un errore. Il lessico dà i valori di un campo che lo schema
+//!   descrive a parole (`mode: blend mode`). Il lessico affina anche un valore vago: `sheet?:
 //!   name` è un foglio, `range?: "A1"` un intervallo.
 
 use std::collections::BTreeSet;
@@ -888,6 +889,9 @@ fn affina(tipo: Combinato, lessico: Option<Tipo>) -> Tipo {
         (Combinato::Vago(_), Some(dal_lessico)) if dal_lessico.riferimento() => dal_lessico,
         (Combinato::Tipo(Tipo::Cella), Some(Tipo::Intervallo)) => Tipo::Intervallo,
         (Combinato::Tipo(Tipo::Testo), Some(Tipo::Segreto)) => Tipo::Segreto,
+        // Una frase che descrive il valore (`mode: blend mode ("multiply")`):
+        // il lessico del comando può dirne i valori.
+        (Combinato::Tipo(Tipo::Testo), Some(scelta @ Tipo::Scelta { .. })) => scelta,
         (Combinato::Tipo(tipo) | Combinato::Vago(tipo), _) => tipo,
     }
 }

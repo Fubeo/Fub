@@ -1397,6 +1397,36 @@ pub struct Voce {
     pub sotto: Option<String>,
 }
 
+/// I metodi di fusione nell'ordine del pannello Trasparenza di VectorCraft
+/// (`BlendMode::ALL`), coi nomi CSS di `mix-blend-mode`: il motore degli
+/// effetti li legge senza trattini e maiuscole.
+pub const FUSIONI: &[&str] = &[
+    "normal",
+    "darken",
+    "multiply",
+    "color-burn",
+    "lighten",
+    "screen",
+    "color-dodge",
+    "overlay",
+    "soft-light",
+    "hard-light",
+    "difference",
+    "exclusion",
+    "hue",
+    "saturation",
+    "color",
+    "luminosity",
+];
+
+/// Gli effetti col campo `mode: blend mode`, che la finestra mostra come
+/// scelta fra le [`FUSIONI`].
+const CON_FUSIONE: &[&str] = &[
+    "stylize.dropShadow",
+    "stylize.innerGlow",
+    "stylize.outerGlow",
+];
+
 /// Le voci delle righe date, importate fonte per fonte.
 ///
 /// # Errors
@@ -1417,12 +1447,21 @@ pub fn voci_di(righe: &[&RigaMappa]) -> Result<Vec<Voce>, Vec<Mancanza>> {
             .iter()
             .filter_map(|r| Some((r.id.as_str(), posto_di(&r.posto)?)))
             .collect();
+        let fusione = [(
+            "mode",
+            Tipo::Scelta {
+                valori: FUSIONI.iter().map(|f| (*f).to_owned()).collect(),
+                aperta: false,
+            },
+        )];
+        let nomi_del_comando: Vec<(&str, &[(&str, Tipo)])> =
+            CON_FUSIONE.iter().map(|id| (*id, &fusione[..])).collect();
         let adattamento = Adattamento {
             schede: SCHEDE,
             posti: &[],
             posti_del_comando: &posti,
             nomi: NOMI,
-            nomi_del_comando: &[],
+            nomi_del_comando: &nomi_del_comando,
         };
         match importa(SPAZIO, &specifiche, &adattamento) {
             Ok(comandi) => {

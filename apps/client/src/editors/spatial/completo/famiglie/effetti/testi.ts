@@ -46,4 +46,13 @@ export const TESTI: Readonly<Record<string, { readonly it: string; readonly en: 
   "campo:extraH": { it: "Altezza in più", en: "Extra Height" },
   "campo:width": { it: "Larghezza", en: "Width" },
   "campo:height": { it: "Altezza", en: "Height" },
+  // Stilizza › Scarabocchio, Tracciato › Contorna traccia.
+  "campo:overlap": { it: "Sovrapposizione", en: "Path Overlap" },
+  "campo:overlapVariation": { it: "Variazione sovrapposizione", en: "Overlap Variation" },
+  "campo:strokeWidth": { it: "Spessore tratto", en: "Stroke Width" },
+  "campo:curviness": { it: "Curvatura", en: "Curviness" },
+  "campo:curvinessVariation": { it: "Variazione curvatura", en: "Curviness Variation" },
+  "campo:spacing": { it: "Spaziatura", en: "Spacing" },
+  "campo:spacingVariation": { it: "Variazione spaziatura", en: "Spacing Variation" },
+  "campo:variation": { it: "Variazione", en: "Variation" },
 };

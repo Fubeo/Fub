@@ -6919,6 +6919,25 @@
     },
     {
       "fonte": "effetto",
+      "id": "blur.gaussian",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "blur.gaussian"
+        }
+      },
+      "etichetta": {
+        "it": "Sfocatura gaussiana…",
+        "en": "Gaussian Blur…"
+      },
+      "posto": "menu/effetto/sfocatura",
+      "famiglia": "raster",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
       "id": "convertToShape.ellipse",
       "chiamata": {
         "comando": "disegno.effect.apply",
@@ -7147,6 +7166,101 @@
     },
     {
       "fonte": "effetto",
+      "id": "path.outlineStroke",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "path.outlineStroke"
+        }
+      },
+      "etichetta": {
+        "it": "Contorna tratto",
+        "en": "Outline Stroke"
+      },
+      "posto": "menu/effetto/tracciato",
+      "famiglia": "effetti",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "effetto",
+      "id": "stylize.dropShadow",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "stylize.dropShadow"
+        }
+      },
+      "etichetta": {
+        "it": "Ombra esterna…",
+        "en": "Drop Shadow…"
+      },
+      "posto": "menu/effetto/stilizza",
+      "famiglia": "raster",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "stylize.feather",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "stylize.feather"
+        }
+      },
+      "etichetta": {
+        "it": "Sfuma bordi…",
+        "en": "Feather…"
+      },
+      "posto": "menu/effetto/stilizza",
+      "famiglia": "raster",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "stylize.innerGlow",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "stylize.innerGlow"
+        }
+      },
+      "etichetta": {
+        "it": "Bagliore interno…",
+        "en": "Inner Glow…"
+      },
+      "posto": "menu/effetto/stilizza",
+      "famiglia": "raster",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "stylize.outerGlow",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "stylize.outerGlow"
+        }
+      },
+      "etichetta": {
+        "it": "Bagliore esterno…",
+        "en": "Outer Glow…"
+      },
+      "posto": "menu/effetto/stilizza",
+      "famiglia": "raster",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
       "id": "stylize.roundCorners",
       "chiamata": {
         "comando": "disegno.effect.apply",
@@ -7157,6 +7271,25 @@
       "etichetta": {
         "it": "Arrotonda angoli…",
         "en": "Round Corners…"
+      },
+      "posto": "menu/effetto/stilizza",
+      "famiglia": "effetti",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "stylize.scribble",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "stylize.scribble"
+        }
+      },
+      "etichetta": {
+        "it": "Scarabocchio…",
+        "en": "Scribble…"
       },
       "posto": "menu/effetto/stilizza",
       "famiglia": "effetti",
