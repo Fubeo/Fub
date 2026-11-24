@@ -280,3 +280,32 @@ fn liberare_una_famiglia_svuota_le_sue_tabelle() {
     assert!(reso <= prima);
     assert_eq!(libera_le_tabelle(testo::TABELLE), 0, "non si svuotano");
 }
+
+#[test]
+fn un_effetto_da_fare_passa_solo_col_filtro_delle_prove() {
+    // Tutti gli effetti della mappa sono fatti: la regola si prova su una riga finta.
+    let riga = |stato, sotto: Option<&str>| Riga {
+        fonte: Fonte::Effetto,
+        id: "prova.effetto".into(),
+        nome_famiglia: "effetti".into(),
+        famiglia: Some(Famiglia::Effetti),
+        stato,
+        sotto: sotto.map(Into::into),
+    };
+    let da_fare = riga(StatoRiga::DaFare, None);
+    assert!(matches!(
+        servito_dalla_riga(Some(&da_fare), Filtro::Fatte),
+        Err(PluginError::Unserved(_))
+    ));
+    assert!(servito_dalla_riga(Some(&da_fare), Filtro::Tutte).unwrap());
+    let fatto = riga(StatoRiga::Fatto, None);
+    assert!(servito_dalla_riga(Some(&fatto), Filtro::Fatte).unwrap());
+    for no in [
+        riga(StatoRiga::Fub, None),
+        riga(StatoRiga::Escluso, None),
+        riga(StatoRiga::Fatto, Some("plugins")),
+    ] {
+        assert!(!servito_dalla_riga(Some(&no), Filtro::Tutte).unwrap());
+    }
+    assert!(!servito_dalla_riga(None, Filtro::Tutte).unwrap());
+}

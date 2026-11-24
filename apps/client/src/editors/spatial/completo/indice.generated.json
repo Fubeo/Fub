@@ -7850,6 +7850,25 @@
     },
     {
       "fonte": "effetto",
+      "id": "cropMarks",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "cropMarks"
+        }
+      },
+      "etichetta": {
+        "it": "Segni di ritaglio",
+        "en": "Crop Marks"
+      },
+      "posto": "menu/effetto",
+      "famiglia": "stampa",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "effetto",
       "id": "distort.diffuseGlow",
       "chiamata": {
         "comando": "disegno.effect.apply",
@@ -8965,6 +8984,82 @@
       },
       "posto": "menu/effetto/texture",
       "famiglia": "raster",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "threeD.extrude",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "threeD.extrude"
+        }
+      },
+      "etichetta": {
+        "it": "Estrusione e smusso…",
+        "en": "Extrude & Bevel…"
+      },
+      "posto": "menu/effetto/tre-d",
+      "famiglia": "tre-d",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "threeD.inflate",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "threeD.inflate"
+        }
+      },
+      "etichetta": {
+        "it": "Gonfia…",
+        "en": "Inflate…"
+      },
+      "posto": "menu/effetto/tre-d",
+      "famiglia": "tre-d",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "threeD.revolve",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "threeD.revolve"
+        }
+      },
+      "etichetta": {
+        "it": "Rivoluzione…",
+        "en": "Revolve…"
+      },
+      "posto": "menu/effetto/tre-d",
+      "famiglia": "tre-d",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "threeD.rotate",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "threeD.rotate"
+        }
+      },
+      "etichetta": {
+        "it": "Ruota…",
+        "en": "Rotate…"
+      },
+      "posto": "menu/effetto/tre-d",
+      "famiglia": "tre-d",
       "tasto": null,
       "effetto": "cambia",
       "finestra": true

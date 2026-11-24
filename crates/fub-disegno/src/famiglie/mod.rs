@@ -1052,7 +1052,12 @@ fn effetto_servito(valore: &Value, filtro: Filtro) -> Result<bool, PluginError> 
     else {
         return Ok(true);
     };
-    let Some(riga) = riga(Fonte::Effetto, id) else {
+    servito_dalla_riga(riga(Fonte::Effetto, id), filtro)
+}
+
+/// La regola di [`effetto_servito`] sulla riga dell'effetto, se la mappa l'ha.
+fn servito_dalla_riga(riga: Option<&Riga>, filtro: Filtro) -> Result<bool, PluginError> {
+    let Some(riga) = riga else {
         return Ok(false);
     };
     match riga.stato {

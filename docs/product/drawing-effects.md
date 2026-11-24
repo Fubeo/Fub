@@ -143,7 +143,7 @@ Texture, Video, Deforma). Ogni voce aggiunge un **effetto dal vivo** agli
 oggetti scelti: la sua finestra (per esempio il Raggio di «Arrotonda angoli»)
 mostra l'anteprima sul disegno mentre si cambiano i valori, e OK lo aggiunge
 in un passo solo di Annulla. Le voci sono spente senza oggetti scelti, con un
-oggetto bloccato o su un disegno di sola lettura. Oggi ci sono:
+oggetto bloccato o su un disegno di sola lettura. Le voci:
 
 - **Stilizza ›** Arrotonda angoli, Ombra esterna, Bagliore interno, Bagliore
   esterno, Sfuma bordi, Scarabocchio (il metodo di fusione dell'ombra e dei
@@ -174,10 +174,13 @@ oggetto bloccato o su un disegno di sola lettura. Oggi ci sono:
 - **Deforma ›** le quindici deformazioni (Arco, Arco inferiore e superiore,
   Arcata, Rigonfiamento, Conchiglia inferiore e superiore, Bandiera, Onda,
   Pesce, Ascesa, Occhio di pesce, Gonfia, Compressione, Torci), con piega,
-  distorsione orizzontale e verticale e direzione.
+  distorsione orizzontale e verticale e direzione;
+- **3D e materiali ›** Estrusione e smusso, Rivoluzione, Gonfia, Ruota: il
+  file tiene le facce come poligoni ombreggiati (Gonfia ne fa migliaia);
+- **Segni di ritaglio**, in fondo al menu: linee sottili agli angoli
+  dell'oggetto, che resta com'è.
 
-Gli altri effetti arrivano uno alla volta, e una voce non ancora pronta non si
-vede. Il file salva il risultato come grafica normale,
+Il file salva il risultato come grafica normale,
 leggibile da ogni programma, e la ricetta dell'effetto per poterlo cambiare
 ([Formato della scena, ricette](../reference/scene-format-recipe.md)).
 

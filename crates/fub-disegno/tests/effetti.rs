@@ -1,7 +1,8 @@
 //! «Applica effetto» (`effect.apply`) col filtro dell'IPC (K6, famiglia
 //! effetti): l'effetto che aggiunge passa come una riga sua. Un effetto fatto
-//! gira; uno da fare non è servito («non ancora pronto») e non arriva al
-//! motore; uno che la mappa non ha è rifiutato. I casi con le operazioni sono
+//! gira; uno che la mappa non ha è rifiutato (uno da fare non è servito,
+//! «non ancora pronto»: la prova è in `src/famiglie/tests.rs`, perché la mappa
+//! non ne ha più). I casi con le operazioni sono
 //! in `famiglie/effetti.json`.
 
 mod common;
@@ -42,19 +43,6 @@ fn un_effetto_fatto_gira() {
     .expect("il comando gira");
     assert!(esito.refused.is_none(), "{esito:?}");
     assert!(esito.ops.is_some(), "{esito:?}");
-}
-
-#[test]
-fn un_effetto_da_fare_non_e_servito() {
-    let mut d = apri();
-    for chiave in ["effect", "id"] {
-        let esito = applica(&mut d, json!({ chiave: "threeD.revolve" }));
-        assert!(matches!(esito, Err(PluginError::Unserved(_))), "{esito:?}");
-        assert!(
-            format!("{esito:?}").contains("host.drawing.not_done"),
-            "{esito:?}"
-        );
-    }
 }
 
 #[test]

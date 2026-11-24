@@ -218,7 +218,7 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // Ridisponi) e la sezione Tavole del Design (il pannello `artboards` e i suoi nove comandi:
   // nuova, elimina, elimina vuote, opzioni, ordine, duplica, copia, taglia, sposta) diventano
   // «fatto». Quattordici righe in più.
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 767, fub: 114, escluso: 12, fatto: 658 });
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 762, fub: 114, escluso: 12, fatto: 663 });
 });
 
 // --- un motore finto ---------------------------------------------------------------

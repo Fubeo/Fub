@@ -31,17 +31,18 @@
 //!   accetta altri parametri, descritti a parole ([`Modulo::aperto`]).
 //! - Il valore dà il tipo. Le parole del tipo (`bool`, `number`, `n`,
 //!   `index`, `pages`, `percent`, `text`, `string`, `name`, `id`, `hex`,
-//!   `field`, `cell`, `range`), `true`/`false`, i numeri e gli intervalli di
-//!   numeri (`11`, `1-7`, `10..400`, `1–32767`), le stringhe fra virgolette
-//!   (una cella o un intervallo come `"B2"` e `"A1:D10"` danno il loro tipo,
-//!   le altre sono esempi di testo), `[…]` e `{…}` (un valore JSON), gli
-//!   elenchi di parole `a|b|c` (una scelta, aperta se finisce con `…`), le
-//!   alternative con `|` e con ` or `, una frase (il tipo della sua ultima
-//!   parola, se è una parola del tipo, se no testo), `null` (si ignora).
-//!   Un'unità di misura (`pt`, `px`, `mm`, `%`, `deg`, e `int`, `amount`,
-//!   `levels`) è un numero, come una frase che ne ha una o un intervallo
-//!   dentro (`pt 0.1..100`, `per inch 0..100`), e una nota sola con un
-//!   numero (`(10)`, il valore di serie) anche.
+//!   `#rrggbb`, `field`, `cell`, `range`), `true`/`false`, i numeri e gli
+//!   intervalli di numeri (`11`, `1-7`, `10..400`, `1–32767`), le stringhe
+//!   fra virgolette (una cella o un intervallo come `"B2"` e `"A1:D10"` danno
+//!   il loro tipo, le altre sono esempi di testo), `[…]` e `{…}` (un valore
+//!   JSON), gli elenchi di parole `a|b|c` (una scelta, aperta se finisce con
+//!   `…`), le alternative con `|` e con ` or `, una frase (il tipo della sua
+//!   ultima parola, se è una parola del tipo, se no testo; `array …` e
+//!   `list of …` sono un valore JSON), `null` (si ignora).
+//!   Un'unità di misura (`pt`, `px`, `mm`, `%`, `deg`, `degrees`, e `int`,
+//!   `integer`, `amount`, `levels`) è un numero, come una frase che ne ha una
+//!   o un intervallo dentro (`pt 0.1..100`, `per inch 0..100`), e una nota
+//!   sola con un numero (`(10)`, il valore di serie) anche.
 //!   ` = …` e le note fra parentesi dopo un valore sono descrizioni; una nota
 //!   tutta maiuscola (`B4 (ISO)`) fa parte del valore.
 //! - Un campo senza valore prende il tipo dal lessico del motore (i nomi
@@ -539,7 +540,7 @@ fn parola_del_tipo(parola: &str) -> Option<(Tipo, bool)> {
     Some(match parola {
         "bool" => (Tipo::SiNo, false),
         "number" | "n" | "index" | "pages" | "percent" => (Tipo::Numero, false),
-        "text" | "string" | "hex" => (Tipo::Testo, false),
+        "text" | "string" | "hex" | "#rrggbb" => (Tipo::Testo, false),
         "name" | "id" | "field" => (Tipo::Testo, true),
         "cell" => (Tipo::Cella, false),
         "range" => (Tipo::Intervallo, false),
@@ -699,6 +700,10 @@ fn pezzo(alternativa: &str, aperta: &mut bool, valori: &mut Vec<String>) -> Esit
                     if t.contains(['{', '[', '"', '|']) {
                         return Err(errore(alternativa, "una frase con dentro una struttura"));
                     }
+                    // `array of 1..10 objects`: un elenco, un valore JSON.
+                    if t.starts_with("array ") || t.starts_with("list of ") {
+                        return Ok(Some(Pezzo::Certo(Tipo::Json)));
+                    }
                     let ultima = t.rsplit(' ').next().unwrap_or(t);
                     // Una frase con un'unità o un intervallo dentro (`pt
                     // 0.1..100`, `per inch 0..100`, `% distortion`) è un
@@ -774,7 +779,9 @@ fn tipo_del_campo(grezzo: &Grezzo, lessico: &[(&str, Tipo)]) -> Esito<Tipo> {
 /// Le unità di misura e le parole che, da sole, dicono un numero (gli
 /// effetti di VectorCraft: `radius: pt (10)`, `seed: int (0)`, `h: amount
 /// (10)`).
-const UNITA: &[&str] = &["pt", "px", "mm", "%", "deg", "°", "int", "amount", "levels"];
+const UNITA: &[&str] = &[
+    "pt", "px", "mm", "%", "deg", "degrees", "°", "int", "integer", "amount", "levels",
+];
 
 /// Il tipo di un valore dalle sue alternative.
 enum Combinato {

@@ -277,9 +277,22 @@ fn json_sì_no_e_numeri() {
         "{threshold: levels 0..255 (0; smaller differences are left alone)}",
         "{horizontal: % distortion (0)}",
         "{mixingRate?: 1..100 % (50)}",
+        // Gli effetti 3D: gradi e interi.
+        "{twist: degrees (0..360, 0; the back turned against the front)}",
+        "{bevelRepeat: integer (1..32, 1)}",
     ] {
         assert_eq!(un_tipo(numero), Tipo::Numero, "{numero}");
     }
+    // Un colore scritto `#rrggbb` è un testo, non una scelta con un valore solo.
+    assert_eq!(
+        un_tipo("{lightColor: #rrggbb (white, #ffffff; legacy directional light color)}"),
+        Tipo::Testo
+    );
+    // Un elenco di oggetti è un valore JSON, anche con un intervallo nella frase.
+    assert_eq!(
+        un_tipo("{lights: null or array of 1..10 objects (color: #rrggbb, intensity: % 0..100)}"),
+        Tipo::Json
+    );
     // Fra altre parole un'unità resta un valore della scelta.
     assert_eq!(
         un_tipo("{units: pt|mm|in}"),

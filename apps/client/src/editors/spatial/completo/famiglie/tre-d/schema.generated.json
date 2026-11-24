@@ -1,5 +1,479 @@
 {
   "$generato": "File generato da crates/fub-disegno/tests/ts_indice.rs, non modificare a mano; rigenera con UPDATE_MIRROR=1 cargo test -p fub-disegno --test ts_indice",
   "famiglia": "tre-d",
-  "finestre": []
+  "finestre": [
+    {
+      "fonte": "effetto",
+      "id": "threeD.extrude",
+      "campi": [
+        {
+          "nome": "depth",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "twist",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "taper",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "cap",
+          "tipo": "sino",
+          "facoltativo": false
+        },
+        {
+          "nome": "bevel",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "none",
+            "classic",
+            "rounded",
+            "cove",
+            "step",
+            "ogee"
+          ],
+          "aperta": false
+        },
+        {
+          "nome": "bevelWidth",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "bevelHeight",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "bevelRepeat",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "bevelSpace",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "bevelInside",
+          "tipo": "sino",
+          "facoltativo": false
+        },
+        {
+          "nome": "bevelBothSides",
+          "tipo": "sino",
+          "facoltativo": false
+        },
+        {
+          "nome": "rotationX",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "rotationY",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "rotationZ",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "perspectiveAngle",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "perspective",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "shade",
+          "tipo": "sino",
+          "facoltativo": false
+        },
+        {
+          "nome": "lightColor",
+          "tipo": "testo",
+          "facoltativo": false
+        },
+        {
+          "nome": "lights",
+          "tipo": "json",
+          "facoltativo": false
+        },
+        {
+          "nome": "lightRotation",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "lightHeight",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "lightBehind",
+          "tipo": "sino",
+          "facoltativo": false
+        },
+        {
+          "nome": "lightIntensity",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "lightSoftness",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "ambient",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "lightAzimuth",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "lightElevation",
+          "tipo": "numero",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "threeD.inflate",
+      "campi": [
+        {
+          "nome": "depth",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "twist",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "taper",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "cap",
+          "tipo": "sino",
+          "facoltativo": false
+        },
+        {
+          "nome": "volume",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "bothSides",
+          "tipo": "sino",
+          "facoltativo": false
+        },
+        {
+          "nome": "rotationX",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "rotationY",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "rotationZ",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "perspectiveAngle",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "perspective",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "shade",
+          "tipo": "sino",
+          "facoltativo": false
+        },
+        {
+          "nome": "lightColor",
+          "tipo": "testo",
+          "facoltativo": false
+        },
+        {
+          "nome": "lights",
+          "tipo": "json",
+          "facoltativo": false
+        },
+        {
+          "nome": "lightRotation",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "lightHeight",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "lightBehind",
+          "tipo": "sino",
+          "facoltativo": false
+        },
+        {
+          "nome": "lightIntensity",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "lightSoftness",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "ambient",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "lightAzimuth",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "lightElevation",
+          "tipo": "numero",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "threeD.revolve",
+      "campi": [
+        {
+          "nome": "angle",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "offset",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "edge",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "left",
+            "right"
+          ],
+          "aperta": false
+        },
+        {
+          "nome": "rotationX",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "rotationY",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "rotationZ",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "perspectiveAngle",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "perspective",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "segments",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "shade",
+          "tipo": "sino",
+          "facoltativo": false
+        },
+        {
+          "nome": "lightColor",
+          "tipo": "testo",
+          "facoltativo": false
+        },
+        {
+          "nome": "lights",
+          "tipo": "json",
+          "facoltativo": false
+        },
+        {
+          "nome": "lightRotation",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "lightHeight",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "lightBehind",
+          "tipo": "sino",
+          "facoltativo": false
+        },
+        {
+          "nome": "lightIntensity",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "lightSoftness",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "ambient",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "lightAzimuth",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "lightElevation",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "cap",
+          "tipo": "sino",
+          "facoltativo": false
+        },
+        {
+          "nome": "expandVisibleOnly",
+          "tipo": "sino",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "threeD.rotate",
+      "campi": [
+        {
+          "nome": "rotationX",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "rotationY",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "rotationZ",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "perspectiveAngle",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "perspective",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "shade",
+          "tipo": "sino",
+          "facoltativo": false
+        },
+        {
+          "nome": "lightColor",
+          "tipo": "testo",
+          "facoltativo": false
+        },
+        {
+          "nome": "lights",
+          "tipo": "json",
+          "facoltativo": false
+        },
+        {
+          "nome": "lightRotation",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "lightHeight",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "lightBehind",
+          "tipo": "sino",
+          "facoltativo": false
+        },
+        {
+          "nome": "lightIntensity",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "lightSoftness",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "ambient",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "lightAzimuth",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "lightElevation",
+          "tipo": "numero",
+          "facoltativo": false
+        }
+      ]
+    }
+  ]
 }
