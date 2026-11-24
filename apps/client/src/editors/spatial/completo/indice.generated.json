@@ -2499,6 +2499,54 @@
     },
     {
       "fonte": "motore",
+      "id": "object.objectsOnPath.attach",
+      "chiamata": {
+        "comando": "disegno.object.objectsOnPath.attach"
+      },
+      "etichetta": {
+        "it": "Aggancia",
+        "en": "Attach"
+      },
+      "posto": "menu/oggetto",
+      "famiglia": "dinamici",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "object.objectsOnPath.expand",
+      "chiamata": {
+        "comando": "disegno.object.objectsOnPath.expand"
+      },
+      "etichetta": {
+        "it": "Espandi",
+        "en": "Expand"
+      },
+      "posto": "menu/oggetto",
+      "famiglia": "dinamici",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "object.objectsOnPath.options",
+      "chiamata": {
+        "comando": "disegno.object.objectsOnPath.options"
+      },
+      "etichetta": {
+        "it": "Opzioni oggetti su tracciato",
+        "en": "Objects on Path Options"
+      },
+      "posto": "ispettore/design",
+      "famiglia": "dinamici",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "object.path.addAnchorPoints",
       "chiamata": {
         "comando": "disegno.object.path.addAnchorPoints"
@@ -6641,6 +6689,22 @@
       },
       "posto": "colonna/disegna",
       "famiglia": "tracciati",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "strumento",
+      "id": "objectsOnPath",
+      "chiamata": {
+        "strumento": "objectsOnPath"
+      },
+      "etichetta": {
+        "it": "Strumento Oggetti su tracciato",
+        "en": "Objects on Path Tool"
+      },
+      "posto": "colonna/oggetti",
+      "famiglia": "dinamici",
       "tasto": null,
       "effetto": "cambia",
       "finestra": false

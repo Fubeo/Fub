@@ -477,14 +477,16 @@ impl Lavoro<'_> {
     /// I tracciati composti fatti o sciolti dal gesto ([`Lavoro::liberati`],
     /// [`Lavoro::assorbiti`]).
     fn composti(&mut self, prima: &Posti<'_>, poi: &Posti<'_>) {
-        // Un tracciato composto, una forma composta (un gruppo segnato) o una
-        // fusione: il file li tiene come un solo elemento con la ricetta.
+        // Un tracciato composto, una forma composta (un gruppo segnato), una
+        // fusione o un gruppo degli Oggetti sul tracciato: il file li tiene
+        // come un solo elemento con la ricetta.
         let composto = |n: Option<&crate::mappa::Posto<'_>>| {
             n.is_some_and(|p| {
                 matches!(
                     p.nodo.kind,
                     NodeKind::Compound { .. } | NodeKind::Blend { .. }
                 ) || p.nodo.is_compound_shape()
+                    || vectorcraft_doc::objects_on_path::is_objects_on_path(p.nodo)
             })
         };
         for (id, dopo) in &poi.nodi {
@@ -902,12 +904,17 @@ impl Lavoro<'_> {
                     })
                     .map_err(no)?
                     .ok_or(Rifiuto::Vuoto)?;
-                let byte = ricetta::codifica(nodo, locale).map_err(no)?;
-                self.ricette.nuove.push(vectorcraft_svg::recipe_element(
-                    &id,
-                    &ricetta::impronta(&raw),
-                    &byte,
-                ));
+                // Riscritto senza più niente che solo il motore sa dire (gli
+                // Oggetti sul tracciato espansi: lo stesso gruppo, ora
+                // semplice): il corpo basta, e la ricetta di prima cade.
+                if ricetta::esito_albero(nodo) > Esito::Corpo {
+                    let byte = ricetta::codifica(nodo, locale).map_err(no)?;
+                    self.ricette.nuove.push(vectorcraft_svg::recipe_element(
+                        &id,
+                        &ricetta::impronta(&raw),
+                        &byte,
+                    ));
+                }
                 self.stato_del_corpo(nodo, riscritto, &id);
                 json!({ "raw": raw })
             } else {

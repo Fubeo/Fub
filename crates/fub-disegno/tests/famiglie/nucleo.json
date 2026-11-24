@@ -624,6 +624,12 @@
       "atteso": { "lettura": {"id": 2, "name": "oa1a1a1a1", "kind": "Path", "visible": true, "locked": false, "bounds": {"x": 100.0, "y": 100.0, "width": 100.0, "height": 50.0}, "fill": "#000000", "stroke": "None", "strokeWidth": 0.0, "anchors": 4, "closed": true} }
     },
     {
+      "id": "document.node",
+      "disegno": "base.svg",
+      "argomenti": {"id": "oa1a1a1a1", "summary": true},
+      "atteso": { "lettura": {"id": 2, "name": "oa1a1a1a1", "kind": "Path", "visible": true, "locked": false, "bounds": {"x": 100.0, "y": 100.0, "width": 100.0, "height": 50.0}, "fill": "#000000", "stroke": "None", "strokeWidth": 0.0, "anchors": 4, "closed": true} }
+    },
+    {
       "id": "document.find",
       "disegno": "base.svg",
       "argomenti": { "name": "oa1" },

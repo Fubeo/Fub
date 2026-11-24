@@ -2353,40 +2353,32 @@
       ],
       "atteso": {
         "ops": [
-          {
-            "op": "batch",
-            "ops": [
-              {
-                "op": "remove",
-                "target": "o5qgdpjl6"
-              },
-              {
-                "op": "remove",
-                "target": {
-                  "path": [
-                    1
-                  ],
-                  "tag": "metadata"
+                {
+                        "op": "batch",
+                        "ops": [
+                                {
+                                        "op": "remove",
+                                        "target": "o5qgdpjl6"
+                                },
+                                {
+                                        "op": "remove",
+                                        "target": {
+                                                "path": [
+                                                        1
+                                                ],
+                                                "tag": "metadata"
+                                        }
+                                },
+                                {
+                                        "op": "add",
+                                        "parent": "l1a2b3c4d",
+                                        "pos": {
+                                                "last": true
+                                        },
+                                        "raw": "<g id=\"o5qgdpjl6\"><path id=\"ohw6dfchg\" d=\"M272 70 L328 70 C334.627 70 340 75.373 340 82 L340 98 C340 104.627 334.627 110 328 110 L272 110 C265.373 110 260 104.627 260 98 L260 82 C260 75.373 265.373 70 272 70 Z\" fill=\"none\" stroke=\"#000000\" stroke-width=\"2\" stroke-miterlimit=\"10\"/></g>"
+                                }
+                        ]
                 }
-              },
-              {
-                "op": "add",
-                "parent": "l1a2b3c4d",
-                "pos": {
-                  "last": true
-                },
-                "raw": "<g id=\"o5qgdpjl6\"><path id=\"ohw6dfchg\" d=\"M272 70 L328 70 C334.627 70 340 75.373 340 82 L340 98 C340 104.627 334.627 110 328 110 L272 110 C265.373 110 260 104.627 260 98 L260 82 C260 75.373 265.373 70 272 70 Z\" fill=\"none\" stroke=\"#000000\" stroke-width=\"2\" stroke-miterlimit=\"10\"/></g>"
-              },
-              {
-                "op": "add",
-                "parent": "#root",
-                "pos": {
-                  "first": true
-                },
-                "raw": "<metadata><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"o5qgdpjl6\" hash=\"545ffc124654aec5\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjoxMCwiYXBwZWFyYW5jZSI6eyJpdGVtcyI6W3sia2luZCI6ImZpbGwiLCJwYWludCI6eyJ0eXBlIjoibm9uZSJ9fSx7ImtpbmQiOiJzdHJva2UiLCJwYWludCI6eyJ0eXBlIjoic29saWQiLCJjb2xvciI6eyJtb2RlbCI6InJnYiIsInIiOjAuMCwiZyI6MC4wLCJiIjowLjB9fSwid2lkdGgiOjIuMH1dfSwia2luZCI6eyJ0eXBlIjoicGF0aCIsInBhdGgiOnsic3VicGF0aHMiOlt7ImFuY2hvcnMiOlt7InAiOlsyNzIuMCw3MC4wXSwiaW4iOlsyNjUuMzcyNTgzMDAyMDMwNDcsNzAuMF19LHsicCI6WzMyOC4wLDcwLjBdLCJvdXQiOlszMzQuNjI3NDE2OTk3OTY5NTMsNzAuMF19LHsicCI6WzM0MC4wLDgyLjBdLCJpbiI6WzM0MC4wLDc1LjM3MjU4MzAwMjAzMDQ4XX0seyJwIjpbMzQwLjAsOTguMF0sIm91dCI6WzM0MC4wLDEwNC42Mjc0MTY5OTc5Njk1Ml19LHsicCI6WzMyOC4wLDExMC4wXSwiaW4iOlszMzQuNjI3NDE2OTk3OTY5NTMsMTEwLjBdfSx7InAiOlsyNzIuMCwxMTAuMF0sIm91dCI6WzI2NS4zNzI1ODMwMDIwMzA0NywxMTAuMF19LHsicCI6WzI2MC4wLDk4LjBdLCJpbiI6WzI2MC4wLDEwNC42Mjc0MTY5OTc5Njk1Ml19LHsicCI6WzI2MC4wLDgyLjBdLCJvdXQiOlsyNjAuMCw3NS4zNzI1ODMwMDIwMzA0OF19XSwiY2xvc2VkIjp0cnVlfV19fX19</vectorcraft:recipe></metadata>"
-              }
-            ]
-          }
         ]
       },
       "dopo": "espandi-forma.svg"

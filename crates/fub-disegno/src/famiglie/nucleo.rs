@@ -88,7 +88,22 @@ impl StatoFamiglia for Stato {
 
     /// Sposta sul livello corrente: l'id del livello corrente esce dal valore
     /// (il motore non lo conosce); un id che non è una stringa è `BadArgs`.
-    fn argomenti_della_copia(id: &str, _copia: &Copia, _selezione: &[String], mut valore: Value) -> Result<Value, PluginError> {
+    fn argomenti_della_copia(id: &str, copia: &Copia, _selezione: &[String], mut valore: Value) -> Result<Value, PluginError> {
+        // Ispeziona oggetto prende anche l'id del file (le sezioni dell'ispettore
+        // leggono così, per esempio, le opzioni di un gruppo di oggetti sul
+        // tracciato): diventa il nodo del motore, anche bloccato o nascosto.
+        if id == "document.node" {
+            if let Some(file) = valore.get("id").and_then(Value::as_str).map(str::to_string) {
+                let nodo = copia
+                    .mappa
+                    .dell_id(&file)
+                    .and_then(|i| copia.mappa.elemento(i))
+                    .and_then(|e| e.nodo)
+                    .ok_or_else(|| PluginError::BadArgs(format!("«{file}» non è nel disegno.").into()))?;
+                valore["id"] = Value::from(nodo.0);
+            }
+            return Ok(valore);
+        }
         if id != SUL_LIVELLO_CORRENTE {
             return Ok(valore);
         }
