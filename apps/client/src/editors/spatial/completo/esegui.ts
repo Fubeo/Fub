@@ -11,7 +11,7 @@
 import type { DrawingAnchor, DrawingOutcome, DrawingPreview } from "../../../host/contract";
 import { languageCurrent } from "../../../i18n/strings";
 import type { Lifetime } from "../../../ui/lifetime";
-import { apriFinestra, type Esegui, type EsitoComando, type FinestraOpzioni, type ModuloFinestra } from "../motore/finestre";
+import { apriFinestra, type Esegui, type EsitoComando, type FinestraOpzioni, type ModuloFinestra, type ValoreCampo } from "../motore/finestre";
 import type { MotoreDelDisegno } from "../motore/gesti";
 import type { ArgomentiRifiutati } from "../motore/sessione";
 import { motivoDelRifiuto } from "../motore/rifiuto";
@@ -74,6 +74,9 @@ export interface DipendenzeComando extends AzioniEsito {
   /// I comandi con finestra la cui finestra è aperta o si sta aprendo, per id: un secondo
   /// comando sulla stessa voce (un doppio clic) non apre una finestra in più. Senza, nessuna guardia.
   readonly finestreAperte?: Set<string>;
+  /// Un effetto applicato con OK dalla sua finestra, coi valori della finestra: è l'«Ultimo
+  /// effetto» (come VectorCraft). Le opzioni di un effetto già applicato non lo cambiano.
+  readonly effettoApplicato?: (voce: VoceIndice, valori: Readonly<Record<string, ValoreCampo>>) => void;
 }
 
 /// I comandi del motore che passano dagli appunti del Completo (`appunti.ts`). Le
@@ -307,6 +310,7 @@ export function eseguiVoce(voce: VoceIndice, dipendenze: DipendenzeComando, altr
         if ("kind" in esito) return { anteprima: null, rifiuto: null, argomenti: esito.message };
         // OK manda il comando una volta sola: un passo della cronologia.
         if (!anteprima) applicaEsito(esito, etichetta, dipendenze);
+        if (!anteprima && esito.refused === null && altro === undefined && voce.fonte === "effetto") dipendenze.effettoApplicato?.(voce, valori);
         return { anteprima: esito.preview, rifiuto: esito.refused };
       };
       // La finestra risolve quando si chiude (OK, Annulla o Esc): allora la voce è di nuovo libera.

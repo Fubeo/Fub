@@ -3619,6 +3619,16 @@
         ]
       },
       "dopo": "pila-espandi.svg"
+    },
+    {
+      "id": "effect.applyLast",
+      "fonte": "interfaccia",
+      "prova": "apps/client/src/editors/spatial/completo/famiglie/effetti/ultimo.test.ts"
+    },
+    {
+      "id": "effect.last",
+      "fonte": "interfaccia",
+      "prova": "apps/client/src/editors/spatial/completo/famiglie/effetti/ultimo.test.ts"
     }
   ]
 }

@@ -6337,6 +6337,38 @@
     },
     {
       "fonte": "interfaccia",
+      "id": "effect.applyLast",
+      "chiamata": {
+        "client": "effect.applyLast"
+      },
+      "etichetta": {
+        "it": "Applica ultimo effetto",
+        "en": "Apply Last Effect"
+      },
+      "posto": "menu/effetto",
+      "famiglia": "effetti",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "interfaccia",
+      "id": "effect.last",
+      "chiamata": {
+        "client": "effect.last"
+      },
+      "etichetta": {
+        "it": "Ultimo effetto…",
+        "en": "Last Effect…"
+      },
+      "posto": "menu/effetto",
+      "famiglia": "effetti",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "interfaccia",
       "id": "pathfinder.repeat",
       "chiamata": {
         "client": "pathfinder.repeat"

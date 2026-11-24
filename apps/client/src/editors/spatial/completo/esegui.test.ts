@@ -279,6 +279,25 @@ describe("eseguiVoce, con finestra", () => {
     expect(conValori({ fonte: "effetto" }, { effect: "e", params: { a: 1 } }, { b: 2 })).toEqual({ effect: "e", params: { a: 1, b: 2 } });
   });
 
+  it("un effetto andato con OK è l'ultimo effetto; l'anteprima no", async () => {
+    const { d } = dipendenze({ finestra: () => Promise.resolve(schema()) });
+    const effettoApplicato = vi.fn();
+    const effetto = voce({
+      fonte: "effetto",
+      id: "stylize.roundCorners",
+      famiglia: "effetti",
+      chiamata: { comando: "disegno.effect.apply", valore: { effect: "stylize.roundCorners" } },
+      finestra: true,
+    });
+    eseguiVoce(effetto, { ...d, effettoApplicato });
+    await tick();
+    const [, , esegui] = vi.mocked(apriFinestra).mock.calls[0]!;
+    await esegui({ radius: 15 }, true);
+    expect(effettoApplicato).not.toHaveBeenCalled();
+    await esegui({ radius: 15 }, false);
+    expect(effettoApplicato).toHaveBeenCalledWith(effetto, { radius: 15 });
+  });
+
   it("un oggetto bloccato nella selezione dice di sbloccarlo o toglierlo, anche per un allineamento", async () => {
     const { d, azioni } = dipendenze({ risposta: { ...esito(), refused: "locked", ops: null } });
     eseguiVoce(voce({ id: "object.align", famiglia: "trasforma", chiamata: { comando: "disegno.object.align", valore: { horizontal: "left" } } }), d);

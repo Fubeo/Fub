@@ -204,6 +204,15 @@ spostamento è spento, come in VectorCraft. In fondo, **Espandi aspetto** (anche
 nel menu Oggetto) rende gli effetti grafica normale e toglie la ricetta.
 Ogni comando è un passo solo di Annulla.
 
+## Ultimo effetto
+
+Nel menu Effetto, **Applica ultimo effetto** rifà l'ultimo effetto applicato
+dal menu, con gli stessi valori, sugli oggetti scelti adesso; **Ultimo
+effetto…** lo rilancia aprendone la finestra coi valori ricordati. Le due voci
+sono spente, col perché, finché non se n'è applicato uno; un effetto rifiutato
+o cambiato dalla sezione Aspetto non conta. Il ricordo dura finché lo spazio
+Completo è aperto.
+
 ## Nel file
 
 Gli effetti stanno in `fub:effect` (con un filtro SVG 1.1 privato fra le

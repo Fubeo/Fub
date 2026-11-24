@@ -402,6 +402,11 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila" | "e
   // come VectorCraft): le forme composte non contano. Vale finché il Completo è aperto.
   let ultimaElaborazione: string | null = null;
   const ripetibili = new Set([...METODI_FORMA, ...OPERAZIONI_ELABORAZIONE]);
+  // L'ultimo effetto applicato dal menu Effetto, coi valori della sua finestra (vuoti per un effetto
+  // senza finestra): «Applica ultimo effetto» lo rifà sugli oggetti scelti adesso, «Ultimo effetto…»
+  // ne riapre la finestra (che parte dai valori ricordati), come VectorCraft. Le opzioni di un effetto
+  // già applicato (la sezione Aspetto) non lo cambiano. Vale finché il Completo è aperto.
+  let ultimoEffetto: { readonly id: string; readonly valori: Readonly<Record<string, ValoreCampo>> } | null = null;
   /// Canc con dei punti scelti con la Selezione diretta (o il Punto di ancoraggio)
   /// toglie quei punti, non l'oggetto intero, come VectorCraft (K6 T12, punti): i
   /// punti vanno nel `value` (`SUI_PUNTI_SCELTI`). `false` senza punti scelti.
@@ -456,6 +461,7 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila" | "e
       const coiPunti = (dipendenze.punti?.() ?? []).length > 0;
       const andata = await eseguiVoce(voce, dipendenze);
       if (andata && ripetibili.has(voce.id)) ultimaElaborazione = voce.id;
+      if (andata && voce.fonte === "effetto" && !voce.finestra && !rifacendo) ultimoEffetto = { id: voce.id, valori: {} };
       // Il segno del modo è quello che il motore ha accettato: un rifiuto non lo cambia (K6 T11).
       const modo = (voce.chiamata as { readonly valore?: { readonly mode?: unknown } }).valore?.mode;
       if (andata && voce.id === "view.drawMode" && (modo === "normal" || modo === "behind")) modoDiDisegno = modo;
@@ -580,6 +586,30 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila" | "e
     stato: () => (ultimaElaborazione === null ? t("draw.disabled.nothing_to_repeat") : null),
     esegui: () => {
       if (ultimaElaborazione !== null) void eseguiPerId(ultimaElaborazione, {}, { senzaFinestra: true });
+    },
+  });
+  let rifacendo = false;
+  vociDelCompleto.set("effect.applyLast", {
+    stato: () => (ultimoEffetto === null ? t("draw.disabled.no_last_effect") : null),
+    esegui: () => {
+      const ultimo = ultimoEffetto;
+      if (ultimo === null) return;
+      // Rifatto senza finestra: non è un effetto nuovo, e i suoi valori restano quelli.
+      rifacendo = true;
+      void eseguiPerId(ultimo.id, ultimo.valori, { senzaFinestra: true }).finally(() => {
+        rifacendo = false;
+      });
+    },
+  });
+  vociDelCompleto.set("effect.last", {
+    stato: () => (ultimoEffetto === null ? t("draw.disabled.no_last_effect") : null),
+    esegui: () => {
+      const ultimo = ultimoEffetto;
+      if (ultimo === null || chiuso) return;
+      void indice().then((pronto) => {
+        const voce = pronto.voci.find((una) => una.id === ultimo.id);
+        if (voce !== undefined && !chiuso) void lancia(voce);
+      });
     },
   });
   // Ricolora grafica (K6 T14): la voce di Modifica › Modifica colori apre la sua finestra. Il suo
@@ -720,6 +750,9 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila" | "e
     seleziona: opzioni.tasti?.seleziona ?? (() => undefined),
     annuncia: opzioni.tasti?.annuncia ?? (() => undefined),
     ...(opzioni.tasti?.diFub === undefined ? {} : { diFub: opzioni.tasti.diFub }),
+    effettoApplicato: (voce, valori) => {
+      ultimoEffetto = { id: voce.id, valori };
+    },
   };
   // Modifica › Modifica colori › «Selettore colore…» (K6 T14, selettore): il selettore del pozzo, con il
   // lato attivo e i colori che la sezione Colore ha visto. Le sue finestre passano da `dipendenze`.

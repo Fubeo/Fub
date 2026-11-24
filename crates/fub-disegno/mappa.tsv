@@ -1028,7 +1028,7 @@ interfaccia	type.highlightTracking	Highlight Tracking		testo	F2	T16	da fare	menu
 interfaccia	type.underline	Underline		testo	F2	T16	da fare	menu/testo	famiglia		Sottolineato
 interfaccia	type.lineComposer	Toggle Line Composer		testo	F2	T16	da fare	menu/testo	famiglia		Alterna composizione delle righe
 interfaccia	type.hyphenate	Hyphenate		testo	F2	T16	da fare	menu/testo	famiglia		Sillaba
-interfaccia	effect.last	Last Effect…		effetti	F2	T18	da fare	menu/effetto	famiglia		Ultimo effetto…
+interfaccia	effect.last	Last Effect…		effetti	F2	T18	fatto	menu/effetto	famiglia	riapre la finestra dell'ultimo effetto applicato dal menu Effetto, coi valori ricordati; le opzioni di un effetto già applicato (sezione Aspetto) non lo cambiano (completo/index.ts)	Ultimo effetto…
 interfaccia	view.zoomIn	Zoom In		vista	F1	T11	fatto	banda	famiglia		Ingrandisci
 interfaccia	view.zoomOut	Zoom Out		vista	F1	T11	fatto	banda	famiglia		Riduci
 interfaccia	view.fitArtboard	Fit Artboard in Window		tavole	F2	T19	fatto	banda	famiglia	Adatta tavola alla finestra nel menu dello zoom della banda: inquadra la tavola di adesso; senza tavole, tutto.	Adatta tavola da disegno alla finestra
@@ -1093,7 +1093,7 @@ interfaccia	effect.dialog	Effect…		effetti	F2	T18	da fare	menu/effetto	famigli
 interfaccia	ui.paramDialog	Command Dialog		fub	—	T11	fub	fub	—	le finestre dei comandi di Fub (completo/finestre)	Finestra dei comandi
 interfaccia	ui.recolorDialog	Recolor Artwork…		colore	F1	T14	fatto	menu/modifica/colori	famiglia		Ricolora grafica…
 interfaccia	ui.cropImage	Crop Image		immagini	F3	T20	da fare	finestra	famiglia		Ritaglia immagine
-interfaccia	effect.applyLast	Apply Last Effect		effetti	F2	T18	da fare	menu/effetto	famiglia		Applica ultimo effetto
+interfaccia	effect.applyLast	Apply Last Effect		effetti	F2	T18	fatto	menu/effetto	famiglia	rifà l'ultimo effetto applicato dal menu Effetto, coi suoi valori, sugli oggetti scelti adesso; spento finché non se n'è applicato uno (completo/index.ts)	Applica ultimo effetto
 interfaccia	pathfinder.repeat	Repeat Pathfinder		forme	F1	T13	fatto	menu/oggetto/elaborazione	famiglia		Ripeti Elaborazione tracciati
 interfaccia	file.export.pdf	Save as PDF…		formati	F3	T23	da fare	menu/file	sotto:disegno-formati		Salva come PDF…
 interfaccia	help.about	About VectorCraft		fub	—	T2	fub	fub	—	Informazioni su Fub e THIRD_PARTY_NOTICES	Informazioni su VectorCraft

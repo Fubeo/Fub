@@ -3,6 +3,11 @@
   "famiglia": "effetti",
   "finestre": [
     {
+      "fonte": "interfaccia",
+      "id": "effect.last",
+      "campi": []
+    },
+    {
       "fonte": "effetto",
       "id": "addon.color.duotone",
       "campi": [
