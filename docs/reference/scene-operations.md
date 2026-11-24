@@ -127,7 +127,7 @@ Altri dettagli:
     spazi, senza niente prima del primo o dopo l'ultimo.
   - Un elemento che, letto in quel posto, il formato ammette passa dagli
     stessi controlli di `elem` (§4): valori nei limiti di §5, id nella forma
-    degli id nuovi, niente carta della pagina, livelli solo sotto la radice,
+    degli id nuovi, niente carta della pagina, livelli solo sotto la radice o in un livello,
     titolo e descrizione della radice solo con `meta`, tratti che si
     leggono. Il `d` di ogni tratto si riscrive col contorno ricalcolato, al
     suo posto o, se manca, in fondo al tag d'apertura; il resto resta com'è
@@ -149,7 +149,9 @@ Altri dettagli:
   del prefisso solo se nient'altro la usa.
 - **`meta`:** una stringa vuota scrive `<title/>` o `<desc/>`, come ogni
   elemento senza testo; `null` toglie l'elemento.
-- **`move`:** un livello sta solo sotto la radice; `title` e `desc` non
+- **`move`:** un livello sta solo sotto la radice o in un livello, dove è un
+  sottolivello; `set` scrive `fub:layer` su un figlio della radice o su un
+  sottolivello, mai su un gruppo dentro un livello; `title` e `desc` non
   entrano né escono dalla radice. Un elemento che spostandosi cambierebbe
   ruolo o namespace è rifiutato con `invalid-elem`.
 - **Id toccati:** un `set` su un gruppo o un livello riporta anche gli id dei

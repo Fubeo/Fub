@@ -116,7 +116,7 @@ export class Plan {
   parentOf(node: ElementPart): string {
     const parent = node.parent!;
     if (parent === this.model.root) return ROOT;
-    return this.idOf(parent, parent.parent === this.model.root && parent.details?.role === "layer" ? "layer" : "object");
+    return this.idOf(parent, parent.details?.role === "layer" ? "layer" : "object");
   }
 
   /// La chiave di `node` dopo il comando: il suo id, anche quello che gli

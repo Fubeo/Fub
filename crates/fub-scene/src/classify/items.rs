@@ -351,12 +351,14 @@ pub(super) fn no_resources(_: &str) -> Option<ResourceKind> {
     None
 }
 
-/// Dove sta un elemento: figlio della radice, di una `defs` della radice, o
-/// di un altro contenitore modificabile.
+/// Dove sta un elemento: figlio della radice, di una `defs` della radice, di
+/// un livello (dove un `<g fub:layer>` è un sottolivello), o di un altro
+/// contenitore modificabile.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub(super) enum Place {
     Root,
     Defs,
+    Layer,
     Inside,
 }
 

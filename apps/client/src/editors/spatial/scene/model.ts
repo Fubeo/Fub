@@ -33,6 +33,7 @@ import {
   type Details,
   type Item,
   type Place,
+  placeWithin,
   type Resolve,
   type StrokeProblem,
   type Tags,
@@ -162,11 +163,11 @@ export function factsOf(doc: XmlDocument, element: ElementNode): ElementFacts {
   };
 }
 
-/// Il posto dei figli di `container`: la radice, una `defs` della radice o
-/// un altro contenitore.
+/// Il posto dei figli di `container`: la radice, una `defs` della radice, un
+/// livello o un altro contenitore.
 export function placeOf(container: ContainerNode): Place {
   if (container.depth === 0) return "root";
-  return container.details?.role === "defs" ? "defs" : "inside";
+  return container.details === null ? "inside" : placeWithin(container.details.role);
 }
 
 /// Gli originali fra i figli di `container` nell'albero, se è una

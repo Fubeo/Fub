@@ -183,7 +183,8 @@ export class Lookup implements Nested {
     const page = this.pages !== null && parent === this.model.root;
     if (page && !this.pages!.includes(container)) return null;
     const isLayer = page || details.role === "layer";
-    if (isLayer ? parent !== this.model.root : details.role !== "group" && details.role !== "link") return null;
+    // Un livello sta alla radice, un sottolivello in un livello (formato della scena §3).
+    if (isLayer ? parent !== this.model.root && parent.details?.role !== "layer" : details.role !== "group" && details.role !== "link") return null;
     const index = elementChildren(parent).indexOf(container);
     const outer = index < 0 ? null : this.contextOf(parent);
     const attrs = this.attrsOf(container);

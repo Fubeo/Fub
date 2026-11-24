@@ -78,6 +78,11 @@ Radice di un documento nuovo:
 
 - **Livello:** un `<g>` figlio della radice con `fub:layer="Nome"` (al massimo
   80 caratteri) e id che inizia con `l`; un documento nuovo ha «Livello 1».
+- **Sottolivello:** un `<g>` con `fub:layer` figlio di un livello, a qualunque
+  profondità di livelli; sta fra gli oggetti del livello, nel loro ordine, e
+  ne eredita blocco, visibilità, trasformazione e ritaglio. Un `<g>` con
+  `fub:layer` dentro un gruppo resta un gruppo
+  ([ADR 0251](../decisions/0251-sottolivelli-nel-formato-della-scena.md)).
 - **Gruppo:** un `<g>` senza `fub:layer`, dentro un livello o un altro gruppo.
 - **Blocco e visibilità:** livelli, gruppi, collegamenti e forme si bloccano
   con `fub:locked="true"`, che li toglie dalla scelta sul foglio e ferma ciò

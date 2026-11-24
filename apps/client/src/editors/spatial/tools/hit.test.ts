@@ -35,6 +35,25 @@ describe("gli oggetti della scena", () => {
     ]);
   });
 
+  it("in un sottolivello si scelgono uno per uno, e il sottolivello ne eredita blocco, visibilità e spostamento", () => {
+    const { index } = open(doc(
+      '<g id="l1" fub:layer="Uno" transform="translate(10 0)">' +
+        '<rect id="a" x="0" y="0" width="10" height="10"/>' +
+        '<g id="l2" fub:layer="Sotto" transform="translate(0 5)"><rect id="b" x="0" y="0" width="10" height="10"/></g>' +
+        "</g>" +
+        '<g id="l3" fub:layer="Fermo" fub:locked="true"><g id="l4" fub:layer="Sotto fermo"><rect id="c" width="1" height="1"/></g></g>',
+    ));
+    expect(index.units.map((unit) => unit.key)).toEqual(["a", "b"]);
+    expect(index.get("b")?.layer).toBe("l2");
+    expect(index.get("b")?.bounds).toEqual({ min: [10, 5], max: [20, 15] });
+    expect(index.layers.map((layer) => [layer.id, layer.locked, layer.hidden])).toEqual([
+      ["l1", false, false],
+      ["l2", false, false],
+      ["l3", true, false],
+      ["l4", true, false],
+    ]);
+  });
+
   it("hanno il riquadro di ciò che si vede, contorno e trasformazioni compresi", () => {
     const { index } = open(SHAPES);
     expect(index.get("r")?.bounds).toEqual({ min: [9, 9], max: [31, 31] });

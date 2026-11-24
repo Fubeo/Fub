@@ -5,7 +5,7 @@
   </g>
   <g id="l2b2b2b2b" fub:layer="Livello 2">
     <rect id="ob2b2b2b2" x="220" y="100" width="60" height="50" fill="#00aa00"/>
-    <g id="l9d9d9d9d" display="none" fub:layer="Sotto">
+    <g id="l9d9d9d9d" fub:layer="Sotto">
       <rect id="od9d9d9d9" x="10" y="10" width="10" height="10" fill="#000000"/>
   </g>
   </g>

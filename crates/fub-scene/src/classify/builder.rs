@@ -215,8 +215,11 @@ fn classify(
         return None;
     }
     let under_root = place == Place::Root;
+    // Un livello sta alla radice; dentro un livello è un sottolivello (formato
+    // della scena §3).
+    let layer_place = under_root || place == Place::Layer;
     let role = match tag {
-        Tag::G if under_root && element.attr(NS_FUB, "layer").is_some() => Role::Layer,
+        Tag::G if layer_place && element.attr(NS_FUB, "layer").is_some() => Role::Layer,
         Tag::G => Role::Group,
         Tag::A => Role::Link,
         Tag::Title | Tag::Desc => {
@@ -757,10 +760,10 @@ impl Builder<'_, '_> {
                                 .then(|| originals_of(doc, child, path.len() + 1, resolve));
                                 stack.push(Frame {
                                     node: child,
-                                    place: if role == Role::Defs {
-                                        Place::Defs
-                                    } else {
-                                        Place::Inside
+                                    place: match role {
+                                        Role::Defs => Place::Defs,
+                                        Role::Layer => Place::Layer,
+                                        _ => Place::Inside,
                                     },
                                     path,
                                     next: 0,

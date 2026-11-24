@@ -5,7 +5,7 @@
 import { formatNumber, formatShortest } from "../../number";
 import { NON_RENDERING } from "../../painter/paint";
 import { isContainer, type Role } from "../../scene/analysis";
-import { classifyChild, type Place, type Resolve, type Tag } from "../../scene/classify";
+import { classifyChild, placeWithin, type Place, type Resolve, type Tag } from "../../scene/classify";
 import type { Bounds } from "../../scene/geometry";
 import { IDENTITY, type Matrix } from "../../scene/matrix";
 import { declarationsOf } from "../../scene/model";
@@ -265,7 +265,7 @@ export function rolesUnder(doc: XmlDocument, id: NodeId, place: Place, depth: nu
     for (const child of doc.children(at)) {
       const element = doc.element(child);
       if (element === null) continue;
-      const inner = classifyChild(doc, child, role === "defs" ? "defs" : "inside", level + 1, resolve);
+      const inner = classifyChild(doc, child, placeWithin(role), level + 1, resolve);
       if (inner === null) continue;
       if (inner[0] !== "title" && inner[0] !== "desc" && !hasId(element)) missing.push(child);
       stack.push([child, inner[1], level + 1]);
@@ -285,7 +285,7 @@ export function holdsForeign(doc: XmlDocument, id: NodeId, place: Place, depth: 
     if (!isContainer(role)) continue;
     for (const child of doc.children(at)) {
       if (doc.element(child) === null) continue;
-      const inner = classifyChild(doc, child, role === "defs" ? "defs" : "inside", level + 1, resolve);
+      const inner = classifyChild(doc, child, placeWithin(role), level + 1, resolve);
       if (inner === null) return true;
       stack.push([child, inner[1], level + 1]);
     }

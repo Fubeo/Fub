@@ -409,14 +409,17 @@ export function installTree(ctx: EditorContext): void {
       if (refusal !== undefined) return `draw.move.${refusal}`;
       items.push(item);
     }
-    // Un livello va solo fra i livelli, e da solo; un oggetto non va fra i
-    // livelli, ma dentro.
+    // Un livello va solo alla radice o dentro un livello, dove diventa un
+    // sottolivello (formato della scena §3), e da solo; un oggetto non va fra
+    // i livelli della radice, ma dentro.
     const layers = items[0]!.item.role === "layer";
     const inside = drop.place === "top" || drop.place === "bottom";
-    if (items.some((item) => (item.item.role === "layer") !== layers) || (host.item.role === "layer" ? inside === layers : layers)) return "draw.move.layers";
+    if (items.some((item) => (item.item.role === "layer") !== layers)) return "draw.move.layers";
     const target = nodeOf(model, host.item);
     const parent = inside ? target : target.parent;
     if (parent === null || parent.kind !== "container") return null;
+    const parentIsLayer = parent.details?.role === "layer";
+    if (layers ? parent !== model.root && !parentIsLayer : parent === model.root && host.item.role === "layer") return "draw.move.layers";
     const moving = items.map((item) => nodeOf(model, item.item));
     // Né dentro sé stesso, né dentro qualcosa di bloccato, né un
     // collegamento dentro un altro.

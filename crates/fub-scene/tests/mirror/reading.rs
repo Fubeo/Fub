@@ -8,7 +8,7 @@ fn sparse_is_a_complete_drawing() {
     let scene = fixture("sparse", &sparse());
     assert!(scene.editable());
     let summary = &scene.summary;
-    assert_eq!(summary.layers, ["Livello 1", "Appunti"]);
+    assert_eq!(summary.layers, ["Livello 1", "Appunti", "Ritagli"]);
     assert_eq!(
         (
             summary.counts.strokes,

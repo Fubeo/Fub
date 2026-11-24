@@ -4,7 +4,7 @@
 import { Context, isContainer, Tally, type Role, type Swatches } from "../analysis";
 import { diagnostic, type Diagnostic } from "../diagnostics";
 import { NS_NONE, valueOf, type NodeId, type XmlDocument } from "../xml";
-import type { Item, Place, Resolve, Tag, Tags } from "./types";
+import { placeWithin, type Item, type Place, type Resolve, type Tag, type Tags } from "./types";
 import { firstTitle } from "./attributes";
 import { classifyChild, indexResources, originalsOf, repeatOf, type Styles, withOriginals } from "./children";
 import { describe, elementItem, followedKind } from "./describe";
@@ -179,7 +179,7 @@ export class Builder {
       const path = [...frame.path, index];
       this.elementItem(child, tag, role, path, context);
       if (isContainer(role)) {
-        const place: Place = role === "defs" ? "defs" : "inside";
+        const place: Place = placeWithin(role);
         // Il contenuto di un simbolo sta nelle coordinate del simbolo.
         const inner = role === "symbol" ? context.within(id!) : context;
         const originals = role === "group" && repeatOf(node) !== null ? originalsOf(doc, child, path.length + 1, this.resolve) : null;

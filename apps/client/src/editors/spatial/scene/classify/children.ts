@@ -168,7 +168,7 @@ export function withLocalSymbols(doc: XmlDocument, ids: readonly NodeId[], resol
 /// delle loro `defs` nella radice.
 export function withArrivingSymbols(doc: XmlDocument, ids: readonly NodeId[], place: Place, resolve: Resolve): Resolve {
   if (place === "defs") return withLocalSymbols(doc, ids, resolve);
-  if (place === "inside") return resolve;
+  if (place === "inside" || place === "layer") return resolve;
   const inner: NodeId[] = [];
   for (const id of ids) {
     const element = doc.element(id);
@@ -325,7 +325,8 @@ export function classify(doc: XmlDocument, id: NodeId, place: Place, resolve: Re
   const underRoot = place === "root";
   switch (tag) {
     case "g":
-      return [tag, underRoot && valueOf(element, NS_FUB, "layer") !== undefined ? "layer" : "group"];
+      // Un livello sta alla radice; dentro un livello è un sottolivello (formato della scena §3).
+      return [tag, (underRoot || place === "layer") && valueOf(element, NS_FUB, "layer") !== undefined ? "layer" : "group"];
     case "a":
       return [tag, "link"];
     case "title":

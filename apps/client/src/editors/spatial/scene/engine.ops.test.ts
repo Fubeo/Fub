@@ -483,7 +483,7 @@ describe("add con raw", () => {
     for (const raw of [
       '<rect width="10" height="10"/>',
       '<rect id="z" width="10" height="10"/>',
-      '<g id="l1b2c3d4e" fub:layer="Dentro"/>',
+      '<g id="o1b2c3d4e"><g id="l1b2c3d4e" fub:layer="Dentro"/></g>',
       '<rect id="o9z8y7x6w" fub:role="paper" width="10" height="10"/>',
       '<g id="o9z8y7x6w"><rect width="1" height="1"/></g>',
       `<path id="o9z8y7x6w" fub:tool="pen" fub:brush="${BRUSH}" fub:ink="1 s100 cxypt"/>`,

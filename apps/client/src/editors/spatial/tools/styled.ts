@@ -1112,7 +1112,7 @@ class Keeper {
     const named = (node: Node): string => {
       const id = node.id();
       if (id !== null) return id;
-      const made = nextId(node.parent?.parent === null && node.local === "g" ? "layer" : "object");
+      const made = nextId((node.parent?.parent === null && node.local === "g") || node.part?.details?.role === "layer" ? "layer" : "object");
       idents.push({ op: "ident", path: pathOf(node), tag: node.local, id: made });
       node.setAttr("id", made);
       present.add(made);

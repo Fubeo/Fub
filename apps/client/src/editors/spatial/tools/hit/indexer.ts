@@ -404,7 +404,10 @@ export class SceneIndexer {
 
   /// Un livello, o un gruppo di una pagina che ne fa le veci: in `layers`, e
   /// i suoi figli a `visit` se `enters` lo accetta, col ritaglio e la
-  /// maschera del livello.
+  /// maschera del livello. Un sottolivello (formato della scena §3) è un
+  /// livello anch'esso, dopo il suo genitore in `layers`: i suoi oggetti si
+  /// scelgono uno per uno, come quelli del livello, e ne ereditano il blocco,
+  /// la visibilità, la matrice, lo stile e i ritagli.
   private walkLayer(
     child: ContainerNode,
     path: number[],
@@ -416,15 +419,24 @@ export class SceneIndexer {
     layers: LayerInfo[],
     visit: Visit,
     foreign: ForeignVisit | null,
+    outer: { readonly matrix: Matrix; readonly clips: readonly Clip[] | null } = { matrix: IDENTITY, clips: null },
   ): void {
     const head = this.builder.headInfo(child);
-    const matrix = compose(IDENTITY, transformOf(head.attrs));
+    const matrix = compose(outer.matrix, transformOf(head.attrs));
     const info: LayerInfo = { id: child.facts.id, path, name, locked, hidden: hidden || head.hidden, matrix };
     layers.push(info);
-    if (!enters(info)) return;
+    // Blocco e visibilità passano ai sottolivelli: chi non entra qui non entra
+    // nemmeno in loro, ma li elenca lo stesso in `layers`.
+    const entered = enters(info);
     const style = styleOf(rootStyle, head.attrs);
-    const clips = this.clipsOf(child, head.attrs, matrix, style, null);
+    const clips = entered ? this.clipsOf(child, head.attrs, matrix, style, outer.clips) : null;
     childLoop(child, (grandchild, inner) => {
+      if (grandchild.kind === "container" && grandchild.details?.role === "layer") {
+        const sub = grandchild.details.layer!;
+        this.walkLayer(grandchild, [...path, inner], sub.name, info.locked || sub.locked, info.hidden || sub.hidden, style, entered ? enters : () => false, layers, visit, foreign, { matrix, clips });
+        return;
+      }
+      if (!entered) return;
       if (grandchild.kind === "leaf") {
         if (grandchild.details === null) {
           foreign?.(grandchild, matrix, style, [...path, inner], clips);

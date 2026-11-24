@@ -95,7 +95,7 @@ export abstract class SceneOps extends SceneEngineBase {
     }
     const root = parent === this.t.model.root;
     const scope = scopeOf(parent);
-    const elem = this.prepare(op.elem, scope, root, parent.details?.role === "defs");
+    const elem = this.prepare(op.elem, scope, root, parent.details?.role === "defs", parent.details?.role === "layer");
     if (root && (elem.tag === "title" || elem.tag === "desc")) {
       reject("invalid-elem", "titolo e descrizione della radice cambiano con meta");
     }
@@ -188,7 +188,7 @@ export abstract class SceneOps extends SceneEngineBase {
 
   /// I controlli di `elem` sugli elementi modificabili di `sequence`, letta
   /// come `parts` sotto `parent`: valori nei limiti, id nella forma degli
-  /// id nuovi, niente carta, livelli solo sotto la radice, titolo e
+  /// id nuovi, niente carta, livelli solo sotto la radice o in un livello, titolo e
   /// descrizione della radice solo con `meta`. Restituisce, in ordine e
   /// negli indici di `raw`, le modifiche che portano il `d` di ogni tratto
   /// al contorno ricalcolato (§4).
@@ -196,9 +196,11 @@ export abstract class SceneOps extends SceneEngineBase {
     const { doc, offset } = sequence;
     const underRoot = parent === this.t.model.root;
     const underDefs = parent.details?.role === "defs";
+    const underLayer = parent.details?.role === "layer";
     const edits: Array<[number, number, string]> = [];
     /// `inDefs`: l'elemento è figlio di una `defs` della radice.
-    const check = (element: ElementNode, top: boolean, inResource: boolean, inDefs: boolean): void => {
+    /// `inLayer`: l'elemento è figlio di un livello (formato della scena §3).
+    const check = (element: ElementNode, top: boolean, inResource: boolean, inDefs: boolean, inLayer = false): void => {
       const tag = element.local;
       for (const attr of element.attrs) {
         if (attr.name === "xmlns" || attr.name.startsWith("xmlns:")) continue;
@@ -206,7 +208,7 @@ export abstract class SceneOps extends SceneEngineBase {
       }
       const sheet = sheetOf(tag, valueOf(element, NS_FUB, "role"), valueOf(element, NS_FUB, "board"), top && underRoot);
       const layer = tag === "g" && valueOf(element, NS_FUB, "layer") !== undefined;
-      if (layer && !(top && underRoot)) reject("invalid-elem", "un livello sta solo sotto la radice");
+      if (layer && !((top && underRoot) || inLayer)) reject("invalid-elem", "un livello sta solo sotto la radice o in un livello");
       // Il gruppo di una pagina annotata ha l'id dal numero.
       const page = tag === "g" && top && underRoot ? positive(valueOf(element, NS_FUB, "page")) : null;
       checkNewId(tag, valueOf(element, NS_NONE, "id"), layer, inResource, inDefs, valueOf(element, NS_FUB, "role"), sheet, page);
@@ -223,14 +225,14 @@ export abstract class SceneOps extends SceneEngineBase {
       }
     };
     /// Un elemento modificabile con quelli che contiene.
-    const visit = (id: NodeId, node: ElementPart, top: boolean, inDefs: boolean): void => {
+    const visit = (id: NodeId, node: ElementPart, top: boolean, inDefs: boolean, inLayer: boolean): void => {
       if (node.details === null) return;
       const element = doc.element(id)!;
-      check(element, top, false, inDefs);
+      check(element, top, false, inDefs, inLayer);
       const inner = element.children.filter((child) => doc.element(child) !== null);
       if (node.kind === "container") {
         const children = elementChildren(node);
-        inner.forEach((child, i) => visit(child, children[i]!, false, roleOf(node) === "defs"));
+        inner.forEach((child, i) => visit(child, children[i]!, false, roleOf(node) === "defs", roleOf(node) === "layer"));
         return;
       }
       // Ciò che sta dentro una risorsa ha l'id facoltativo.
@@ -249,7 +251,7 @@ export abstract class SceneOps extends SceneEngineBase {
       if (underRoot && element.ns === NS_SVG && (element.local === "title" || element.local === "desc")) {
         reject("invalid-elem", "titolo e descrizione della radice cambiano con meta");
       }
-      visit(child, nodes[i]!, true, underDefs);
+      visit(child, nodes[i]!, true, underDefs, underLayer);
     });
     return edits;
   }
@@ -316,7 +318,7 @@ export abstract class SceneOps extends SceneEngineBase {
     if (this.lockedInside(parent)) reject("locked", "il genitore è bloccato o sta in un contenitore bloccato");
     if (this.within(parent, node)) reject("cycle", "un elemento non va dentro sé stesso");
     const root = parent === this.t.model.root;
-    if (roleOf(node) === "layer" && !root) reject("invalid-elem", "un livello sta solo sotto la radice");
+    if (roleOf(node) === "layer" && !root && roleOf(parent) !== "layer") reject("invalid-elem", "un livello sta solo sotto la radice o in un livello");
     if (isMeta(node) && (root || node.parent === this.t.model.root)) {
       reject("invalid-elem", "titolo e descrizione della radice cambiano con meta");
     }
@@ -502,8 +504,10 @@ export abstract class SceneOps extends SceneEngineBase {
     } else if (current(FUB_NS, "role") === "paper") {
       reject("invalid-elem", "una carta nasce con add");
     }
-    if (isSvg(element, "g") && current(FUB_NS, "layer") !== undefined && node.parent !== this.t.model.root) {
-      reject("invalid-elem", "un livello sta solo sotto la radice");
+    // Un livello sta alla radice; dentro un livello si cambia un sottolivello, ma un gruppo non lo
+    // diventa (formato della scena §3).
+    if (isSvg(element, "g") && current(FUB_NS, "layer") !== undefined && node.parent !== this.t.model.root && !(roleOf(node.parent!) === "layer" && roleOf(node) === "layer")) {
+      reject("invalid-elem", "un livello sta solo sotto la radice o in un livello");
     }
     // Un tratto si ridisegna quando cambiano inchiostro, pennello o
     // strumento, e il suo `d` non si scrive a mano (§4).

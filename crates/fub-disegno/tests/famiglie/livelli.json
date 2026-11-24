@@ -1253,8 +1253,17 @@
       "selezione": [],
       "argomenti": {},
       "atteso": {
-        "rifiuto": "empty"
-      }
+        "ops": [
+          {
+            "op": "set",
+            "id": "l9d9d9d9d",
+            "attrs": {
+              "display": null
+            }
+          }
+        ]
+      },
+      "dopo": "mostra-tutti-sottolivello.svg"
     },
     {
       "id": "layer.unlockAll",

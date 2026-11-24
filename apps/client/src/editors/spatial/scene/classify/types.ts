@@ -267,4 +267,11 @@ export const NO_RESOURCES: Resolve = () => null;
 
 /// Dove sta un elemento: figlio della radice, di una `defs` della radice, o
 /// di un altro contenitore modificabile.
-export type Place = "root" | "defs" | "inside";
+/// Dove sta un elemento: figlio della radice, di una `defs` della radice, di un livello (dove un
+/// `<g fub:layer>` è un sottolivello), o di un altro contenitore modificabile.
+export type Place = "root" | "defs" | "layer" | "inside";
+
+/// Il posto dei figli di un contenitore col ruolo `role`, sotto la radice.
+export function placeWithin(role: Role): Place {
+  return role === "defs" ? "defs" : role === "layer" ? "layer" : "inside";
+}

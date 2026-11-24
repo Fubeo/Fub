@@ -887,11 +887,21 @@ describe("spostare", () => {
     expect(rowEl("b").dataset.drop).toBe("after");
     expect(depthOf("b")).toBe("0");
     expect(host.querySelector<HTMLElement>(".draw-objects-ghost")!.textContent).toBe("l1");
-    pointer("pointermove", treeEl(), 30);
+    // Sul bordo alto della riga di l2: sopra.
+    pointer("pointermove", treeEl(), 5);
     expect(rowEl("l2").dataset.drop).toBe("before");
-    pointer("pointerup", treeEl(), 30, { buttons: 0 });
+    pointer("pointerup", treeEl(), 5, { buttons: 0 });
     expect(moves).toEqual([[["l1"], { key: "l2", place: "before" }]]);
     expect(chosen).toEqual([]);
+  });
+
+  it("nel mezzo della riga di un livello, un livello ci entra e diventa un sottolivello", () => {
+    layout();
+    mountMoving(["d"]);
+    pointer("pointerdown", labelOf("l1"), 4 * ROW_PX + 10);
+    pointer("pointermove", treeEl(), ROW_PX / 2);
+    pointer("pointerup", treeEl(), ROW_PX / 2, { buttons: 0 });
+    expect(moves).toEqual([[["l1"], { key: "l2", place: "top" }]]);
   });
 
   it("una riga scelta porta con sé le altre scelte, in ordine di documento", () => {

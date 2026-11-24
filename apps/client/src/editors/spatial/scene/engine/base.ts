@@ -791,10 +791,11 @@ export abstract class SceneEngineBase {
   /// Controlla `elem` e ne fa la forma da scrivere: id nuovi, valori nei
   /// limiti, inchiostro e pennello dei tratti, `d` dei tratti ricalcolato
   /// (§4). Il resto lo giudica la classificazione, sull'elemento scritto.
-  protected prepare(elem: unknown, scope: NamespaceScope, underRoot: boolean, underDefs: boolean): Elem {
+  protected prepare(elem: unknown, scope: NamespaceScope, underRoot: boolean, underDefs: boolean, underLayer = false): Elem {
     const ids = new Set<string>();
-    /// `inDefs`: l'elemento è figlio di una `defs` della radice.
-    const visit = (value: unknown, top: boolean, inResource: boolean, inDefs: boolean): Elem => {
+    /// `inDefs`: l'elemento è figlio di una `defs` della radice; `inLayer`
+    /// di un livello, dove un livello è un sottolivello (formato della scena §3).
+    const visit = (value: unknown, top: boolean, inResource: boolean, inDefs: boolean, inLayer: boolean): Elem => {
       if (!isRecord(value) || typeof value.tag !== "string" || !isRecord(value.attrs)) reject("invalid-elem", "elemento non valido");
       const tag = value.tag;
       const attrs: Record<string, string> = {};
@@ -812,7 +813,7 @@ export abstract class SceneEngineBase {
       };
       const sheet = sheetOf(tag, get(FUB_NS, "role"), get(FUB_NS, "board"), top && underRoot);
       const layer = tag === "g" && get(FUB_NS, "layer") !== undefined;
-      if (layer && !(top && underRoot)) reject("invalid-elem", "un livello sta solo sotto la radice");
+      if (layer && !((top && underRoot) || inLayer)) reject("invalid-elem", "un livello sta solo sotto la radice o in un livello");
       // Il gruppo di una pagina annotata ha l'id dal numero.
       const page = tag === "g" && top && underRoot ? positive(get(FUB_NS, "page")) : null;
       const id = get("", "id");
@@ -833,7 +834,7 @@ export abstract class SceneEngineBase {
         // Il contenuto di un simbolo sono oggetti, ognuno col suo id.
         const inside = inResource || (tag !== "symbol" && isResource(tag, inDefs, get(FUB_NS, "role")));
         const defs = tag === "defs" && top && underRoot;
-        out.children = value.children.map((child) => visit(child, false, inside, defs));
+        out.children = value.children.map((child) => visit(child, false, inside, defs, layer));
       }
       if (value.text !== undefined) out.text = value.text as string | null;
       // I pezzi di una riga: la forma la controlla la scrittura, i valori la
@@ -841,7 +842,7 @@ export abstract class SceneEngineBase {
       if (value.runs !== undefined) out.runs = value.runs as Run[];
       return out;
     };
-    return visit(elem, true, false, underDefs);
+    return visit(elem, true, false, underDefs, underLayer);
   }
 
   /// `d` di un tratto da inchiostro e pennello; `null` se l'inchiostro ha

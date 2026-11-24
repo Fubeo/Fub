@@ -1077,6 +1077,14 @@ export function createObjectTree(life: Lifetime, options: ObjectTreeOptions): Ob
   };
 
   /// La riga in cima che contiene la riga `index`, o lei.
+  /// La riga del livello più vicino che contiene la riga `index`; la riga in
+  /// cima se nessuno la contiene.
+  const layerOf = (index: number): number => {
+    let at = rows[index]!.parent;
+    while (at >= 0 && !rows[at]!.entry.layer) at = rows[at]!.parent;
+    return at >= 0 ? at : topOf(index);
+  };
+
   const topOf = (index: number): number => {
     let at = index;
     while (rows[at]!.parent >= 0) at = rows[at]!.parent;
@@ -1136,15 +1144,20 @@ export function createObjectTree(life: Lifetime, options: ObjectTreeOptions): Ob
     const height = box.bottom - box.top;
     const part = height > 0 ? (y - box.top) / height : 0.5;
     if (current.layers) {
-      // Un livello va sopra o sotto un altro, dal lato più vicino.
-      const top = topOf(index);
+      // Sulla riga di un livello: ai bordi sopra o sotto di lui, nel mezzo
+      // dentro, dove diventa un sottolivello. Sugli oggetti, sopra o sotto il
+      // livello che li contiene, dal lato più vicino.
+      if (row.entry.layer && part >= 0.25 && part <= 0.75) return into(index, "top");
+      const top = row.entry.layer ? index : layerOf(index);
       const end = lastOf(top);
       const first = boxOf(top) ?? box;
       const last = boxOf(end) ?? box;
       const key = rows[top]!.entry.key;
-      return y < (first.top + last.bottom) / 2
-        ? offer({ key, place: "before" }, { index: top, place: "before", depth: 0 })
-        : offer({ key, place: "after" }, { index: end, place: "after", depth: 0 });
+      const depth = rows[top]!.level - 1;
+      const above = row.entry.layer ? part < 0.25 : y < (first.top + last.bottom) / 2;
+      return above
+        ? offer({ key, place: "before" }, { index: top, place: "before", depth })
+        : offer({ key, place: "after" }, { index: end, place: "after", depth });
     }
     if (row.entry.layer) {
       // Sul bordo alto di un livello, in fondo a ciò che sta sopra.
