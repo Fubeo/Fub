@@ -3907,6 +3907,22 @@
     },
     {
       "fonte": "motore",
+      "id": "path.create",
+      "chiamata": {
+        "comando": "disegno.path.create"
+      },
+      "etichetta": {
+        "it": "Crea tracciato",
+        "en": "Create Path"
+      },
+      "posto": "interno",
+      "famiglia": "tracciati",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "path.curvature",
       "chiamata": {
         "comando": "disegno.path.curvature"
@@ -11511,6 +11527,22 @@
       },
       "posto": "ispettore/risorse",
       "famiglia": "colore",
+      "tasto": null,
+      "effetto": "mostra",
+      "finestra": false
+    },
+    {
+      "fonte": "pannello",
+      "id": "transform",
+      "chiamata": {
+        "client": "transform"
+      },
+      "etichetta": {
+        "it": "Trasforma",
+        "en": "Transform"
+      },
+      "posto": "ispettore/design",
+      "famiglia": "trasforma",
       "tasto": null,
       "effetto": "mostra",
       "finestra": false

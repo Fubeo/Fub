@@ -1548,6 +1548,6 @@ pannello	swatches	Swatches	Window	colore	F1	T14	fatto	ispettore/risorse	famiglia
 pannello	symbols	Symbols	Window	simboli	F3	T22	da fare	ispettore/risorse	famiglia		Simboli
 pannello	tabs	Tabs	Window	fub	—	T2	fub	fub	—	le schede del documento sono le schede di Fub	Tabulazioni
 pannello	text_styles	Text Styles	Window	testo	F2	T16	da fare	ispettore/risorse	famiglia		Text Styles
-pannello	transform	Transform	Window	trasforma	F1	T13	da fare	ispettore/design	famiglia		Trasforma
+pannello	transform	Transform	Window	trasforma	F1	T13	fatto	ispettore/design	famiglia	la sezione Trasforma del Design: punto di riferimento, X, Y, larghezza e altezza col lucchetto delle proporzioni (Ctrl+Invio) e la copia (Alt+Invio), rotazione e inclinazione con gli angoli pronti, rifletti, Reimposta riquadro, Scala angoli e Scala tratti; il riquadro lo legge Ispeziona documento (transformBox). Restano fuori, col menu del pannello: Usa il punto di registrazione del simbolo e Trasforma solo oggetto/motivo	Trasforma
 pannello	transparency	Transparency	Window	aspetto	F1	T15	da fare	ispettore/design	famiglia	la sezione Trasparenza del Completo c'è (transparency.set, giro 2); le maschere nel pannello aspettano le righe qui sopra (K6 T15 giro maschere)	Trasparenza
 pannello	variables	Variables	Window	dati	F4	T26	da fare	ispettore/design/documento	famiglia		Variabili

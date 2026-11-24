@@ -11,6 +11,7 @@ use fub_motori::{ErroreMotore, Servizi};
 use serde_json::Value;
 use vectorcraft_doc::text::TextKind;
 use vectorcraft_doc::{Document, Node, NodeId, NodeKind};
+use vectorcraft_geom::{Affine, Point};
 
 /// Due decimali, come li scrive la differenza per la geometria (`DECIMALI_GEOMETRIA`): uno scarto
 /// più piccolo di così non si vede e non si scrive.
@@ -191,8 +192,48 @@ impl StatoFamiglia for Stato {
             let angoli = valore.get("corners").unwrap_or(&Value::Null);
             quadrilatero_valido(angoli).map_err(|perche| PluginError::BadArgs(format!("{id}: {perche}").into()))?;
         }
-        Ok(valore)
+        Ok(nel_motore(id, copia.radice, valore))
     }
+}
+
+/// I punti e le misure che il pannello Trasforma manda, dalla scena al documento del motore: `x`,
+/// `y`, `width` e `height` di `object.setBounds`, e il punto `origin` di `object.rotate`,
+/// `object.shear`, `object.reflect` e `object.scale` (Ispeziona documento li dà nella scena,
+/// `nucleo::riquadro_della_selezione`). La radice è una scala e uno spostamento (il `viewBox`):
+/// `x` e `y` passano ognuno da soli. Un valore che non è un numero resta com'è (il motore lo
+/// rifiuta).
+fn nel_motore(id: &str, radice: Affine, mut valore: Value) -> Value {
+    if radice == Affine::IDENTITY {
+        return valore;
+    }
+    let [a, _, _, d, e, f] = radice.as_coeffs();
+    let scala = radice.determinant().abs().sqrt();
+    let numero = |x: f64| serde_json::Number::from_f64(x).map_or(Value::Null, Value::Number);
+    let Some(campi) = valore.as_object_mut() else { return valore };
+    let mut cambia = |chiave: &str, come: &dyn Fn(f64) -> f64| {
+        if let Some(n) = campi.get(chiave).and_then(Value::as_f64) {
+            campi.insert(chiave.into(), numero(come(n)));
+        }
+    };
+    match id {
+        "object.setBounds" => {
+            cambia("x", &|x| a * x + e);
+            cambia("y", &|y| d * y + f);
+            cambia("width", &|w| w * scala);
+            cambia("height", &|h| h * scala);
+        }
+        "object.rotate" | "object.shear" | "object.reflect" | "object.scale" => {
+            if let Some([x, y]) = campi.get("origin").and_then(Value::as_array).and_then(|o| match o.as_slice() {
+                [x, y] => Some([x.as_f64()?, y.as_f64()?]),
+                _ => None,
+            }) {
+                let p = radice * Point::new(x, y);
+                campi.insert("origin".into(), Value::Array(vec![numero(p.x), numero(p.y)]));
+            }
+        }
+        _ => {}
+    }
+    valore
 }
 
 /// «Rendi perfetto al pixel» (`object.makePixelPerfect`, K6 T13): sposta e arrotonda gli oggetti scelti

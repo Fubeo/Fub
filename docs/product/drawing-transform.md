@@ -138,13 +138,23 @@ attributi; annulla la riporta com'era, byte per byte. Una forma solo spostata,
 scalata o ruotata resta quella che era. Una linea, un tracciato in un file con
 uno stile CSS o una forma con una freccia non si deformano, e lo si dice.
 
-La sezione Trasforma, nella scheda Design, dà posizione, misura, rotazione e
-inclinazione, e Reimposta riquadro. I campi mostrano i valori della selezione,
-nell'unità del pannello, e restano vuoti se la selezione non ha un valore solo.
-L'inclinazione non ha un valore da leggere: si scrive di quanto inclinare, da 0.
-Ogni campo manda il suo comando quando si conferma; rotazione e inclinazione
-vanno senza finestra. Nel Disegno completo «Posizione e misure» e i gruppi
-Distribuisci non ci sono: li dà questa sezione e la sezione Allinea.
+La sezione Trasforma, nella scheda Design, è il pannello Trasforma di
+VectorCraft. Il punto di riferimento (una griglia di nove posti, di serie il
+centro) dice quale punto del riquadro sono X e Y e attorno a quale punto
+girano rotazione, inclinazione e riflessi. Il riquadro lo legge Ispeziona
+documento (`transformBox`): segue la rotazione dell'oggetto, e le misure sono
+quelle della scena anche quando la radice del file è scalata. Larghezza e
+altezza tengono le proporzioni col lucchetto acceso (preferenza
+`constrainProportions` del motore) o confermando con Ctrl+Invio; Alt+Invio
+applica il valore a una copia. La rotazione è l'angolo del riquadro, in senso
+antiorario, e parte solo se cambia; l'inclinazione si scrive di quanto
+inclinare, da 0 (fra -90° e 90°, esclusi). Ci sono gli angoli pronti (rotazione
+ogni 45°, inclinazione ogni 15° fino a 60°), Rifletti in orizzontale e in
+verticale, Reimposta riquadro e le caselle Scala angoli e Scala tratti, che
+cambiano le preferenze del motore. Senza una selezione i comandi sono spenti;
+il lucchetto e le caselle no. Senza motore i campi mostrano le misure della
+vista, nell'unità del pannello. Nel Disegno completo «Posizione e misure» e i
+gruppi Distribuisci non ci sono: li dà questa sezione e la sezione Allinea.
 
 Nel menu ≡ › Oggetto › Disponi ci sono le sette voci che dispongono gli oggetti
 scelti: Disponi in griglia, Scambia oggetti, Sostituisci con l'oggetto superiore,

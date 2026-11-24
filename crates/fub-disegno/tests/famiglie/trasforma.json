@@ -261,6 +261,11 @@
       "prova": "apps/client/src/editors/spatial/completo/famiglie/trasforma/allinea.test.ts"
     },
     {
+      "id": "transform",
+      "fonte": "pannello",
+      "prova": "apps/client/src/editors/spatial/completo/trasforma-sezione.test.ts"
+    },
+    {
       "id": "object.move",
       "disegno": "base.svg",
       "selezione": [

@@ -8,6 +8,8 @@ use fub_motori::{ErroreMotore, Servizi};
 use fub_scene::Role;
 use serde_json::Value;
 use vectorcraft_doc::{NodeId, NodeKind};
+use vectorcraft_engine::Session;
+use vectorcraft_geom::Affine;
 
 use super::{nodi_scelti, StatoFamiglia};
 use crate::apertura::Copia;
@@ -134,6 +136,41 @@ impl StatoFamiglia for Stato {
         }
         Ok(valore)
     }
+}
+
+/// Ispeziona documento, la lettura a cui [`riquadro_della_selezione`] aggiunge `transformBox`.
+pub(super) const ISPEZIONA_DOCUMENTO: &str = "document.inspect";
+
+/// Il riquadro della selezione `scelti` come lo mostra il pannello Trasforma di VectorCraft
+/// (`Session::transform_box`: ruota con gli oggetti, e con «Usa i contorni di anteprima» comprende
+/// i tratti), nelle coordinate della scena: `angle` in gradi in senso antiorario, come lo prende
+/// `object.rotate`; `width` e `height` lungo i suoi lati; `points` i nove punti di riferimento,
+/// riga per riga dall'angolo in alto a sinistra del riquadro (lo 0 di `reference`). `None` senza
+/// selezione o senza un riquadro. La radice di un file è solo una scala e uno spostamento (il
+/// `viewBox`): le misure tornano alla scena con la sua scala.
+pub(super) fn riquadro_della_selezione(sessione: &Session, scelti: &[NodeId], radice: Affine) -> Option<Value> {
+    if scelti.is_empty() {
+        return None;
+    }
+    let riquadro = sessione.transform_box(scelti)?;
+    let alla_scena = radice.inverse();
+    let scala = radice.determinant().abs().sqrt();
+    if !(scala.is_finite() && scala > 0.0) {
+        return None;
+    }
+    let numero = |x: f64| serde_json::Number::from_f64(x).map_or(Value::Null, Value::Number);
+    let punti: Vec<Value> = (0..9)
+        .map(|i| {
+            let p = alla_scena * riquadro.reference_point(i);
+            Value::Array(vec![numero(p.x), numero(p.y)])
+        })
+        .collect();
+    Some(serde_json::json!({
+        "angle": numero(riquadro.angle),
+        "width": numero(riquadro.rect.width() / scala),
+        "height": numero(riquadro.rect.height() / scala),
+        "points": punti,
+    }))
 }
 
 /// Il tratto di `n` si allinea dentro o fuori: come `stroke_mixed` di VectorCraft, guarda le forme

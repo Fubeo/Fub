@@ -1317,6 +1317,17 @@ pub(crate) fn esegui(
         banco.ripristina(copia);
         return Ok(rifiuta(motivo));
     }
+    // Ispeziona documento porta anche il riquadro della selezione del pannello Trasforma, che
+    // il motore sa con le sue preferenze (`nucleo::riquadro_della_selezione`).
+    let mut risultato = risultato;
+    if riga.id == nucleo::ISPEZIONA_DOCUMENTO {
+        if let (Some(campi), Some(riquadro)) = (
+            risultato.as_object_mut(),
+            nucleo::riquadro_della_selezione(&banco.sessione, &selezione, copia.radice),
+        ) {
+            campi.insert("transformBox".into(), riquadro);
+        }
+    }
     // I comandi dei tracciati spostano punti: una matrice li spiega solo se
     // è uno spostamento.
     let dei_punti = riga.famiglia == Some(Famiglia::Tracciati);

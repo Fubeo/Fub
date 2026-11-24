@@ -621,8 +621,16 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila" | "e
       return { ids, nodi: [primo, ...altri] };
     },
   });
-  // La sezione «Trasforma» (K6 T13, giro 3): posizione, misura, rotazione e inclinazione.
-  registraTrasforma(sezioni, eseguiPerId);
+  // La sezione «Trasforma», come il pannello Transform di VectorCraft: il riquadro della selezione lo
+  // legge dal motore (`document.inspect`), e le sue preferenze (`prefs.get`, `prefs.set`) restano
+  // per i disegni dopo. Il punto di riferimento vale finché il Completo è aperto.
+  registraTrasforma(sezioni, {
+    esegui: eseguiPerId,
+    leggi: () => chiama(dipendenze, "disegno.document.inspect", { depth: 0 }, false).then((esito) => (esito === null || esito.refused !== null ? null : esito.reading)),
+    preferenze: () => chiama(dipendenze, "disegno.prefs.get", {}, false).then((esito) => (esito === null || esito.refused !== null ? null : esito.reading)),
+    imposta: (chiave, valore) => void comandoDellaFila("disegno.prefs.set", { key: chiave, value: valore }, t("draw.trasforma.titolo"), undefined),
+    riferimento: { indice: 4 },
+  });
   // La sezione «Colore» (K6 T14, giro 1): riempimento e contorno, scambia, nessuno e di serie.
   // Il lato attivo che Colore cambia e Risorse › Campioni usa (K6 T14, giro 2).
   const latoAttivo: LatoAttivo = { lato: "fill" };

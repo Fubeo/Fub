@@ -193,6 +193,7 @@ pub(crate) fn importa(testo: &str, revisione: u64) -> Result<Copia, ErroreApertu
     spazi_fra_le_righe(&mappa, &mut documento);
     testi_in_area(&mappa, &mut documento);
     testi_verticali(&mappa, &mut documento);
+    angoli_dei_riquadri(&mappa, &mut documento);
     crate::ricetta::nomi_di_ruolo(&ricette, &mut documento);
     mappa.lega_le_facce(&documento);
     mappa.ricette = ricette;
@@ -651,6 +652,27 @@ fn testi_in_area(mappa: &Mappa, documento: &mut Document) {
 /// `text-anchor`, e il testo si sposta perché la cima della prima colonna
 /// cada in `x`, `y` come nel file. Un testo con pezzi, ruotato o inclinato
 /// resta com'è importato.
+/// L'angolo del riquadro di ogni oggetto (`Node::bbox_angle`), che il motore tiene mentre lo si
+/// gira e il file dice con la `transform`: un rettangolo girato di 30° si riapre col suo riquadro
+/// girato, come in VectorCraft dopo Ruota, e il pannello Trasforma ne legge l'angolo e i lati. È
+/// l'angolo che la matrice dell'elemento (con quelle dei gruppi che lo contengono) dà ai suoi assi
+/// (`transformed_angle`, lo stesso conto di quando il motore lo trasforma). I livelli non ne
+/// hanno uno, come nel motore.
+fn angoli_dei_riquadri(mappa: &Mappa, documento: &mut Document) {
+    for e in mappa.elementi() {
+        let (Some(nodo), Some(ctm)) = (e.nodo, e.ctm()) else {
+            continue;
+        };
+        let angolo = vectorcraft_doc::orient::transformed_angle(0.0, ctm);
+        if angolo == 0.0 || !angolo.is_finite() {
+            continue;
+        }
+        if let Some(n) = documento.node_mut(nodo).filter(|n| !n.is_layer()) {
+            n.bbox_angle = angolo;
+        }
+    }
+}
+
 fn testi_verticali(mappa: &Mappa, documento: &mut Document) {
     use vectorcraft_doc::text::{Justify, TextKind};
     use vectorcraft_doc::NodeKind;
