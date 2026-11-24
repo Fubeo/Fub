@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MAX_GUIDES, parseGuides, parseUnits, UNIT_SIZE } from "./rulers";
+import { MAX_GUIDES, nextUnit, parseGuides, parseUnits, UNIT_SIZE } from "./rulers";
 import cases from "../../../__fixtures__/scene-rulers/cases.json";
 
 describe("unità e guide del documento", () => {
@@ -28,5 +28,13 @@ describe("unità e guide del documento", () => {
     expect(UNIT_SIZE.mm * 25.4).toBeCloseTo(96, 12);
     expect(UNIT_SIZE.pt * 72).toBeCloseTo(96, 12);
     expect(UNIT_SIZE.px).toBe(1);
+  });
+});
+
+describe("Cambia unità (Ctrl+Alt+Maiusc+U)", () => {
+  it("segue l'ordine di VectorCraft fra le unità del file e torna alla prima", () => {
+    const visti: string[] = [];
+    for (let u = nextUnit("pt"); visti.length < 5; u = nextUnit(u)) visti.push(u);
+    expect(visti).toEqual(["in", "mm", "cm", "px", "pt"]);
   });
 });

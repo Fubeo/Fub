@@ -11,6 +11,7 @@ import { ROTATE_STEP, ZOOM_STEP } from "./constants";
 import type { Edge } from "../arrange";
 import type { EditorContext } from "./context";
 import { adattaTavola } from "./chrome/zoom-menu";
+import { cambiaUnita } from "./chrome/unita";
 
 const ROTATE_STEP_SHIFT = 90;
 
@@ -124,7 +125,8 @@ export function installVaultImages(ctx: EditorContext): void {
   /// VectorCraft: annulla (`Ctrl+Z`) e ripeti (`Ctrl+Maiusc+Z`) sulla cronologia del
   /// disegno, la vista (`Ctrl+Y` contorni, `Ctrl+'` griglia, `Ctrl+Maiusc+'` aggancio,
   /// `Ctrl+0` adatta la tavola e `Ctrl+Alt+0` tutto, `Ctrl+1` 100%, `Ctrl+=` e `Ctrl+-`
-  /// zoom, `Ctrl+Maiusc+H` nasconde le tavole) e la
+  /// zoom, `Ctrl+Maiusc+H` nasconde le tavole), l'unità del documento (`Ctrl+Alt+Maiusc+U` passa
+  /// alla successiva) e la
   /// ricerca dei comandi (`Ctrl+Maiusc+/`). `true` se l'ha preso. Copia, taglia e
   /// incolla restano al browser, che manda gli appunti al Completo.
   function vistaComeVectorCraft(event: KeyboardEvent): boolean {
@@ -152,6 +154,10 @@ export function installVaultImages(ctx: EditorContext): void {
     }
     if (event.code === "KeyH" && event.shiftKey && !alt) {
       changeGrid({ ...ctx.grid, hideArtboards: ctx.grid.hideArtboards !== true });
+      return true;
+    }
+    if (event.code === "KeyU" && event.shiftKey && alt) {
+      cambiaUnita(ctx);
       return true;
     }
     if (event.code === "Digit1" && !alt && !event.shiftKey) {

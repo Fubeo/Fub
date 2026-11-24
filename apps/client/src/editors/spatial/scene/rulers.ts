@@ -16,6 +16,16 @@ export type LengthUnit = "px" | "mm" | "cm" | "in" | "pt";
 /// Le unità, nell'ordine in cui la superficie le propone.
 export const UNITS: readonly LengthUnit[] = ["px", "mm", "cm", "in", "pt"];
 
+/// L'ordine di «Cambia unità» (`document.switchUnits`, VectorCraft: Switch Units), lo stesso
+/// del menu dei righelli di VectorCraft (punti, pica, pollici, millimetri, centimetri, pixel,
+/// piedi e pollici, metri, iarde, piedi) con le sole unità che il file di Fub sa scrivere.
+const SWITCH_ORDER: readonly LengthUnit[] = ["pt", "in", "mm", "cm", "px"];
+
+/// L'unità dopo `unit` per «Cambia unità»: l'ultima torna alla prima.
+export function nextUnit(unit: LengthUnit): LengthUnit {
+  return SWITCH_ORDER[(SWITCH_ORDER.indexOf(unit) + 1) % SWITCH_ORDER.length]!;
+}
+
 /// Quante unità utente vale un'unità: 96 per pollice, come in CSS.
 export const UNIT_SIZE: Readonly<Record<LengthUnit, number>> = {
   px: 1,

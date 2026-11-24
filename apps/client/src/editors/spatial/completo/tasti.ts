@@ -164,6 +164,7 @@ export const TASTI_DELLA_FINESTRA: readonly string[] = [
   "Ctrl-Tab", "Ctrl-Shift-Tab", "Mod-PageUp", "Mod-PageDown", "F6", "Shift-F6",
   "Mod-z", "Mod-Shift-z", "Mod-y", "Mod-c", "Mod-x", "Mod-v", "Mod-Shift-v",
   "Mod-'", "Mod-0", "Mod-Alt-0", "Mod-1", "Mod-=", "Mod--", "Mod-Shift-h",
+  "Mod-Alt-Shift-u",
 ];
 
 /// Applica la regola a un elenco di comandi del motore e alle modifiche

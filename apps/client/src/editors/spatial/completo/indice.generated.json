@@ -1139,6 +1139,22 @@
     },
     {
       "fonte": "motore",
+      "id": "document.switchUnits",
+      "chiamata": {
+        "client": "document.switchUnits"
+      },
+      "etichetta": {
+        "it": "Cambia unità",
+        "en": "Switch Units"
+      },
+      "posto": "ispettore/design/documento",
+      "famiglia": "tavole",
+      "tasto": "Cmd+Alt+Shift+U",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "edit.clear",
       "chiamata": {
         "comando": "disegno.edit.clear"

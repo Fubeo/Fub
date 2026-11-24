@@ -21,7 +21,9 @@ campo **Unità** della sezione «Documento» delle
 [proprietà](drawing-properties.md). Un pollice vale 96 pixel, 25,4 millimetri e 72 punti, come nei fogli di stile. Cambiarla
 è un passo di annulla, si annuncia, «Il documento ora misura in
 millimetri.», e il disegno resta com'è: cambia soltanto come si leggono e si
-scrivono le misure.
+scrivono le misure. Col Completo e il motore, `Ctrl+Alt+Maiusc+U` (Cambia
+unità, come in VectorCraft) passa all'unità successiva, nell'ordine punti,
+pollici, millimetri, centimetri, pixel, e dai pixel torna ai punti.
 
 Nell'unità del documento ci sono:
 

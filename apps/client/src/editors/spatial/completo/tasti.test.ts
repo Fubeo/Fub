@@ -254,7 +254,7 @@ describe("TASTI_DELLA_FINESTRA", () => {
   });
 
   it("i tasti della vista di VectorCraft restano all'editor: adatta tavola e tutto, nascondi tavole", () => {
-    for (const tasto of ["Mod-0", "Mod-Alt-0", "Mod-Shift-h"]) expect(TASTI_DELLA_FINESTRA).toContain(tasto);
+    for (const tasto of ["Mod-0", "Mod-Alt-0", "Mod-Shift-h", "Mod-Alt-Shift-u"]) expect(TASTI_DELLA_FINESTRA).toContain(tasto);
   });
 
   it("senza il motore (la regola di sempre) quei tasti restano di Fub", () => {

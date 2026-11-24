@@ -17,7 +17,8 @@ quel tasto. Vale questo ordine:
   posto: il browser li manda agli appunti del Completo) e la vista: `Ctrl+Y`
   contorni, `Ctrl+'` griglia, `Ctrl+Maiusc+'` aggancio alla griglia, `Ctrl+0` adatta
   la tavola di adesso e `Ctrl+Alt+0` tutto, `Ctrl+1` 100%, `Ctrl+=` e `Ctrl+-`
-  zoom, `Ctrl+Maiusc+H` nasconde le tavole,
+  zoom, `Ctrl+Maiusc+H` nasconde le tavole, `Ctrl+Alt+Maiusc+U` cambia l'unità del
+  documento,
   `Ctrl+Maiusc+/` cerca i comandi. Ogni altro tasto con `Ctrl` o `Alt` è del
   motore, anche dove lo Standard o la shell ne fanno altro: per esempio `Ctrl+G`
   raggruppa, `Ctrl+2` blocca, `Ctrl+3` nasconde, `Ctrl+D` ripete la

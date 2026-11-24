@@ -1255,6 +1255,11 @@
       "id": "view.artboards",
       "fonte": "interfaccia",
       "prova": "apps/client/src/editors/spatial/tools/editor/chrome/visualizza.test.ts"
+    },
+    {
+      "id": "document.switchUnits",
+      "fonte": "motore",
+      "prova": "apps/client/src/editors/spatial/tools/editor/chrome/unita.test.ts"
     }
   ]
 }

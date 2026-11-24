@@ -195,7 +195,7 @@ motore	document.node	Inspect Object		nucleo	F1	T11	fatto	interno	nucleo	lettura 
 motore	document.find	Find Objects		nucleo	F1	T11	fatto	interno	nucleo	lettura del motore per l’ispettore e i test: nessuna voce di menu	Trova oggetti
 motore	document.json	Document JSON		nucleo	F1	T11	fatto	interno	nucleo	lettura del motore per l’ispettore e i test: nessuna voce di menu	JSON del documento
 motore	document.setUnits	Units	File › Document Setup	tavole	F2	T19	da fare	menu/file	famiglia		Unità
-motore	document.switchUnits	Switch Units		tavole	F2	T19	da fare	ispettore/design/documento	famiglia		Cambia unità
+motore	document.switchUnits	Switch Units		tavole	F2	T19	fatto	ispettore/design/documento	famiglia	Ctrl+Alt+Maiusc+U: l'unità del documento passa alla successiva nell'ordine di VectorCraft (punti, pollici, millimetri, centimetri, pixel), con le sole cinque unità che il file sa scrivere.	Cambia unità
 motore	document.rulerOrigin	Ruler Origin		tavole	F2	T19	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Origine dei righelli
 motore	document.setRulerOrigin	Ruler Origin		tavole	F2	T19	da fare	ispettore/design/documento	famiglia		Origine dei righelli
 motore	document.resetRulerOrigin	Reset Ruler Origin		tavole	F2	T19	da fare	ispettore/design/documento	famiglia		Ripristina origine dei righelli

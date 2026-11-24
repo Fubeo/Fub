@@ -9,6 +9,7 @@
 // fotogramma: il puntatore si muove a ogni tocco, la selezione può avere 50 000
 // elementi, e una lettura vecchia non si mostra.
 
+import { CAMBIA_UNITA } from "./unita";
 import { plural, t } from "../../../strings";
 import type { Point } from "../../../scene/matrix";
 import type { EditorContext } from "../context";
@@ -94,6 +95,7 @@ export function voceClienteBanda(id: string): string | null | undefined {
 export function voceClienteCompleto(ctx: EditorContext, id: string): string | null | undefined {
   // `null` vuol dire «si fa»: non si confonde con «non è di questa parte» (`??` lo
   // scambierebbe per assente, e una voce fatta comparirebbe come non collegata).
+  if (id === CAMBIA_UNITA) return null;
   const visualizza = voceVisualizza(ctx, id);
   return visualizza !== undefined ? visualizza : voceClienteBanda(id);
 }

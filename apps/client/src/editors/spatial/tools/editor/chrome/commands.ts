@@ -5,6 +5,7 @@
 // ricerca dei comandi (Ctrl+/) e il menu radiale. Un comando nuovo entra da
 // uno di quei posti, e la ricerca lo trova senza altro lavoro.
 
+import { CAMBIA_UNITA, cambiaUnita } from "./unita";
 import { displayBinding } from "../../../../../ui/commands";
 import type { MenuItem } from "../../../../../ui/menu";
 import { t } from "../../../strings";
@@ -104,7 +105,8 @@ export function azioniVoci(ctx: EditorContext, riprova: () => void): AzioniVociC
     // altre non sono collegate, e lo stato le dice spente (`statoVoce`), quindi non
     // arrivano qui.
     client: (id) => {
-      if (isComandoBanda(id)) ctx.comandoVista(id);
+      if (id === CAMBIA_UNITA) cambiaUnita(ctx);
+      else if (isComandoBanda(id)) ctx.comandoVista(id);
     },
     riprova,
   };

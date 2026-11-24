@@ -47,7 +47,7 @@ fn generato() -> String {
 /// di Fub, che il comando del motore porterebbe nel documento. Il client le
 /// chiama come le sue voci, e la sua prova è `visualizza.test.ts`. La stessa
 /// lista è `MOTORE_DEL_CLIENT` in `tests/casi/mod.rs`: cambiano insieme.
-const DEL_CLIENT: &[&str] = &["view.transparencyGrid"];
+const DEL_CLIENT: &[&str] = &["view.transparencyGrid", "document.switchUnits"];
 
 /// Il comando che il client chiama per la voce: il comando del motore, un
 /// effetto con `disegno.effect.apply`, uno strumento del motore; una voce
