@@ -1088,6 +1088,36 @@ describe("la scheda Livelli del Completo", () => {
     expect(voce("Rilascia maschera di ritaglio del livello «Livello 1»")!.getAttribute("aria-disabled")).not.toBe("true");
   });
 
+  it("con un gruppo scelto da solo la voce ritaglia il gruppo, non il livello, come in VectorCraft", async () => {
+    const conGruppo = {
+      ...VAULT,
+      "casa.svg": HOUSE.replace(/\n    (<rect[^\n]*)/, '\n    <g id="og1a1a1a1">\n      $1\n    </g>'),
+    };
+    const { fake, chiamate } = livelliFinti(false);
+    const host = await start(createFakeHost({ file: conGruppo, draw: true, settings: [drawWorkspace("full", "default")], drawing: fake }));
+    await open("casa.svg");
+    await waitFor("la colonna del Completo", () => tools().join(",") === COLUMN_TOOLS_COMPLETO.join(","));
+    const bottone = (): HTMLButtonElement | null => document.querySelector<HTMLButtonElement>(".draw-objects-menu:not([hidden])");
+    await schedaLivelli();
+    const rigaGruppo = (): HTMLElement | null => document.querySelector<HTMLElement>('.draw-object[data-key="og1a1a1a1"]');
+    if (rigaGruppo() === null) rigaLivello()!.querySelector<HTMLElement>(".draw-object-twisty")?.click();
+    await waitFor("la riga del gruppo", () => rigaGruppo() !== null);
+    rigaGruppo()!.querySelector<HTMLElement>(".draw-object-label")!.click();
+    await waitFor("il gruppo scelto", () => rigaGruppo()!.getAttribute("aria-selected") === "true");
+    const voci = (): HTMLButtonElement[] => {
+      const aperti = document.querySelectorAll<HTMLElement>(".context-menu");
+      return aperti.length === 0 ? [] : [...aperti[aperti.length - 1]!.querySelectorAll<HTMLButtonElement>("button")];
+    };
+    const voce = (frase: string): HTMLButtonElement | undefined => voci().find((each) => each.querySelector(".menu-label")?.textContent === frase);
+    bottone()!.click();
+    await waitFor("la voce del gruppo", () => voce("Crea maschera di ritaglio del gruppo scelto") !== undefined);
+    expect(voce("Crea maschera di ritaglio del livello «Livello 1»")).toBeUndefined();
+    voce("Crea maschera di ritaglio del gruppo scelto")!.click();
+    await waitFor("il comando del gruppo", () => chiamate.some((c) => c.id === "disegno.layer.clippingMask.toggle"));
+    expect(chiamate.filter((c) => c.id === "disegno.layer.clippingMask.toggle")).toEqual([{ id: "disegno.layer.clippingMask.toggle", value: {} }]);
+    await waitFor("il ritaglio arriva al disco", () => written(host, "casa.svg").length === 1);
+  });
+
   it("su un livello vuoto Crea maschera di ritaglio è spenta e dice perché", async () => {
     const vuota = { ...VAULT, "casa.svg": HOUSE.replace(/\n    <rect[^\n]*/, "") };
     const { fake } = livelliFinti(false);

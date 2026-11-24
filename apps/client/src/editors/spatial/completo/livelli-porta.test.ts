@@ -124,6 +124,12 @@ describe("creaPortaLivelli", () => {
     expect(await prepara().porta.comando({ kind: "ritaglia", livello: "nessuno" })).toEqual({ kind: "nativo" });
   });
 
+  it("la maschera di ritaglio del gruppo scelto va al motore senza numero, col gruppo come selezione", async () => {
+    const ritaglia = prepara();
+    expect(await ritaglia.porta.comando({ kind: "ritagliaGruppo", gruppo: "og1" })).toEqual({ kind: "fatto", ops: SET });
+    expect(ritaglia.chiamate[ritaglia.chiamate.length - 1]).toMatchObject({ id: "disegno.layer.clippingMask.toggle", value: {}, selection: ["og1"] });
+  });
+
   it("un livello bloccato rifiutato dal motore ha la sua frase, non quella della selezione", async () => {
     const { porta } = prepara({ risposta: esito({ refused: "locked", ops: null }) });
     expect(await porta.comando({ kind: "proprieta", livello: "l1", nome: "X" })).toEqual({ kind: "rifiuto", motivo: "draw.livelli.bloccato" });

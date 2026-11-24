@@ -10,10 +10,10 @@ import { sameCurve } from "../../../../ink/input/pressure";
 import type { Bounds } from "../../scene/geometry";
 import { plural, t, type DrawKey } from "../../strings";
 import { fittedPage, gesture as asGesture } from "../edit";
-import type { Arranged } from "../arrange";
+import { plainAttributes, type Arranged } from "../arrange";
 import { gridStep, sameStep, unitSteps, withStep, type Grid } from "../grid";
 import { nextTurn } from "../../view";
-import type { LayerInfo } from "../hit";
+import type { LayerInfo, Unit } from "../hit";
 import {
   addLayerOps,
   canShiftLayer,
@@ -36,6 +36,7 @@ import { BAR_FEATURES } from "./constants";
 import type { EditorContext } from "./context";
 import { checkedGrid, layerRefusal, layerState, layerTitle, union } from "./helpers";
 import type { Op } from "../../scene/ops";
+import { elementChildren } from "../../scene/model";
 import type { PortaLivelli, RichiestaLivello } from "../../completo/livelli-porta";
 
 /// Quanti caratteri del nome di un livello entrano nel nome di un comando:
@@ -370,6 +371,27 @@ export function installLayersGrid(ctx: EditorContext): void {
     });
   }
 
+  /// Il gruppo scelto da solo, con un id: il menu dei livelli ritaglia lui e non il livello, come
+  /// in VectorCraft (la riga o il gruppo scelto prima del livello corrente).
+  const chosenGroup = (): Unit | null => {
+    const units = ctx.selectedUnits();
+    const only = units.length === 1 ? units[0]! : null;
+    return only !== null && only.role === "group" && only.id !== null && ctx.selection.length === 1 ? only : null;
+  };
+
+  /// Crea o rilascia la maschera di ritaglio del gruppo scelto (solo col motore del Completo).
+  function toggleGroupClip(group: Unit): void {
+    if (!editable()) return;
+    cancelGesture();
+    const clips = plainAttributes(group.node).has("clip-path");
+    layerWrite({
+      label: "draw.livelli.azione.ritaglioGruppo",
+      request: { kind: "ritagliaGruppo", gruppo: group.id! },
+      engineKey: () => null,
+      said: () => t(clips ? "draw.livelli.ritaglioGruppo.rilasciato" : "draw.livelli.ritaglioGruppo.creato"),
+    });
+  }
+
   /// Raccogli in un nuovo livello (solo col motore del Completo): gli oggetti scelti in un livello
   /// nuovo accanto al più alto di loro; dentro un livello è un sottolivello.
   function collectInNew(): void {
@@ -403,6 +425,17 @@ export function installLayersGrid(ctx: EditorContext): void {
   /// livello bloccato (o di sola lettura) e, per crearla, su un livello vuoto.
   const clipItem = (current: LayerInfo, name: string, frozen: DrawKey | null): MenuItem => {
     const model = ctx.engine.model!;
+    const group = chosenGroup();
+    if (group !== null) {
+      const clips = plainAttributes(group.node).has("clip-path");
+      const empty = !clips && group.node.kind === "container" && elementChildren(group.node).length === 0;
+      const off = frozen ?? (empty ? "draw.livelli.ritaglioGruppo.vuoto" : null);
+      return {
+        label: t(clips ? "draw.livelli.ritaglioGruppo.rilascia" : "draw.livelli.ritaglioGruppo.crea"),
+        ...(off === null ? {} : { disabled: true, description: t(off) }),
+        run: () => toggleGroupClip(group),
+      };
+    }
     const clips = layerClips(model, current);
     const empty = !clips && layerEmpty(model, current);
     const off = frozen ?? (empty ? "draw.livelli.ritaglio.vuoto" : null);

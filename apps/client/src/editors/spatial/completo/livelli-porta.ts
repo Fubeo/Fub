@@ -46,7 +46,10 @@ export type RichiestaLivello =
   | { readonly kind: "raccogli"; readonly oggetti: readonly string[] }
   /// Crea o rilascia la maschera di ritaglio del livello: il suo oggetto più alto ritaglia il resto,
   /// e di nuovo torna un oggetto. Solo del motore.
-  | { readonly kind: "ritaglia"; readonly livello: string };
+  | { readonly kind: "ritaglia"; readonly livello: string }
+  /// Crea o rilascia la maschera di ritaglio del `gruppo` scelto da solo (id della scena), come il
+  /// menu dei livelli di VectorCraft: il suo oggetto più alto ritaglia il resto. Solo del motore.
+  | { readonly kind: "ritagliaGruppo"; readonly gruppo: string };
 
 /// Com'è andato un comando di livello.
 /// - `fatto`: le operazioni da scrivere (vuote se non cambiava niente);
@@ -98,6 +101,9 @@ function chiamataDi(
       const numero = numeri.get(richiesta.livello);
       return numero === undefined ? null : { id: "disegno.layer.clippingMask.toggle", value: { id: numero } };
     }
+    case "ritagliaGruppo":
+      // Senza `id` il motore prende il gruppo scelto da solo (`famiglie/livelli.rs`).
+      return { id: "disegno.layer.clippingMask.toggle", value: {}, selection: [richiesta.gruppo] };
     case "raccogli":
       return { id: "disegno.layer.collectInNew", value: {}, selection: richiesta.oggetti };
     case "nuovo":
