@@ -12,8 +12,10 @@
 //! **Il contorno.** Del pannello Contorno del motore il file dice lo spessore, gli estremi, gli angoli,
 //! il loro limite e il tratteggio con il suo spostamento (`stroke-width`, `stroke-linecap`,
 //! `stroke-linejoin`, `stroke-miterlimit`, `stroke-dasharray`, `stroke-dashoffset`). L'allineamento
-//! dentro o fuori, il tratteggio adattato agli angoli, le frecce del motore e i profili di spessore non
-//! hanno un attributo nella scena: chiederli è `unsupported`, e niente cambia. Un testo non ha contorno (come per il Colore): con
+//! dentro o fuori, il tratteggio adattato agli angoli e le frecce del motore non hanno un attributo:
+//! l'oggetto si scrive come lo esporta VectorCraft (un ritaglio, una maschera, tracciati pieni) con la
+//! sua ricetta (`docs/reference/scene-format.md`). I profili di spessore aspettano la loro forma nella
+//! scena: chiederli è `unsupported`, e niente cambia. Un testo non ha contorno (come per il Colore): con
 //! soli testi scelti il comando è spento, e in una selezione mista il contorno va alle altre forme.
 
 use std::sync::Arc;
@@ -260,17 +262,11 @@ pub(super) fn testo(copia: &Copia, n: NodeId) -> bool {
         .is_some_and(|nodo| matches!(nodo.kind, NodeKind::Text(_)))
 }
 
-/// Gli argomenti di `stroke.set` chiedono qualcosa che la scena non scrive: un allineamento dentro o
-/// fuori, un tratteggio adattato agli angoli, una freccia del motore (le punte di Fub sono un'altra cosa, `docs/product/drawing-tips.md`),
-/// un profilo di spessore, un tratto dell'aspetto che non è quello in cima.
+/// Gli argomenti di `stroke.set` chiedono qualcosa che il file non sa ancora scrivere: un profilo di
+/// spessore, un tratto dell'aspetto che non è quello in cima.
 fn fuori_dalla_scena(valore: &Value) -> bool {
     let c = |chiave: &str| valore.get(chiave).filter(|v| !v.is_null());
-    c("align").is_some_and(|v| v.as_str() != Some("center"))
-        || c("alignDashes").is_some_and(|v| v.as_bool() != Some(false))
-        || c("startArrow").is_some()
-        || c("endArrow").is_some()
-        || c("arrowAlign").is_some()
-        || c("profile").is_some_and(|v| v.as_str() != Some("uniform"))
+    c("profile").is_some_and(|v| v.as_str() != Some("uniform"))
         || c("item").is_some()
         || c("target").is_some_and(|v| v.as_str() != Some("object"))
 }

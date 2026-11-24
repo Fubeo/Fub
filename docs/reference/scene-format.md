@@ -148,6 +148,15 @@ Radice di un documento nuovo:
   smussata. Senza l'attributo vale 4, come in SVG; il Disegno completo lo
   scrive solo con la giunzione ad angolo e un valore diverso da 4 (il suo
   predefinito è 10). Un valore minore di 1 rende l'elemento estraneo.
+- **Il tratto che un attributo non dice:** il tratto dentro o fuori dalla
+  forma, il tratteggio adattato agli angoli e le frecce del Disegno completo
+  si scrivono come li esporta VectorCraft: l'oggetto diventa un `<g>` con il
+  suo id, che porta la grafica semplice (il tratto dentro è il tratto a
+  spessore doppio con un `clip-path` sulla forma, quello fuori lo stesso con
+  una `mask` che toglie la forma; il tratteggio adattato e le punte sono
+  tracciati pieni), più la [ricetta](scene-format-recipe.md) dell'oggetto.
+  Ogni programma disegna lo stesso; il Disegno completo ritrova il tratto
+  dalla ricetta, e un Fub che non la conosce tiene il gruppo com'è.
 - **Colori:** si scrivono `#rrggbb` minuscolo oppure `none`. In lettura si
   accettano anche `#rgb` e i nomi CSS, normalizzati solo se l'elemento viene
   modificato. Ogni altra forma (`rgb()`, `hsl()`, `currentColor`,
