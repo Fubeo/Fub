@@ -819,6 +819,54 @@
     },
     {
       "fonte": "motore",
+      "id": "dimension.applyToAll",
+      "chiamata": {
+        "comando": "disegno.dimension.applyToAll"
+      },
+      "etichetta": {
+        "it": "Applica a tutti",
+        "en": "Apply to All"
+      },
+      "posto": "ispettore/design/documento",
+      "famiglia": "tavole",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "dimension.create",
+      "chiamata": {
+        "comando": "disegno.dimension.create"
+      },
+      "etichetta": {
+        "it": "Crea quota",
+        "en": "Create Dimension"
+      },
+      "posto": "ispettore/design/documento",
+      "famiglia": "tavole",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "dimension.update",
+      "chiamata": {
+        "comando": "disegno.dimension.update"
+      },
+      "etichetta": {
+        "it": "Aggiorna quote",
+        "en": "Update Dimensions"
+      },
+      "posto": "ispettore/design/documento",
+      "famiglia": "tavole",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "document.find",
       "chiamata": {
         "comando": "disegno.document.find"

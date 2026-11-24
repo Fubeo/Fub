@@ -485,6 +485,19 @@ pub fn esito_albero(n: &Node) -> Esito {
     e
 }
 
+/// Vero se `n` è un tracciato che non disegna niente: nessun riempimento e
+/// nessun contorno visibili. L'import non ne fa un oggetto (`applica`), e
+/// solo la sua ricetta lo rimette al suo posto alla riapertura.
+pub(crate) fn non_disegna(n: &Node) -> bool {
+    use vectorcraft_doc::AppearanceItem;
+    n.children().is_none()
+        && n.path_data().is_some()
+        && !n.appearance.items.iter().any(|i| match i {
+            AppearanceItem::Fill(f) => f.visible && !f.paint.is_none(),
+            AppearanceItem::Stroke(s) => s.visible && !s.paint.is_none() && s.width > 0.0,
+        })
+}
+
 /// I costrutti di `n` e di tutto ciò che contiene, senza ripetizioni e in
 /// un ordine fisso.
 pub fn costrutti_albero(n: &Node) -> Vec<Costrutto> {
@@ -1005,6 +1018,42 @@ fn risorse_presenti(doc: &Document, n: &Node) -> Result<(), Rifiutata> {
 /// Toglie i nomi agli oggetti dentro `n`: vengono dal documento in cui la
 /// ricetta è nata e non devono confondersi con gli elementi di questo. Restano
 /// i nomi che per il motore sono un ruolo ([`nome_di_ruolo`]).
+/// Gli id di `n` e di ogni nodo dentro.
+fn ids_dentro(n: &Node) -> HashSet<vectorcraft_doc::NodeId> {
+    let mut ids = HashSet::new();
+    let mut coda = vec![n];
+    while let Some(n) = coda.pop() {
+        ids.insert(n.id);
+        if let Some(figli) = n.children() {
+            coda.extend(figli.iter().map(|c| c.as_ref()));
+        }
+    }
+    ids
+}
+
+/// Una Quota legata a un oggetto fuori dalla ricetta (`source`) perde il
+/// legame: la ricetta tiene gli id del motore, che alla riapertura si
+/// rinumerano, e il legame punterebbe a un altro oggetto o a nessuno. La
+/// quota resta com'è, con le sue misure e il suo stile.
+fn senza_legami_esterni(n: &mut Node, dentro: &HashSet<vectorcraft_doc::NodeId>) {
+    let esterno = n.extras().dimension.as_ref().is_some_and(|d| {
+        d.source
+            .as_ref()
+            .is_some_and(|s| s.nodes().iter().any(|id| !dentro.contains(id)))
+    });
+    if esterno {
+        if let Some(d) = n.extras_mut().dimension.as_mut() {
+            d.source = None;
+            d.moved = None;
+        }
+    }
+    if let Some(figli) = n.children_mut() {
+        for c in figli.iter_mut() {
+            senza_legami_esterni(std::sync::Arc::make_mut(c), dentro);
+        }
+    }
+}
+
 fn senza_nomi_dentro(n: &mut Node) {
     let shaper = n.extras().shaper.is_some();
     let grafico = n.extras().graph.is_some();
@@ -1051,6 +1100,8 @@ pub(crate) fn codifica(n: &Node, locale: Affine) -> Result<Vec<u8>, String> {
         copia.name = None;
     }
     senza_nomi_dentro(&mut copia);
+    let dentro = ids_dentro(&copia);
+    senza_legami_esterni(&mut copia, &dentro);
     copia.transform(locale, Scaling::from(true));
     let byte = vectorcraft_svg::recipe_of(&copia);
     match senza_file(&byte) {

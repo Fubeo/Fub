@@ -131,9 +131,9 @@ motore	css.export	Export CSS		web	F3	T22	da fare	ispettore/design/documento	fami
 motore	path.mirrorCut	Mirror & Cut		tracciati	F1	T12	fatto	ispettore/design	famiglia		Specchia e taglia
 motore	path.lineCut	Line Cut		tracciati	F1	T12	fatto	ispettore/design	famiglia		Taglio linea
 motore	path.rectCut	Rectangle Cut		tracciati	F1	T12	fatto	ispettore/design	famiglia		Taglio rettangolare
-motore	dimension.create	Create Dimension		tavole	F2	T19	da fare	ispettore/design/documento	famiglia		Crea quota
-motore	dimension.update	Update Dimensions		tavole	F2	T19	da fare	ispettore/design/documento	famiglia		Aggiorna quote
-motore	dimension.applyToAll	Apply to All		tavole	F2	T19	da fare	ispettore/design/documento	famiglia		Applica a tutti
+motore	dimension.create	Create Dimension		tavole	F2	T19	fatto	ispettore/design/documento	famiglia		Crea quota
+motore	dimension.update	Update Dimensions		tavole	F2	T19	fatto	ispettore/design/documento	famiglia		Aggiorna quote
+motore	dimension.applyToAll	Apply to All		tavole	F2	T19	fatto	ispettore/design/documento	famiglia		Applica a tutti
 motore	stroke.widthPoint.set	Width Point		aspetto	F1	T15	da fare	ispettore/design	famiglia	lo strumento Larghezza scrive il profilo nella ricetta del file (letto alla riapertura); manca la voce nell'ispettore	Punto di larghezza
 motore	stroke.widthPoint.remove	Delete Width Point		aspetto	F1	T15	da fare	ispettore/design	famiglia	lo strumento Larghezza scrive il profilo nella ricetta del file (letto alla riapertura); manca la voce nell'ispettore	Elimina punto di larghezza
 motore	stroke.widthPoint.copy	Copy Width Point		aspetto	F1	T15	da fare	ispettore/design	famiglia	lo strumento Larghezza scrive il profilo nella ricetta del file (letto alla riapertura); manca la voce nell'ispettore	Copia punto di larghezza

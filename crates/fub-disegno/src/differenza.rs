@@ -906,8 +906,10 @@ impl Lavoro<'_> {
                     .ok_or(Rifiuto::Vuoto)?;
                 // Riscritto senza più niente che solo il motore sa dire (gli
                 // Oggetti sul tracciato espansi: lo stesso gruppo, ora
-                // semplice): il corpo basta, e la ricetta di prima cade.
-                if ricetta::esito_albero(nodo) > Esito::Corpo {
+                // semplice): il corpo basta, e la ricetta di prima cade. Un
+                // tracciato che non disegna niente la tiene: l'import non lo
+                // porterebbe.
+                if ricetta::esito_albero(nodo) > Esito::Corpo || ricetta::non_disegna(nodo) {
                     let byte = ricetta::codifica(nodo, locale).map_err(no)?;
                     self.ricette.nuove.push(vectorcraft_svg::recipe_element(
                         &id,
