@@ -519,6 +519,11 @@ export interface GestiMotoreContext {
   /// quando esce dal foglio o preme. Con uno strumento del motore scelto il
   /// passaggio va al motore (cursore e segni, come in VectorCraft).
   motoreSopra: (p: Point | null) => void;
+  /// La vista è cambiata (zoom, spostamento, rotazione): i segni che restano
+  /// sul foglio senza un gesto (la Misura, il passaggio) si rifanno alla
+  /// scala nuova, come VectorCraft che li ridisegna a ogni fotogramma.
+  /// Facoltativo: la vista nasce prima dei gesti del motore.
+  motoreVista?: () => void;
   /// Il Pennello tondo (K6 T12, giro 2): a rilascio il colpo va al motore in un solo comando col colore.
   pennelloEnd: (punti: readonly Point[], colore: string) => void;
 }
@@ -820,8 +825,9 @@ export function installGestiMotore(ctx: EditorContext): void {
   let sopra: Point | null = null;
   let fotogrammaSopra: number | null = null;
   let sopraInVolo = false;
-  /// I segni del passaggio sono sul foglio.
+  /// I segni del passaggio sono sul foglio, e quelli che il motore ha dato.
   let segniSopra = false;
+  let ultimiSopra: readonly DrawingOverlay[] = [];
 
   const togliSegniSopra = (): void => {
     if (!segniSopra) return;
@@ -847,6 +853,23 @@ export function installGestiMotore(ctx: EditorContext): void {
     if (fotogrammaSopra !== null) cancelAnimationFrame(fotogrammaSopra);
   });
 
+  /// I segni del passaggio, con la misura che resta, alla scala di adesso.
+  /// `false` se non ce n'è nessuno.
+  const mostraSopra = (id: string): boolean => {
+    const conMisura = misura !== null && tieneLaMisura(id) ? misura : [];
+    const segni = segniComeForma([...conMisura, ...ultimiSopra], ctx.camera.scale);
+    if (segni === null) return false;
+    segniSopra = true;
+    ctx.showShape(segni, IDENTITY);
+    return true;
+  };
+  ctx.motoreVista = () => {
+    if (ctx.disposed || ctx.current !== null) return;
+    const id = ctx.motoreTool;
+    if (segniSopra && id !== null) mostraSopra(id);
+    else mostraMisura();
+  };
+
   const mandaSopra = (): void => {
     fotogrammaSopra = null;
     const p = sopra;
@@ -871,13 +894,8 @@ export function installGestiMotore(ctx: EditorContext): void {
         }
         if (esito.state) ctx.surface.style.cursor = cursoreDelloStrumento(id, esito.state.cursor, ctx.preciseCursors);
         // Misura e ispeziona legge il tracciato sotto il mouse accanto alla misura che resta.
-        const conMisura = misura !== null && tieneLaMisura(id) ? misura : [];
-        const segni = segniComeForma([...conMisura, ...(esito.preview?.overlays ?? [])], ctx.camera.scale);
-        if (segni === null) togliSegniSopra();
-        else {
-          segniSopra = true;
-          ctx.showShape(segni, IDENTITY);
-        }
+        ultimiSopra = esito.preview?.overlays ?? [];
+        if (!mostraSopra(id)) togliSegniSopra();
       })
       .catch((error: unknown) => {
         console.error(error);

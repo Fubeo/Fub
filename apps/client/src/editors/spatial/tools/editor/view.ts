@@ -270,6 +270,8 @@ export function installView(ctx: EditorContext): void {
     // Il fondo del foglio rende la parte della pagina che si vede.
     const size = surfaceSize();
     folio?.view?.(next, size.w, size.h);
+    // I segni del motore che restano sul foglio (la Misura) si rifanno alla scala nuova.
+    ctx.motoreVista?.();
   };
   ctx.setCamera = setCamera;
   /// Il formato delle coordinate dette a voce, nella lingua di adesso.

@@ -1324,6 +1324,24 @@ describe("la Misura del motore: la misura resta sul foglio", () => {
     await settle(16, 8);
     expect(scritteSulFoglio()).toEqual([]);
   });
+
+  it("a uno zoom fatto dopo, le scritte che restano si rifanno alla scala nuova", async () => {
+    const fake = createFakeHost({ drawing: misuraFinta() });
+    const editor = await montaConPreparazione(EMPTY, fake);
+    editor.setEngineTool("measure");
+    await drag(editor, [[100, 100], [160, 100]]);
+    await settle(16, 8);
+    const corpo = (): number => Number(host.querySelector(".draw-engine-text")?.getAttribute("font-size"));
+    const scala = editor.stage.camera.scale;
+    expect(corpo()).toBeCloseTo(11 / scala);
+    const rotella = new WheelEvent("wheel", { deltaY: -200, bubbles: true, cancelable: true });
+    for (const [name, value] of Object.entries({ ctrlKey: true, shiftKey: false, metaKey: false, clientX: 40, clientY: 40 })) Object.defineProperty(rotella, name, { value });
+    surfaceOf().dispatchEvent(rotella);
+    await settle(16, 8);
+    expect(editor.stage.camera.scale).not.toBeCloseTo(scala);
+    expect(scritteSulFoglio()).toHaveLength(1);
+    expect(corpo()).toBeCloseTo(11 / editor.stage.camera.scale);
+  });
 });
 
 describe("le frecce durante il trascinamento di uno strumento del motore", () => {

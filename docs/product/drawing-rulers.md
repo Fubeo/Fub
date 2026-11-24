@@ -47,8 +47,9 @@ verticale; con Maiusc la linea va a passi di 45°, e senza si aggancia come
 gli altri strumenti. Il disegno non cambia e non c'è un passo di annulla. La
 linea e le misure restano sul foglio fino alla misura dopo; Esc a metà
 trascinamento la annulla e riporta quella di prima, e un altro strumento le
-toglie. Con «Etichette delle misure» spenta resta solo la linea. Le scritte
-non si rifanno a uno zoom fatto dopo.
+toglie. Con «Etichette delle misure» spenta resta solo la linea. A uno zoom
+fatto dopo, le scritte si rifanno alla scala nuova, come i segni del
+passaggio di «Misura e ispeziona».
 
 Accanto c'è **Misura e ispeziona**, che VectorCraft ha in più: il
 trascinamento misura come la Misura, e la misura resta allo stesso modo. Il
