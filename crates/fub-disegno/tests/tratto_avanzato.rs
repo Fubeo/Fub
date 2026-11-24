@@ -111,3 +111,104 @@ fn su_un_tracciato_chiuso_la_freccia_si_ricorda_ma_non_si_disegna() {
     assert!(ops.contains("<rect id=\\\"oa1a1a1a1\\\""), "{ops}");
     assert!(ops.contains("vectorcraft:recipe"), "{ops}");
 }
+
+/// La scala delle frecce (`stroke.setAdvanced`): la punta disegnata cresce, e
+/// la ricetta ricorda la scala dopo la riapertura, dove la lettura del nodo la
+/// dà al pannello insieme a `canAlign`.
+#[test]
+fn la_scala_delle_frecce_si_ricorda() {
+    let (mut d, _) = apri(LINEA);
+    let ops = ops_di(&tratto(
+        &mut d,
+        "op1p1p1p1",
+        json!({"endArrow": "Triangle"}),
+    ));
+    let testo = common::applica::applica(LINEA, &ops).expect("la scena accetta");
+    let (mut d, _) = apri(&testo);
+    let esito = d
+        .comando(DrawingCommandRequest {
+            revision: d.revisione(),
+            id: "disegno.stroke.setAdvanced".into(),
+            selection: vec!["op1p1p1p1".into()],
+            value: json!({"arrowScale": [100, 250]}),
+            preview: false,
+        })
+        .expect("il comando passa");
+    assert_eq!(esito.refused, None, "{esito:?}");
+    let grande = common::applica::applica(&testo, &ops_di(&esito)).expect("la scena accetta");
+    assert_ne!(grande, testo);
+    let (mut d, aperto) = apri(&grande);
+    assert!(aperto.losses.is_empty(), "{:?}", aperto.losses);
+    let nodo = |d: &mut fub_disegno::motore::Disegno, id: &str| {
+        d.comando(DrawingCommandRequest {
+            revision: d.revisione(),
+            id: "disegno.document.node".into(),
+            selection: vec![],
+            value: json!({"id": id, "summary": true}),
+            preview: false,
+        })
+        .expect("la lettura passa")
+        .reading
+        .expect("c'è una lettura")
+    };
+    let aperto = nodo(&mut d, "op1p1p1p1");
+    assert_eq!(aperto["strokeOptions"]["arrowScale"], json!([100.0, 250.0]));
+    assert_eq!(aperto["strokeOptions"]["endArrow"], json!("Triangle"));
+    assert_eq!(aperto["strokeOptions"]["canAlign"], json!(false));
+    assert_eq!(
+        nodo(&mut d, "oa1a1a1a1")["strokeOptions"]["canAlign"],
+        json!(true)
+    );
+}
+
+/// Lo scambio delle punte porta la freccia dalla fine all'inizio.
+#[test]
+fn lo_scambio_porta_la_freccia_all_inizio() {
+    let (mut d, _) = apri(LINEA);
+    let ops = ops_di(&tratto(&mut d, "op1p1p1p1", json!({"endArrow": "Circle"})));
+    let testo = common::applica::applica(LINEA, &ops).expect("la scena accetta");
+    let (mut d, _) = apri(&testo);
+    let esito = d
+        .comando(DrawingCommandRequest {
+            revision: d.revisione(),
+            id: "disegno.stroke.setAdvanced".into(),
+            selection: vec!["op1p1p1p1".into()],
+            value: json!({"swapArrows": true}),
+            preview: false,
+        })
+        .expect("il comando passa");
+    assert_eq!(esito.refused, None, "{esito:?}");
+    let scambiato = common::applica::applica(&testo, &ops_di(&esito)).expect("la scena accetta");
+    let (mut d, _) = apri(&scambiato);
+    let lettura = d
+        .comando(DrawingCommandRequest {
+            revision: d.revisione(),
+            id: "disegno.document.node".into(),
+            selection: vec![],
+            value: json!({"id": "op1p1p1p1", "summary": true}),
+            preview: false,
+        })
+        .expect("la lettura passa")
+        .reading
+        .expect("c'è una lettura");
+    assert_eq!(lettura["strokeOptions"]["startArrow"], json!("Circle"));
+    assert_eq!(lettura["strokeOptions"]["endArrow"], Value::Null);
+}
+
+/// Il profilo rovesciato e il pennello non hanno ancora una forma nel file.
+#[test]
+fn profilo_e_pennello_restano_fuori() {
+    for valore in [json!({"flipProfile": "along"}), json!({"brush": "Gesso"})] {
+        let (mut d, _) = apri(LINEA);
+        let esito = d
+            .comando(DrawingCommandRequest {
+                revision: d.revisione(),
+                id: "disegno.stroke.setAdvanced".into(),
+                selection: vec!["oa1a1a1a1".into()],
+                value: valore,
+                preview: false,
+            })
+            .expect("il comando risponde");
+        assert_eq!(esito.refused, Some(fub_abi::DrawingRefusal::Unsupported));
+    }
+}

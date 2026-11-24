@@ -7,7 +7,7 @@ use fub_abi::{DrawingDisabledReason, DrawingRefusal, PluginError};
 use fub_motori::{ErroreMotore, Servizi};
 use fub_scene::Role;
 use serde_json::Value;
-use vectorcraft_doc::NodeId;
+use vectorcraft_doc::{NodeId, NodeKind};
 
 use super::{nodi_scelti, StatoFamiglia};
 use crate::apertura::Copia;
@@ -88,6 +88,25 @@ impl StatoFamiglia for Stato {
 
     /// Sposta sul livello corrente: l'id del livello corrente esce dal valore
     /// (il motore non lo conosce); un id che non è una stringa è `BadArgs`.
+    /// Ispeziona oggetto con `summary`: alle opzioni del contorno (`strokeOptions`) si aggiungono
+    /// ciò che il pannello Contorno di VectorCraft legge dal tratto e il riassunto del motore non
+    /// porta: la scala delle frecce (`arrowScale`, inizio e fine in %) e se l'allineamento dentro o
+    /// fuori vale per l'oggetto (`canAlign`: niente tracciati aperti fra le forme che dipinge).
+    fn lettura(&self, id: &str, copia: &Copia, mut risultato: Value) -> Value {
+        if id != "document.node" {
+            return risultato;
+        }
+        let Some(nodo) = risultato.get("id").and_then(Value::as_u64).and_then(|n| copia.documento.node(NodeId(n))) else {
+            return risultato;
+        };
+        let tratto = vectorcraft_engine::inspect::node_stroke(nodo);
+        if let (Some(opzioni), Some(tratto)) = (risultato.get_mut("strokeOptions").and_then(Value::as_object_mut), tratto) {
+            opzioni.insert("arrowScale".into(), serde_json::json!([tratto.arrow_scale.0, tratto.arrow_scale.1]));
+            opzioni.insert("canAlign".into(), Value::Bool(si_allinea(nodo)));
+        }
+        risultato
+    }
+
     fn argomenti_della_copia(id: &str, copia: &Copia, _selezione: &[String], mut valore: Value) -> Result<Value, PluginError> {
         // Ispeziona oggetto prende anche l'id del file (le sezioni dell'ispettore
         // leggono così, per esempio, le opzioni di un gruppo di oggetti sul
@@ -115,6 +134,32 @@ impl StatoFamiglia for Stato {
         }
         Ok(valore)
     }
+}
+
+/// Il tratto di `n` si allinea dentro o fuori: come `stroke_mixed` di VectorCraft, guarda le forme
+/// che l'oggetto dipinge (dentro gruppi e livelli; un testo si allinea ai contorni dei caratteri,
+/// che sono chiusi) e vuole che nessuna sia un tracciato aperto.
+fn si_allinea(n: &vectorcraft_doc::Node) -> bool {
+    fn chiusa(n: &vectorcraft_doc::Node) -> bool {
+        match &n.kind {
+            NodeKind::Path { path, .. } => path.is_closed(),
+            NodeKind::Compound { children, .. } => children.iter().all(|c| chiusa(c)),
+            _ => true,
+        }
+    }
+    fn dipinte(n: &vectorcraft_doc::Node, cima: bool) -> bool {
+        let apri = match n.kind {
+            NodeKind::Group { .. } | NodeKind::Layer { .. } => true,
+            NodeKind::Compound { .. } => false,
+            _ => !cima && n.is_container(),
+        };
+        if apri {
+            n.children().into_iter().flatten().all(|c| dipinte(c, false))
+        } else {
+            matches!(n.kind, NodeKind::Text(_)) || chiusa(n)
+        }
+    }
+    dipinte(n, true)
 }
 
 /// Il livello corrente nel documento del motore, dato l'id di Fub che il client

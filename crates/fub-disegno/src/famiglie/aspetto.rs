@@ -36,6 +36,15 @@ const TRASPARENZA: &str = "transparency.set";
 /// Il contorno: spessore, estremi, angoli, tratteggio.
 pub(crate) const CONTORNO: &str = "stroke.set";
 
+/// Le opzioni in più del pannello Contorno: la scala delle frecce e lo scambio delle due punte. Ha le
+/// regole del contorno (spento, rifiuti, testi saltati).
+const CONTORNO_AVANZATO: &str = "stroke.setAdvanced";
+
+/// `stroke.set` o `stroke.setAdvanced`.
+fn del_contorno(id: &str) -> bool {
+    id == CONTORNO || id == CONTORNO_AVANZATO
+}
+
 /// Crea la maschera di opacità (K6 T15, giro maschere): con due oggetti o più, il più alto fa da
 /// maschera degli altri, che vanno in un gruppo con `mask`.
 const CREA_MASCHERA: &str = "transparency.makeOpacityMask";
@@ -148,7 +157,7 @@ impl StatoFamiglia for Stato {
         if matches!(id, RIDUCI | AGGIUNGI_RIEMPIMENTO | AGGIUNGI_CONTORNO) {
             return spento_oggetti(copia, selezione);
         }
-        if id != TRASPARENZA && id != CONTORNO {
+        if id != TRASPARENZA && !del_contorno(id) {
             return None;
         }
         if selezione.is_empty() {
@@ -162,7 +171,7 @@ impl StatoFamiglia for Stato {
             Err(DrawingRefusal::Locked) => return Some(DrawingDisabledReason::ReadOnly),
             Err(_) => return Some(DrawingDisabledReason::Unmapped),
         };
-        if id == CONTORNO {
+        if del_contorno(id) {
             if sceglie_inchiostro(copia, selezione) {
                 return Some(DrawingDisabledReason::FubInk);
             }
@@ -194,7 +203,7 @@ impl StatoFamiglia for Stato {
                 _ => Some(DrawingRefusal::Empty),
             };
         }
-        if id != CONTORNO {
+        if !del_contorno(id) {
             return None;
         }
         if sceglie_inchiostro(copia, selezione) {
@@ -221,6 +230,12 @@ impl StatoFamiglia for Stato {
             let c = |chiave: &str| valore.get(chiave).and_then(Value::as_bool);
             return (c("clip") == Some(false) || c("invert") == Some(true)).then_some(DrawingRefusal::Unsupported);
         }
+        if id == CONTORNO_AVANZATO {
+            // Il profilo rovesciato aspetta i profili nella scena, come `stroke.set`; il pennello non
+            // ha una forma nel file.
+            let c = |chiave: &str| valore.get(chiave).is_some();
+            return (c("flipProfile") || c("brush") || fuori_dalla_scena(valore)).then_some(DrawingRefusal::Unsupported);
+        }
         (id == CONTORNO && fuori_dalla_scena(valore)).then_some(DrawingRefusal::Unsupported)
     }
 
@@ -234,7 +249,7 @@ impl StatoFamiglia for Stato {
         if let Some(sfumatura) = come_sfumatura(id) {
             return Colore::rifiuto_dopo(sfumatura, copia, dopo, scelti_dopo);
         }
-        (id == CONTORNO && inchiostro_toccato(copia, dopo)).then_some(DrawingRefusal::Unmapped)
+        (del_contorno(id) && inchiostro_toccato(copia, dopo)).then_some(DrawingRefusal::Unmapped)
     }
 
     /// In una selezione con testi e forme il contorno va alle forme, una alla volta nella stessa
@@ -243,7 +258,7 @@ impl StatoFamiglia for Stato {
         if let Some(sfumatura) = come_sfumatura(id) {
             return Colore::uno_alla_volta(sfumatura, copia, selezione);
         }
-        if id != CONTORNO {
+        if !del_contorno(id) {
             return None;
         }
         let scelti = nodi_scelti(copia, selezione).ok()?;

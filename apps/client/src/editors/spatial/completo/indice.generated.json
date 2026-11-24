@@ -5155,6 +5155,22 @@
     },
     {
       "fonte": "motore",
+      "id": "stroke.setAdvanced",
+      "chiamata": {
+        "comando": "disegno.stroke.setAdvanced"
+      },
+      "etichetta": {
+        "it": "Opzioni tratto",
+        "en": "Stroke Options"
+      },
+      "posto": "ispettore/design/contorno",
+      "famiglia": "aspetto",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "swatch.addUsedColors",
       "chiamata": {
         "comando": "disegno.swatch.addUsedColors"
