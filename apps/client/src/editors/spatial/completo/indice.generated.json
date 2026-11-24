@@ -5811,6 +5811,22 @@
     },
     {
       "fonte": "motore",
+      "id": "text.setText",
+      "chiamata": {
+        "comando": "disegno.text.setText"
+      },
+      "etichetta": {
+        "it": "Imposta testo",
+        "en": "Set Text"
+      },
+      "posto": "ispettore/design",
+      "famiglia": "testo",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "text.tabs.get",
       "chiamata": {
         "comando": "disegno.text.tabs.get"

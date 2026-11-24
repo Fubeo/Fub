@@ -634,7 +634,7 @@ motore	type.scaleTextAttributes	Scale Text Attributes	Type	testo	F2	T16	fatto	me
 motore	type.opticalMarginAlignment	Optical Margin Alignment	Type	testo	F2	T16	da fare	menu/testo	famiglia		Allineamento ottico dei margini
 motore	type.systemLayout	System Layout		testo	F2	T16	da fare	ispettore/design	famiglia		Layout di sistema
 motore	type.fractionalWidths	Fractional Widths		testo	F2	T16	da fare	ispettore/design	famiglia		Larghezze frazionarie
-motore	text.setText	Set Text		testo	F2	T16	da fare	ispettore/design	famiglia		Imposta testo
+motore	text.setText	Set Text		testo	F2	T16	fatto	ispettore/design	famiglia		Imposta testo
 motore	text.areaOptions	Area Type Options…	Type	testo	F2	T16	da fare	menu/testo	famiglia	finestra	Opzioni testo in area…
 motore	text.reshapeArea	Reshape Type Area		testo	F2	T16	da fare	ispettore/design	famiglia		Rimodella area di testo
 motore	text.reshapePath	Reshape Type Path		testo	F2	T16	da fare	ispettore/design	famiglia		Reshape Type Path

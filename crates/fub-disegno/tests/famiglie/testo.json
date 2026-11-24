@@ -624,6 +624,8 @@
     {"id": "type.scaleTextAttributes", "disegno": "base.svg", "selezione": ["ot1t1t1t1"], "argomenti": {}, "atteso": {"rifiuto": "empty"}},
     {"id": "text.replaceFont", "disegno": "base.svg", "selezione": ["ot2t2t2t2"], "argomenti": {"from": {"family": "Inter"}, "to": {"family": "Nessuno"}}, "atteso": {"errore": "bad_args"}},
     {"id": "type.findFont", "fonte": "interfaccia", "prova": "apps/client/src/editors/spatial/completo/trova-carattere.test.ts"},
+    {"id": "text.setText", "disegno": "base.svg", "selezione": ["ot2t2t2t2"], "argomenti": {"text": "Neve"}, "atteso": {"ops": [{"op": "text", "id": "ot2t2t2t2", "lines": ["Neve"]}]}, "dopo": "text-setText.svg"},
+    {"id": "text.setText", "disegno": "base.svg", "selezione": ["ot2t2t2t2"], "argomenti": {"text": "Neve\nal sole"}, "atteso": {"ops": [{"op": "text", "id": "ot2t2t2t2", "lines": ["Neve", "al sole"]}]}, "dopo": "text-setText-righe.svg"},
     {"id": "type.bold", "fonte": "interfaccia", "prova": "apps/client/src/editors/spatial/completo/famiglie/testo/stile.test.ts"},
     {"id": "type.italic", "fonte": "interfaccia", "prova": "apps/client/src/editors/spatial/completo/famiglie/testo/stile.test.ts"},
     {"id": "type.underline", "fonte": "interfaccia", "prova": "apps/client/src/editors/spatial/completo/famiglie/testo/stile.test.ts"},
