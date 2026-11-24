@@ -154,7 +154,11 @@ esportazione SVG (`crates/fub-disegno/src/espansa.rs`): l'oggetto da solo,
 già nello spazio del genitore, su un documento con le risorse di quello
 vero. Gli effetti dal vivo sono applicati, l'aspetto impilato è un
 elemento per ogni riempimento e contorno, le forme dal vivo hanno la loro
-geometria, i testi sono contorni, le ombre e le sfocature sono filtri.
+geometria, i testi sono contorni, le ombre e le sfocature sono filtri, e
+gli effetti a pixel (Artistico, Pennellate, Schizzo, Texture, Pixel, Video,
+Sfocatura radiale e migliore, Maschera di contrasto, Bordi luminosi,
+Rasterizza) sono un'immagine PNG dell'oggetto alla risoluzione degli effetti
+del documento, come nell'esportazione SVG di VectorCraft.
 Il corpo è un elemento solo con l'id dell'oggetto:
 
 - l'elemento che l'esportazione scrive, se è uno, senza risorse e senza

@@ -3,7 +3,9 @@
 // campi delle finestre degli effetti (`campo:<nome>`, o `campo:<id>:<nome>`
 // per un effetto solo) e delle loro scelte (`scelta:<campo>:<valore>`).
 
-export const TESTI: Readonly<Record<string, { readonly it: string; readonly en: string }>> = {
+export const TESTI: Readonly<
+  Record<string, { readonly it: string; readonly en: string }>
+> = {
   // Arrotonda angoli (stylize.roundCorners).
   "campo:radius": { it: "Raggio", en: "Radius" },
   // Distorci e trasforma, Tracciato, Converti in forma.
@@ -34,7 +36,10 @@ export const TESTI: Readonly<Record<string, { readonly it: string; readonly en: 
   "campo:random": { it: "Casuale", en: "Random" },
   "campo:objects": { it: "Trasforma oggetti", en: "Transform Objects" },
   "campo:patterns": { it: "Trasforma pattern", en: "Transform Patterns" },
-  "campo:strokes": { it: "Scala tratti ed effetti", en: "Scale Strokes & Effects" },
+  "campo:strokes": {
+    it: "Scala tratti ed effetti",
+    en: "Scale Strokes & Effects",
+  },
   "campo:corners": { it: "Angoli", en: "Corners" },
   "campo:offset": { it: "Spostamento", en: "Offset" },
   "campo:joins": { it: "Unioni", en: "Joins" },
@@ -48,12 +53,21 @@ export const TESTI: Readonly<Record<string, { readonly it: string; readonly en: 
   "campo:height": { it: "Altezza", en: "Height" },
   // Stilizza › Scarabocchio, Tracciato › Contorna traccia.
   "campo:overlap": { it: "Sovrapposizione", en: "Path Overlap" },
-  "campo:overlapVariation": { it: "Variazione sovrapposizione", en: "Overlap Variation" },
+  "campo:overlapVariation": {
+    it: "Variazione sovrapposizione",
+    en: "Overlap Variation",
+  },
   "campo:strokeWidth": { it: "Spessore tratto", en: "Stroke Width" },
   "campo:curviness": { it: "Curvatura", en: "Curviness" },
-  "campo:curvinessVariation": { it: "Variazione curvatura", en: "Curviness Variation" },
+  "campo:curvinessVariation": {
+    it: "Variazione curvatura",
+    en: "Curviness Variation",
+  },
   "campo:spacing": { it: "Spaziatura", en: "Spacing" },
-  "campo:spacingVariation": { it: "Variazione spaziatura", en: "Spacing Variation" },
+  "campo:spacingVariation": {
+    it: "Variazione spaziatura",
+    en: "Spacing Variation",
+  },
   "campo:variation": { it: "Variazione", en: "Variation" },
   // Regolazioni (adjust.*).
   "campo:brightness": { it: "Luminosità", en: "Brightness" },
@@ -74,7 +88,10 @@ export const TESTI: Readonly<Record<string, { readonly it: string; readonly en: 
   "campo:outputBlack": { it: "Nero in uscita", en: "Output Black" },
   "campo:outputWhite": { it: "Bianco in uscita", en: "Output White" },
   "campo:color": { it: "Colore", en: "Color" },
-  "campo:preserveLightness": { it: "Mantieni la luminosità", en: "Preserve Lightness" },
+  "campo:preserveLightness": {
+    it: "Mantieni la luminosità",
+    en: "Preserve Lightness",
+  },
   "campo:temperature": { it: "Temperatura", en: "Temperature" },
   "campo:tint": { it: "Tinta", en: "Tint" },
   // Effetti colore (addon.color.*).
@@ -134,13 +151,22 @@ export const TESTI: Readonly<Record<string, { readonly it: string; readonly en: 
   "campo:thickness": { it: "Spessore", en: "Thickness" },
   "campo:heightWidth": { it: "Altezza/larghezza", en: "Height/Width" },
   "campo:tintReduction": { it: "Riduzione tinta", en: "Tint Reduction" },
-  "campo:trapsWithProcessColor": { it: "Abbondanze in quadricromia", en: "Traps with Process Color" },
+  "campo:trapsWithProcessColor": {
+    it: "Abbondanze in quadricromia",
+    en: "Traps with Process Color",
+  },
   "campo:reverseTraps": { it: "Inverti le abbondanze", en: "Reverse Traps" },
   "campo:precision": { it: "Precisione", en: "Precision" },
-  "campo:removeRedundantPoints": { it: "Togli i punti superflui", en: "Remove Redundant Points" },
+  "campo:removeRedundantPoints": {
+    it: "Togli i punti superflui",
+    en: "Remove Redundant Points",
+  },
   // Deforma (warp.*).
   "campo:bend": { it: "Piega", en: "Bend" },
-  "campo:horizontal": { it: "Distorsione orizzontale", en: "Horizontal Distortion" },
+  "campo:horizontal": {
+    it: "Distorsione orizzontale",
+    en: "Horizontal Distortion",
+  },
   "campo:vertical": { it: "Distorsione verticale", en: "Vertical Distortion" },
   "campo:orientation": { it: "Direzione", en: "Orientation" },
   "scelta:orientation:horizontal": { it: "Orizzontale", en: "Horizontal" },

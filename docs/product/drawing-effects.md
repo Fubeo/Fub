@@ -148,7 +148,14 @@ oggetto bloccato o su un disegno di sola lettura. Oggi ci sono:
 - **Stilizza ›** Arrotonda angoli, Ombra esterna, Bagliore interno, Bagliore
   esterno, Sfuma bordi, Scarabocchio (il metodo di fusione dell'ombra e dei
   bagliori si sceglie fra quelli del pannello Trasparenza);
-- **Sfocatura ›** Sfocatura gaussiana;
+- **Sfocatura ›** Sfocatura gaussiana, Sfocatura radiale, Sfocatura migliore;
+- **Nitidezza ›** Maschera di contrasto;
+- **Artistico, Pennellate, Schizzo, Texture, Pixel, Video, Distorci ›** tutti
+  i filtri a pixel (Matita colorata, Neon, Acquerello, Sumi-e, Carboncino,
+  Cromatura, Mosaico, Vetro, Increspatura, Cristallizza, Deinterlaccia…), più
+  Bordi luminosi in Stilizza e **Rasterizza**: nel file l'oggetto diventa
+  un'immagine di come appare, e la ricetta tiene l'oggetto e l'effetto per
+  cambiarlo ancora;
 - **Distorci e trasforma ›** Contrai e gonfia, Torci, Zig-zag, Irruvidisci,
   Ritocca, Trasforma (con le copie), Distorsione libera;
 - **Tracciato ›** Sposta tracciato, Contorna oggetto, Contorna traccia;

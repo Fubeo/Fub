@@ -5,7 +5,8 @@
 //! Il motore sa già espandere un oggetto: la sua esportazione SVG cuoce gli
 //! effetti dal vivo (`bake_document`), scrive l'aspetto in pila come più
 //! elementi, le forme vive con la loro geometria, le ombre e le sfocature
-//! come filtri. Qui l'oggetto va da solo, già nello spazio del genitore, su
+//! come filtri, gli effetti a pixel come immagine (`flatten_pixel_effects`,
+//! come fa l'esportazione SVG del motore). Qui l'oggetto va da solo, già nello spazio del genitore, su
 //! un livello vuoto di un documento con le risorse di quello vero, e se ne
 //! prende ciò che l'esportazione scrive dentro il livello e dentro `<defs>`.
 //!
@@ -95,7 +96,10 @@ impl Stampo {
             outline_text: true,
             ..ExportOptions::default()
         };
-        let svg = vectorcraft_svg::export(&self.doc, &opzioni);
+        // Gli effetti a pixel (Artistico, Schizzo, Pennellate…, Rasterizza) l'SVG non li sa
+        // disegnare: l'esportazione del motore li scrive come immagine dell'oggetto, e così qui.
+        let piatto = vectorcraft_engine::cmd::rasterfx::flatten_pixel_effects(&self.doc);
+        let svg = vectorcraft_svg::export(piatto.as_ref().unwrap_or(&self.doc), &opzioni);
         self.doc.layers.clear();
         let pezzi = Pezzi::di(&svg)?;
         if !pezzi.elementi.iter().any(|e| disegna(e)) {

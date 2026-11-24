@@ -492,8 +492,16 @@ pub fn esegui(disegni: &Arc<Disegni>, caso: &Caso) -> Result<(), String> {
                     "{nome}: le operazioni non sono un passo: {ottenute}"
                 ));
             }
-            if let common::Confronto::Diverse(dove) = common::confronta_ops(attese, &ottenute, None)
-            {
+            // I pixel di un effetto a pixel (un'immagine PNG nel corpo espanso) passano dal seno e
+            // dal coseno della libreria di sistema, che fra Linux e Windows può differire di poco:
+            // le operazioni si confrontano senza i byte dell'immagine, e i pixel li prova
+            // l'oracolo qui sotto con la sua tolleranza.
+            let (a, o) = if caso.fonte == FonteMappa::Effetto {
+                (common::senza_pixel(attese), common::senza_pixel(&ottenute))
+            } else {
+                (attese.clone(), ottenute.clone())
+            };
+            if let common::Confronto::Diverse(dove) = common::confronta_ops(&a, &o, None) {
                 return Err(format!("{nome}: operazioni diverse: {dove}"));
             }
             scritte = Some(ottenute);
@@ -632,8 +640,11 @@ pub fn disegno_del_motore(caso: &Caso) -> Result<String, String> {
             .execute("effect.apply", &valore)
             .map_err(|e| format!("effect.apply: {e}"))?;
         let doc = &sessione.doc().map_err(|e| e.to_string())?.doc;
+        // Come l'esportazione SVG del motore (`cmd/fileio/svg.rs`): gli effetti a pixel prima
+        // diventano immagini dell'oggetto.
+        let piatto = vectorcraft_engine::cmd::rasterfx::flatten_pixel_effects(doc);
         Ok(vectorcraft_svg::export(
-            doc,
+            piatto.as_ref().unwrap_or(doc),
             &vectorcraft_svg::ExportOptions {
                 artboard: Some(0),
                 ..Default::default()

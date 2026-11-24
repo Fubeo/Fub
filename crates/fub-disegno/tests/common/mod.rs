@@ -155,6 +155,32 @@ pub fn confronta_ops(attese: &Value, ottenute: &Value, ammessa: Option<&str>) ->
     }
 }
 
+/// `v` con i byte di ogni immagine PNG incorporata (`data:image/png;base64,…`) al posto di
+/// `@pixel`: per i casi degli effetti a pixel, i cui pixel prova l'oracolo a pixel.
+pub fn senza_pixel(v: &Value) -> Value {
+    const INIZIO: &str = "data:image/png;base64,";
+    match v {
+        Value::String(s) if s.contains(INIZIO) => {
+            let mut out = String::new();
+            let mut resto = s.as_str();
+            while let Some(i) = resto.find(INIZIO) {
+                let (prima, dopo) = resto.split_at(i + INIZIO.len());
+                out.push_str(prima);
+                out.push_str("@pixel");
+                let fine = dopo.find(['"', '\'', ')']).unwrap_or(dopo.len());
+                resto = &dopo[fine..];
+            }
+            out.push_str(resto);
+            Value::String(out)
+        }
+        Value::Array(a) => Value::Array(a.iter().map(senza_pixel).collect()),
+        Value::Object(o) => {
+            Value::Object(o.iter().map(|(k, x)| (k.clone(), senza_pixel(x))).collect())
+        }
+        _ => v.clone(),
+    }
+}
+
 /// Gli id nuovi (quelli dati da `ident` e dagli `add`) diventano `@1`,
 /// `@2`… nell'ordine in cui compaiono.
 fn canonicalizza(ops: &mut Value) {

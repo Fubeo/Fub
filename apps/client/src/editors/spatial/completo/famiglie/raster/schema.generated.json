@@ -4,10 +4,1239 @@
   "finestre": [
     {
       "fonte": "effetto",
+      "id": "artistic.coloredPencil",
+      "campi": [
+        {
+          "nome": "pencilWidth",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "strokePressure",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "paperBrightness",
+          "tipo": "numero",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "artistic.cutout",
+      "campi": [
+        {
+          "nome": "levels",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "edgeSimplicity",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "edgeFidelity",
+          "tipo": "numero",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "artistic.dryBrush",
+      "campi": [
+        {
+          "nome": "brushSize",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "brushDetail",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "texture",
+          "tipo": "numero",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "artistic.filmGrain",
+      "campi": [
+        {
+          "nome": "grain",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "highlightArea",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "intensity",
+          "tipo": "numero",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "artistic.fresco",
+      "campi": [
+        {
+          "nome": "brushSize",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "brushDetail",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "texture",
+          "tipo": "numero",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "artistic.neonGlow",
+      "campi": [
+        {
+          "nome": "glowSize",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "glowBrightness",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "color",
+          "tipo": "testo",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "artistic.paintDaubs",
+      "campi": [
+        {
+          "nome": "brushSize",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "sharpness",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "brushType",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "simple",
+            "lightRough",
+            "darkRough",
+            "wideSharp",
+            "wideBlurry",
+            "sparkle"
+          ],
+          "aperta": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "artistic.paletteKnife",
+      "campi": [
+        {
+          "nome": "strokeSize",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "strokeDetail",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "softness",
+          "tipo": "numero",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "artistic.plasticWrap",
+      "campi": [
+        {
+          "nome": "highlightStrength",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "detail",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "smoothness",
+          "tipo": "numero",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "artistic.posterEdges",
+      "campi": [
+        {
+          "nome": "edgeThickness",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "edgeIntensity",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "posterization",
+          "tipo": "numero",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "artistic.roughPastels",
+      "campi": [
+        {
+          "nome": "strokeLength",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "strokeDetail",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "texture",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "brick",
+            "burlap",
+            "canvas",
+            "sandstone"
+          ],
+          "aperta": false
+        },
+        {
+          "nome": "scaling",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "relief",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "lightDirection",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "bottom",
+            "bottomLeft",
+            "left",
+            "topLeft",
+            "top",
+            "topRight",
+            "right",
+            "bottomRight"
+          ],
+          "aperta": false
+        },
+        {
+          "nome": "invert",
+          "tipo": "sino",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "artistic.smudgeStick",
+      "campi": [
+        {
+          "nome": "strokeLength",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "highlightArea",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "intensity",
+          "tipo": "numero",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "artistic.sponge",
+      "campi": [
+        {
+          "nome": "brushSize",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "definition",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "smoothness",
+          "tipo": "numero",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "artistic.underpainting",
+      "campi": [
+        {
+          "nome": "brushSize",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "textureCoverage",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "texture",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "brick",
+            "burlap",
+            "canvas",
+            "sandstone"
+          ],
+          "aperta": false
+        },
+        {
+          "nome": "scaling",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "relief",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "lightDirection",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "bottom",
+            "bottomLeft",
+            "left",
+            "topLeft",
+            "top",
+            "topRight",
+            "right",
+            "bottomRight"
+          ],
+          "aperta": false
+        },
+        {
+          "nome": "invert",
+          "tipo": "sino",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "artistic.watercolor",
+      "campi": [
+        {
+          "nome": "brushDetail",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "shadowIntensity",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "texture",
+          "tipo": "numero",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
       "id": "blur.gaussian",
       "campi": [
         {
           "nome": "radius",
+          "tipo": "numero",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "blur.radial",
+      "campi": [
+        {
+          "nome": "amount",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "method",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "spin",
+            "zoom"
+          ],
+          "aperta": false
+        },
+        {
+          "nome": "quality",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "draft",
+            "good",
+            "best"
+          ],
+          "aperta": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "blur.smart",
+      "campi": [
+        {
+          "nome": "radius",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "threshold",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "quality",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "low",
+            "medium",
+            "high"
+          ],
+          "aperta": false
+        },
+        {
+          "nome": "blurMode",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "normal",
+            "edgeOnly",
+            "overlayEdge"
+          ],
+          "aperta": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "brushStrokes.accentedEdges",
+      "campi": [
+        {
+          "nome": "edgeWidth",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "edgeBrightness",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "smoothness",
+          "tipo": "numero",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "brushStrokes.angledStrokes",
+      "campi": [
+        {
+          "nome": "directionBalance",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "strokeLength",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "sharpness",
+          "tipo": "numero",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "brushStrokes.crosshatch",
+      "campi": [
+        {
+          "nome": "strokeLength",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "sharpness",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "strength",
+          "tipo": "numero",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "brushStrokes.darkStrokes",
+      "campi": [
+        {
+          "nome": "balance",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "blackIntensity",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "whiteIntensity",
+          "tipo": "numero",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "brushStrokes.inkOutlines",
+      "campi": [
+        {
+          "nome": "strokeLength",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "darkIntensity",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "lightIntensity",
+          "tipo": "numero",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "brushStrokes.spatter",
+      "campi": [
+        {
+          "nome": "sprayRadius",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "smoothness",
+          "tipo": "numero",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "brushStrokes.sprayedStrokes",
+      "campi": [
+        {
+          "nome": "strokeLength",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "sprayRadius",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "strokeDirection",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "rightDiagonal",
+            "horizontal",
+            "leftDiagonal",
+            "vertical"
+          ],
+          "aperta": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "brushStrokes.sumiE",
+      "campi": [
+        {
+          "nome": "strokeWidth",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "strokePressure",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "contrast",
+          "tipo": "numero",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "distort.diffuseGlow",
+      "campi": [
+        {
+          "nome": "graininess",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "glowAmount",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "clearAmount",
+          "tipo": "numero",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "distort.glass",
+      "campi": [
+        {
+          "nome": "distortion",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "smoothness",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "texture",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "blocks",
+            "canvas",
+            "frosted",
+            "tinyLens",
+            "loaded"
+          ],
+          "aperta": false
+        },
+        {
+          "nome": "textureImage",
+          "tipo": "json",
+          "facoltativo": true
+        },
+        {
+          "nome": "scaling",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "invert",
+          "tipo": "sino",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "distort.oceanRipple",
+      "campi": [
+        {
+          "nome": "rippleSize",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "rippleMagnitude",
+          "tipo": "numero",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "pixelate.colorHalftone",
+      "campi": [
+        {
+          "nome": "maxRadius",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "channel1",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "channel2",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "channel3",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "channel4",
+          "tipo": "numero",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "pixelate.crystallize",
+      "campi": [
+        {
+          "nome": "cellSize",
+          "tipo": "numero",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "pixelate.mezzotint",
+      "campi": [
+        {
+          "nome": "type",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "fineDots",
+            "mediumDots",
+            "grainyDots",
+            "coarseDots",
+            "shortLines",
+            "mediumLines",
+            "longLines",
+            "shortStrokes",
+            "mediumStrokes",
+            "longStrokes"
+          ],
+          "aperta": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "pixelate.pointillize",
+      "campi": [
+        {
+          "nome": "cellSize",
+          "tipo": "numero",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "rasterize",
+      "campi": [
+        {
+          "nome": "colorModel",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "document",
+            "grayscale",
+            "bitmap"
+          ],
+          "aperta": false
+        },
+        {
+          "nome": "useDocumentResolution",
+          "tipo": "sino",
+          "facoltativo": false
+        },
+        {
+          "nome": "resolution",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "background",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "white",
+            "transparent"
+          ],
+          "aperta": false
+        },
+        {
+          "nome": "antiAlias",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "none",
+            "art",
+            "type"
+          ],
+          "aperta": false
+        },
+        {
+          "nome": "clippingMask",
+          "tipo": "sino",
+          "facoltativo": false
+        },
+        {
+          "nome": "addAround",
+          "tipo": "numero",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "sharpen.unsharpMask",
+      "campi": [
+        {
+          "nome": "amount",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "radius",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "threshold",
+          "tipo": "numero",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "sketch.basRelief",
+      "campi": [
+        {
+          "nome": "detail",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "smoothness",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "lightDirection",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "bottom",
+            "bottomLeft",
+            "left",
+            "topLeft",
+            "top",
+            "topRight",
+            "right",
+            "bottomRight"
+          ],
+          "aperta": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "sketch.chalkCharcoal",
+      "campi": [
+        {
+          "nome": "chalkArea",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "charcoalArea",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "strokePressure",
+          "tipo": "numero",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "sketch.charcoal",
+      "campi": [
+        {
+          "nome": "thickness",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "detail",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "lightDarkBalance",
+          "tipo": "numero",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "sketch.chrome",
+      "campi": [
+        {
+          "nome": "detail",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "smoothness",
+          "tipo": "numero",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "sketch.conteCrayon",
+      "campi": [
+        {
+          "nome": "foregroundLevel",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "backgroundLevel",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "texture",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "brick",
+            "burlap",
+            "canvas",
+            "sandstone"
+          ],
+          "aperta": false
+        },
+        {
+          "nome": "scaling",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "relief",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "lightDirection",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "bottom",
+            "bottomLeft",
+            "left",
+            "topLeft",
+            "top",
+            "topRight",
+            "right",
+            "bottomRight"
+          ],
+          "aperta": false
+        },
+        {
+          "nome": "invert",
+          "tipo": "sino",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "sketch.graphicPen",
+      "campi": [
+        {
+          "nome": "strokeLength",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "lightDarkBalance",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "strokeDirection",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "rightDiagonal",
+            "horizontal",
+            "leftDiagonal",
+            "vertical"
+          ],
+          "aperta": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "sketch.halftonePattern",
+      "campi": [
+        {
+          "nome": "size",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "contrast",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "patternType",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "circle",
+            "dot",
+            "line"
+          ],
+          "aperta": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "sketch.notePaper",
+      "campi": [
+        {
+          "nome": "imageBalance",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "graininess",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "relief",
+          "tipo": "numero",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "sketch.photocopy",
+      "campi": [
+        {
+          "nome": "detail",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "darkness",
+          "tipo": "numero",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "sketch.plaster",
+      "campi": [
+        {
+          "nome": "imageBalance",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "smoothness",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "lightDirection",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "bottom",
+            "bottomLeft",
+            "left",
+            "topLeft",
+            "top",
+            "topRight",
+            "right",
+            "bottomRight"
+          ],
+          "aperta": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "sketch.reticulation",
+      "campi": [
+        {
+          "nome": "density",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "foregroundLevel",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "backgroundLevel",
+          "tipo": "numero",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "sketch.stamp",
+      "campi": [
+        {
+          "nome": "lightDarkBalance",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "smoothness",
+          "tipo": "numero",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "sketch.tornEdges",
+      "campi": [
+        {
+          "nome": "imageBalance",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "smoothness",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "contrast",
+          "tipo": "numero",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "sketch.waterPaper",
+      "campi": [
+        {
+          "nome": "fiberLength",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "brightness",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "contrast",
           "tipo": "numero",
           "facoltativo": false
         }
@@ -89,6 +1318,27 @@
       "campi": [
         {
           "nome": "radius",
+          "tipo": "numero",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "stylize.glowingEdges",
+      "campi": [
+        {
+          "nome": "edgeWidth",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "edgeBrightness",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "smoothness",
           "tipo": "numero",
           "facoltativo": false
         }
@@ -191,6 +1441,200 @@
           "nome": "color",
           "tipo": "testo",
           "facoltativo": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "texture.craquelure",
+      "campi": [
+        {
+          "nome": "crackSpacing",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "crackDepth",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "crackBrightness",
+          "tipo": "numero",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "texture.grain",
+      "campi": [
+        {
+          "nome": "intensity",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "contrast",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "grainType",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "regular",
+            "soft",
+            "sprinkles",
+            "clumped",
+            "contrasty",
+            "enlarged",
+            "stippled",
+            "horizontal",
+            "vertical",
+            "speckle"
+          ],
+          "aperta": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "texture.mosaicTiles",
+      "campi": [
+        {
+          "nome": "tileSize",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "groutWidth",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "lightenGrout",
+          "tipo": "numero",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "texture.patchwork",
+      "campi": [
+        {
+          "nome": "squareSize",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "relief",
+          "tipo": "numero",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "texture.stainedGlass",
+      "campi": [
+        {
+          "nome": "cellSize",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "borderThickness",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "lightIntensity",
+          "tipo": "numero",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "texture.texturizer",
+      "campi": [
+        {
+          "nome": "texture",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "brick",
+            "burlap",
+            "canvas",
+            "sandstone",
+            "loaded"
+          ],
+          "aperta": false
+        },
+        {
+          "nome": "textureImage",
+          "tipo": "json",
+          "facoltativo": true
+        },
+        {
+          "nome": "scaling",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "relief",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "lightDirection",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "bottom",
+            "bottomLeft",
+            "left",
+            "topLeft",
+            "top",
+            "topRight",
+            "right",
+            "bottomRight"
+          ],
+          "aperta": false
+        },
+        {
+          "nome": "invert",
+          "tipo": "sino",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "video.deinterlace",
+      "campi": [
+        {
+          "nome": "eliminate",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "odd",
+            "even"
+          ],
+          "aperta": false
+        },
+        {
+          "nome": "create",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "duplication",
+            "interpolation"
+          ],
+          "aperta": false
         }
       ]
     }

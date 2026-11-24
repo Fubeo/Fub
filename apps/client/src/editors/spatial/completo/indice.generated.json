@@ -7299,6 +7299,291 @@
     },
     {
       "fonte": "effetto",
+      "id": "artistic.coloredPencil",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "artistic.coloredPencil"
+        }
+      },
+      "etichetta": {
+        "it": "Matita colorata…",
+        "en": "Colored Pencil…"
+      },
+      "posto": "menu/effetto/artistico",
+      "famiglia": "raster",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "artistic.cutout",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "artistic.cutout"
+        }
+      },
+      "etichetta": {
+        "it": "Ritaglio…",
+        "en": "Cutout…"
+      },
+      "posto": "menu/effetto/artistico",
+      "famiglia": "raster",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "artistic.dryBrush",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "artistic.dryBrush"
+        }
+      },
+      "etichetta": {
+        "it": "Pennello secco…",
+        "en": "Dry Brush…"
+      },
+      "posto": "menu/effetto/artistico",
+      "famiglia": "raster",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "artistic.filmGrain",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "artistic.filmGrain"
+        }
+      },
+      "etichetta": {
+        "it": "Grana della pellicola…",
+        "en": "Film Grain…"
+      },
+      "posto": "menu/effetto/artistico",
+      "famiglia": "raster",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "artistic.fresco",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "artistic.fresco"
+        }
+      },
+      "etichetta": {
+        "it": "Affresco…",
+        "en": "Fresco…"
+      },
+      "posto": "menu/effetto/artistico",
+      "famiglia": "raster",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "artistic.neonGlow",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "artistic.neonGlow"
+        }
+      },
+      "etichetta": {
+        "it": "Bagliore neon…",
+        "en": "Neon Glow…"
+      },
+      "posto": "menu/effetto/artistico",
+      "famiglia": "raster",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "artistic.paintDaubs",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "artistic.paintDaubs"
+        }
+      },
+      "etichetta": {
+        "it": "Pennellate…",
+        "en": "Paint Daubs…"
+      },
+      "posto": "menu/effetto/artistico",
+      "famiglia": "raster",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "artistic.paletteKnife",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "artistic.paletteKnife"
+        }
+      },
+      "etichetta": {
+        "it": "Spatola…",
+        "en": "Palette Knife…"
+      },
+      "posto": "menu/effetto/artistico",
+      "famiglia": "raster",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "artistic.plasticWrap",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "artistic.plasticWrap"
+        }
+      },
+      "etichetta": {
+        "it": "Pellicola plastica…",
+        "en": "Plastic Wrap…"
+      },
+      "posto": "menu/effetto/artistico",
+      "famiglia": "raster",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "artistic.posterEdges",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "artistic.posterEdges"
+        }
+      },
+      "etichetta": {
+        "it": "Bordi poster…",
+        "en": "Poster Edges…"
+      },
+      "posto": "menu/effetto/artistico",
+      "famiglia": "raster",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "artistic.roughPastels",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "artistic.roughPastels"
+        }
+      },
+      "etichetta": {
+        "it": "Pastelli grezzi…",
+        "en": "Rough Pastels…"
+      },
+      "posto": "menu/effetto/artistico",
+      "famiglia": "raster",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "artistic.smudgeStick",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "artistic.smudgeStick"
+        }
+      },
+      "etichetta": {
+        "it": "Sfumino…",
+        "en": "Smudge Stick…"
+      },
+      "posto": "menu/effetto/artistico",
+      "famiglia": "raster",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "artistic.sponge",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "artistic.sponge"
+        }
+      },
+      "etichetta": {
+        "it": "Spugna…",
+        "en": "Sponge…"
+      },
+      "posto": "menu/effetto/artistico",
+      "famiglia": "raster",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "artistic.underpainting",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "artistic.underpainting"
+        }
+      },
+      "etichetta": {
+        "it": "Sottopittura…",
+        "en": "Underpainting…"
+      },
+      "posto": "menu/effetto/artistico",
+      "famiglia": "raster",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "artistic.watercolor",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "artistic.watercolor"
+        }
+      },
+      "etichetta": {
+        "it": "Acquerello…",
+        "en": "Watercolor…"
+      },
+      "posto": "menu/effetto/artistico",
+      "famiglia": "raster",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
       "id": "blur.gaussian",
       "chiamata": {
         "comando": "disegno.effect.apply",
@@ -7311,6 +7596,196 @@
         "en": "Gaussian Blur…"
       },
       "posto": "menu/effetto/sfocatura",
+      "famiglia": "raster",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "blur.radial",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "blur.radial"
+        }
+      },
+      "etichetta": {
+        "it": "Sfocatura radiale…",
+        "en": "Radial Blur…"
+      },
+      "posto": "menu/effetto/sfocatura",
+      "famiglia": "raster",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "blur.smart",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "blur.smart"
+        }
+      },
+      "etichetta": {
+        "it": "Sfocatura intelligente…",
+        "en": "Smart Blur…"
+      },
+      "posto": "menu/effetto/sfocatura",
+      "famiglia": "raster",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "brushStrokes.accentedEdges",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "brushStrokes.accentedEdges"
+        }
+      },
+      "etichetta": {
+        "it": "Bordi accentuati…",
+        "en": "Accented Edges…"
+      },
+      "posto": "menu/effetto/pennellate",
+      "famiglia": "raster",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "brushStrokes.angledStrokes",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "brushStrokes.angledStrokes"
+        }
+      },
+      "etichetta": {
+        "it": "Pennellate angolate…",
+        "en": "Angled Strokes…"
+      },
+      "posto": "menu/effetto/pennellate",
+      "famiglia": "raster",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "brushStrokes.crosshatch",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "brushStrokes.crosshatch"
+        }
+      },
+      "etichetta": {
+        "it": "Tratteggio incrociato…",
+        "en": "Crosshatch…"
+      },
+      "posto": "menu/effetto/pennellate",
+      "famiglia": "raster",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "brushStrokes.darkStrokes",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "brushStrokes.darkStrokes"
+        }
+      },
+      "etichetta": {
+        "it": "Pennellate scure…",
+        "en": "Dark Strokes…"
+      },
+      "posto": "menu/effetto/pennellate",
+      "famiglia": "raster",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "brushStrokes.inkOutlines",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "brushStrokes.inkOutlines"
+        }
+      },
+      "etichetta": {
+        "it": "Contorni a china…",
+        "en": "Ink Outlines…"
+      },
+      "posto": "menu/effetto/pennellate",
+      "famiglia": "raster",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "brushStrokes.spatter",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "brushStrokes.spatter"
+        }
+      },
+      "etichetta": {
+        "it": "Spruzzo…",
+        "en": "Spatter…"
+      },
+      "posto": "menu/effetto/pennellate",
+      "famiglia": "raster",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "brushStrokes.sprayedStrokes",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "brushStrokes.sprayedStrokes"
+        }
+      },
+      "etichetta": {
+        "it": "Pennellate spruzzate…",
+        "en": "Sprayed Strokes…"
+      },
+      "posto": "menu/effetto/pennellate",
+      "famiglia": "raster",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "brushStrokes.sumiE",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "brushStrokes.sumiE"
+        }
+      },
+      "etichetta": {
+        "it": "Sumi-e…",
+        "en": "Sumi-e…"
+      },
+      "posto": "menu/effetto/pennellate",
       "famiglia": "raster",
       "tasto": null,
       "effetto": "cambia",
@@ -7375,6 +7850,25 @@
     },
     {
       "fonte": "effetto",
+      "id": "distort.diffuseGlow",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "distort.diffuseGlow"
+        }
+      },
+      "etichetta": {
+        "it": "Bagliore diffuso…",
+        "en": "Diffuse Glow…"
+      },
+      "posto": "menu/effetto/distorci",
+      "famiglia": "raster",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
       "id": "distort.freeDistort",
       "chiamata": {
         "comando": "disegno.effect.apply",
@@ -7388,6 +7882,44 @@
       },
       "posto": "menu/effetto/distorci-trasforma",
       "famiglia": "effetti",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "distort.glass",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "distort.glass"
+        }
+      },
+      "etichetta": {
+        "it": "Vetro…",
+        "en": "Glass…"
+      },
+      "posto": "menu/effetto/distorci",
+      "famiglia": "raster",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "distort.oceanRipple",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "distort.oceanRipple"
+        }
+      },
+      "etichetta": {
+        "it": "Increspatura oceanica…",
+        "en": "Ocean Ripple…"
+      },
+      "posto": "menu/effetto/distorci",
+      "famiglia": "raster",
       "tasto": null,
       "effetto": "cambia",
       "finestra": true
@@ -7812,6 +8344,386 @@
     },
     {
       "fonte": "effetto",
+      "id": "pixelate.colorHalftone",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "pixelate.colorHalftone"
+        }
+      },
+      "etichetta": {
+        "it": "Mezzetinte colore…",
+        "en": "Color Halftone…"
+      },
+      "posto": "menu/effetto/pixel",
+      "famiglia": "raster",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "pixelate.crystallize",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "pixelate.crystallize"
+        }
+      },
+      "etichetta": {
+        "it": "Cristallizza…",
+        "en": "Crystallize…"
+      },
+      "posto": "menu/effetto/pixel",
+      "famiglia": "raster",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "pixelate.mezzotint",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "pixelate.mezzotint"
+        }
+      },
+      "etichetta": {
+        "it": "Mezzatinta…",
+        "en": "Mezzotint…"
+      },
+      "posto": "menu/effetto/pixel",
+      "famiglia": "raster",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "pixelate.pointillize",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "pixelate.pointillize"
+        }
+      },
+      "etichetta": {
+        "it": "Puntinismo…",
+        "en": "Pointillize…"
+      },
+      "posto": "menu/effetto/pixel",
+      "famiglia": "raster",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "rasterize",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "rasterize"
+        }
+      },
+      "etichetta": {
+        "it": "Rasterizza…",
+        "en": "Rasterize…"
+      },
+      "posto": "menu/effetto",
+      "famiglia": "raster",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "sharpen.unsharpMask",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "sharpen.unsharpMask"
+        }
+      },
+      "etichetta": {
+        "it": "Maschera di contrasto…",
+        "en": "Unsharp Mask…"
+      },
+      "posto": "menu/effetto/nitidezza",
+      "famiglia": "raster",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "sketch.basRelief",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "sketch.basRelief"
+        }
+      },
+      "etichetta": {
+        "it": "Bassorilievo…",
+        "en": "Bas Relief…"
+      },
+      "posto": "menu/effetto/schizzo",
+      "famiglia": "raster",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "sketch.chalkCharcoal",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "sketch.chalkCharcoal"
+        }
+      },
+      "etichetta": {
+        "it": "Gesso e carboncino…",
+        "en": "Chalk & Charcoal…"
+      },
+      "posto": "menu/effetto/schizzo",
+      "famiglia": "raster",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "sketch.charcoal",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "sketch.charcoal"
+        }
+      },
+      "etichetta": {
+        "it": "Carboncino…",
+        "en": "Charcoal…"
+      },
+      "posto": "menu/effetto/schizzo",
+      "famiglia": "raster",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "sketch.chrome",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "sketch.chrome"
+        }
+      },
+      "etichetta": {
+        "it": "Cromo…",
+        "en": "Chrome…"
+      },
+      "posto": "menu/effetto/schizzo",
+      "famiglia": "raster",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "sketch.conteCrayon",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "sketch.conteCrayon"
+        }
+      },
+      "etichetta": {
+        "it": "Matita Conté…",
+        "en": "Conté Crayon…"
+      },
+      "posto": "menu/effetto/schizzo",
+      "famiglia": "raster",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "sketch.graphicPen",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "sketch.graphicPen"
+        }
+      },
+      "etichetta": {
+        "it": "Penna grafica…",
+        "en": "Graphic Pen…"
+      },
+      "posto": "menu/effetto/schizzo",
+      "famiglia": "raster",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "sketch.halftonePattern",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "sketch.halftonePattern"
+        }
+      },
+      "etichetta": {
+        "it": "Pattern mezzetinte…",
+        "en": "Halftone Pattern…"
+      },
+      "posto": "menu/effetto/schizzo",
+      "famiglia": "raster",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "sketch.notePaper",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "sketch.notePaper"
+        }
+      },
+      "etichetta": {
+        "it": "Carta da lettere…",
+        "en": "Note Paper…"
+      },
+      "posto": "menu/effetto/schizzo",
+      "famiglia": "raster",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "sketch.photocopy",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "sketch.photocopy"
+        }
+      },
+      "etichetta": {
+        "it": "Fotocopia…",
+        "en": "Photocopy…"
+      },
+      "posto": "menu/effetto/schizzo",
+      "famiglia": "raster",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "sketch.plaster",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "sketch.plaster"
+        }
+      },
+      "etichetta": {
+        "it": "Gesso…",
+        "en": "Plaster…"
+      },
+      "posto": "menu/effetto/schizzo",
+      "famiglia": "raster",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "sketch.reticulation",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "sketch.reticulation"
+        }
+      },
+      "etichetta": {
+        "it": "Reticolo…",
+        "en": "Reticulation…"
+      },
+      "posto": "menu/effetto/schizzo",
+      "famiglia": "raster",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "sketch.stamp",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "sketch.stamp"
+        }
+      },
+      "etichetta": {
+        "it": "Timbro…",
+        "en": "Stamp…"
+      },
+      "posto": "menu/effetto/schizzo",
+      "famiglia": "raster",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "sketch.tornEdges",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "sketch.tornEdges"
+        }
+      },
+      "etichetta": {
+        "it": "Bordi strappati…",
+        "en": "Torn Edges…"
+      },
+      "posto": "menu/effetto/schizzo",
+      "famiglia": "raster",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "sketch.waterPaper",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "sketch.waterPaper"
+        }
+      },
+      "etichetta": {
+        "it": "Carta bagnata…",
+        "en": "Water Paper…"
+      },
+      "posto": "menu/effetto/schizzo",
+      "famiglia": "raster",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
       "id": "stylize.dropShadow",
       "chiamata": {
         "comando": "disegno.effect.apply",
@@ -7841,6 +8753,25 @@
       "etichetta": {
         "it": "Sfuma bordi…",
         "en": "Feather…"
+      },
+      "posto": "menu/effetto/stilizza",
+      "famiglia": "raster",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "stylize.glowingEdges",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "stylize.glowingEdges"
+        }
+      },
+      "etichetta": {
+        "it": "Bordi luminosi…",
+        "en": "Glowing Edges…"
       },
       "posto": "menu/effetto/stilizza",
       "famiglia": "raster",
@@ -7923,6 +8854,158 @@
       "tasto": null,
       "effetto": "cambia",
       "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "texture.craquelure",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "texture.craquelure"
+        }
+      },
+      "etichetta": {
+        "it": "Craquelé…",
+        "en": "Craquelure…"
+      },
+      "posto": "menu/effetto/texture",
+      "famiglia": "raster",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "texture.grain",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "texture.grain"
+        }
+      },
+      "etichetta": {
+        "it": "Granulosità…",
+        "en": "Grain…"
+      },
+      "posto": "menu/effetto/texture",
+      "famiglia": "raster",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "texture.mosaicTiles",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "texture.mosaicTiles"
+        }
+      },
+      "etichetta": {
+        "it": "Tessere di mosaico…",
+        "en": "Mosaic Tiles…"
+      },
+      "posto": "menu/effetto/texture",
+      "famiglia": "raster",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "texture.patchwork",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "texture.patchwork"
+        }
+      },
+      "etichetta": {
+        "it": "Patchwork…",
+        "en": "Patchwork…"
+      },
+      "posto": "menu/effetto/texture",
+      "famiglia": "raster",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "texture.stainedGlass",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "texture.stainedGlass"
+        }
+      },
+      "etichetta": {
+        "it": "Vetro colorato…",
+        "en": "Stained Glass…"
+      },
+      "posto": "menu/effetto/texture",
+      "famiglia": "raster",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "texture.texturizer",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "texture.texturizer"
+        }
+      },
+      "etichetta": {
+        "it": "Applica texture…",
+        "en": "Texturizer…"
+      },
+      "posto": "menu/effetto/texture",
+      "famiglia": "raster",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "video.deinterlace",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "video.deinterlace"
+        }
+      },
+      "etichetta": {
+        "it": "Deinterlaccia…",
+        "en": "De-Interlace…"
+      },
+      "posto": "menu/effetto/video",
+      "famiglia": "raster",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "video.ntscColors",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "video.ntscColors"
+        }
+      },
+      "etichetta": {
+        "it": "Colori NTSC",
+        "en": "NTSC Colors"
+      },
+      "posto": "menu/effetto/video",
+      "famiglia": "raster",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
     },
     {
       "fonte": "effetto",
