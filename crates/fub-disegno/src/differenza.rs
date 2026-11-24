@@ -987,7 +987,9 @@ impl Lavoro<'_> {
                 // e non ha una transform.
                 if let Some(figli) = l.children().filter(|f| !f.is_empty()) {
                     self.gruppi_nuovi.insert(l.id, None);
-                    let figli: Vec<&Arc<Node>> = figli.iter().collect();
+                    // La forma di un livello che ritaglia è nel suo `clipPath`.
+                    let figli: Vec<&Arc<Node>> =
+                        figli.iter().skip(usize::from(l.clips())).collect();
                     if !self.figli_di_prima(&figli, prima)? {
                         nuovi.extend((0..figli.len()).map(|j| (Some(l.id), figli.clone(), j)));
                     }
@@ -1022,10 +1024,10 @@ impl Lavoro<'_> {
             if !riscritto && nodo.is_layer() {
                 let figli: Vec<&Arc<Node>> = nodo
                     .children()
-                    .map(|f| f.iter().collect())
+                    .map(|f| f.iter().skip(usize::from(nodo.clips())).collect())
                     .unwrap_or_default();
                 let di_prima = self.figli_di_prima(&figli, prima)?;
-                let attrs = self.attributi_del_livello(nodo)?;
+                let attrs = self.attributi_del_livello(nodo, genitore)?;
                 self.gruppi_nuovi.insert(nodo.id, genitore);
                 let pos = self.posto(genitore, &fratelli, i)?;
                 self.add.push(json!({
@@ -1481,7 +1483,7 @@ impl Lavoro<'_> {
                 }
             }
         };
-        let attrs = self.attributi_del_livello(l)?;
+        let attrs = self.attributi_del_livello(l, None)?;
         self.add.push(json!({
             "op": "add", "parent": "#root", "pos": pos,
             "elem": { "tag": "g", "attrs": attrs, "children": [] },
@@ -1515,13 +1517,18 @@ impl Lavoro<'_> {
     /// livello nuovo e `fub:layer` col nome del motore (formato della scena
     /// §3, ADR 0251). Si scrive solo un livello nascosto o bloccato al più:
     /// ciò che il formato non dice (il modello, la stampa, l'anteprima, le
-    /// immagini sbiadite, una maschera) si rifiuta. Il colore del motore non
-    /// si scrive: il formato non lo ha, e il motore ne dà uno a ogni livello
-    /// nuovo.
-    fn attributi_del_livello(&mut self, l: &Node) -> Result<Map<String, Value>, Rifiuto> {
+    /// immagini sbiadite) si rifiuta. Un livello che ritaglia (Duplica di un
+    /// livello che ritaglia) ha il suo `clip-path` e un `clipPath` privato
+    /// nuovo ([`Lavoro::ritaglio_del_livello_nuovo`]), nelle coordinate del
+    /// `genitore`. Il colore del motore non si scrive: il formato non lo ha,
+    /// e il motore ne dà uno a ogni livello nuovo.
+    fn attributi_del_livello(
+        &mut self,
+        l: &Node,
+        genitore: Option<NodeId>,
+    ) -> Result<Map<String, Value>, Rifiuto> {
         let NodeKind::Layer {
             children,
-            clip,
             template,
             printable,
             preview,
@@ -1531,7 +1538,7 @@ impl Lavoro<'_> {
         else {
             return Err(no("il livello nuovo non è un livello"));
         };
-        if *clip || *template || !*printable || !*preview || dim_images.is_some() {
+        if *template || !*printable || !*preview || dim_images.is_some() {
             return Err(no(
                 "il livello nuovo ha opzioni che il formato della scena non ha",
             ));
@@ -1545,10 +1552,13 @@ impl Lavoro<'_> {
         let mut attrs = Map::new();
         attrs.insert("id".into(), json!(id));
         attrs.insert("fub:layer".into(), json!(nome));
+        if let Some(ritaglio) = self.ritaglio_del_livello_nuovo(l, genitore)? {
+            attrs.insert("clip-path".into(), json!(ritaglio));
+        }
         // La scena non mette niente in un livello bloccato: la copia di un
         // livello bloccato (Duplica livello) nasce sbloccata, prende i suoi
         // oggetti e si blocca con un `set`, che va dopo tutti gli `add`.
-        let con_figli = !children.is_empty();
+        let con_figli = children.len() > usize::from(l.clips());
         if l.locked && con_figli {
             self.set
                 .push(json!({ "op": "set", "id": id, "attrs": { "fub:locked": "true" } }));

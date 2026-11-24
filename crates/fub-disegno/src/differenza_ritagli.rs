@@ -21,7 +21,8 @@
 //!   alto, che il motore mette in fondo. Nel file l'oggetto esce ed entra in
 //!   un `clipPath` privato come sopra, nelle coordinate del livello, e il
 //!   livello riceve `clip-path` con un `set`; premuto di nuovo, è un
-//!   Rilascia.
+//!   Rilascia. Duplica di un livello che ritaglia fa lo stesso sul livello
+//!   nuovo: un `clipPath` privato nuovo con la copia della forma.
 //!
 //! Un ritaglio che il file non dice con l'attributo `clip-path` (in `style`,
 //! o da un foglio di stile) non si toglie con un `set`: Rilascia è
@@ -253,6 +254,38 @@ impl Lavoro<'_> {
         let mut messo = b.clone();
         messo.set_clips(true);
         Ok(Some(messo))
+    }
+
+    /// Il ritaglio di un livello nuovo che ritaglia (Duplica di un livello che
+    /// ritaglia, come in VectorCraft): il suo oggetto più alto entra in un
+    /// `clipPath` privato nuovo, nelle coordinate del `genitore`, che sono
+    /// anche quelle del livello (un livello nuovo non ha transform). Il
+    /// valore di `clip-path` per il livello; `None` se non ritaglia. Gli altri
+    /// oggetti li scrive chi lo chiama, senza il primo.
+    pub(super) fn ritaglio_del_livello_nuovo(
+        &mut self,
+        l: &Node,
+        genitore: Option<NodeId>,
+    ) -> Result<Option<String>, Rifiuto> {
+        if !l.clips() {
+            return Ok(None);
+        }
+        let c = taglierina(l).ok_or_else(|| no("un livello che ritaglia senza la forma"))?;
+        let locale = self.matrice_del_genitore(genitore)?.inverse();
+        if !locale.is_finite() {
+            return Err(no("il genitore ha una transform che non si inverte"));
+        }
+        let mut forma = forma_che_ritaglia(c, locale)?;
+        let risorsa = self.id_nuovo(Specie::Risorsa)?;
+        let id_forma = self.id_nuovo(Specie::Risorsa)?;
+        forma["attrs"]["id"] = json!(id_forma);
+        self.ids.insert(c.id, id_forma);
+        self.sfumature.push(json!({
+            "tag": "clipPath",
+            "attrs": { "id": risorsa, "fub:role": "private", "clipPathUnits": "userSpaceOnUse" },
+            "children": [forma],
+        }));
+        Ok(Some(format!("url(#{risorsa})")))
     }
 
     /// Scrive il gruppo di ritaglio nuovo `nodo` (vedi [`ritaglio_nuovo`]):

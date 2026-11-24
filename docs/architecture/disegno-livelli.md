@@ -73,9 +73,12 @@ forma torna il primo oggetto, senza colore, e il `clipPath` se ne va
 (`differenza_ritagli.rs`, `ritaglio_messo` e `ritaglio_tolto`). Un contenitore
 vuoto rifiuta `Empty`; uno con in cima un gruppo, un'immagine o un testo
 `Unsupported`; uno bloccato `Locked` (`famiglie/livelli.rs`,
-`livello_che_ritaglia`). Nel client la voce sta nel menu dei livelli, con
-«Crea» o «Rilascia» secondo il `clip-path` del livello, spenta su un livello
-vuoto o bloccato. Imposta livello corrente e Individua oggetto sono del
+`livello_che_ritaglia`). Duplica livello di un livello che ritaglia scrive la
+copia con un `clipPath` privato suo, con la copia della forma
+(`ritaglio_del_livello_nuovo`), come in VectorCraft. Nel client la voce sta nel
+menu dei livelli, con «Crea» o «Rilascia» secondo il `clip-path` del livello,
+spenta su un livello vuoto o bloccato; con un gruppo scelto da solo la voce è
+del gruppo, come in VectorCraft, spenta su un gruppo vuoto. Imposta livello corrente e Individua oggetto sono del
 client.
 
 Il livello corrente sta nel client, nella sessione del documento
