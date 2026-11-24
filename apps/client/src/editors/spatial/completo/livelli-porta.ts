@@ -34,7 +34,11 @@ export type RichiestaLivello =
       readonly bloccato?: boolean;
     }
   | { readonly kind: "nuovo"; readonly nome: string }
-  | { readonly kind: "elimina"; readonly livello: string };
+  | { readonly kind: "elimina"; readonly livello: string }
+  /// Duplica livello: la copia va subito sopra, col nome «… copia». Solo del motore.
+  | { readonly kind: "duplica"; readonly livello: string }
+  /// Appiattisci grafica: tutto nel livello, i livelli nascosti si scartano. Solo del motore.
+  | { readonly kind: "appiattisci"; readonly livello: string };
 
 /// Com'è andato un comando di livello.
 /// - `fatto`: le operazioni da scrivere (vuote se non cambiava niente);
@@ -80,6 +84,14 @@ function chiamataDi(richiesta: RichiestaLivello, numeri: ReadonlyMap<string, num
     case "elimina": {
       const numero = numeri.get(richiesta.livello);
       return numero === undefined ? null : { id: "disegno.layer.delete", value: { ids: [numero] } };
+    }
+    case "duplica": {
+      const numero = numeri.get(richiesta.livello);
+      return numero === undefined ? null : { id: "disegno.layer.duplicate", value: { ids: [numero] } };
+    }
+    case "appiattisci": {
+      const numero = numeri.get(richiesta.livello);
+      return numero === undefined ? null : { id: "disegno.layer.flatten", value: { id: numero } };
     }
     case "proprieta": {
       const numero = numeri.get(richiesta.livello);

@@ -295,6 +295,8 @@ export function installWorkspace(ctx: EditorContext): void {
           applicaSpazio();
           mostraRisorse();
           ctx.syncRail(ctx.editable());
+          // Il menu della scheda Livelli c'è col motore.
+          ctx.syncLayers();
           // La voce dello zoom della banda sceglie il suo menu solo col Completo
           // presente (`status.ts`): la banda si rilegge adesso.
           ctx.statusChanged();
@@ -313,6 +315,7 @@ export function installWorkspace(ctx: EditorContext): void {
     portaCompleto();
     mostraRisorse();
     ctx.syncRail(ctx.editable());
+    ctx.syncLayers();
     ctx.statusChanged();
   }));
 

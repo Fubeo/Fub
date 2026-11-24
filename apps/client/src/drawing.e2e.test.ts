@@ -908,6 +908,18 @@ function livelliFinti(bloccato: boolean): { fake: DrawingFake; chiamate: { id: s
           if (value.name !== undefined) attrs["fub:layer"] = value.name;
           return esito({ ops: JSON.stringify([{ op: "set", id: "l1", attrs }]) });
         }
+        case "disegno.layer.duplicate":
+          return esito({
+            ops: JSON.stringify([
+              {
+                op: "batch",
+                ops: [
+                  { op: "add", parent: "#root", pos: { after: "l1" }, elem: { tag: "g", attrs: { id: "l00000000", "fub:layer": "Livello 1 copia" }, children: [] } },
+                  { op: "add", parent: "l00000000", pos: { last: true }, elem: { tag: "path", attrs: { d: "M60 60 L140 60 L140 120 L60 120 Z", id: "o00000001" } } },
+                ],
+              },
+            ]),
+          });
         default:
           return esito({ refused: "unsupported" });
       }
@@ -961,6 +973,30 @@ describe("la scheda Livelli del Completo", () => {
     expect(chiamate.filter((c) => c.id === "disegno.layer.setProps")).toEqual([{ id: "disegno.layer.setProps", value: { ids: [3], locked: false } }]);
     rigaLivello()!.querySelector(".draw-object-label")!.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
     await waitFor("il campo del nome", () => document.querySelector(".draw-object-rename") !== null);
+  });
+
+  it("Duplica nel menu dei livelli passa dal motore: la copia va sopra e si disegna lì", async () => {
+    const { fake, chiamate } = livelliFinti(false);
+    const host = await start(createFakeHost({ file: VAULT, draw: true, settings: [drawWorkspace("full", "default")], drawing: fake }));
+    await open("casa.svg");
+    await waitFor("la colonna del Completo", () => tools().join(",") === COLUMN_TOOLS_COMPLETO.join(","));
+    const bottone = (): HTMLButtonElement | null => document.querySelector<HTMLButtonElement>(".draw-objects-menu:not([hidden])");
+    await schedaLivelli();
+    await waitFor("il bottone dei livelli", () => bottone() !== null);
+    bottone()!.click();
+    const voci = (): HTMLButtonElement[] => {
+      const aperti = document.querySelectorAll<HTMLElement>(".context-menu");
+      return aperti.length === 0 ? [] : [...aperti[aperti.length - 1]!.querySelectorAll<HTMLButtonElement>("button")];
+    };
+    const voce = (frase: string): HTMLButtonElement | undefined => voci().find((each) => each.querySelector(".menu-label")?.textContent === frase);
+    await waitFor("la voce Duplica", () => voce("Duplica «Livello 1»") !== undefined);
+    // Appiattisci c'è ma, con un livello solo, non serve.
+    expect(voce("Appiattisci tutto in «Livello 1»")?.getAttribute("aria-disabled")).toBe("true");
+    voce("Duplica «Livello 1»")!.click();
+    await waitFor("la copia arriva al disco", () => written(host, "casa.svg").length === 1);
+    expect(written(host, "casa.svg")[0]).toMatch(/<g id="l00000000" fub:layer="Livello 1 copia">\s*<path id="o00000001" d="M60 60 L140 60 L140 120 L60 120 Z"\/>/);
+    expect(chiamate.filter((c) => c.id === "disegno.layer.duplicate")).toEqual([{ id: "disegno.layer.duplicate", value: { ids: [3] } }]);
+    await waitFor("la riga della copia", () => document.querySelector('.draw-object[data-key="l00000000"]') !== null);
   });
 
   it("nel Semplice l'albero resta com'era: i livelli non si cambiano, e il motore non sente niente", async () => {

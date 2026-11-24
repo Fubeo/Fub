@@ -218,6 +218,8 @@ export function installControls(ctx: EditorContext): void {
   function syncLayers(): void {
     layerGroup.hidden = !has("layers");
     layersButton.disabled = !editable();
+    ctx.layersMenuButton.hidden = !has("layers") || (ctx.livelliMotore?.() ?? null) === null;
+    ctx.layersMenuButton.disabled = !editable();
     if (!layerGroup.hidden) {
       const layer = currentLayer();
       const name = layer === null ? t("draw.layers.none.short") : layerTitle(layer);

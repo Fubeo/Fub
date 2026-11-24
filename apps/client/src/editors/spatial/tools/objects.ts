@@ -202,6 +202,8 @@ export interface ObjectTreeOptions {
 export interface ObjectTree {
   /// Il pannello: titolo, conteggio, filtro e albero.
   readonly element: HTMLElement;
+  /// L'intestazione col titolo e il conteggio, dove l'editor può aggiungere i suoi comandi.
+  readonly header: HTMLElement;
   /// Le voci e la selezione di adesso. Se il fuoco non è nell'albero, la riga
   /// attiva va al primo oggetto scelto.
   update(entries: readonly TreeEntry[], selection: readonly string[], count: number): void;
@@ -1499,6 +1501,7 @@ export function createObjectTree(life: Lifetime, options: ObjectTreeOptions): Ob
 
   return {
     element,
+    header,
     update(next, selection, total) {
       entries = next;
       count = total;

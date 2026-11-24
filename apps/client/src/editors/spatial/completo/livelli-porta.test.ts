@@ -1,5 +1,5 @@
 // I comandi di livello del Completo (K6 T15, giro 4): la porta legge i numeri dei livelli con
-// `document.inspect`, manda occhio, lucchetto, nome, livello nuovo ed elimina con gli `ids` del
+// `document.inspect`, manda occhio, lucchetto, nome, livello nuovo, elimina, duplica e appiattisci con gli `ids` del
 // motore, e dice all'editor che cosa scrivere. Quando il motore non può farlo (spento, famiglia che
 // non arriva, livello senza id che il motore conosca) l'editor lo fa da sé. Motore e famiglie finti.
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -96,6 +96,15 @@ describe("creaPortaLivelli", () => {
     const { porta, chiamate } = prepara();
     await porta.comando({ kind: "elimina", livello: "l2" });
     expect(chiamate[1]).toMatchObject({ id: "disegno.layer.delete", value: { ids: [7] } });
+  });
+
+  it("duplica e appiattisci vanno al motore col numero del livello", async () => {
+    const duplica = prepara();
+    expect(await duplica.porta.comando({ kind: "duplica", livello: "l1" })).toEqual({ kind: "fatto", ops: SET });
+    expect(duplica.chiamate[1]).toMatchObject({ id: "disegno.layer.duplicate", value: { ids: [4] } });
+    const appiattisci = prepara();
+    await appiattisci.porta.comando({ kind: "appiattisci", livello: "l2" });
+    expect(appiattisci.chiamate[1]).toMatchObject({ id: "disegno.layer.flatten", value: { id: 7 } });
   });
 
   it("un livello bloccato rifiutato dal motore ha la sua frase, non quella della selezione", async () => {

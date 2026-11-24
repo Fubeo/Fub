@@ -81,6 +81,9 @@ export interface ToolbarContext {
   propertiesButton: HTMLButtonElement;
   layerGroup: HTMLElement;
   layersButton: HTMLButtonElement;
+  /// Il menu dei livelli in cima alla scheda Livelli, come il menu del pannello Livelli di
+  /// VectorCraft: nel Completo la riga delle opzioni non ha il pulsante dei livelli.
+  layersMenuButton: HTMLButtonElement;
   layerText: HTMLSpanElement;
   layerStateText: HTMLSpanElement;
   tree: ObjectTree;
@@ -447,6 +450,12 @@ export function installToolbar(ctx: EditorContext): void {
   });
   ctx.tree = tree;
   tree.element.hidden = true;
+  const layersMenuButton = button(tree.header, "draw-button draw-objects-menu", () => t("draw.livelli.menu"), "draw-more", () => ctx.openMenu(layersMenuButton, ctx.layerItems()));
+  ctx.layersMenuButton = layersMenuButton;
+  layersMenuButton.tabIndex = 0;
+  layersMenuButton.hidden = true;
+  layersMenuButton.setAttribute("aria-haspopup", "menu");
+  layersMenuButton.setAttribute("aria-expanded", "false");
   relabels.push(() => tree.relabel());
 
   // La cronologia, dal livello Standard: i passi del disegno, per tornare a

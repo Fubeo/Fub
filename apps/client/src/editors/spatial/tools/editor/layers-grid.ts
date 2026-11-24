@@ -46,8 +46,9 @@ export interface LayerWrite {
   readonly label: DrawKey;
   /// Il comando per il motore del Completo.
   readonly request: RichiestaLivello;
-  /// Le operazioni native e il livello corrente dopo, calcolate quando si scrivono.
-  readonly native: () => { readonly arranged: Arranged; readonly key: string | null };
+  /// Le operazioni native e il livello corrente dopo, calcolate quando si scrivono; assenti per un
+  /// comando che fa solo il motore del Completo (Duplica, Appiattisci), che senza motore non parte.
+  readonly native?: () => { readonly arranged: Arranged; readonly key: string | null };
   /// Il livello corrente dopo l'esito del motore, dalle sue operazioni; `null` lo lascia com'è.
   readonly engineKey: (ops: readonly Op[]) => string | null;
   /// Ciò che si dice a comando scritto.
@@ -128,6 +129,10 @@ export function installLayersGrid(ctx: EditorContext): void {
 
   const layerWrite = (write: LayerWrite): void => {
     const nativeNow = (): void => {
+      if (write.native === undefined) {
+        announce(t("draw.livelli.senzaMotore"));
+        return;
+      }
       const made = write.native();
       if (writeLayers(write.label, made.arranged, made.key)) announce(write.said());
     };
@@ -311,6 +316,36 @@ export function installLayersGrid(ctx: EditorContext): void {
     });
   }
 
+  /// Duplica il livello corrente (solo col motore del Completo): la copia va subito sopra, col
+  /// nome «… copia», e diventa il livello corrente. Anche un livello bloccato si copia.
+  function duplicateLayer(): void {
+    const layer = layering();
+    if (layer === null || !editable()) return;
+    cancelGesture();
+    const name = layerTitle(layer);
+    layerWrite({
+      label: "draw.livelli.azione.duplica",
+      request: { kind: "duplica", livello: layer.id ?? "" },
+      engineKey: addedLayer,
+      said: () => t("draw.livelli.duplicato", { name }),
+    });
+  }
+
+  /// Appiattisci grafica (solo col motore del Completo): tutto il disegno nel livello corrente, i
+  /// livelli nascosti si scartano, come in VectorCraft. Il livello corrente resta lui.
+  function flattenLayer(): void {
+    const layer = layering();
+    if (layer === null || !editable() || layer.hidden) return;
+    cancelGesture();
+    const name = layerTitle(layer);
+    layerWrite({
+      label: "draw.livelli.azione.appiattisci",
+      request: { kind: "appiattisci", livello: layer.id ?? "" },
+      engineKey: () => layer.id,
+      said: () => t("draw.livelli.appiattito", { name }),
+    });
+  }
+
   /// Il menu dei livelli: i livelli dalla cima, per scegliere quello
   /// corrente, e i comandi su quello corrente.
   const layerItems = (): MenuItem[] => {
@@ -345,6 +380,27 @@ export function installLayersGrid(ctx: EditorContext): void {
       { label: t(current.locked ? "draw.layer.unlock" : "draw.layer.lock", { name }), run: () => lockLayer(!current.locked) },
       { label: t("draw.layer.up", { name }), disabled: !canShiftLayer(layers, current, "up"), run: () => shiftLayer("up") },
       { label: t("draw.layer.down", { name }), disabled: !canShiftLayer(layers, current, "down"), run: () => shiftLayer("down") },
+    );
+    // Duplica e Appiattisci li fa solo il motore del Completo.
+    if ((ctx.livelliMotore?.() ?? null) !== null) {
+      const hiddenOthers = layers.some((other) => other.hidden && other.path[0] !== current.path[0]);
+      items.push(
+        { label: t("draw.livelli.duplica", { name }), run: () => duplicateLayer() },
+        {
+          label: t("draw.livelli.appiattisci", { name }),
+          disabled: lone || current.hidden,
+          ...(lone
+            ? { description: t("draw.layer.delete.last") }
+            : current.hidden
+              ? { description: t("draw.livelli.appiattisci.nascosto") }
+              : hiddenOthers
+                ? { description: t("draw.livelli.appiattisci.scarta") }
+                : {}),
+          run: () => flattenLayer(),
+        },
+      );
+    }
+    items.push(
       {
         label: t("draw.layer.delete", { name }),
         separator: true,

@@ -90,7 +90,12 @@ il nome, Nuovo livello ed Elimina livello chiedono a
 `delete` con quegli `ids`. Le operazioni che tornano passano dal commit di
 sempre. Quando la porta risponde `nativo` (motore assente, famiglia non pronta,
 livello che il motore non conosce) l'editor scrive le stesse operazioni da sé;
-un livello bloccato si ferma prima, col motivo `draw.livelli.bloccato`. Lo
+un livello bloccato si ferma prima, col motivo `draw.livelli.bloccato`.
+Col motore, la scheda ha in testa il bottone «Menu dei livelli» (il menu del
+pannello Livelli di VectorCraft: nel Completo la riga delle opzioni non ha il
+pulsante dei livelli), con due voci in più, Duplica e Appiattisci, che mandano
+`disegno.layer.duplicate` e `disegno.layer.flatten`. Non hanno una strada
+nativa: senza motore non partono, e lo dicono (`draw.livelli.senzaMotore`). Lo
 spostamento delle righe della scheda resta nativo: `layer.move` e `node.move`
 sono comandi del motore, ma la scheda non li chiama ancora.
 L'albero si rifà dalla scena dopo ogni commit, quindi non serve un aggancio in
