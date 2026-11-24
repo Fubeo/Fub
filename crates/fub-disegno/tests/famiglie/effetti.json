@@ -1,5 +1,5 @@
 {
-  "$nota": "I casi della famiglia effetti (K6): «Applica effetto» (effect.apply), il comando interno del motore con cui ogni voce del menu Effetto aggiunge il suo effetto dal vivo, e gli effetti uno per uno (`fonte: effetto`). Il disegno è effetti/base.svg: due rettangoli (oa1a1a1a1 nero, ob2b2b2b2 rosso). Il corpo porta la grafica espansa e il <metadata> la ricetta di ogni oggetto (scene-format-recipe.md); l'oracolo a pixel confronta il disegno di Fub con quello del motore. Gli Elaboratori tracciati (pathfinder.*) agiscono su un gruppo: il loro disegno è effetti/gruppo.svg, un gruppo og3g3g3g3 con due rettangoli sovrapposti (oa1a1a1a1 blu, ob2b2b2b2 rosso all'80%).",
+  "$nota": "I casi della famiglia effetti (K6): «Applica effetto» (effect.apply), il comando interno del motore con cui ogni voce del menu Effetto aggiunge il suo effetto dal vivo, e gli effetti uno per uno (`fonte: effetto`). Il disegno è effetti/base.svg: due rettangoli (oa1a1a1a1 nero, ob2b2b2b2 rosso). Il corpo porta la grafica espansa e il <metadata> la ricetta di ogni oggetto (scene-format-recipe.md); l'oracolo a pixel confronta il disegno di Fub con quello del motore. Gli Elaboratori tracciati (pathfinder.*) agiscono su un gruppo: il loro disegno è effetti/gruppo.svg, un gruppo og3g3g3g3 con due rettangoli sovrapposti (oa1a1a1a1 blu, ob2b2b2b2 rosso all'80%). La pila degli effetti (sezione «Aspetto»: togli, opzioni, occhio, duplica, sposta, togli sugli effetti allineati di più oggetti) parte da effetti/pila.svg: il nero ha Irruvidisci e Gonfia e restringi, il rosso Irruvidisci.",
   "casi": [
     {
       "id": "effect.apply",
@@ -3214,6 +3214,364 @@
         ]
       },
       "dopo": "pathfinder.softMix.svg"
+    },
+    {
+      "id": "effect.remove",
+      "disegno": "pila.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {
+        "index": 0
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "oa1a1a1a1"
+              },
+              {
+                "op": "remove",
+                "target": {
+                  "path": [
+                    1
+                  ],
+                  "tag": "metadata"
+                }
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<path id=\"oa1a1a1a1\" d=\"M107.5 103.75 C130.833 96.25 169.167 96.25 192.5 103.75 C207.5 115.417 207.5 134.583 192.5 146.25 C169.167 153.75 130.833 153.75 107.5 146.25 C92.5 134.583 92.5 115.417 107.5 103.75 Z\" fill=\"#000000\"/>"
+              },
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<metadata><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"ob2b2b2b2\" hash=\"e209d5a00dc297bf\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjozLCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MS4wLCJnIjowLjAsImIiOjAuMH19fV0sImVmZmVjdHMiOlt7ImlkIjoiZGlzdG9ydC5yb3VnaGVuIiwicGFyYW1zIjp7InNpemUiOjUsInJlbGF0aXZlIjp0cnVlLCJkZXRhaWwiOjEwLjAsInBvaW50cyI6InNtb290aCIsInNlZWQiOjF9LCJ2aXNpYmxlIjp0cnVlfV19LCJraW5kIjp7InR5cGUiOiJwYXRoIiwicGF0aCI6eyJzdWJwYXRocyI6W3siYW5jaG9ycyI6W3sicCI6WzIyMC4wLDEwMC4wXX0seyJwIjpbMjgwLjAsMTAwLjBdfSx7InAiOlsyODAuMCwxNTAuMF19LHsicCI6WzIyMC4wLDE1MC4wXX1dLCJjbG9zZWQiOnRydWV9XX19fX0=</vectorcraft:recipe><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"oa1a1a1a1\" hash=\"f3919eb038cce356\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjoyLCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MC4wLCJnIjowLjAsImIiOjAuMH19fV0sImVmZmVjdHMiOlt7ImlkIjoiZGlzdG9ydC5wdWNrZXJCbG9hdCIsInBhcmFtcyI6eyJhbW91bnQiOjMwfSwidmlzaWJsZSI6dHJ1ZX1dfSwia2luZCI6eyJ0eXBlIjoicGF0aCIsInBhdGgiOnsic3VicGF0aHMiOlt7ImFuY2hvcnMiOlt7InAiOlsxMDAuMCwxMDAuMF19LHsicCI6WzIwMC4wLDEwMC4wXX0seyJwIjpbMjAwLjAsMTUwLjBdfSx7InAiOlsxMDAuMCwxNTAuMF19XSwiY2xvc2VkIjp0cnVlfV19fX19</vectorcraft:recipe></metadata>"
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "pila-togli.svg"
+    },
+    {
+      "id": "effect.setParams",
+      "disegno": "pila.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {
+        "index": 0,
+        "params": {
+          "size": 10
+        }
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "oa1a1a1a1"
+              },
+              {
+                "op": "remove",
+                "target": {
+                  "path": [
+                    1
+                  ],
+                  "tag": "metadata"
+                }
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<path id=\"oa1a1a1a1\" d=\"M112.713 106.931 C101.566 100.981 102.612 105.995 114.967 109.612 C102.818 102.347 98.757 90.795 113.17 98.843 C101.811 88.406 108.715 97.292 121.741 104.313 C115.043 96.711 118.108 88.663 127.202 97.555 C120.429 87.052 116.702 89.68 126.886 100.741 C120.98 94.657 128.149 101.125 136.688 108.591 C136.056 104.453 138.651 104.027 144.42 108.121 C146.474 100.282 151.4 92.532 154.036 100.287 C159.745 90.577 163.888 96.344 162.924 103.786 C171.307 96.233 172.365 92.638 170.486 100.043 C183.292 89.81 196.799 87.885 187.154 97.516 C203.958 87.726 197.14 89.637 186.359 99.689 C201.468 91.855 212.566 93.532 196.752 102.436 C214.164 95.391 204.894 94.333 189.904 103.812 C203.305 98.315 209.11 103.555 193.229 111.267 C208.088 109.263 201.951 112.349 187.639 116.468 C200.12 114.545 201.679 110.058 189.169 116.136 C204.532 115.937 209.675 126.183 193.965 129.504 C209.514 135.984 202.8 137.988 188.811 137.868 C202.443 146.811 208.258 156.132 193.174 149.066 C208.79 158.968 205.627 151.279 189.991 144.157 C202.808 150.536 200.932 154.322 186.922 147.419 C199.199 156.32 199.394 155.755 186.148 148.585 C198.643 158.044 201.299 163.334 185.257 152.493 C194.328 161.04 182.568 152.531 170.691 143.499 C173.643 147.505 174.584 146.533 165.468 141.349 C167.495 147.684 160.998 153.788 154.97 146.051 C152.676 153.153 148.587 144.351 147.015 139.939 C143.56 146.052 145.517 157.778 143.824 149.822 C137.996 159.368 128.068 151.543 130.337 143.467 C118.95 148.405 116.455 148.415 123.606 142.866 C112.35 149.907 115.05 153.749 121.233 146.775 C107.334 155.15 93.891 152.129 106.497 145.972 C88.619 154.599 96.256 163.153 109.541 152.251 C94.491 160.565 85.57 147.287 102.585 140.235 C86.356 143.916 96.635 152.814 111.285 144.776 C98.832 150.676 92.644 141.293 107.456 135.495 C92.461 137.084 97.102 141.438 110.88 135.444 C97.269 136.8 93.607 131.516 107.826 125.21 C92.501 119.031 94.158 105.618 108.428 107.759 C93.576 97.71 90.34 101.734 106.535 107.673 C92.273 101.361 97.764 100.106 112.713 106.931 Z\" fill=\"#000000\"/>"
+              },
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<metadata><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"ob2b2b2b2\" hash=\"e209d5a00dc297bf\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjozLCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MS4wLCJnIjowLjAsImIiOjAuMH19fV0sImVmZmVjdHMiOlt7ImlkIjoiZGlzdG9ydC5yb3VnaGVuIiwicGFyYW1zIjp7InNpemUiOjUsInJlbGF0aXZlIjp0cnVlLCJkZXRhaWwiOjEwLjAsInBvaW50cyI6InNtb290aCIsInNlZWQiOjF9LCJ2aXNpYmxlIjp0cnVlfV19LCJraW5kIjp7InR5cGUiOiJwYXRoIiwicGF0aCI6eyJzdWJwYXRocyI6W3siYW5jaG9ycyI6W3sicCI6WzIyMC4wLDEwMC4wXX0seyJwIjpbMjgwLjAsMTAwLjBdfSx7InAiOlsyODAuMCwxNTAuMF19LHsicCI6WzIyMC4wLDE1MC4wXX1dLCJjbG9zZWQiOnRydWV9XX19fX0=</vectorcraft:recipe><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"oa1a1a1a1\" hash=\"a5adb7ff714b6219\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjoyLCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MC4wLCJnIjowLjAsImIiOjAuMH19fV0sImVmZmVjdHMiOlt7ImlkIjoiZGlzdG9ydC5yb3VnaGVuIiwicGFyYW1zIjp7InNpemUiOjEwLCJyZWxhdGl2ZSI6dHJ1ZSwiZGV0YWlsIjoxMC4wLCJwb2ludHMiOiJzbW9vdGgiLCJzZWVkIjoxfSwidmlzaWJsZSI6dHJ1ZX0seyJpZCI6ImRpc3RvcnQucHVja2VyQmxvYXQiLCJwYXJhbXMiOnsiYW1vdW50IjozMH0sInZpc2libGUiOnRydWV9XX0sImtpbmQiOnsidHlwZSI6InBhdGgiLCJwYXRoIjp7InN1YnBhdGhzIjpbeyJhbmNob3JzIjpbeyJwIjpbMTAwLjAsMTAwLjBdfSx7InAiOlsyMDAuMCwxMDAuMF19LHsicCI6WzIwMC4wLDE1MC4wXX0seyJwIjpbMTAwLjAsMTUwLjBdfV0sImNsb3NlZCI6dHJ1ZX1dfX19fQ==</vectorcraft:recipe></metadata>"
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "pila-opzioni.svg"
+    },
+    {
+      "id": "effect.setParams",
+      "disegno": "pila.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {
+        "index": 1,
+        "visible": false
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "oa1a1a1a1"
+              },
+              {
+                "op": "remove",
+                "target": {
+                  "path": [
+                    1
+                  ],
+                  "tag": "metadata"
+                }
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<path id=\"oa1a1a1a1\" d=\"M103.094 101.869 C104.043 101.828 104.643 104.239 105.149 103.446 C105.656 102.653 104.607 97.63 106.133 97.111 C107.66 96.591 111.743 100.455 114.309 100.329 C116.875 100.202 119.58 96.703 121.53 96.353 C123.48 96.003 123.451 97.145 126.009 98.227 C128.567 99.309 133.421 102.121 136.877 102.845 C140.333 103.569 143.271 103.383 146.746 102.569 C150.22 101.755 154.172 98.385 157.723 97.96 C161.274 97.535 164.813 100.043 168.053 100.019 C171.294 99.995 173.345 98.431 177.166 97.817 C180.987 97.202 188.233 96.365 190.979 96.33 C193.726 96.296 191.843 97.126 193.646 97.609 C195.45 98.091 200.991 98.82 201.8 99.224 C202.61 99.629 198.725 98.937 198.501 100.034 C198.277 101.131 200.679 103.737 200.457 105.804 C200.235 107.871 197.566 110.549 197.168 112.435 C196.77 114.322 197.448 114.144 198.069 117.123 C198.689 120.102 200.925 126.476 200.89 130.307 C200.855 134.138 197.936 136.784 197.858 140.111 C197.781 143.438 200.309 148.827 200.424 150.269 C200.54 151.712 199.286 148.697 198.552 148.766 C197.818 148.835 196.856 150.251 196.018 150.685 C195.18 151.119 194.548 150.874 193.522 151.371 C192.496 151.869 192.57 154.169 189.864 153.67 C187.158 153.171 180.672 149.472 177.286 148.379 C173.901 147.287 172.719 146.864 169.55 147.114 C166.381 147.365 161.819 150.019 158.272 149.88 C154.726 149.742 151.138 145.915 148.272 146.285 C145.406 146.655 144.447 151.753 141.074 152.099 C137.702 152.445 131.649 149.042 128.039 148.36 C124.429 147.678 121.753 147.682 119.415 148.007 C117.076 148.331 116.878 150.002 114.01 150.306 C111.142 150.611 104.216 149.297 102.208 149.834 C100.199 150.371 102.803 154.09 101.957 153.528 C101.112 152.965 97.088 147.423 97.137 146.459 C97.187 145.495 101.777 149.036 102.255 147.745 C102.732 146.455 100.042 141.039 100.002 138.715 C99.962 136.391 101.98 136.51 102.017 133.801 C102.053 131.092 100.46 126.875 100.22 122.46 C99.98 118.046 100.7 110.44 100.574 107.312 C100.447 104.184 99.04 104.597 99.46 103.69 C99.881 102.783 102.146 101.909 103.094 101.869 Z\" fill=\"#000000\"/>"
+              },
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<metadata><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"ob2b2b2b2\" hash=\"e209d5a00dc297bf\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjozLCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MS4wLCJnIjowLjAsImIiOjAuMH19fV0sImVmZmVjdHMiOlt7ImlkIjoiZGlzdG9ydC5yb3VnaGVuIiwicGFyYW1zIjp7InNpemUiOjUsInJlbGF0aXZlIjp0cnVlLCJkZXRhaWwiOjEwLjAsInBvaW50cyI6InNtb290aCIsInNlZWQiOjF9LCJ2aXNpYmxlIjp0cnVlfV19LCJraW5kIjp7InR5cGUiOiJwYXRoIiwicGF0aCI6eyJzdWJwYXRocyI6W3siYW5jaG9ycyI6W3sicCI6WzIyMC4wLDEwMC4wXX0seyJwIjpbMjgwLjAsMTAwLjBdfSx7InAiOlsyODAuMCwxNTAuMF19LHsicCI6WzIyMC4wLDE1MC4wXX1dLCJjbG9zZWQiOnRydWV9XX19fX0=</vectorcraft:recipe><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"oa1a1a1a1\" hash=\"eba0404ddb30c699\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjoyLCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MC4wLCJnIjowLjAsImIiOjAuMH19fV0sImVmZmVjdHMiOlt7ImlkIjoiZGlzdG9ydC5yb3VnaGVuIiwicGFyYW1zIjp7InNpemUiOjUsInJlbGF0aXZlIjp0cnVlLCJkZXRhaWwiOjEwLjAsInBvaW50cyI6InNtb290aCIsInNlZWQiOjF9LCJ2aXNpYmxlIjp0cnVlfSx7ImlkIjoiZGlzdG9ydC5wdWNrZXJCbG9hdCIsInBhcmFtcyI6eyJhbW91bnQiOjMwfSwidmlzaWJsZSI6ZmFsc2V9XX0sImtpbmQiOnsidHlwZSI6InBhdGgiLCJwYXRoIjp7InN1YnBhdGhzIjpbeyJhbmNob3JzIjpbeyJwIjpbMTAwLjAsMTAwLjBdfSx7InAiOlsyMDAuMCwxMDAuMF19LHsicCI6WzIwMC4wLDE1MC4wXX0seyJwIjpbMTAwLjAsMTUwLjBdfV0sImNsb3NlZCI6dHJ1ZX1dfX19fQ==</vectorcraft:recipe></metadata>"
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "pila-nascondi.svg"
+    },
+    {
+      "id": "effect.duplicate",
+      "disegno": "pila.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {
+        "index": 1
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "oa1a1a1a1"
+              },
+              {
+                "op": "remove",
+                "target": {
+                  "path": [
+                    1
+                  ],
+                  "tag": "metadata"
+                }
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<path id=\"oa1a1a1a1\" d=\"M116.03 108.265 C89.323 94.377 90.117 97.565 117.515 109.405 C91.457 95.468 90.069 88.826 118.226 104.827 C94.107 87.451 99.507 92.561 124.132 107.152 C106.294 92.227 109.872 87.6 129.35 104.28 C115.03 86.673 114.991 88.184 132.586 105.634 C121.757 91.046 128.176 94.765 140.438 108.97 C137.317 96.679 141.203 96.433 147.568 108.771 C150.393 94.28 155.619 89.824 155.499 105.441 C165.012 88.7 169.692 92.016 162.963 106.928 C178.263 91.952 180.976 89.885 169.547 105.337 C191.082 88.259 200.665 87.152 179.527 104.264 C207.93 87.061 205.439 88.159 181.454 105.187 C210.209 89.435 217.538 90.399 187.345 106.354 C219.678 91.468 214.541 90.554 184.961 106.94 C213.948 93.455 217.125 96.901 186.375 111.108 C216.538 102.368 213.009 105.91 183.999 115.899 C211.956 110.9 212.853 110.665 184.649 119.286 C214.493 118.544 217.45 126.974 186.687 128.812 C217.358 137.107 213.497 140.606 184.497 135.895 C213.292 149.406 216.635 156.533 186.351 143.234 C216.941 160.348 215.283 156.361 184.998 142.148 C213.341 156.544 212.07 158.416 183.167 143.535 C209.852 159.564 209.016 159.24 181.364 144.031 C206.303 160.556 206.4 163.597 178.721 145.691 C199.243 162.279 190.666 157.386 169.634 141.869 C181.711 154.496 180.147 153.937 164.044 140.955 C171.765 154.599 165.732 158.109 155.896 142.953 C156.352 157.743 151.607 152.683 148.671 140.356 C144.026 153.661 142.758 160.403 143.471 144.556 C133.838 161.318 125.832 156.818 134.052 141.855 C116.284 155.014 112.745 155.02 127.821 141.6 C106.561 155.877 106.298 158.086 123.916 143.261 C98.712 158.892 89.553 157.155 115.389 142.92 C84.24 158.575 87.683 163.494 115.209 145.589 C85.448 162.006 80.125 154.676 111.726 140.482 C80.256 152.127 86.327 156.81 115.423 141.411 C87.59 153.396 84.032 146.233 113.796 134.886 C83.927 140.086 86.596 140.244 115.251 131.336 C86.692 133.079 84.586 127.502 113.953 123.143 C83.95 115.825 84.903 105.767 114.209 112.198 C84.568 97.492 82.708 98.039 113.405 109.581 C83.819 95.64 86.816 94.485 116.03 108.265 Z\" fill=\"#000000\"/>"
+              },
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<metadata><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"ob2b2b2b2\" hash=\"e209d5a00dc297bf\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjozLCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MS4wLCJnIjowLjAsImIiOjAuMH19fV0sImVmZmVjdHMiOlt7ImlkIjoiZGlzdG9ydC5yb3VnaGVuIiwicGFyYW1zIjp7InNpemUiOjUsInJlbGF0aXZlIjp0cnVlLCJkZXRhaWwiOjEwLjAsInBvaW50cyI6InNtb290aCIsInNlZWQiOjF9LCJ2aXNpYmxlIjp0cnVlfV19LCJraW5kIjp7InR5cGUiOiJwYXRoIiwicGF0aCI6eyJzdWJwYXRocyI6W3siYW5jaG9ycyI6W3sicCI6WzIyMC4wLDEwMC4wXX0seyJwIjpbMjgwLjAsMTAwLjBdfSx7InAiOlsyODAuMCwxNTAuMF19LHsicCI6WzIyMC4wLDE1MC4wXX1dLCJjbG9zZWQiOnRydWV9XX19fX0=</vectorcraft:recipe><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"oa1a1a1a1\" hash=\"b2fd220a1a0fbb54\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjoyLCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MC4wLCJnIjowLjAsImIiOjAuMH19fV0sImVmZmVjdHMiOlt7ImlkIjoiZGlzdG9ydC5yb3VnaGVuIiwicGFyYW1zIjp7InNpemUiOjUsInJlbGF0aXZlIjp0cnVlLCJkZXRhaWwiOjEwLjAsInBvaW50cyI6InNtb290aCIsInNlZWQiOjF9LCJ2aXNpYmxlIjp0cnVlfSx7ImlkIjoiZGlzdG9ydC5wdWNrZXJCbG9hdCIsInBhcmFtcyI6eyJhbW91bnQiOjMwfSwidmlzaWJsZSI6dHJ1ZX0seyJpZCI6ImRpc3RvcnQucHVja2VyQmxvYXQiLCJwYXJhbXMiOnsiYW1vdW50IjozMH0sInZpc2libGUiOnRydWV9XX0sImtpbmQiOnsidHlwZSI6InBhdGgiLCJwYXRoIjp7InN1YnBhdGhzIjpbeyJhbmNob3JzIjpbeyJwIjpbMTAwLjAsMTAwLjBdfSx7InAiOlsyMDAuMCwxMDAuMF19LHsicCI6WzIwMC4wLDE1MC4wXX0seyJwIjpbMTAwLjAsMTUwLjBdfV0sImNsb3NlZCI6dHJ1ZX1dfX19fQ==</vectorcraft:recipe></metadata>"
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "pila-duplica.svg"
+    },
+    {
+      "id": "effect.move",
+      "disegno": "pila.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {
+        "from": 1,
+        "to": 0
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "oa1a1a1a1"
+              },
+              {
+                "op": "remove",
+                "target": {
+                  "path": [
+                    1
+                  ],
+                  "tag": "metadata"
+                }
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<path id=\"oa1a1a1a1\" d=\"M110.827 105.759 C113.427 105.433 115.915 107.109 117.597 105.736 C119.279 104.362 118.844 98.494 120.916 97.519 C122.989 96.544 127.426 100.333 130.033 99.885 C132.639 99.436 135.073 95.414 136.555 94.83 C138.038 94.245 137.132 95.317 138.928 96.376 C140.724 97.435 144.788 100.406 147.332 101.183 C149.876 101.961 151.725 101.814 154.193 101.043 C156.661 100.272 159.563 96.806 162.14 96.557 C164.717 96.309 167.263 99.264 169.655 99.551 C172.046 99.838 173.202 98.522 176.488 98.278 C179.773 98.034 186.845 97.603 189.367 98.086 C191.89 98.57 189.6 99.472 191.624 101.179 C193.649 102.887 200.105 105.983 201.513 108.332 C202.921 110.681 199.656 112.502 200.072 115.274 C200.489 118.045 203.944 122.341 204.012 124.964 C204.079 127.586 201.21 129.835 200.476 131.01 C199.742 132.185 199.859 130.38 199.608 132.015 C199.356 133.65 200.535 138.443 198.967 140.82 C197.399 143.197 192.221 144.539 190.198 146.275 C188.174 148.011 188.833 150.94 186.828 151.236 C184.822 151.531 180.98 148.054 178.166 148.049 C175.351 148.044 172.259 150.426 169.943 151.205 C167.627 151.984 166.011 151.981 164.269 152.724 C162.526 153.467 162.383 156.096 159.488 155.664 C156.592 155.232 149.99 151.307 146.895 150.133 C143.8 148.958 143.369 148.452 140.916 148.617 C138.463 148.782 134.747 151.478 132.176 151.121 C129.604 150.764 127.162 146.39 125.486 146.475 C123.811 146.56 124.298 151.676 122.122 151.631 C119.946 151.586 114.939 147.46 112.429 146.206 C109.918 144.952 108.404 144.948 107.059 144.107 C105.713 143.267 106.411 142.751 104.357 141.164 C102.303 139.576 95.958 136.097 94.735 134.585 C93.511 133.072 97.239 134.872 97.017 132.09 C96.795 129.309 92.781 120.612 93.402 117.895 C94.022 115.179 99.308 117.491 100.74 115.79 C102.172 114.09 100.311 109.362 101.992 107.69 C103.673 106.018 108.226 106.084 110.827 105.759 Z\" fill=\"#000000\"/>"
+              },
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<metadata><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"ob2b2b2b2\" hash=\"e209d5a00dc297bf\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjozLCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MS4wLCJnIjowLjAsImIiOjAuMH19fV0sImVmZmVjdHMiOlt7ImlkIjoiZGlzdG9ydC5yb3VnaGVuIiwicGFyYW1zIjp7InNpemUiOjUsInJlbGF0aXZlIjp0cnVlLCJkZXRhaWwiOjEwLjAsInBvaW50cyI6InNtb290aCIsInNlZWQiOjF9LCJ2aXNpYmxlIjp0cnVlfV19LCJraW5kIjp7InR5cGUiOiJwYXRoIiwicGF0aCI6eyJzdWJwYXRocyI6W3siYW5jaG9ycyI6W3sicCI6WzIyMC4wLDEwMC4wXX0seyJwIjpbMjgwLjAsMTAwLjBdfSx7InAiOlsyODAuMCwxNTAuMF19LHsicCI6WzIyMC4wLDE1MC4wXX1dLCJjbG9zZWQiOnRydWV9XX19fX0=</vectorcraft:recipe><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"oa1a1a1a1\" hash=\"cbd4bd0f42a4fdc1\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjoyLCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MC4wLCJnIjowLjAsImIiOjAuMH19fV0sImVmZmVjdHMiOlt7ImlkIjoiZGlzdG9ydC5wdWNrZXJCbG9hdCIsInBhcmFtcyI6eyJhbW91bnQiOjMwfSwidmlzaWJsZSI6dHJ1ZX0seyJpZCI6ImRpc3RvcnQucm91Z2hlbiIsInBhcmFtcyI6eyJzaXplIjo1LCJyZWxhdGl2ZSI6dHJ1ZSwiZGV0YWlsIjoxMC4wLCJwb2ludHMiOiJzbW9vdGgiLCJzZWVkIjoxfSwidmlzaWJsZSI6dHJ1ZX1dfSwia2luZCI6eyJ0eXBlIjoicGF0aCIsInBhdGgiOnsic3VicGF0aHMiOlt7ImFuY2hvcnMiOlt7InAiOlsxMDAuMCwxMDAuMF19LHsicCI6WzIwMC4wLDEwMC4wXX0seyJwIjpbMjAwLjAsMTUwLjBdfSx7InAiOlsxMDAuMCwxNTAuMF19XSwiY2xvc2VkIjp0cnVlfV19fX19</vectorcraft:recipe></metadata>"
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "pila-sposta.svg"
+    },
+    {
+      "id": "effect.remove",
+      "disegno": "pila.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "ob2b2b2b2"
+      ],
+      "argomenti": {
+        "index": 0,
+        "aligned": true
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "ob2b2b2b2"
+              },
+              {
+                "op": "remove",
+                "target": "oa1a1a1a1"
+              },
+              {
+                "op": "remove",
+                "target": {
+                  "path": [
+                    1
+                  ],
+                  "tag": "metadata"
+                }
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<path id=\"oa1a1a1a1\" d=\"M107.5 103.75 C130.833 96.25 169.167 96.25 192.5 103.75 C207.5 115.417 207.5 134.583 192.5 146.25 C169.167 153.75 130.833 153.75 107.5 146.25 C92.5 134.583 92.5 115.417 107.5 103.75 Z\" fill=\"#000000\"/>"
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "last": true
+                },
+                "raw": "<rect id=\"ob2b2b2b2\" x=\"220\" y=\"100\" width=\"60\" height=\"50\" fill=\"#ff0000\"/>"
+              },
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<metadata><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"oa1a1a1a1\" hash=\"f3919eb038cce356\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjoyLCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MC4wLCJnIjowLjAsImIiOjAuMH19fV0sImVmZmVjdHMiOlt7ImlkIjoiZGlzdG9ydC5wdWNrZXJCbG9hdCIsInBhcmFtcyI6eyJhbW91bnQiOjMwfSwidmlzaWJsZSI6dHJ1ZX1dfSwia2luZCI6eyJ0eXBlIjoicGF0aCIsInBhdGgiOnsic3VicGF0aHMiOlt7ImFuY2hvcnMiOlt7InAiOlsxMDAuMCwxMDAuMF19LHsicCI6WzIwMC4wLDEwMC4wXX0seyJwIjpbMjAwLjAsMTUwLjBdfSx7InAiOlsxMDAuMCwxNTAuMF19XSwiY2xvc2VkIjp0cnVlfV19fX19</vectorcraft:recipe></metadata>"
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "pila-togli-allineati.svg"
+    },
+    {
+      "id": "effect.list",
+      "disegno": "pila.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "lettura_parziale": {
+          "applied": [
+            {
+              "id": 2,
+              "effects": [
+                {
+                  "id": "distort.roughen",
+                  "params": {
+                    "size": 5,
+                    "relative": true,
+                    "detail": 10.0,
+                    "points": "smooth",
+                    "seed": 1
+                  },
+                  "visible": true
+                },
+                {
+                  "id": "distort.puckerBloat",
+                  "params": {
+                    "amount": 30
+                  },
+                  "visible": true
+                }
+              ],
+              "items": [
+                {
+                  "index": 0,
+                  "kind": "fill",
+                  "effects": []
+                }
+              ]
+            }
+          ],
+          "activeItem": null
+        }
+      }
     }
   ]
 }

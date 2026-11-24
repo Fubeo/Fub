@@ -1555,6 +1555,86 @@
     },
     {
       "fonte": "motore",
+      "id": "effect.duplicate",
+      "chiamata": {
+        "comando": "disegno.effect.duplicate"
+      },
+      "etichetta": {
+        "it": "Duplica effetto",
+        "en": "Duplicate Effect"
+      },
+      "posto": "ispettore/design/aspetto",
+      "famiglia": "effetti",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "effect.list",
+      "chiamata": {
+        "comando": "disegno.effect.list"
+      },
+      "etichetta": {
+        "it": "Effetti",
+        "en": "Effects"
+      },
+      "posto": "interno",
+      "famiglia": "effetti",
+      "tasto": null,
+      "effetto": "legge",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "effect.move",
+      "chiamata": {
+        "comando": "disegno.effect.move"
+      },
+      "etichetta": {
+        "it": "Sposta effetto",
+        "en": "Move Effect"
+      },
+      "posto": "ispettore/design/aspetto",
+      "famiglia": "effetti",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "effect.remove",
+      "chiamata": {
+        "comando": "disegno.effect.remove"
+      },
+      "etichetta": {
+        "it": "Rimuovi effetto",
+        "en": "Remove Effect"
+      },
+      "posto": "ispettore/design/aspetto",
+      "famiglia": "effetti",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "effect.setParams",
+      "chiamata": {
+        "comando": "disegno.effect.setParams"
+      },
+      "etichetta": {
+        "it": "Opzioni effetto",
+        "en": "Effect Options"
+      },
+      "posto": "ispettore/design/aspetto",
+      "famiglia": "effetti",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "eyedropper.setOptions",
       "chiamata": {
         "comando": "disegno.eyedropper.setOptions"
