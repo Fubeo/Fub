@@ -291,6 +291,11 @@ export function installVaultImages(ctx: EditorContext): void {
       ctx.motoreFreccia?.({ kind: "key", key: event.key, code: event.code, mods: { shift: event.shiftKey, alt: event.altKey, cmd: event.ctrlKey || event.metaKey }, pressed: true });
       return;
     }
+    // Le guide scelte prendono Canc e le frecce, come in VectorCraft.
+    if (comeVectorCraft && !scriveTesto && ctx.current === null && !isWritingField(event.target) && ctx.guideKey(event)) {
+      event.preventDefault();
+      return;
+    }
     if (comeVectorCraft && !scriveTesto && freccia !== undefined && !isWritingField(event.target)) {
       event.preventDefault();
       if (ctx.current === null && ctx.selection.length > 0 && editable()) {

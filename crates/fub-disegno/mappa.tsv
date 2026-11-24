@@ -179,7 +179,7 @@ motore	view.guides.lock	Lock Guides	View › Guides	tavole	F2	T19	fatto	menu/vis
 motore	view.guides.clear	Clear Guides	View › Guides	tavole	F2	T19	fatto	menu/visualizza	famiglia		Cancella guide
 motore	guide.add	Add Guide		tavole	F2	T19	fatto	ispettore/design/documento	famiglia		Aggiungi guida
 motore	guide.list	Guides		tavole	F2	T19	fatto	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Guide
-motore	guide.select	Select Guides		tavole	F2	T19	da fare	ispettore/design/documento	famiglia		Seleziona guide
+motore	guide.select	Select Guides		tavole	F2	T19	fub	ispettore/design/documento	famiglia	la scelta delle guide del client (tools/editor/guide-linee.ts): clic, Maiusc+clic, Canc, frecce (object.nudge con «guides»), trascinamento	Seleziona guide
 motore	guide.remove	Remove Guide		tavole	F2	T19	fatto	ispettore/design/documento	famiglia	più guide con «guides» (indici)	Rimuovi guida
 motore	guide.move	Move Guide		tavole	F2	T19	fatto	ispettore/design/documento	famiglia	più guide con «guides» (indici)	Sposta guida
 motore	guide.setLayer	Move Guide to Layer		tavole	F2	T19	fatto	ispettore/design/documento	famiglia		Sposta guida nel livello

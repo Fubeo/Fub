@@ -4344,6 +4344,48 @@
         ]
       },
       "dopo": "marionetta-strumento.svg"
+    },
+    {
+      "$nota": "Sposta con le frecce e sole guide scelte: le guide si spostano del passo della tastiera, Maiusc dieci volte, come in VectorCraft.",
+      "id": "object.nudge",
+      "disegno": "../tavole/guide.svg",
+      "selezione": [],
+      "argomenti": {
+        "dx": 1,
+        "dy": 0,
+        "big": true,
+        "guides": [
+          0
+        ]
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "#root",
+            "attrs": {
+              "fub:guides": "x 130 layer=l1a2b3c4d; y 50 board=b3c3c3c3c; x 30 layer=l1a2b3c4d locked"
+            }
+          }
+        ]
+      },
+      "dopo": "guide-frecce.svg"
+    },
+    {
+      "$nota": "Sposta con le frecce una guida bloccata nel file: rifiutato.",
+      "id": "object.nudge",
+      "disegno": "../tavole/guide.svg",
+      "selezione": [],
+      "argomenti": {
+        "dx": 0,
+        "dy": 1,
+        "guides": [
+          2
+        ]
+      },
+      "atteso": {
+        "rifiuto": "locked"
+      }
     }
   ]
 }

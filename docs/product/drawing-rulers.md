@@ -27,6 +27,14 @@ Il **Completo** col motore le riporta come in VectorCraft
 - con gli strumenti di selezione una guida si prende e si sposta (il
   cursore lo dice), con Alt se ne lascia una copia, e lasciata sopra un
   righello si toglie;
+- un clic su una guida la sceglie (si colora come la selezione e toglie gli
+  oggetti scelti), Maiusc+clic ne aggiunge un'altra o la toglie, un clic
+  fuori dalle guide le lascia; trascinarne una sposta tutte le scelte, Canc
+  le toglie dal disegno e le frecce le spostano del passo della tastiera
+  (Maiusc dieci passi, Alt una copia che resta scelta). La scelta vale per
+  la vista, non per il file: una guida aggiunta o tolta, un oggetto scelto,
+  **Guide** o **Blocca guide** la svuotano. Guide e oggetti non si scelgono
+  insieme, e il riquadro di selezione non prende le guide;
 - in Visualizza, **Guide** le nasconde e le rimostra, e **Blocca guide** le
   lascia vedere senza che si prendano; tutte e due valgono per la sessione,
   non per il file;

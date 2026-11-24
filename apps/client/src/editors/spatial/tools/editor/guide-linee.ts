@@ -180,6 +180,10 @@ type Gesto =
       readonly kind: "sposta";
       readonly pointerId: number;
       readonly index: number;
+      /// Le guide che il gesto sposta: le scelte, fra cui quella presa.
+      readonly gruppo: readonly number[];
+      /// Maiusc sopra una guida già scelta: lasciata senza trascinarla, esce dalla scelta.
+      readonly togliSeClic: boolean;
       readonly asse: "x" | "y";
       readonly da: number;
       readonly inizio: Point;
@@ -207,6 +211,23 @@ export function installGuideLines(ctx: EditorContext): void {
   let gesto: Gesto | null = null;
   let sotto: number | null = null;
   let disegnato = "";
+  /// Le guide scelte (indici di `fub:guides`), come la selezione delle guide di VectorCraft:
+  /// della vista, non del file. Gli oggetti scelti le tolgono, e loro tolgono gli oggetti.
+  let scelte: number[] = [];
+  /// Quante guide aveva il disegno quando la scelta è nata: se cambiano, gli indici non
+  /// valgono più e la scelta si svuota.
+  let quanteAllaScelta = 0;
+  /// Quante ne aveva prima di una copia mandata al motore e non ancora tornata: finché il
+  /// disegno resta così, la scelta (le copie) aspetta.
+  let quanteInAttesa: number | null = null;
+  /// Sceglie `indici`; `quante` è il numero di guide che il disegno avrà, quando il comando
+  /// appena mandato al motore (una copia) ne aggiunge.
+  const sceglie = (indici: readonly number[], quante = (ctx.scene.root.guides ?? []).length): void => {
+    scelte = [...new Set(indici)].sort((a, b) => a - b);
+    const ora = (ctx.scene.root.guides ?? []).length;
+    quanteInAttesa = quante === ora ? null : ora;
+    quanteAllaScelta = quante;
+  };
 
   /// Il motore c'è: le guide sono del Completo.
   const completo = () => {
@@ -278,6 +299,10 @@ export function installGuideLines(ctx: EditorContext): void {
   const disegna = (): void => {
     if (ctx.disposed) return;
     const guide = ctx.scene.root.guides ?? [];
+    // Gli indici scelti valgono finché le guide restano quelle: un'altra guida aggiunta o
+    // tolta, gli oggetti scelti, Nascondi o Blocca guide svuotano la scelta.
+    if (guide.length === quanteAllaScelta) quanteInAttesa = null;
+    if (scelte.length > 0 && ((guide.length !== quanteAllaScelta && guide.length !== quanteInAttesa) || ctx.selection.length > 0 || ctx.guidesHidden || ctx.guidesLocked || !ctx.editable())) scelte = [];
     const conTracciati = tracciatiGuida();
     if (svg === null && guide.length === 0 && conTracciati.length === 0 && gesto === null) return;
     if (svg === null) {
@@ -294,7 +319,7 @@ export function installGuideLines(ctx: EditorContext): void {
     }
     const { w, h } = ctx.surfaceSize();
     const { tx, ty, scale, angle } = ctx.camera;
-    const chiave = JSON.stringify([tx, ty, scale, angle, w, h, guide, ctx.guidesHidden, ctx.guidesLocked, sotto, gesto, ctx.boards === null, versione]);
+    const chiave = JSON.stringify([tx, ty, scale, angle, w, h, guide, ctx.guidesHidden, ctx.guidesLocked, sotto, gesto, ctx.boards === null, versione, scelte]);
     if (chiave === disegnato) return;
     disegnato = chiave;
     const figli: SVGElement[] = [];
@@ -305,21 +330,24 @@ export function installGuideLines(ctx: EditorContext): void {
         if (p !== null) figli.push(p);
       }
     }
-    const nascosta = gesto?.kind === "sposta" && gesto.cominciato && !gesto.copia ? gesto.index : null;
+    // Le guide che si spostano non restano al loro posto, salvo con Alt, che ne lascia una copia.
+    const spostate = new Set(gesto?.kind === "sposta" && gesto.cominciato && !gesto.copia ? gesto.gruppo : []);
+    const mobili: { readonly asse: "x" | "y"; readonly at: number }[] = [];
     for (const g of guideSulloSchermo(stato())) {
-      if (g.index === nascosta) continue;
+      if (gesto?.kind === "sposta" && gesto.cominciato && !gesto.via && gesto.gruppo.includes(g.index)) {
+        // Si sposta lungo l'asse di chi la trascina: una guida dell'altro asse resta dov'è.
+        const d = gesto.at - gesto.da;
+        mobili.push({ asse: g.guida.axis, at: g.guida.axis === gesto.asse ? g.guida.at + d : g.guida.at });
+      }
+      if (spostate.has(g.index)) continue;
       const classi = ["draw-guide-line"];
       if (g.guida.locked) classi.push("draw-guide-line-locked");
       if (g.index === sotto) classi.push("draw-guide-line-hot");
+      if (scelte.includes(g.index)) classi.push("draw-guide-line-scelta");
       figli.push(linea(g.a, g.b, classi.join(" ")));
     }
-    const mobile =
-      gesto?.kind === "sposta" && gesto.cominciato && !gesto.via
-        ? { asse: gesto.asse, at: gesto.at }
-        : gesto?.kind === "nuova"
-          ? gesto.dove
-          : null;
-    if (mobile !== null) {
+    if (gesto?.kind === "nuova" && gesto.dove !== null) mobili.push(gesto.dove);
+    for (const mobile of mobili) {
       const [a, b] = trattoIntero(mobile.asse, mobile.at);
       figli.push(linea(a, b, "draw-guide-line draw-guide-line-hot"));
     }
@@ -360,12 +388,26 @@ export function installGuideLines(ctx: EditorContext): void {
       nuovo = { kind: "nuova", pointerId: event.pointerId, asse: righello === "y" ? "y" : "x", dove: null };
     } else if (selezione()) {
       const presa = guidaSotto(guideSulloSchermo(stato()), punto);
-      if (presa === null) return;
+      if (presa === null) {
+        // Un clic fuori dalle guide (senza Maiusc) le toglie dalla scelta; il clic va agli strumenti.
+        if (scelte.length > 0 && !event.shiftKey) {
+          scelte = [];
+          disegna();
+        }
+        return;
+      }
+      // Come in VectorCraft: il clic sceglie la guida (e lascia gli oggetti); con Maiusc la
+      // aggiunge, o la toglie se era scelta e non si trascina; trascinarla sposta le scelte.
+      const giaScelta = scelte.includes(presa.index);
+      if (!giaScelta) sceglie(event.shiftKey ? [...scelte, presa.index] : [presa.index]);
+      if (ctx.selection.length > 0) ctx.select([]);
       const scena = ctx.sceneAt(event.clientX, event.clientY);
       nuovo = {
         kind: "sposta",
         pointerId: event.pointerId,
         index: presa.index,
+        gruppo: [...scelte],
+        togliSeClic: giaScelta && event.shiftKey,
         asse: presa.guida.axis,
         da: presa.guida.at,
         inizio: punto,
@@ -444,12 +486,27 @@ export function installGuideLines(ctx: EditorContext): void {
           }
           c.eseguiComando?.("guide.add", valori);
         }
-      } else if (finito.cominciato) {
+      } else if (!finito.cominciato) {
+        if (finito.togliSeClic) sceglie(scelte.filter((i) => i !== finito.index));
+      } else if (finito.gruppo.length <= 1) {
         if (finito.via) c.eseguiComando?.("guide.remove", { index: finito.index });
         else if (finito.copia) {
           const d = finito.at - finito.da;
+          const prima = (ctx.scene.root.guides ?? []).length;
           c.eseguiComando?.("guide.move", { guides: [finito.index], dx: finito.asse === "x" ? d : 0, dy: finito.asse === "y" ? d : 0, copy: true });
+          // Come in VectorCraft, resta scelta la copia, in coda alle guide.
+          sceglie([prima], prima + 1);
         } else if (finito.at !== finito.da) c.eseguiComando?.("guide.move", { index: finito.index, pos: finito.at });
+      } else {
+        // Le guide scelte si spostano insieme, lungo l'asse di quella presa.
+        const d = finito.at - finito.da;
+        const valori = { guides: finito.gruppo, dx: finito.asse === "x" ? d : 0, dy: finito.asse === "y" ? d : 0 };
+        if (finito.via) c.eseguiComando?.("guide.remove", { guides: finito.gruppo });
+        else if (finito.copia) {
+          const prima = (ctx.scene.root.guides ?? []).length;
+          c.eseguiComando?.("guide.move", { ...valori, copy: true });
+          sceglie(finito.gruppo.map((_, k) => prima + k), prima + finito.gruppo.length);
+        } else if (d !== 0) c.eseguiComando?.("guide.move", valori);
       }
     }
     disegnato = "";
@@ -481,6 +538,27 @@ export function installGuideLines(ctx: EditorContext): void {
   ctx.life.listen(ctx.surface, "pointerleave", () => {
     if (gesto === null) cambiaSotto(null);
   });
+
+  /// I tasti delle guide scelte, come in VectorCraft: Canc le toglie, le frecce le spostano
+  /// del passo della tastiera (`object.nudge` del motore; Maiusc dieci passi, Alt una copia).
+  /// Vero se il tasto è loro.
+  ctx.guideKey = (event) => {
+    const c = completo();
+    if (scelte.length === 0 || c === null || !ctx.editable() || ctx.selection.length > 0 || event.ctrlKey || event.metaKey) return false;
+    const freccia = ({ ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] } as const)[event.key as "ArrowLeft"];
+    if (event.key === "Delete" || event.key === "Backspace") {
+      c.eseguiComando?.("guide.remove", { guides: scelte });
+      scelte = [];
+    } else if (freccia !== undefined) {
+      const prima = (ctx.scene.root.guides ?? []).length;
+      const gruppo = scelte;
+      c.eseguiComando?.("object.nudge", { dx: freccia[0], dy: freccia[1], big: event.shiftKey, copy: event.altKey, guides: gruppo });
+      if (event.altKey) sceglie(gruppo.map((_, k) => prima + k), prima + gruppo.length);
+    } else return false;
+    disegnato = "";
+    disegna();
+    return true;
+  };
 
   /// Nascondi guide: le toglie dalla vista, e non si prendono.
   ctx.setGuidesHidden = (nascoste) => {

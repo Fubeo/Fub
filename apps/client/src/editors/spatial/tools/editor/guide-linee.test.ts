@@ -66,6 +66,8 @@ function fingi(guide: RulerGuide[], piu: Record<string, unknown> = {}): Finto {
     currentIndex: () => ({ layers: [{ id: "l1", hidden: false, locked: false }, { id: "l2", hidden: false, locked: true }] }),
     scene: { root: { guides: guide } },
     engine: { model: null },
+    selection: [],
+    select: vi.fn(),
     editable: () => true,
     edgeRulers: true,
     grid: { snap: false, snapPixel: false },
@@ -327,5 +329,73 @@ describe("i tracciati-guida (Crea guide)", () => {
     ctx.guidesHidden = true;
     ctx.showGuides();
     expect(tracciati(surface)).toHaveLength(0);
+  });
+});
+
+describe("la scelta delle guide (Seleziona guide di VectorCraft)", () => {
+  const due: RulerGuide[] = [{ axis: "x", at: 50, locked: false }, { axis: "x", at: 80, locked: false }];
+  const clic = (surface: HTMLElement, x: number, y: number, tasti: { shift?: boolean } = {}): void => {
+    surface.dispatchEvent(evento("pointerdown", x, y, tasti));
+    surface.dispatchEvent(evento("pointerup", x, y, tasti));
+  };
+  const scelte = (surface: HTMLElement) => linee(surface).filter((l) => l.classList.contains("draw-guide-line-scelta")).map((l) => Number(l.getAttribute("x1")));
+  const tasto = (key: string, tasti: { shift?: boolean; alt?: boolean } = {}) => new KeyboardEvent("keydown", { key, shiftKey: tasti.shift === true, altKey: tasti.alt === true });
+
+  it("un clic la sceglie senza cambiare il file; Maiusc+clic aggiunge, e toglie quella già scelta", () => {
+    const { surface, esegui, dopo } = fingi(due);
+    clic(surface, 50, 150);
+    expect(scelte(surface)).toEqual([50]);
+    expect(esegui).not.toHaveBeenCalled();
+    expect(dopo).not.toHaveBeenCalled();
+    clic(surface, 80, 150, { shift: true });
+    expect(scelte(surface)).toEqual([50, 80]);
+    clic(surface, 50, 150, { shift: true });
+    expect(scelte(surface)).toEqual([80]);
+  });
+
+  it("trascinarne una sposta tutte le scelte insieme, in un passo", () => {
+    const { surface, esegui } = fingi(due);
+    clic(surface, 50, 150);
+    clic(surface, 80, 150, { shift: true });
+    trascina(surface, [80, 150], [100, 150]);
+    expect(esegui).toHaveBeenCalledWith("guide.move", { guides: [0, 1], dx: 20, dy: 0 });
+  });
+
+  it("Canc le toglie, le frecce le spostano col passo della tastiera del motore", () => {
+    const { ctx, surface, esegui } = fingi(due);
+    expect(ctx.guideKey(tasto("Delete"))).toBe(false);
+    clic(surface, 50, 150);
+    expect(ctx.guideKey(tasto("ArrowRight", { shift: true }))).toBe(true);
+    expect(esegui).toHaveBeenLastCalledWith("object.nudge", { dx: 1, dy: 0, big: true, copy: false, guides: [0] });
+    expect(ctx.guideKey(tasto("a"))).toBe(false);
+    expect(ctx.guideKey(tasto("Delete"))).toBe(true);
+    expect(esegui).toHaveBeenLastCalledWith("guide.remove", { guides: [0] });
+    expect(scelte(surface)).toEqual([]);
+    expect(ctx.guideKey(tasto("Delete"))).toBe(false);
+  });
+
+  it("un clic fuori, gli oggetti scelti o Blocca guide svuotano la scelta; un clic su una guida lascia gli oggetti", () => {
+    const { ctx, surface } = fingi(due);
+    clic(surface, 50, 150);
+    clic(surface, 300, 150);
+    expect(scelte(surface)).toEqual([]);
+    (ctx as { selection: string[] }).selection = ["o1"];
+    clic(surface, 50, 150);
+    expect(ctx.select).toHaveBeenCalledWith([]);
+    (ctx as { selection: string[] }).selection = [];
+    clic(surface, 50, 150);
+    expect(scelte(surface)).toEqual([50]);
+    ctx.setGuidesLocked(true);
+    expect(scelte(surface)).toEqual([]);
+  });
+
+  it("Alt+trascina ne lascia una copia, e la copia resta scelta", () => {
+    const { ctx, surface, esegui } = fingi(due);
+    trascina(surface, [50, 150], [60, 150], { alt: true });
+    expect(esegui).toHaveBeenCalledWith("guide.move", { guides: [0], dx: 10, dy: 0, copy: true });
+    // Il motore risponde: le guide diventano tre, e la terza è la copia scelta.
+    (ctx.scene.root as unknown as { guides: RulerGuide[] }).guides = [...due, { axis: "x", at: 60, locked: false }];
+    ctx.showGuides();
+    expect(scelte(surface)).toEqual([60]);
   });
 });

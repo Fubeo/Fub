@@ -1108,6 +1108,9 @@ fn si_legge_in_sola_lettura(id: &str) -> bool {
     )
 }
 
+/// Sposta con le frecce: prende anche le guide scelte (`guides`).
+const SPOSTA_CON_LE_FRECCE: &str = "object.nudge";
+
 /// Esegue il comando `disegno.<id>` della richiesta: prepara la sua
 /// famiglia, lo fa girare nella sessione del motore sulla selezione e passa
 /// per la differenza. Le operazioni, se il documento cambia; la lettura, se
@@ -1187,12 +1190,19 @@ pub(crate) fn esegui(
         Default::default()
     };
     // Le guide scelte di un comando delle guide (`guides`, i loro indici):
-    // tolte dal valore, vanno nella selezione del motore.
-    let guide_scelte = if famiglia == Famiglia::Tavole {
+    // tolte dal valore, vanno nella selezione del motore. Anche Sposta con le
+    // frecce le prende: con sole guide scelte le sposta del passo della
+    // tastiera, come in VectorCraft.
+    let guide_scelte = if famiglia == Famiglia::Tavole || riga.id == SPOSTA_CON_LE_FRECCE {
         tavole::guide_scelte(copia, &mut valore)?
     } else {
         Vec::new()
     };
+    // Una guida bloccata nel file non si sposta con le frecce, come col
+    // trascinamento (`tavole`, `rifiuto_valore`).
+    if riga.id == SPOSTA_CON_LE_FRECCE && guide_scelte.iter().any(|i| copia.guide.bloccata(*i)) {
+        return Ok(rifiuta(DrawingRefusal::Locked));
+    }
     // Un comando che il motore vuole su un oggetto solo gira una volta per
     // oggetto, nella stessa copia: la differenza li scrive in un passo.
     let giri: Vec<Vec<NodeId>> =

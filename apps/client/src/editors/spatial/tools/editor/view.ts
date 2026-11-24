@@ -77,6 +77,8 @@ export interface ViewContext {
   setGuidesLocked: (locked: boolean) => void;
   /// Ridisegna le guide del righello, dopo un cambio della scena.
   showGuides: () => void;
+  /// I tasti delle guide scelte (Canc, frecce): vero se li ha presi (`guide-linee.ts`).
+  guideKey: (event: KeyboardEvent) => boolean;
   /// «Usa cursori di precisione» (K6 T11, cursori): la croce al posto del cursore degli strumenti che disegnano.
   preciseCursors: boolean;
   setPreciseCursors: (on: boolean) => void;

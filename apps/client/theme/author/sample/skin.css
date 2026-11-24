@@ -20102,6 +20102,11 @@ button.draw-isolation-crumb:hover {
 .draw-guide-line-hot {
   stroke-width: 2px;
 }
+/* Una guida scelta (clic con le Selezioni): Canc la toglie, le frecce la spostano. */
+.draw-guide-line-scelta {
+  stroke: var(--accent);
+  stroke-width: 2px;
+}
 /* Un tracciato-guida (Crea guide): la sua forma, senza riempimento. */
 .draw-guide-path {
   fill: none;
