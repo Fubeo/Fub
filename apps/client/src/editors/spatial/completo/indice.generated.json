@@ -1587,6 +1587,22 @@
     },
     {
       "fonte": "motore",
+      "id": "effect.lightingPreset",
+      "chiamata": {
+        "comando": "disegno.effect.lightingPreset"
+      },
+      "etichetta": {
+        "it": "Predefinito illuminazione 3D",
+        "en": "3D Lighting Preset"
+      },
+      "posto": "menu/effetto",
+      "famiglia": "effetti",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "motore",
       "id": "effect.list",
       "chiamata": {
         "comando": "disegno.effect.list"

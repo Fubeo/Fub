@@ -176,7 +176,11 @@ oggetto bloccato o su un disegno di sola lettura. Le voci:
   Pesce, Ascesa, Occhio di pesce, Gonfia, Compressione, Torci), con piega,
   distorsione orizzontale e verticale e direzione;
 - **3D e materiali ›** Estrusione e smusso, Rivoluzione, Gonfia, Ruota: il
-  file tiene le facce come poligoni ombreggiati (Gonfia ne fa migliaia);
+  file tiene le facce come poligoni ombreggiati (Gonfia ne fa migliaia).
+  **Predefinito illuminazione 3D…** cambia la luce di un effetto 3D già
+  applicato con uno di quattro rig (Standard, Diffusa, In alto a sinistra,
+  Destra) e lascia com'è il resto; vale sul primo effetto 3D della pila, e
+  con più oggetti scelti solo se lo hanno nello stesso posto;
 - **Segni di ritaglio**, in fondo al menu: linee sottili agli angoli
   dell'oggetto, che resta com'è.
 

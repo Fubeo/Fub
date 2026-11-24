@@ -980,6 +980,15 @@ pub const FINESTRE_SCRITTE: &[FinestraScritta] = &[
         predefiniti: &[("kind", "spotColors")],
         limiti: &[],
     },
+    // Predefinito illuminazione 3D: dal menu si sceglie solo il preset; il
+    // posto dell'effetto 3D nella pila (`index`, `item`) lo trova il client
+    // fra gli effetti degli oggetti scelti.
+    FinestraScritta {
+        id: "effect.lightingPreset",
+        schema: "{preset: standard|diffuse|topLeft|right}",
+        predefiniti: &[("preset", "standard")],
+        limiti: &[],
+    },
     FinestraScritta {
         id: "object.compoundShape.setMode",
         schema: "{mode: add|subtract|intersect|exclude}",

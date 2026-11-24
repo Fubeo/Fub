@@ -199,7 +199,9 @@ describe("la sezione Disegno completo delle scorciatoie", () => {
       expect(document.querySelector('.drawing-keys [role="alert"]')?.textContent).toContain("Non è cambiato niente"),
     );
 
-    const tastoSbagliato = JSON.stringify({ format: "vectorcraft-shortcuts", version: 1, overrides: { a: "Cmd+Shift+1" } });
+    // Una sequenza di due tasti: la shell sa premere un accordo solo. (Cmd+Shift+1 oggi vale: il
+    // tasto 1 tenuto con Maiusc, riconosciuto dal tasto fisico.)
+    const tastoSbagliato = JSON.stringify({ format: "vectorcraft-shortcuts", version: 1, overrides: { a: "Cmd+K Cmd+S" } });
     await importaFile(new Blob([tastoSbagliato]), { insieme: null, tasti: {} }, salva, new Set(["a"]));
     expect(salva).not.toHaveBeenCalled();
     expect(vi.mocked(notify).mock.lastCall![0]).toContain("Comando a");

@@ -14,9 +14,12 @@ import indiceGenerato from "../../indice.generated.json";
 
 const giro = (): Promise<void> => new Promise((risolto) => setTimeout(risolto, 0));
 
-function completoVero(rifiuto: string | null = null) {
+function completoVero(rifiuto: string | null = null, pila: unknown = null) {
   const esito = { revision: "1", preview: null, ops: rifiuto === null ? "[]" : null, selection: ["k1"], losses: [], refused: rifiuto, frame: null };
-  const comando = vi.fn((_passo: { readonly id: string; readonly value?: unknown }) => Promise.resolve(esito));
+  const comando = vi.fn((passo: { readonly id: string; readonly value?: unknown }) =>
+    Promise.resolve(passo.id === "disegno.effect.list" ? { ...esito, ops: null, reading: pila } : esito),
+  );
+  const annuncia = vi.fn();
   const sessione = { comandi: vi.fn(() => Promise.resolve([])), comando } as unknown as SessioneMotore;
   const motore = { adesso: () => sessione, pronta: () => Promise.resolve(sessione), assente: () => null } as unknown as MotoreDelDisegno;
   const completo = apri(
@@ -25,12 +28,12 @@ function completoVero(rifiuto: string | null = null) {
       indice: () => Promise.resolve(indiceDi(indiceGenerato as never)),
       prepara: () => Promise.resolve("pronta"),
       moduli: { "./famiglie/effetti/index.ts": () => Promise.resolve({ default: { registra: () => undefined } }) },
-      tasti: { selezione: () => ["k1"], annuncia: vi.fn(), leggi: () => [], commit: () => true, seleziona: () => undefined } as never,
+      tasti: { selezione: () => ["k1"], annuncia, leggi: () => [], commit: () => true, seleziona: () => undefined } as never,
     } as never,
   );
   const voce = async (id: string) =>
     (await completo.ricerca(() => ["k1"], { strumento: vi.fn(), client: vi.fn(), riprova: vi.fn() } as never))!.find((v) => v.key === id)!;
-  return { completo, comando, voce };
+  return { completo, comando, voce, annuncia };
 }
 
 describe("Applica ultimo effetto e Ultimo effetto", () => {
@@ -76,6 +79,16 @@ describe("Applica ultimo effetto e Ultimo effetto", () => {
     await vi.waitFor(() => expect(comando).toHaveBeenCalledTimes(1));
     await giro();
     expect((await voce("effect.applyLast")).disabled).toBe(true);
+    completo.chiudi();
+  });
+});
+
+describe("Predefinito illuminazione 3D dal menu", () => {
+  it("senza un effetto 3D negli oggetti scelti lo dice e non manda niente", async () => {
+    const { completo, comando, voce, annuncia } = completoVero(null, { applied: [{ effects: [{ id: "distort.roughen", params: {}, visible: true }], items: [] }] });
+    (await voce("effect.lightingPreset")).run();
+    await vi.waitFor(() => expect(annuncia).toHaveBeenCalledWith(t("draw.lightingPreset.none")));
+    expect(comando.mock.calls.map(([passo]) => passo.id)).toEqual(["disegno.effect.list"]);
     completo.chiudi();
   });
 });

@@ -25,7 +25,7 @@ export type { EffettiSpazio, SchedaSpazio, SpazioPreset } from "./spazi";
 import { COMANDO_DEL_CLIC, iconaMotore, layoutCompleto, MOTORE_PRONTO, TIPO_DEL_GRAFICO, type GruppoLayout } from "./colonna";
 import { registraAllinea } from "./allinea";
 import { registraElaborazione } from "./elaborazione";
-import { registraAspetto } from "./aspetto-sezione";
+import { pileDaLettura, postoDel3D, registraAspetto } from "./aspetto-sezione";
 import { infoDaLettura, registraFusione, COMANDI_FUSIONE } from "./fusione-sezione";
 import { eGruppoSulTracciato, registraOggettiSulTracciato, STRUMENTO_OGGETTI_SUL_TRACCIATO } from "./oggetti-sul-tracciato-sezione";
 import { registraTrasforma } from "./trasforma-sezione";
@@ -441,7 +441,8 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila" | "e
     };
     apriFinestraDatiGrafico(creaPortaDatiGrafico(dipendenze, parola("dati:titolo")), parola, ctx.life);
   };
-  const lancia = async (voce: VoceIndice): Promise<void> => {
+  const lancia = async (scelta: VoceIndice): Promise<void> => {
+    let voce = scelta;
     // «Modalità di disegno» (K6 T11): la voce senza modo apre la scelta; il comando parte col modo scelto.
     if (voce.id === "view.drawMode" && (voce.chiamata as { readonly valore?: unknown }).valore === undefined) {
       if (!chiuso) await apriModoDisegno(portaModoDisegno);
@@ -451,6 +452,19 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila" | "e
     if (voce.id === "graph.setData" && (voce.chiamata as { readonly valore?: unknown }).valore === undefined) {
       if (!chiuso) await apriDatiGrafico();
       return;
+    }
+    // Predefinito illuminazione 3D (menu Effetto): la finestra chiede il preset; il posto
+    // dell'effetto 3D nella pila degli oggetti scelti lo trova il client, come lo vuole il motore.
+    if (voce.id === "effect.lightingPreset" && (voce.chiamata as { readonly valore?: unknown }).valore === undefined) {
+      const esito = await chiama(dipendenze, "disegno.effect.list", {}, false).catch(() => null);
+      const pile = esito === null || esito.refused !== null ? null : pileDaLettura(esito.reading);
+      const posto = pile === null ? "nessuno" : postoDel3D(pile);
+      if (chiuso) return;
+      if (typeof posto === "string") {
+        dipendenze.annuncia(t(posto === "nessuno" ? "draw.lightingPreset.none" : "draw.lightingPreset.mixed"));
+        return;
+      }
+      voce = { ...voce, chiamata: { ...voce.chiamata, valore: posto } } as VoceIndice;
     }
     const chiave = JSON.stringify([voce.id, voce.chiamata, dipendenze.selezione()]);
     if (inVolo.has(chiave)) return;

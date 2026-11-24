@@ -219,7 +219,7 @@ motore	effect.apply	Apply Effect		effetti	F2	T18	fatto	interno	famiglia	comando 
 motore	effect.list	Effects		effetti	F2	T18	fatto	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Effetti
 motore	effect.remove	Remove Effect		effetti	F2	T18	fatto	ispettore/design/aspetto	famiglia		Rimuovi effetto
 motore	effect.setParams	Effect Options		effetti	F2	T18	fatto	ispettore/design/aspetto	famiglia		Opzioni effetto
-motore	effect.lightingPreset	3D Lighting Preset		effetti	F2	T18	da fare	menu/effetto	famiglia		Predefinito illuminazione 3D
+motore	effect.lightingPreset	3D Lighting Preset		effetti	F2	T18	fatto	menu/effetto	famiglia	finestra; la finestra chiede il preset (Standard, Diffusa, In alto a sinistra, Destra); il posto dell'effetto 3D nella pila degli oggetti scelti lo trova il client (completo/index.ts, aspetto-sezione.ts postoDel3D)	Predefinito illuminazione 3D
 motore	effect.expandAppearance	Expand Appearance	Object	effetti	F2	T18	fatto	menu/oggetto	famiglia		Espandi aspetto
 motore	effect.duplicate	Duplicate Effect		effetti	F2	T18	fatto	ispettore/design/aspetto	famiglia		Duplica effetto
 motore	effect.move	Move Effect		effetti	F2	T18	fatto	ispettore/design/aspetto	famiglia		Sposta effetto

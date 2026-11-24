@@ -8,7 +8,7 @@ import { describe, expect, it, vi } from "vitest";
 import { openLifetime } from "../../../ui/lifetime";
 import type { MotoreDelDisegno } from "../motore/gesti";
 import type { SessioneMotore } from "../motore/sessione";
-import { allinea, pileDaLettura, sezioneAspetto, statoDallePile, stessoEffetto, type AzioniAspetto, type EffettoApplicato } from "./aspetto-sezione";
+import { allinea, pileDaLettura, postoDel3D, sezioneAspetto, statoDallePile, stessoEffetto, type AzioniAspetto, type EffettoApplicato } from "./aspetto-sezione";
 import { apri } from "./index";
 import { indiceDi } from "./indice";
 import indiceGenerato from "./indice.generated.json";
@@ -180,5 +180,25 @@ describe("la sezione Aspetto del Design", () => {
     } as never);
     expect(c.sezioni.di("design").map((una) => una.id)).toContain("aspetto");
     c.chiudi();
+  });
+});
+
+describe("Predefinito illuminazione 3D: il posto dell'effetto 3D", () => {
+  const effetto = (id: string): EffettoApplicato => ({ id, params: {}, visibile: true });
+  const pila = (effetti: string[], elementi: { posto: number; effetti: string[] }[] = []) => ({
+    effetti: effetti.map(effetto),
+    elementi: elementi.map((e) => ({ posto: e.posto, tipo: "fill", effetti: e.effetti.map(effetto) })),
+  });
+
+  it("il primo effetto 3D dell'oggetto, se no quello di un suo elemento", () => {
+    expect(postoDel3D([pila(["distort.roughen", "threeD.extrude", "threeD.rotate"])])).toEqual({ item: null, index: 1 });
+    expect(postoDel3D([pila(["distort.roughen"], [{ posto: 0, effetti: [] }, { posto: 2, effetti: ["threeD.inflate"] }])])).toEqual({ item: 2, index: 0 });
+  });
+
+  it("lo stesso posto per tutti; un oggetto senza 3D o posti diversi no", () => {
+    expect(postoDel3D([pila(["threeD.extrude"]), pila(["threeD.revolve"])])).toEqual({ item: null, index: 0 });
+    expect(postoDel3D([pila(["threeD.extrude"]), pila(["distort.roughen"])])).toBe("nessuno");
+    expect(postoDel3D([pila(["threeD.extrude"]), pila(["distort.roughen", "threeD.extrude"])])).toBe("diversi");
+    expect(postoDel3D([])).toBe("nessuno");
   });
 });

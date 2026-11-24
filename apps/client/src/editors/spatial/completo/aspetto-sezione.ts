@@ -114,6 +114,29 @@ function uguali(a: unknown, b: unknown): boolean {
   return false;
 }
 
+/// Dove sta l'effetto 3D a cui «Predefinito illuminazione 3D» del menu cambia la luce: il primo
+/// della pila dell'oggetto, se no il primo di un suo elemento (riempimento o contorno). Il comando
+/// del motore vuole lo stesso posto su tutti gli oggetti scelti: `nessuno` se uno non ha un effetto
+/// 3D, `diversi` se gli oggetti lo hanno in posti diversi.
+export function postoDel3D(
+  pile: readonly PilaOggetto[],
+): { readonly item: number | null; readonly index: number } | "nessuno" | "diversi" {
+  const del3D = (pila: PilaOggetto): { readonly item: number | null; readonly index: number } | null => {
+    const primo = (effetti: readonly EffettoApplicato[]) => effetti.findIndex((effetto) => effetto.id.startsWith("threeD."));
+    const index = primo(pila.effetti);
+    if (index >= 0) return { item: null, index };
+    for (const elemento of pila.elementi) {
+      const suo = primo(elemento.effetti);
+      if (suo >= 0) return { item: elemento.posto, index: suo };
+    }
+    return null;
+  };
+  const posti = pile.map(del3D);
+  const primo = posti[0];
+  if (primo === undefined || posti.some((posto) => posto === null)) return "nessuno";
+  return posti.every((posto) => posto!.item === primo!.item && posto!.index === primo!.index) ? primo! : "diversi";
+}
+
 /// Due effetti applicati uguali: stesso effetto, stessi valori, stessa visibilità.
 export function stessoEffetto(a: EffettoApplicato, b: EffettoApplicato): boolean {
   return a.id === b.id && a.visibile === b.visibile && uguali(a.params, b.params);

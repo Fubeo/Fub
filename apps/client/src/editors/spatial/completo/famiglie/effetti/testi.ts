@@ -6,6 +6,12 @@
 export const TESTI: Readonly<
   Record<string, { readonly it: string; readonly en: string }>
 > = {
+  // Predefinito illuminazione 3D (effect.lightingPreset): i quattro rig di VectorCraft.
+  "campo:preset": { it: "Illuminazione", en: "Lighting" },
+  "scelta:preset:standard": { it: "Standard", en: "Standard" },
+  "scelta:preset:diffuse": { it: "Diffusa", en: "Diffuse" },
+  "scelta:preset:topLeft": { it: "In alto a sinistra", en: "Top Left" },
+  "scelta:preset:right": { it: "Destra", en: "Right" },
   // Arrotonda angoli (stylize.roundCorners).
   "campo:radius": { it: "Raggio", en: "Radius" },
   // Distorci e trasforma, Tracciato, Converti in forma.

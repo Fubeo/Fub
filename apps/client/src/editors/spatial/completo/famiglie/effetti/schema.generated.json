@@ -3,6 +3,25 @@
   "famiglia": "effetti",
   "finestre": [
     {
+      "fonte": "motore",
+      "id": "effect.lightingPreset",
+      "campi": [
+        {
+          "nome": "preset",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "standard",
+            "diffuse",
+            "topLeft",
+            "right"
+          ],
+          "aperta": false,
+          "predefinito": "standard"
+        }
+      ]
+    },
+    {
       "fonte": "interfaccia",
       "id": "effect.last",
       "campi": []
