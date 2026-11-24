@@ -324,6 +324,7 @@ const PRESENTATION_ORDER = [
   "letter-spacing",
   "text-decoration",
   "text-anchor",
+  "writing-mode",
   "preserveAspectRatio",
 ];
 

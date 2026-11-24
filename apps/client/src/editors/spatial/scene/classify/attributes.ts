@@ -22,7 +22,7 @@ import {
   transform,
   trim,
 } from "../values";
-import { isSvg, NS_NONE, NS_SVG, NS_XLINK, valueOf, type ElementNode, type NodeId, type XmlDocument } from "../xml";
+import { isSvg, NS_FUB, NS_NONE, NS_SVG, NS_XLINK, valueOf, type ElementNode, type NodeId, type XmlDocument } from "../xml";
 import { NO_RESOURCES, type Resolve, RESOURCE_TAGS, type ResourceKind, type ResourceTag, type Tag } from "./types";
 
 export const TAGS: ReadonlySet<string> = new Set<Tag>([
@@ -171,6 +171,9 @@ export function svgAttribute(tag: Tag, name: string, value: string, resolve: Res
       return keyword(name, value);
     case "letter-spacing":
       return letterSpacing(value) !== null;
+    // Il verso del testo: soltanto sul `text` (formato della scena, testo §10).
+    case "writing-mode":
+      return tag === "text" && keyword(name, value);
     case "text-decoration":
       // Non si eredita: vale soltanto dove si scrive il testo.
       return (tag === "text" || tag === "tspan") && textDecoration(value) !== null;
@@ -193,8 +196,9 @@ export function geometryAttribute(tag: Tag, name: string, value: string): boolea
       if (is("rect", "image", "text", "tspan")) return length(value) !== null;
       return false;
     case "y":
-      if (is("rect", "image", "text")) return length(value) !== null;
+      if (is("rect", "image", "text", "tspan")) return length(value) !== null;
       return false;
+    case "dx":
     case "dy":
       return is("tspan") && length(value) !== null;
     case "cx":
@@ -261,7 +265,7 @@ export function firstTitle(doc: XmlDocument, element: ElementNode): string | nul
 /// Gli attributi che un pezzo di riga non ha: un pezzo continua la riga,
 /// non la sposta, non la nasconde e non ha un nome suo. SVG non dà a un
 /// `tspan` né opacità né trasformazione.
-export const NOT_IN_PIECE: ReadonlySet<string> = new Set(["id", "x", "dy", "text-anchor", "display", "opacity", "transform"]);
+export const NOT_IN_PIECE: ReadonlySet<string> = new Set(["id", "x", "dy", "y", "dx", "text-anchor", "display", "opacity", "transform"]);
 
 /// Vero se `id` è un pezzo di riga modificabile: un `tspan` con attributi da
 /// pezzo e solo testo dentro.
@@ -339,6 +343,28 @@ export function textPathTarget(element: ElementNode): string | null {
   return value === undefined ? null : hrefId(value);
 }
 
+/// Vero se `element` è un testo verticale: `writing-mode="vertical-rl"`
+/// (formato della scena, testo §10).
+export function vertical(element: ElementNode): boolean {
+  const mode = valueOf(element, NS_NONE, "writing-mode");
+  return mode !== undefined && trim(mode) === "vertical-rl";
+}
+
+/// Vero se le righe di un testo hanno gli attributi del suo verso: `x` e
+/// `dy` in orizzontale, `y` e `dx` in verticale (formato della scena, testo
+/// §6). Un testo verticale non va a capo in un riquadro: `fub:wrap` lo rende
+/// estraneo.
+function linesFollowWritingMode(doc: XmlDocument, element: ElementNode): boolean {
+  const isVertical = vertical(element);
+  if (isVertical && valueOf(element, NS_FUB, "wrap") !== undefined) return false;
+  const other = isVertical ? ["x", "dy"] : ["y", "dx"];
+  return element.children.every((child) => {
+    const node = doc.nodes[child]!;
+    if (node.kind !== "element" || !isSvg(node, "tspan")) return true;
+    return other.every((name) => valueOf(node, NS_NONE, name) === undefined);
+  });
+}
+
 /// Vero se ogni figlio di un'unità è ammesso: spazi, `title`, `desc` e, per
 /// `text`, i `tspan` o un `textPath`. Un testo ha le righe o il tracciato,
 /// non tutti e due, e col tracciato non ha `x` e `y`, che i lettori
@@ -358,6 +384,7 @@ export function unitChildrenAllowed(doc: XmlDocument, element: ElementNode, tag:
     if (inner === "tspan") lines++;
     return allowedPart(doc, child, tag === "text", resolve);
   });
-  if (!children || paths === 0) return children;
-  return paths === 1 && lines === 0 && valueOf(element, NS_NONE, "x") === undefined && valueOf(element, NS_NONE, "y") === undefined;
+  if (!children || !linesFollowWritingMode(doc, element)) return false;
+  if (paths === 0) return true;
+  return !vertical(element) && paths === 1 && lines === 0 && valueOf(element, NS_NONE, "x") === undefined && valueOf(element, NS_NONE, "y") === undefined;
 }

@@ -175,6 +175,7 @@ const KEYWORDS: ReadonlyMap<string, readonly string[]> = new Map([
   ["font-weight", ["normal", "bold", "100", "200", "300", "400", "500", "600", "700", "800", "900"]],
   ["font-style", ["normal", "italic", "oblique"]],
   ["text-anchor", ["start", "middle", "end"]],
+  ["writing-mode", ["horizontal-tb", "vertical-rl"]],
   // Le risorse del disegno (formato della scena, risorse).
   ["spreadMethod", ["pad", "reflect", "repeat"]],
   ["gradientUnits", ["userSpaceOnUse", "objectBoundingBox"]],

@@ -45,6 +45,31 @@ fn a_text_is_editable_only_with_allowed_tspans() {
 }
 
 #[test]
+fn a_vertical_text_has_columns_with_y_and_dx() {
+    for body in [
+        r#"<text writing-mode="vertical-rl" x="40" y="10"><tspan y="10" dx="0">一</tspan><tspan y="10" dx="-28.8">二 <tspan font-weight="bold">b</tspan></tspan></text>"#,
+        r#"<text writing-mode=" vertical-rl "><tspan>a</tspan></text>"#,
+        r#"<text writing-mode="horizontal-tb"><tspan x="0" dy="0">a</tspan></text>"#,
+    ] {
+        assert_eq!(first(body), Some(Role::Text), "{body}");
+    }
+    for body in [
+        // Le righe di un altro verso, un verso che non si scrive, un pezzo
+        // che sposta, il verso su una riga, in area o su tracciato.
+        r#"<text writing-mode="vertical-rl"><tspan x="0" dy="0">a</tspan></text>"#,
+        r#"<text writing-mode="horizontal-tb"><tspan y="0" dx="0">a</tspan></text>"#,
+        r#"<text writing-mode="tb-rl"><tspan>a</tspan></text>"#,
+        r#"<text writing-mode="vertical-lr"><tspan>a</tspan></text>"#,
+        r#"<text writing-mode="vertical-rl"><tspan>a<tspan dx="1">b</tspan></tspan></text>"#,
+        r#"<text><tspan writing-mode="vertical-rl">a</tspan></text>"#,
+        r#"<text writing-mode="vertical-rl" fub:wrap="100"><tspan>a</tspan></text>"#,
+        r##"<text writing-mode="vertical-rl"><textPath href="#p">a</textPath></text>"##,
+    ] {
+        assert_eq!(first(body), None, "{body}");
+    }
+}
+
+#[test]
 fn text_lines_and_titles_carry_their_decoded_content() {
     let source = doc(concat!(
         "<title>Gatti &amp; cani &#233;</title>",

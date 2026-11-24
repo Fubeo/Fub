@@ -4,7 +4,7 @@
 > stile loro, il corsivo, la spaziatura delle lettere, il sottolineato e il
 > barrato, il testo in area, che va a capo in un riquadro, e il testo su
 > tracciato; come si leggono, come si scrivono e come li cambia l'operazione
-> `text`; i caratteri con cui si disegnano. Versione 1.
+> `text`; i caratteri con cui si disegnano; il testo verticale. Versione 1.
 > **Fonti autorevoli:** `apps/client/src/editors/spatial/scene/classify.ts`
 > e `crates/fub-scene/src/classify.rs`, che leggono allo stesso modo; i
 > valori in `scene/values.ts` e `crates/fub-scene/src/values.rs`; la
@@ -374,3 +374,33 @@ vede è in [Disegni, caratteri del vault](../product/drawing-fonts.md).
   che non si leggono, le facce oltre il tetto e i caratteri la cui licenza
   (`fsType`) non lascia incorporarli: nel PDF il loro testo va a tracciati
   ([esportazione](scene-format-export.md), §5).
+
+## 10. Il testo verticale
+
+```xml
+<text id="o7a8b9c0d" writing-mode="vertical-rl" x="700" y="40" font-size="24">
+  <tspan y="40" dx="0">縦書き</tspan>
+  <tspan y="40" dx="-28.8">二<tspan font-weight="bold">列</tspan></tspan>
+</text>
+```
+
+Un testo che si legge dall'alto in basso, a colonne da destra a sinistra,
+come lo scrive lo strumento Testo verticale del Completo: la prima colonna
+ha la linea di mezzo in `x = 700` e comincia in `y = 40`, la seconda sta
+28,8 più a sinistra.
+
+- **`writing-mode`** sta soltanto sul `text`, con `horizontal-tb`, il
+  verso di serie, o `vertical-rl`. Ogni altro valore, come `tb-rl` o
+  `vertical-lr`, o il verso su un `tspan`, rende estraneo il `text`.
+- **Le righe** di un testo verticale sono colonne: ogni `tspan` ha la sua
+  `y`, dove la colonna comincia, e il suo `dx`, quanto si sposta dalla
+  colonna prima: l'interlinea, negativa perché le colonne vanno verso
+  sinistra. `x` e `dy` su una colonna, o `y` e `dx` su una riga di un testo
+  orizzontale, rendono estraneo il `text`; un pezzo non ha né `y` né `dx`.
+- **Le lettere** stanno come le mette un browser con `vertical-rl`: gli
+  ideogrammi e i kana dritti, le lettere latine e le cifre coricate (UAX
+  #50), come il motore di VectorCraft.
+- **Un testo verticale è da punto:** `fub:wrap` e un `textPath` lo rendono
+  estraneo.
+- **Un lettore di FubDraw più vecchio** lo vede estraneo e lo conserva byte
+  per byte; un browser lo disegna come FubDraw.

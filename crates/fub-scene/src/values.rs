@@ -188,6 +188,7 @@ pub(crate) fn keyword(name: &str, value: &str) -> bool {
         ],
         "font-style" => &["normal", "italic", "oblique"],
         "text-anchor" => &["start", "middle", "end"],
+        "writing-mode" => &["horizontal-tb", "vertical-rl"],
         // Le risorse del disegno (formato della scena, risorse).
         "spreadMethod" => &["pad", "reflect", "repeat"],
         "gradientUnits"

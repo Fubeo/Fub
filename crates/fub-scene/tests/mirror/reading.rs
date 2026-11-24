@@ -245,7 +245,14 @@ fn text_is_read_in_a_frame_and_along_a_path() {
     );
     assert!(element(&[3, 4]).is_none());
     assert!(element(&[3, 5]).is_none());
-    assert_eq!(scene.summary.counts.texts, 4);
+    // Il testo verticale ha le sue colonne; quello con le righe orizzontali
+    // è estraneo.
+    assert_eq!(
+        element(&[3, 6]).and_then(|e| e.lines.clone()),
+        Some(vec!["縦書き".to_owned(), "二列".to_owned()])
+    );
+    assert!(element(&[3, 7]).is_none());
+    assert_eq!(scene.summary.counts.texts, 5);
     // L'indice unisce senza spazio le righe spezzate dentro una parola, solo
     // in una cornice che si legge.
     let texts: Vec<_> = scene.index.texts.iter().map(|p| p.text.as_str()).collect();
@@ -258,8 +265,8 @@ fn text_is_read_in_a_frame_and_along_a_path() {
     assert!(texts.contains(&"Storto"));
     let codes: Vec<_> = scene.diagnostics.iter().map(|d| d.code).collect();
     use fub_scene::Code::*;
-    // Il tracciato estraneo nella `defs` e i due testi estranei.
-    assert_eq!(codes, [S002, S002]);
+    // Il tracciato estraneo nella `defs` e i testi estranei.
+    assert_eq!(codes, [S002, S002, S002]);
 }
 
 #[test]

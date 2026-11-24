@@ -409,6 +409,18 @@ describe("il riquadro di un elemento nuovo", () => {
     expect(geometryBox(elem)).toEqual({ min: [10, 10], max: [30, 30] });
     expect(geometryBox({ tag: "rect", attrs: { width: "0", height: "5" } })).toBeNull();
   });
+
+  it("un testo verticale sta in colonne da destra a sinistra, un em per lettera", () => {
+    const elem = {
+      tag: "text",
+      attrs: { "writing-mode": "vertical-rl", x: "100", y: "10", "font-size": "20" },
+      children: [
+        { tag: "tspan", attrs: { y: "10", dx: "0" }, text: "abc" },
+        { tag: "tspan", attrs: { y: "10", dx: "-24" }, text: "de" },
+      ],
+    };
+    expect(elemBounds(elem, [1, 0, 0, 1, 0, 0])).toEqual({ min: [66, 10], max: [110, 70] });
+  });
 });
 
 describe("che cosa si vede in un punto", () => {

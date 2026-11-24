@@ -29,5 +29,10 @@
     </text>
     <text id="o00000005" x="40" y="500"><textPath href="#r00000001">Con x e y</textPath></text>
     <text id="o00000006"><textPath href="#r00000003">Storto</textPath></text>
+    <text id="o00000007" writing-mode="vertical-rl" x="700" y="40" font-size="24">
+      <tspan y="40" dx="0">縦書き</tspan>
+      <tspan y="40" dx="-28.8">二<tspan font-weight="bold">列</tspan></tspan>
+    </text>
+    <text id="o00000008" writing-mode="vertical-rl"><tspan x="0" dy="0">Storto</tspan></text>
   </g>
 </svg>
