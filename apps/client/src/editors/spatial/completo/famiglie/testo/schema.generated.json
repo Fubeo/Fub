@@ -73,6 +73,11 @@
           "predefinito": "bullet"
         }
       ]
+    },
+    {
+      "fonte": "interfaccia",
+      "id": "type.findFont",
+      "campi": []
     }
   ]
 }

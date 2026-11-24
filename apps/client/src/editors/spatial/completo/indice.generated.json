@@ -5763,6 +5763,22 @@
     },
     {
       "fonte": "motore",
+      "id": "text.replaceFont",
+      "chiamata": {
+        "comando": "disegno.text.replaceFont"
+      },
+      "etichetta": {
+        "it": "Sostituisci font",
+        "en": "Replace Font"
+      },
+      "posto": "interno",
+      "famiglia": "testo",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "text.setRangeStyle",
       "chiamata": {
         "comando": "disegno.text.setRangeStyle"
@@ -6670,6 +6686,22 @@
       "tasto": null,
       "effetto": "cambia",
       "finestra": false
+    },
+    {
+      "fonte": "interfaccia",
+      "id": "type.findFont",
+      "chiamata": {
+        "client": "type.findFont"
+      },
+      "etichetta": {
+        "it": "Trova font…",
+        "en": "Find Font…"
+      },
+      "posto": "menu/testo",
+      "famiglia": "testo",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
     },
     {
       "fonte": "interfaccia",

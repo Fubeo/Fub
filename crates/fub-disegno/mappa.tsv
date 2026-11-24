@@ -229,7 +229,7 @@ motore	text.missingFonts	Missing Fonts		testo	F2	T16	fatto	interno	famiglia	lett
 motore	text.findFontFiles	Find Font Files		testo	F2	T16	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Trova file dei font
 motore	text.addFontFiles	Add Font Files		testo	F2	T16	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Aggiungi file dei font
 motore	text.fonts	Fonts in Document		testo	F2	T16	fatto	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Font nel documento
-motore	text.replaceFont	Replace Font		testo	F2	T16	da fare	ispettore/design	famiglia		Sostituisci font
+motore	text.replaceFont	Replace Font		testo	F2	T16	fatto	interno	famiglia	lo usa la finestra Trova carattere… del menu Testo: Cambia (solo i testi scelti) e Cambia tutto; un carattere che non c'è è un errore con il perché (BadArgs)	Sostituisci font
 motore	select.font	Select Text by Font		livelli	F1	T15	fatto	ispettore/livelli	famiglia	cerca i testi con il carattere (e lo stile, se c'è) in una delle loro parti, fra quelli visibili e sbloccati, dentro i gruppi e i livelli; la scelta della selezione non conta, e il comando non cambia il file. Un carattere che nel disegno non c'è, o c'è solo su testi nascosti o bloccati, è un errore con il perché (BadArgs)	Seleziona testo per font
 motore	text.fontList	Font List		testo	F2	T16	fatto	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Elenco font
 motore	text.rescanFonts	Refresh Font List		testo	F2	T16	da fare	ispettore/design	famiglia		Aggiorna elenco font
@@ -964,7 +964,7 @@ interfaccia	type.recentFont13	Recent Font 13		testo	F2	T16	da fare	menu/testo	fa
 interfaccia	type.recentFont14	Recent Font 14		testo	F2	T16	da fare	menu/testo	famiglia		Font recente 14
 interfaccia	type.recentFont15	Recent Font 15		testo	F2	T16	da fare	menu/testo	famiglia		Font recente 15
 interfaccia	file.clearRecent	Clear Recent Files		fub	—	T2	fub	fub	—	recenti di Fub	Cancella file recenti
-interfaccia	type.findFont	Find Font…		testo	F2	T16	da fare	menu/testo	famiglia		Trova font…
+interfaccia	type.findFont	Find Font…		testo	F2	T16	fatto	menu/testo	famiglia	voce del client: la finestra dei caratteri del disegno (text.fonts, anche quelli che mancano) con Trova (select.font), Cambia sui testi scelti e Cambia tutto (text.replaceFont); il carattere nuovo fra quelli che Fub conosce (text.fontList), con uno stile o lo stile più vicino; resta aperta e rilegge l'elenco dopo un cambio	Trova font…
 interfaccia	ui.missingFontsDialog	Missing Fonts Dialog		testo	F2	T16	da fare	finestra	famiglia		Finestra di dialogo Font mancanti
 interfaccia	ui.findFontsInFolder	Find Fonts in Folder…		testo	F2	T16	da fare	finestra	famiglia		Trova font in una cartella…
 interfaccia	file.recentFiles	Recent Files		fub	—	T2	fub	fub	—	recenti di Fub	File recenti

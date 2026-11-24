@@ -67,6 +67,7 @@ import { applicaEsito, applicaRisposta, chiama, conValori, etichettaDi, eseguiVo
 import { creaAppuntiCompleto } from "./appunti";
 import { creaPortaLivelli, type PortaLivelli } from "./livelli-porta";
 import { apriFinestraLibrerie, creaPortaLibrerie } from "./librerie-finestra";
+import { apriTrovaCarattere, creaPortaTrovaCarattere } from "./trova-carattere";
 import { apriFinestraDatiGrafico, creaPortaDatiGrafico } from "./grafico-dati-finestra";
 export type { EsitoLivello, PortaLivelli, RichiestaLivello } from "./livelli-porta";
 import { registraAppuntiCompleto } from "../tools/clipboard";
@@ -695,6 +696,9 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila" | "e
       esegui: () => void eseguiPerId("text.setStyle", { justify }, { senzaFinestra: true }),
     });
   }
+  // Trova carattere… (menu Testo): la finestra dei caratteri del disegno, con Trova, Cambia e
+  // Cambia tutto (`trova-carattere.ts`).
+  vociDelCompleto.set("type.findFont", { stato: () => null, esegui: () => apriTrovaCarattere(creaPortaTrovaCarattere(dipendenze), ctx.life) });
   // Ricolora grafica (K6 T14): la voce di Modifica › Modifica colori apre la sua finestra. Il suo
   // stato è quello del comando che la finestra scrive (`conVociClient`).
   vociDelCompleto.set(VOCE_RICOLORA, { stato: () => null, esegui: () => void apriRicolora(dipendenze) });

@@ -482,27 +482,21 @@ fn un_testo_preserve_si_sposta_senza_toccarne_il_contenuto() {
     }
 }
 
-/// Grassetto e Corsivo del menu Testo (il client, `completo/facce-testo.ts`)
-/// leggono le facce della famiglia con `text.fontList` e mandano
-/// `text.setRangeStyle {style}`: col motore vero e le facce di Inter che Fub
-/// porta, la lettura è servita e la faccia nuova diventa `font-weight` e
-/// `font-style` del `<text>`.
-#[test]
-fn grassetto_e_corsivo_passano_alle_facce_della_famiglia() {
-    let svg = include_str!("famiglie/testo/base.svg");
-    let (mut d, _) = apri(svg);
-    let comando = |d: &mut Disegno, id: &str, valore: Value| {
-        d.comando(fub_abi::DrawingCommandRequest {
-            revision: d.revisione(),
-            id: format!("disegno.{id}"),
-            selection: vec!["ot1t1t1t1".into()],
-            value: valore,
-            preview: false,
-        })
-        .unwrap_or_else(|e| panic!("{id}: {e:?}"))
-    };
-    // Il client prepara la famiglia `testo` prima di leggerne le facce: nasce
-    // in sottofondo, e si chiede finché non è pronta.
+/// Un comando del motore sui testi `scelti`; un errore ferma la prova.
+fn comando(d: &mut Disegno, id: &str, scelti: &[&str], valore: Value) -> DrawingOutcome {
+    d.comando(fub_abi::DrawingCommandRequest {
+        revision: d.revisione(),
+        id: format!("disegno.{id}"),
+        selection: scelti.iter().map(|s| (*s).to_string()).collect(),
+        value: valore,
+        preview: false,
+    })
+    .unwrap_or_else(|e| panic!("{id}: {e:?}"))
+}
+
+/// Prepara la famiglia `testo` del motore, come il client prima delle sue
+/// voci: nasce in sottofondo, e si chiede finché non è pronta.
+fn prepara_testo(d: &mut Disegno) {
     let inizio = std::time::Instant::now();
     loop {
         let preparata = d
@@ -517,7 +511,7 @@ fn grassetto_e_corsivo_passano_alle_facce_della_famiglia() {
         assert_eq!(preparata.refused, None, "{preparata:?}");
         let stato = preparata.reading.as_ref().map(|l| l["stato"].clone());
         if stato == Some(json!("pronta")) {
-            break;
+            return;
         }
         assert!(
             inizio.elapsed().as_secs() < 30,
@@ -525,9 +519,26 @@ fn grassetto_e_corsivo_passano_alle_facce_della_famiglia() {
         );
         std::thread::sleep(std::time::Duration::from_millis(20));
     }
-    let lista = comando(&mut d, "text.fontList", json!({"family": "Inter"}))
-        .reading
-        .expect("le facce di Inter");
+}
+
+/// Grassetto e Corsivo del menu Testo (il client, `completo/facce-testo.ts`)
+/// leggono le facce della famiglia con `text.fontList` e mandano
+/// `text.setRangeStyle {style}`: col motore vero e le facce di Inter che Fub
+/// porta, la lettura è servita e la faccia nuova diventa `font-weight` e
+/// `font-style` del `<text>`.
+#[test]
+fn grassetto_e_corsivo_passano_alle_facce_della_famiglia() {
+    let svg = include_str!("famiglie/testo/base.svg");
+    let (mut d, _) = apri(svg);
+    prepara_testo(&mut d);
+    let lista = comando(
+        &mut d,
+        "text.fontList",
+        &["ot1t1t1t1"],
+        json!({"family": "Inter"}),
+    )
+    .reading
+    .expect("le facce di Inter");
     let stili: Vec<&str> = lista["styles"]
         .as_array()
         .expect("styles")
@@ -537,7 +548,12 @@ fn grassetto_e_corsivo_passano_alle_facce_della_famiglia() {
     for faccia in ["Regular", "Bold", "Italic", "Bold Italic"] {
         assert!(stili.contains(&faccia), "{faccia} in {stili:?}");
     }
-    let esito = comando(&mut d, "text.setRangeStyle", json!({"style": "Bold"}));
+    let esito = comando(
+        &mut d,
+        "text.setRangeStyle",
+        &["ot1t1t1t1"],
+        json!({"style": "Bold"}),
+    );
     assert_eq!(esito.refused, None);
     let ops = ops_di(&esito).to_string();
     assert!(
@@ -547,9 +563,111 @@ fn grassetto_e_corsivo_passano_alle_facce_della_famiglia() {
     let esito = comando(
         &mut d,
         "text.setRangeStyle",
+        &["ot1t1t1t1"],
         json!({"style": "Bold Italic"}),
     );
     assert_eq!(esito.refused, None);
     let ops = ops_di(&esito).to_string();
     assert!(ops.contains(r#""font-style":"italic""#), "{ops}");
+}
+
+/// Le operazioni di `esito` scritte nel testo `testo`, e il testo nuovo al
+/// disegno, come fa il client dopo un comando.
+fn sincronizza(d: &mut Disegno, testo: &mut String, esito: &DrawingOutcome) {
+    *testo = common::applica::applica(testo, &ops_di(esito)).expect("le operazioni si applicano");
+    let sync = fub_abi::DrawingSync {
+        revision: d.revisione() + 1,
+        change: fub_abi::DrawingChange::Text {
+            text: testo.clone(),
+        },
+    };
+    d.sincronizza(sync).expect("il sync passa");
+    assert!(
+        d.aspetta_il_reimport(std::time::Duration::from_secs(30)),
+        "il reimport finisce"
+    );
+}
+
+/// Trova carattere… del menu Testo (il client, `completo/trova-carattere.ts`)
+/// legge i caratteri del disegno (`text.fonts`) e le famiglie
+/// (`text.fontList`), e manda `text.replaceFont` (Cambia, sui soli testi
+/// scelti; Cambia tutto) e `select.font` (Trova). Col motore vero e le facce
+/// di Inter: Inter Regular passa a Inter Bold nel `font-weight` del `<text>`,
+/// e un carattere che non c'è è un errore con il perché.
+#[test]
+fn trova_carattere_sostituisce_e_sceglie_i_testi() {
+    let mut svg = include_str!("famiglie/testo/base.svg").to_string();
+    let (mut d, _) = apri(&svg);
+    prepara_testo(&mut d);
+    let caratteri = comando(&mut d, "text.fonts", &[], json!({}))
+        .reading
+        .expect("i caratteri del disegno");
+    let primo = caratteri.as_array().expect("un elenco")[0].clone();
+    assert_eq!(primo["family"], "Inter", "{caratteri}");
+    assert_eq!(primo["objects"], 2, "{caratteri}");
+    let famiglie = comando(&mut d, "text.fontList", &[], json!({}))
+        .reading
+        .expect("le famiglie");
+    assert!(
+        famiglie["families"]
+            .as_array()
+            .is_some_and(|f| f.contains(&json!("Inter"))),
+        "{famiglie}"
+    );
+    // Cambia: solo il testo scelto.
+    let solo = comando(
+        &mut d,
+        "text.replaceFont",
+        &["ot2t2t2t2"],
+        json!({
+            "from": {"family": "Inter", "style": primo["style"]},
+            "to": {"family": "Inter", "style": "Bold"},
+            "selectionOnly": true
+        }),
+    );
+    assert_eq!(solo.refused, None, "{solo:?}");
+    let ops = ops_di(&solo).to_string();
+    assert!(ops.contains("ot2t2t2t2"), "{ops}");
+    assert!(!ops.contains("ot1t1t1t1"), "{ops}");
+    assert!(
+        ops.contains(r#""font-weight":"bold""#) || ops.contains(r#""font-weight":"700""#),
+        "{ops}"
+    );
+    sincronizza(&mut d, &mut svg, &solo);
+    // Cambia tutto, poi Trova sul carattere nuovo.
+    let tutti = comando(
+        &mut d,
+        "text.replaceFont",
+        &[],
+        json!({
+            "from": {"family": "Inter", "style": primo["style"]},
+            "to": {"family": "Inter", "style": "Italic"}
+        }),
+    );
+    assert_eq!(tutti.refused, None, "{tutti:?}");
+    let ops = ops_di(&tutti).to_string();
+    assert!(ops.contains("ot1t1t1t1"), "{ops}");
+    assert!(!ops.contains("ot2t2t2t2"), "{ops}");
+    sincronizza(&mut d, &mut svg, &tutti);
+    let trovati = comando(
+        &mut d,
+        "select.font",
+        &[],
+        json!({"family": "Inter", "style": "Italic"}),
+    );
+    assert_eq!(trovati.refused, None, "{trovati:?}");
+    assert_eq!(
+        trovati.selection,
+        vec!["ot1t1t1t1".to_string()],
+        "{trovati:?}"
+    );
+    // Un carattere che non c'è: l'errore del motore, e niente cambia.
+    let errore = d.comando(fub_abi::DrawingCommandRequest {
+        revision: d.revisione(),
+        id: "disegno.text.replaceFont".into(),
+        selection: Vec::new(),
+        value: json!({"from": {"family": "Inter"}, "to": {"family": "Nessuno"}}),
+        preview: false,
+    });
+    assert!(errore.is_err(), "{errore:?}");
 }
