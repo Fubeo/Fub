@@ -1035,6 +1035,34 @@ fn riga_del_comando(
     Ok(Some((riga, famiglia)))
 }
 
+/// Il comando del motore dietro ogni voce del menu Effetto: la voce lo chiama
+/// col suo effetto (`effect`, o `id` come la chiave vecchia del motore).
+const APPLICA_EFFETTO: &str = "effect.apply";
+
+/// L'effetto che `effect.apply` aggiunge passa come una riga sua: «fatto», o
+/// «da fare» col filtro delle prove; una riga da fare con il filtro dell'IPC
+/// non è servita, come un comando da fare. `false` (rifiutato) per un effetto
+/// di Fub, escluso, dietro una feature spenta o che la mappa non ha: il motore
+/// non lo vede. Senza nome decide il motore (dà l'errore degli argomenti).
+fn effetto_servito(valore: &Value, filtro: Filtro) -> Result<bool, PluginError> {
+    let Some(id) = valore
+        .get("effect")
+        .or_else(|| valore.get("id"))
+        .and_then(Value::as_str)
+    else {
+        return Ok(true);
+    };
+    let Some(riga) = riga(Fonte::Effetto, id) else {
+        return Ok(false);
+    };
+    match riga.stato {
+        StatoRiga::Fub | StatoRiga::Escluso => Ok(false),
+        _ if riga.sotto.is_some() => Ok(false),
+        StatoRiga::DaFare if filtro == Filtro::Fatte => Err(non_fatta()),
+        StatoRiga::Fatto | StatoRiga::DaFare => Ok(true),
+    }
+}
+
 /// Le righe «fatto» del motore, come comandi del disegno accesi o spenti
 /// sulla selezione. Nessuna famiglia nasce per dirlo.
 pub(crate) fn elenco(copia: &Copia, selezione: &[String]) -> Vec<fub_abi::DrawingCommandInfo> {
@@ -1099,6 +1127,9 @@ pub(crate) fn esegui(
     let Some((riga, famiglia)) = riga_del_comando(&richiesta.id, filtro)? else {
         return Ok(rifiuta(DrawingRefusal::Unsupported));
     };
+    if riga.id == APPLICA_EFFETTO && !effetto_servito(&richiesta.value, filtro)? {
+        return Ok(rifiuta(DrawingRefusal::Unsupported));
+    }
     let nata = match famiglie.per_un_comando(famiglia) {
         Ok(Some(nata)) => nata,
         Ok(None) => return Ok(rifiuta(DrawingRefusal::NoMemory)),

@@ -59,7 +59,7 @@ import { t, type DrawKey } from "../strings";
 import { COLONNA_IT } from "../strings/completo";
 // I tasti del motore (K6 T9b): il montaggio sulla radice dell'editor, e il
 // percorso di un comando che fanno partire.
-import { applicaEsito, applicaRisposta, chiama, eseguiVoce, type AzioniEsito, type DipendenzeComando, type OpzioniFinestraComando } from "./esegui";
+import { applicaEsito, applicaRisposta, chiama, conValori, eseguiVoce, type AzioniEsito, type DipendenzeComando, type OpzioniFinestraComando } from "./esegui";
 // Gli appunti del motore (K6 T11): copia, taglia e incolla passano dal motore.
 import { creaAppuntiCompleto } from "./appunti";
 import { creaPortaLivelli, type PortaLivelli } from "./livelli-porta";
@@ -390,10 +390,10 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila" | "e
         return;
       }
       const fisso = (voce.chiamata as { readonly valore?: unknown }).valore;
-      const base = typeof fisso === "object" && fisso !== null ? fisso : {};
+      const base = typeof fisso === "object" && fisso !== null ? (fisso as Readonly<Record<string, unknown>>) : {};
       // Una sezione che manda il comando lo manda senza la finestra della voce (la rotazione, K6 T13 giro 3).
       const senza = opzioni.senzaFinestra === true ? { ...voce, finestra: false } : voce;
-      await lancia({ ...senza, chiamata: { comando: voce.chiamata.comando, valore: { ...base, ...valori } } });
+      await lancia({ ...senza, chiamata: { comando: voce.chiamata.comando, valore: conValori(voce, base, valori) } });
     });
   };
   // L'ultima elaborazione andata (`object.pathfinder.*`, dalla sezione, dal menu o dai

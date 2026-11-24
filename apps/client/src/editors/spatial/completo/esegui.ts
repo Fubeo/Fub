@@ -108,6 +108,18 @@ function comeOggetto(valore: unknown): Readonly<Record<string, unknown>> {
   return typeof valore === "object" && valore !== null && !Array.isArray(valore) ? (valore as Readonly<Record<string, unknown>>) : {};
 }
 
+/// Il valore di un comando con i valori di una finestra o di una sezione: per un effetto
+/// (`disegno.effect.apply`, col suo `effect`) vanno nei `params` dell'effetto, come il
+/// motore li prende; per gli altri comandi accanto al valore fisso.
+export function conValori(
+  voce: Pick<VoceIndice, "fonte">,
+  base: Readonly<Record<string, unknown>>,
+  valori: Readonly<Record<string, unknown>>,
+): Readonly<Record<string, unknown>> {
+  if (voce.fonte !== "effetto") return { ...base, ...valori };
+  return { ...base, params: { ...comeOggetto(base.params), ...valori } };
+}
+
 /// I comandi del menu che valgono sui punti scelti, se ce ne sono (K6 T12):
 /// il menu ≡, Ctrl+/ e il tasto li mandano coi punti dello strumento.
 const SUI_PUNTI_SCELTI: ReadonlySet<string> = new Set([
@@ -266,7 +278,7 @@ export function eseguiVoce(voce: VoceIndice, dipendenze: DipendenzeComando): Pro
       // I punti scelti quando la finestra si apre: valgono fino a OK.
       const partenza = valoreDi(comando.id, comando.valore, dipendenze);
       const esegui: Esegui = async (valori, anteprima): Promise<EsitoComando> => {
-        const esito = await chiamaConArgomenti(dipendenze, comando.id, { ...partenza, ...valori }, anteprima);
+        const esito = await chiamaConArgomenti(dipendenze, comando.id, conValori(voce, partenza, valori), anteprima);
         if (esito === null) return { anteprima: null, rifiuto: "not_ready" };
         // I valori che il motore non prende: la finestra dice la sua frase e resta aperta.
         if ("kind" in esito) return { anteprima: null, rifiuto: null, argomenti: esito.message };

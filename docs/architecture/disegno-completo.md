@@ -217,7 +217,12 @@ nei testi della famiglia (`descrizione:<id>`, `azione:<id>`,
 l'id, la chiamata (un comando, un effetto con `disegno.effect.apply`, uno
 strumento o un'azione del client), le etichette italiana e inglese, il
 posto (`scheda/gruppo`), la famiglia, il tasto, l'effetto (`cambia`,
-`legge`, `mostra`) e se apre una finestra. Le etichette passano per
+`legge`, `mostra`) e se apre una finestra. Per un effetto i valori della
+finestra vanno nei `params` della chiamata (`conValori` in
+`completo/esegui.ts`), e il ponte (`famiglie::esegui`) serve
+`effect.apply` solo per un effetto la cui riga è servita come un comando: da
+fare con il filtro dell'IPC dà `host.drawing.not_done`, di Fub, escluso o
+assente è rifiutato. Le etichette passano per
 `crates/fub-disegno/glossario.tsv`, le parole del motore tradotte in quelle
 del disegno di Fub; un'etichetta senza traduzione resta inglese e il test
 la elenca. Il client legge l'indice con `completo/indice.ts`: un solo

@@ -1539,6 +1539,22 @@
     },
     {
       "fonte": "motore",
+      "id": "effect.apply",
+      "chiamata": {
+        "comando": "disegno.effect.apply"
+      },
+      "etichetta": {
+        "it": "Applica effetto",
+        "en": "Apply Effect"
+      },
+      "posto": "interno",
+      "famiglia": "effetti",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "eyedropper.setOptions",
       "chiamata": {
         "comando": "disegno.eyedropper.setOptions"
@@ -6900,6 +6916,25 @@
       "tasto": null,
       "effetto": "mostra",
       "finestra": false
+    },
+    {
+      "fonte": "effetto",
+      "id": "stylize.roundCorners",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "stylize.roundCorners"
+        }
+      },
+      "etichetta": {
+        "it": "Arrotonda angoli…",
+        "en": "Round Corners…"
+      },
+      "posto": "menu/effetto/stilizza",
+      "famiglia": "effetti",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
     },
     {
       "fonte": "strumento",

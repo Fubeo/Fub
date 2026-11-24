@@ -9,7 +9,7 @@ import { openLifetime, type Lifetime } from "../../../ui/lifetime";
 import type { Op } from "../scene/ops";
 import { apriFinestra } from "../motore/finestre";
 import type { Caricatore, StatoFamiglia } from "./carica";
-import { applicaEsito, etichettaDi, eseguiVoce, type DipendenzeComando, type OpzioniFinestraComando } from "./esegui";
+import { applicaEsito, conValori, etichettaDi, eseguiVoce, type DipendenzeComando, type OpzioniFinestraComando } from "./esegui";
 import type { VoceIndice } from "./indice";
 import indiceGenerato from "./indice.generated.json";
 import { t } from "../strings";
@@ -257,6 +257,26 @@ describe("eseguiVoce, con finestra", () => {
     expect(sessione.comando).toHaveBeenCalledWith(expect.objectContaining({ value: { radius: 12 }, preview: false }));
     expect(azioni.commit).toHaveBeenCalledWith(OPS, etichettaDi(voce()));
     expect(risposta).toEqual({ anteprima: null, rifiuto: null });
+  });
+
+  it("un effetto (stylize.roundCorners) manda i valori della finestra nei suoi params, accanto all'effetto", async () => {
+    const { d, sessione } = dipendenze({ finestra: () => Promise.resolve(schema()) });
+    const effetto = voce({
+      fonte: "effetto",
+      id: "stylize.roundCorners",
+      famiglia: "effetti",
+      chiamata: { comando: "disegno.effect.apply", valore: { effect: "stylize.roundCorners" } },
+      finestra: true,
+    });
+    eseguiVoce(effetto, d);
+    await tick();
+    const [, , esegui] = vi.mocked(apriFinestra).mock.calls[0]!;
+    await esegui({ radius: 15 }, true);
+    expect(sessione.comando).toHaveBeenLastCalledWith(
+      expect.objectContaining({ id: "disegno.effect.apply", value: { effect: "stylize.roundCorners", params: { radius: 15 } }, preview: true }),
+    );
+    expect(conValori({ fonte: "motore" }, { x: 1 }, { radius: 2 })).toEqual({ x: 1, radius: 2 });
+    expect(conValori({ fonte: "effetto" }, { effect: "e", params: { a: 1 } }, { b: 2 })).toEqual({ effect: "e", params: { a: 1, b: 2 } });
   });
 
   it("un oggetto bloccato nella selezione dice di sbloccarlo o toglierlo, anche per un allineamento", async () => {

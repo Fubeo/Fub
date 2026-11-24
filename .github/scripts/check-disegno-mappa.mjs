@@ -96,7 +96,7 @@ const POSTO = new RegExp(
       "menu/modifica/colori",
       "menu/oggetto/(?:tracciato|trasforma|disponi|fusione|inviluppo|blocca|nascondi|elaborazione|ritaglio|tavole)",
       "menu/selezione/(?:uguale|oggetto)",
-      "menu/effetto/(?:deforma|stilizza|distorci)",
+      "menu/effetto/(?:tre-d|artistico|sfocatura|pennellate|regolazioni|effetti-colore|converti|distorci|distorci-trasforma|tracciato|effetti-tracciato|elaborazione|pixel|nitidezza|schizzo|stilizza|texture|video|deforma)",
       "menu/visualizza/guide",
       "colonna/(?:scegli|disegna|forme|testo|trasforma|colore|oggetti|prospettiva|misura|vista)",
       "ispettore/(?:design|livelli|risorse|cronologia)(?:/[a-z][a-z-]*)?",

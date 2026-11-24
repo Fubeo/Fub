@@ -370,6 +370,8 @@ fn una_selezione_con_un_elemento_non_mappato_non_cambia_niente() {
         "disegno.artboard.copy",
         "disegno.artboard.cut",
         "disegno.artboard.move",
+        // Cambia unità è del documento, non degli oggetti scelti.
+        "disegno.document.switchUnits",
     ];
     let comandi = d.comandi(&["oa1a1a1a1".into(), "onessuno1".into()]);
     let accesi: Vec<&str> = comandi

@@ -133,6 +133,22 @@ l'oggetto che li porta, e il resto della pagina resta vettoriale. Un disegno
 con effetti molto grandi li dipinge a una risoluzione più bassa, e l'export
 si fa comunque ([Disegni, esportare](drawing-export.md)).
 
+## Il menu Effetto (spazio Completo)
+
+Nello spazio Completo il menu ≡ ha **Effetto**, con i sottomenu di VectorCraft
+(3D e materiali, Artistico, Sfocatura, Pennellate, Regolazioni colore, Effetti
+colore, Converti in forma, Distorci, Distorci e trasforma, Tracciato, Effetti
+tracciato, Elaborazione tracciati, Pixel, Nitidezza, Schizzo, Stilizza,
+Texture, Video, Deforma). Ogni voce aggiunge un **effetto dal vivo** agli
+oggetti scelti: la sua finestra (per esempio il Raggio di «Arrotonda angoli»)
+mostra l'anteprima sul disegno mentre si cambiano i valori, e OK lo aggiunge
+in un passo solo di Annulla. Le voci sono spente senza oggetti scelti, con un
+oggetto bloccato o su un disegno di sola lettura. Per ora c'è **Stilizza ›
+Arrotonda angoli**; gli altri effetti arrivano uno alla volta, e una voce non
+ancora pronta non si vede. Il file salva il risultato come grafica normale,
+leggibile da ogni programma, e la ricetta dell'effetto per poterlo cambiare
+([Formato della scena, ricette](../reference/scene-format-recipe.md)).
+
 ## Nel file
 
 Gli effetti stanno in `fub:effect` (con un filtro SVG 1.1 privato fra le
