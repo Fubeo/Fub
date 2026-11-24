@@ -256,6 +256,8 @@ export function installGuideLines(ctx: EditorContext): void {
   const linea = (a: Point, b: Point, classe: string): SVGLineElement => {
     const l = document.createElementNS(SVG_NS, "line");
     l.setAttribute("class", classe);
+    // Bordi netti: un attributo SVG, perché la pelle non ammette `shape-rendering`.
+    l.setAttribute("shape-rendering", "crispEdges");
     l.setAttribute("x1", String(a[0]));
     l.setAttribute("y1", String(a[1]));
     l.setAttribute("x2", String(b[0]));

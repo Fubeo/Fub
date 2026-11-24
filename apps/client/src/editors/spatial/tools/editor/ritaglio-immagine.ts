@@ -193,6 +193,8 @@ export function installCropImage(ctx: EditorContext): void {
     });
     const misura = document.createElementNS(SVG_NS, "text");
     misura.setAttribute("class", "draw-ritaglio-misura");
+    // Il bordo scuro sotto il testo: un attributo SVG, perché la pelle non ammette `paint-order`.
+    misura.setAttribute("paint-order", "stroke");
     const [lx, ly] = apply(m, [r.min[0], r.max[1]]);
     misura.setAttribute("x", String(lx));
     misura.setAttribute("y", String(ly + 16));

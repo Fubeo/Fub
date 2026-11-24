@@ -20093,7 +20093,6 @@ button.draw-isolation-crumb:hover {
 .draw-guide-line {
   stroke: #1fc8e0;
   stroke-width: 1px;
-  shape-rendering: crispEdges;
   vector-effect: non-scaling-stroke;
 }
 .draw-guide-line-locked {
@@ -20110,7 +20109,6 @@ button.draw-isolation-crumb:hover {
 /* Un tracciato-guida (Crea guide): la sua forma, senza riempimento. */
 .draw-guide-path {
   fill: none;
-  shape-rendering: auto;
 }
 /* Ritaglia immagine (`tools/editor/ritaglio-immagine.ts`): l'immagine fuori dal riquadro
    scurita come in VectorCraft (nero al 43%), il riquadro e le maniglie nel ciano dei
@@ -20142,7 +20140,6 @@ button.draw-isolation-crumb:hover {
 .draw-ritaglio-misura {
   fill: #1fc8e0;
   font: 11px var(--font-ui, sans-serif);
-  paint-order: stroke;
   stroke: rgb(0 0 0 / 60%);
   stroke-width: 2px;
 }
