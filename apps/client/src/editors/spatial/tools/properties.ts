@@ -426,6 +426,18 @@ const SECTIONS: ReadonlyArray<{ readonly id: SectionId; readonly label: DrawKey 
   { id: "view", label: "draw.properties.view_section" },
 ];
 
+/// Le punte di Fub (`marker-start`/`marker-end`): nel Completo le frecce sono quelle del motore (sezione
+/// Contorno, come VectorCraft); le punte di Fub si mostrano solo se gli oggetti scelti ne hanno già.
+const PUNTE_DI_FUB: ReadonlySet<FieldId> = new Set<FieldId>(["tipStart", "tipEnd"]);
+
+/// Vero se nessun oggetto scelto ha una punta di Fub (inizio e fine «nessuna»; un misto ne ha).
+function senzaPunteDiFub(vista: PropertiesView): boolean {
+  return [...PUNTE_DI_FUB].every((id) => {
+    const campo = vista.fields[id];
+    return campo === undefined || (campo.kind === "menu" && campo.value === "none");
+  });
+}
+
 /// Le sezioni che nel Completo non ci sono: la sezione Trasforma dà posizione e misure (K6 T13, giro 4),
 /// e la sezione Trasparenza dà l'opacità (K6 T15, giro 2).
 const NASCOSTE_NEL_COMPLETO: ReadonlySet<SectionId> = new Set<SectionId>(["place", "look"]);
@@ -440,8 +452,9 @@ const CAMPI_NASCOSTI_NEL_COMPLETO: ReadonlySet<FieldId> = new Set<FieldId>(["fil
 
 /// Le sezioni che nel Completo hanno un altro titolo: del Contorno restano solo le punte, perché il
 /// resto lo dà la sezione Contorno del Completo, e due sezioni «Contorno» confonderebbero. Le punte
-/// restano visibili (K6 T15, giro 6): il motore non ha un comando né una sezione per le punte di Fub
-/// (`marker-start`/`marker-end` sulle linee), e toglierle le farebbe sparire dal Completo.
+/// restano visibili dove ci sono (K6 T15, giro 6): il motore non ha un comando per le punte di Fub
+/// (`marker-start`/`marker-end` sulle linee), e toglierle le farebbe sparire dal Completo; dove non ci
+/// sono la sezione si nasconde (`senzaPunteDiFub`).
 const TITOLI_NEL_COMPLETO: Readonly<Partial<Record<SectionId, DrawKey>>> = { stroke: "draw.properties.tips" };
 
 /// La misura del campo numerico `id` della vista, con il passaggio alle unità della scena; `undefined`
@@ -1810,7 +1823,7 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
       for (const spec of SPECS) {
         const line = lines.get(spec.id)!;
         const state = next.fields[spec.id];
-        if (state === undefined || state.kind !== spec.kind || (completoAperto && CAMPI_NASCOSTI_NEL_COMPLETO.has(spec.id))) {
+        if (state === undefined || state.kind !== spec.kind || (completoAperto && (CAMPI_NASCOSTI_NEL_COMPLETO.has(spec.id) || (PUNTE_DI_FUB.has(spec.id) && senzaPunteDiFub(next))))) {
           line.root.hidden = true;
           continue;
         }

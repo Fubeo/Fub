@@ -816,6 +816,25 @@ describe("le scelte e i pulsanti", () => {
     expect(titolo("stroke")).toBe(t("draw.properties.stroke"));
   });
 
+  it("nel Completo «Punte» c'è solo se gli oggetti scelti hanno punte di Fub; le frecce sono quelle del Contorno", () => {
+    const sezioni = creaSezioni();
+    state.tips = { start: { shape: "none", size: "medium" }, end: { shape: "none", size: "medium" } };
+    mount();
+    // Il Semplice le mostra sempre, anche senza punte: è da lì che si mettono.
+    expect(field("tipEnd").hidden).toBe(false);
+    expect(section("stroke").hidden).toBe(false);
+    panel.collegaSezioni(sezioni, null, () => ({ numero: 1, punti: [] }));
+    expect(field("tipStart").hidden).toBe(true);
+    expect(field("tipEnd").hidden).toBe(true);
+    expect(section("stroke").hidden).toBe(true);
+    // Un oggetto con una punta di Fub: la sezione torna, con tutte e due le punte.
+    state.tips = { start: { shape: "none", size: "medium" }, end: { shape: "circle", size: "medium" } };
+    panel.update(view());
+    expect(field("tipStart").hidden).toBe(false);
+    expect(field("tipEnd").hidden).toBe(false);
+    expect(section("stroke").hidden).toBe(false);
+  });
+
   it("la sezione del registro vede il contorno della vista: lo spessore nella sua unità, estremi, angoli, trattini, blocco", async () => {
     const sezioni = creaSezioni();
     const visti: unknown[] = [];
