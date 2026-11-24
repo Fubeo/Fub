@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { TOOLS, type ToolSpec } from "../tools/registry";
-import { CASELLE, GRUPPI_COLONNA, layoutCompleto, type GruppoColonna } from "./colonna";
+import { CASELLE, COMANDO_DEL_CLIC, GRUPPI_COLONNA, layoutCompleto, TIPO_DEL_GRAFICO, type GruppoColonna } from "./colonna";
 
 // Ogni casella del prototipo ha gli strumenti del motore del loro posto
 // `colonna/<gruppo>` nella mappa: la tabella non si inventa.
@@ -101,5 +101,20 @@ describe("la colonna del Disegno completo", () => {
     expect(errori).toEqual([]);
     // Uno scostamento che non serve più si toglie.
     expect([...Object.keys(SCOSTAMENTI)].filter((chiave) => !usati.has(chiave))).toEqual([]);
+  });
+});
+
+describe("gli strumenti dei grafici", () => {
+  it("stanno nel riquadro delle forme composte, dopo i simboli, uno per tipo", () => {
+    const riquadro = CASELLE.find((c) => c.id === "shapeBuilder");
+    const strumenti = Object.keys(TIPO_DEL_GRAFICO).map((s) => `motore:${s}`);
+    expect(strumenti).toHaveLength(9);
+    expect(riquadro?.strumenti.slice(-9)).toEqual(strumenti);
+  });
+
+  it("il clic crea un grafico del tipo dello strumento, dal punto del clic", () => {
+    for (const [strumento, tipo] of Object.entries(TIPO_DEL_GRAFICO)) {
+      expect(COMANDO_DEL_CLIC[strumento]).toEqual({ comando: "graph.create", x: "x", y: "y", fissi: { type: tipo } });
+    }
   });
 });

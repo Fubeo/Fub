@@ -355,6 +355,8 @@ fn una_selezione_con_un_elemento_non_mappato_non_cambia_niente() {
         "disegno.symbol.libraries",
         "disegno.symbol.library",
         "disegno.symbol.addFromLibrary",
+        // Crea grafico prende il rettangolo dal valore.
+        "disegno.graph.create",
     ];
     let comandi = d.comandi(&["oa1a1a1a1".into(), "onessuno1".into()]);
     let accesi: Vec<&str> = comandi

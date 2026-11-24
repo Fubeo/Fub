@@ -274,6 +274,8 @@ export function installWorkspace(ctx: EditorContext): void {
           ctx.preparaStrumento = (id) => aperto!.preparaStrumento(id);
           // Il clic senza trascinare di uno strumento di forma apre la sua finestra (T13).
           ctx.clicStrumento = (strumento, punto, doppio) => aperto?.clicStrumento(strumento, punto, doppio);
+          // Un grafico disegnato trascinando apre i suoi dati.
+          ctx.gestoFinito = (strumento) => aperto?.gestoFinito(strumento);
           // Le caselle degli strumenti del motore (K6 T11) cambiano col nome e
           // con lo stato della loro famiglia, e la casella accesa con lo
           // strumento scelto: la colonna si risincronizza.

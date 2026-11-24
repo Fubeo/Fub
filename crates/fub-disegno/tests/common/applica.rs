@@ -53,9 +53,12 @@ fn dentro(testo: &str, genitore: &str) -> Result<(usize, usize), String> {
     let chiude = testo[..a].rfind("</").ok_or("il genitore non si chiude")?;
     let mut inizio = fine_del_tag(testo, da)?;
     if genitore == "#root" {
-        // Come il client: il primo posto della radice è dopo il titolo.
-        if let Some(t) = testo[inizio..].find("</title>") {
-            inizio += t + "</title>".len();
+        // Come il client: il primo posto della radice è dopo il suo titolo, se il titolo è il
+        // primo figlio (non quello di un simbolo nelle `defs`).
+        if testo[inizio..].trim_start().starts_with("<title") {
+            if let Some(t) = testo[inizio..].find("</title>") {
+                inizio += t + "</title>".len();
+            }
         }
     }
     Ok((inizio, chiude))

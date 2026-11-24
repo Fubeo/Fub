@@ -20216,6 +20216,38 @@ button.draw-isolation-crumb:hover {
   color: var(--muted);
 }
 
+/* Dati del grafico (K6, grafici): i pulsanti della tabella, poi la tabella che scorre nei due versi;
+   la prima riga ha i nomi delle serie, la prima colonna le categorie. */
+.draw-graph-data-body {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.draw-graph-data-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+.draw-graph-data-scroll {
+  max-height: 45vh;
+  overflow: auto;
+  border: 1px solid var(--border);
+}
+.draw-graph-data-table {
+  border-collapse: collapse;
+}
+.draw-graph-data-table td,
+.draw-graph-data-table th {
+  padding: 0;
+  border: 1px solid var(--border);
+}
+.draw-graph-data-cell {
+  width: 7em;
+  min-width: 0;
+  border: 0;
+  border-radius: 0;
+}
+
 /* Guida colori (K6 T14, guida): la sezione del Design e le sue finestre. Una riga per armonia-colore,
    il colore di partenza al centro con il suo bordo. Con Senza scelta i campioni sono spenti. */
 .draw-guide-head {

@@ -965,6 +965,61 @@ pub const FINESTRE_SCRITTE: &[FinestraScritta] = &[
         ],
         limiti: &[],
     },
+    // Il clic di uno strumento Grafico (VectorCraft, la finestra `graph`): larghezza e altezza del
+    // grafico che parte dal punto del clic. Il tipo e il punto vengono dallo strumento.
+    FinestraScritta {
+        id: "graph.create",
+        schema: "{width, height}",
+        predefiniti: &[("width", "200"), ("height", "150")],
+        limiti: &[
+            ("width", Some(1.0), Some(1_000_000.0)),
+            ("height", Some(1.0), Some(1_000_000.0)),
+        ],
+    },
+    // Dati del grafico: il client apre al suo posto la tabella dei dati (`grafico-dati-finestra.ts`),
+    // che manda il testo CSV e i due scambi. Lo schema del motore, con le righe e le serie annidate,
+    // non è una finestra.
+    FinestraScritta {
+        id: "graph.setData",
+        schema: "{csv?: text, transpose?: bool, switchXY?: bool}",
+        predefiniti: &[],
+        limiti: &[],
+    },
+    // Tipo di grafico: il tipo e le opzioni del grafico scelto, che la finestra legge prima di
+    // aprirsi (`graph.setType` senza valori). I minimi e i massimi degli assi, la scala a parte del
+    // secondo asse e le opzioni della torta restano al motore: un numero vuoto non si manda.
+    FinestraScritta {
+        id: "graph.setType",
+        schema: "{type: column|stackedColumn|bar|stackedBar|line|area|scatter|pie|radar, valueAxis: left|right|both, columnWidth: number, clusterWidth: number, legend: bool, legendAcrossTop: bool, dropShadow: bool, firstRowInFront: bool, firstColumnInFront: bool, markPoints: bool, connectPoints: bool, edgeToEdge: bool, filledLines: bool, ticks: number, tickLength: none|short|full, tickMarks: number, categoryTickLength: none|short|full, categoryTickMarks: number, ticksBetweenLabels: bool, prefix?: text, suffix?: text}",
+        predefiniti: &[
+            ("type", "column"),
+            ("valueAxis", "left"),
+            ("columnWidth", "90"),
+            ("clusterWidth", "80"),
+            ("legend", "true"),
+            ("legendAcrossTop", "false"),
+            ("dropShadow", "false"),
+            ("firstRowInFront", "false"),
+            ("firstColumnInFront", "false"),
+            ("markPoints", "true"),
+            ("connectPoints", "true"),
+            ("edgeToEdge", "false"),
+            ("filledLines", "false"),
+            ("ticks", "0"),
+            ("tickLength", "short"),
+            ("tickMarks", "1"),
+            ("categoryTickLength", "none"),
+            ("categoryTickMarks", "1"),
+            ("ticksBetweenLabels", "false"),
+        ],
+        limiti: &[
+            ("columnWidth", Some(1.0), Some(1000.0)),
+            ("clusterWidth", Some(1.0), Some(1000.0)),
+            ("ticks", Some(0.0), Some(100.0)),
+            ("tickMarks", Some(1.0), Some(20.0)),
+            ("categoryTickMarks", Some(1.0), Some(20.0)),
+        ],
+    },
 ];
 
 /// La finestra scritta da Fub per il comando `id`, se ne ha una.

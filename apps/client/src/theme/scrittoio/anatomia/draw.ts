@@ -46,6 +46,7 @@ export const DRAW: PartAnatomy = {
         "draw-recolor-list", "draw-recolor-row", "draw-recolor-current", "draw-recolor-chip", "draw-recolor-code", "draw-recolor-arrow",
         "draw-guide-head", "draw-guide-rule-name", "draw-guide-note", "draw-guide-grid", "draw-guide-row", "draw-guide-swatch",
         "draw-guide-field", "draw-guide-rule",
+        "draw-graph-data-body", "draw-graph-data-tools", "draw-graph-data-scroll", "draw-graph-data-table", "draw-graph-data-cell",
       ],
     },
     {

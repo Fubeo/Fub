@@ -1,5 +1,197 @@
 {
   "$generato": "File generato da crates/fub-disegno/tests/ts_indice.rs, non modificare a mano; rigenera con UPDATE_MIRROR=1 cargo test -p fub-disegno --test ts_indice",
   "famiglia": "grafici",
-  "finestre": []
+  "finestre": [
+    {
+      "fonte": "motore",
+      "id": "graph.setData",
+      "campi": [
+        {
+          "nome": "csv",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "transpose",
+          "tipo": "sino",
+          "facoltativo": true
+        },
+        {
+          "nome": "switchXY",
+          "tipo": "sino",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "fonte": "motore",
+      "id": "graph.setType",
+      "campi": [
+        {
+          "nome": "type",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "column",
+            "stackedColumn",
+            "bar",
+            "stackedBar",
+            "line",
+            "area",
+            "scatter",
+            "pie",
+            "radar"
+          ],
+          "aperta": false,
+          "predefinito": "column"
+        },
+        {
+          "nome": "valueAxis",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "left",
+            "right",
+            "both"
+          ],
+          "aperta": false,
+          "predefinito": "left"
+        },
+        {
+          "nome": "columnWidth",
+          "tipo": "numero",
+          "facoltativo": false,
+          "minimo": 1.0,
+          "massimo": 1000.0,
+          "predefinito": 90.0
+        },
+        {
+          "nome": "clusterWidth",
+          "tipo": "numero",
+          "facoltativo": false,
+          "minimo": 1.0,
+          "massimo": 1000.0,
+          "predefinito": 80.0
+        },
+        {
+          "nome": "legend",
+          "tipo": "sino",
+          "facoltativo": false,
+          "predefinito": true
+        },
+        {
+          "nome": "legendAcrossTop",
+          "tipo": "sino",
+          "facoltativo": false,
+          "predefinito": false
+        },
+        {
+          "nome": "dropShadow",
+          "tipo": "sino",
+          "facoltativo": false,
+          "predefinito": false
+        },
+        {
+          "nome": "firstRowInFront",
+          "tipo": "sino",
+          "facoltativo": false,
+          "predefinito": false
+        },
+        {
+          "nome": "firstColumnInFront",
+          "tipo": "sino",
+          "facoltativo": false,
+          "predefinito": false
+        },
+        {
+          "nome": "markPoints",
+          "tipo": "sino",
+          "facoltativo": false,
+          "predefinito": true
+        },
+        {
+          "nome": "connectPoints",
+          "tipo": "sino",
+          "facoltativo": false,
+          "predefinito": true
+        },
+        {
+          "nome": "edgeToEdge",
+          "tipo": "sino",
+          "facoltativo": false,
+          "predefinito": false
+        },
+        {
+          "nome": "filledLines",
+          "tipo": "sino",
+          "facoltativo": false,
+          "predefinito": false
+        },
+        {
+          "nome": "ticks",
+          "tipo": "numero",
+          "facoltativo": false,
+          "minimo": 0.0,
+          "massimo": 100.0,
+          "predefinito": 0.0
+        },
+        {
+          "nome": "tickLength",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "none",
+            "short",
+            "full"
+          ],
+          "aperta": false,
+          "predefinito": "short"
+        },
+        {
+          "nome": "tickMarks",
+          "tipo": "numero",
+          "facoltativo": false,
+          "minimo": 1.0,
+          "massimo": 20.0,
+          "predefinito": 1.0
+        },
+        {
+          "nome": "categoryTickLength",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "none",
+            "short",
+            "full"
+          ],
+          "aperta": false,
+          "predefinito": "none"
+        },
+        {
+          "nome": "categoryTickMarks",
+          "tipo": "numero",
+          "facoltativo": false,
+          "minimo": 1.0,
+          "massimo": 20.0,
+          "predefinito": 1.0
+        },
+        {
+          "nome": "ticksBetweenLabels",
+          "tipo": "sino",
+          "facoltativo": false,
+          "predefinito": false
+        },
+        {
+          "nome": "prefix",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "suffix",
+          "tipo": "testo",
+          "facoltativo": true
+        }
+      ]
+    }
+  ]
 }

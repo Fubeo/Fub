@@ -810,9 +810,9 @@ motore	flattener.presets.delete	Delete Transparency Flattener Preset		stampa	F4	
 motore	flattener.presets.import	Import Transparency Flattener Presets		stampa	F4	T25	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Importa preset appiattimento trasparenza
 motore	flattener.presets.export	Export Transparency Flattener Presets		stampa	F4	T25	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Esporta preset di appiattimento trasparenza
 motore	flattener.preview	Flattener Preview		stampa	F4	T25	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Anteprima appiattimento
-motore	graph.create	Create Graph		grafici	F4	T25	da fare	colonna	famiglia		Crea grafico
-motore	graph.setData	Data…	Object › Graph	grafici	F4	T25	da fare	menu/oggetto	famiglia	finestra	Dati…
-motore	graph.setType	Type…	Object › Graph	grafici	F4	T25	da fare	menu/oggetto	famiglia	finestra	Tipo…
+motore	graph.create	Create Graph		grafici	F4	T25	fatto	colonna	famiglia		Crea grafico
+motore	graph.setData	Data…	Object › Graph	grafici	F4	T25	fatto	menu/oggetto	famiglia	finestra	Dati…
+motore	graph.setType	Type…	Object › Graph	grafici	F4	T25	fatto	menu/oggetto	famiglia	finestra	Tipo…
 motore	graph.design	Design…	Object › Graph	grafici	F4	T25	da fare	menu/oggetto	famiglia	finestra	Design…
 motore	graph.column	Column…	Object › Graph	grafici	F4	T25	da fare	menu/oggetto	famiglia	finestra	Colonna…
 motore	graph.marker	Marker…	Object › Graph	grafici	F4	T25	da fare	menu/oggetto	famiglia	finestra	Indicatore…
@@ -1354,15 +1354,15 @@ strumento	symbolSpinner	Symbol Spinner Tool		simboli	F3	T22	fatto	colonna/oggett
 strumento	symbolStainer	Symbol Stainer Tool		simboli	F3	T22	da fare	colonna/oggetti	famiglia	bloccato dal formato: il motore dà all'istanza un riempimento suo (sopra l'arte del simbolo), e il file non ha ancora un modo di scriverlo (come symbol.instance.setAppearance)	Strumento Colorazione simboli
 strumento	symbolScreener	Symbol Screener Tool		simboli	F3	T22	fatto	colonna/oggetti	famiglia	riquadro «shapeBuilder», dopo lo Spruzzo; il tratto cambia le istanze sotto il pennello (Alt al contrario); la fila dà il diametro e l'intensità	Strumento Trasparenza simboli
 strumento	symbolStyler	Symbol Styler Tool		simboli	F3	T22	da fare	colonna/oggetti	famiglia	bloccato dal formato: il motore dà all'istanza un riempimento suo (sopra l'arte del simbolo), e il file non ha ancora un modo di scriverlo (come symbol.instance.setAppearance)	Strumento Stile simboli
-strumento	columnGraph	Column Graph Tool		grafici	F4	T25	da fare	colonna/oggetti	famiglia	riquadro «columnGraph»	Strumento Grafico a colonne
-strumento	stackedColumnGraph	Stacked Column Graph Tool		grafici	F4	T25	da fare	colonna/oggetti	famiglia	riquadro «columnGraph»	Strumento Grafico a colonne sovrapposte
-strumento	barGraph	Bar Graph Tool		grafici	F4	T25	da fare	colonna/oggetti	famiglia	riquadro «columnGraph»	Strumento Grafico a barre
-strumento	stackedBarGraph	Stacked Bar Graph Tool		grafici	F4	T25	da fare	colonna/oggetti	famiglia	riquadro «columnGraph»	Strumento Grafico a barre sovrapposte
-strumento	lineGraph	Line Graph Tool		grafici	F4	T25	da fare	colonna/oggetti	famiglia	riquadro «columnGraph»	Strumento Grafico a linee
-strumento	areaGraph	Area Graph Tool		grafici	F4	T25	da fare	colonna/oggetti	famiglia	riquadro «columnGraph»	Strumento Grafico ad area
-strumento	scatterGraph	Scatter Graph Tool		grafici	F4	T25	da fare	colonna/oggetti	famiglia	riquadro «columnGraph»	Strumento Grafico a dispersione
-strumento	pieGraph	Pie Graph Tool		grafici	F4	T25	da fare	colonna/oggetti	famiglia	riquadro «columnGraph»	Strumento Grafico a torta
-strumento	radarGraph	Radar Graph Tool		grafici	F4	T25	da fare	colonna/oggetti	famiglia	riquadro «columnGraph»	Strumento Grafico radar
+strumento	columnGraph	Column Graph Tool		grafici	F4	T25	fatto	colonna/oggetti	famiglia	riquadro «shapeBuilder», dopo i simboli; il trascinamento disegna il grafico (Maiusc quadrato, Alt dal centro) e apre i suoi dati; il clic chiede larghezza e altezza	Strumento Grafico a colonne
+strumento	stackedColumnGraph	Stacked Column Graph Tool		grafici	F4	T25	fatto	colonna/oggetti	famiglia	riquadro «shapeBuilder», dopo i simboli; il trascinamento disegna il grafico (Maiusc quadrato, Alt dal centro) e apre i suoi dati; il clic chiede larghezza e altezza	Strumento Grafico a colonne sovrapposte
+strumento	barGraph	Bar Graph Tool		grafici	F4	T25	fatto	colonna/oggetti	famiglia	riquadro «shapeBuilder», dopo i simboli; il trascinamento disegna il grafico (Maiusc quadrato, Alt dal centro) e apre i suoi dati; il clic chiede larghezza e altezza	Strumento Grafico a barre
+strumento	stackedBarGraph	Stacked Bar Graph Tool		grafici	F4	T25	fatto	colonna/oggetti	famiglia	riquadro «shapeBuilder», dopo i simboli; il trascinamento disegna il grafico (Maiusc quadrato, Alt dal centro) e apre i suoi dati; il clic chiede larghezza e altezza	Strumento Grafico a barre sovrapposte
+strumento	lineGraph	Line Graph Tool		grafici	F4	T25	fatto	colonna/oggetti	famiglia	riquadro «shapeBuilder», dopo i simboli; il trascinamento disegna il grafico (Maiusc quadrato, Alt dal centro) e apre i suoi dati; il clic chiede larghezza e altezza	Strumento Grafico a linee
+strumento	areaGraph	Area Graph Tool		grafici	F4	T25	fatto	colonna/oggetti	famiglia	riquadro «shapeBuilder», dopo i simboli; il trascinamento disegna il grafico (Maiusc quadrato, Alt dal centro) e apre i suoi dati; il clic chiede larghezza e altezza	Strumento Grafico ad area
+strumento	scatterGraph	Scatter Graph Tool		grafici	F4	T25	fatto	colonna/oggetti	famiglia	riquadro «shapeBuilder», dopo i simboli; il trascinamento disegna il grafico (Maiusc quadrato, Alt dal centro) e apre i suoi dati; il clic chiede larghezza e altezza	Strumento Grafico a dispersione
+strumento	pieGraph	Pie Graph Tool		grafici	F4	T25	fatto	colonna/oggetti	famiglia	riquadro «shapeBuilder», dopo i simboli; il trascinamento disegna il grafico (Maiusc quadrato, Alt dal centro) e apre i suoi dati; il clic chiede larghezza e altezza	Strumento Grafico a torta
+strumento	radarGraph	Radar Graph Tool		grafici	F4	T25	fatto	colonna/oggetti	famiglia	riquadro «shapeBuilder», dopo i simboli; il trascinamento disegna il grafico (Maiusc quadrato, Alt dal centro) e apre i suoi dati; il clic chiede larghezza e altezza	Strumento Grafico radar
 strumento	artboard	Artboard Tool		tavole	F2	T19	fatto	colonna/misura	famiglia	riquadro «artboard»; trascinato fuori crea una tavola (view + carta, nome «Tavola N»), dentro la sposta coi disegni, sulle maniglie la ridimensiona; nel disegno senza tavole la pagina diventa la prima; la pagina si allarga a passi di 256 (crate::tavole)	Strumento Tavola da disegno
 strumento	slice	Slice Tool		web	F3	T22	da fare	colonna/misura	famiglia	riquadro «artboard»	Strumento Sezione
 strumento	sliceSelection	Slice Selection Tool		web	F3	T22	da fare	colonna/misura	famiglia	riquadro «artboard»	Strumento Selezione sezione

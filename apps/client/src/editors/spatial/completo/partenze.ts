@@ -52,8 +52,49 @@ function opzioniDellaFusione(lettura: unknown): Readonly<Record<string, ValoreCa
   return campi;
 }
 
+/// I campi di Tipo di grafico che una lettura riempie, col loro tipo (gli altri restano di serie).
+const CAMPI_DEL_GRAFICO: ReadonlyArray<readonly [string, "string" | "number" | "boolean"]> = [
+  ["type", "string"],
+  ["valueAxis", "string"],
+  ["columnWidth", "number"],
+  ["clusterWidth", "number"],
+  ["legend", "boolean"],
+  ["legendAcrossTop", "boolean"],
+  ["dropShadow", "boolean"],
+  ["firstRowInFront", "boolean"],
+  ["firstColumnInFront", "boolean"],
+  ["markPoints", "boolean"],
+  ["connectPoints", "boolean"],
+  ["edgeToEdge", "boolean"],
+  ["filledLines", "boolean"],
+  ["ticks", "number"],
+  ["tickLength", "string"],
+  ["tickMarks", "number"],
+  ["categoryTickLength", "string"],
+  ["categoryTickMarks", "number"],
+  ["ticksBetweenLabels", "boolean"],
+  ["prefix", "string"],
+  ["suffix", "string"],
+];
+
+/// Tipo di grafico (`graph.setType` senza valori): le opzioni del grafico scelto. La torta non dice
+/// `legend` ma `pieLegend`: la legenda c'è se non è «none». Un asse dei valori misto (le serie
+/// scelte su lati diversi) non ha un valore e resta di serie.
+function opzioniDelGrafico(lettura: unknown): Readonly<Record<string, ValoreCampo>> {
+  if (typeof lettura !== "object" || lettura === null) return {};
+  const letti = lettura as Record<string, unknown>;
+  const campi: Record<string, ValoreCampo> = {};
+  for (const [nome, tipo] of CAMPI_DEL_GRAFICO) {
+    const valore = letti[nome];
+    if (typeof valore === tipo) campi[nome] = valore as ValoreCampo;
+  }
+  if (typeof letti["pieLegend"] === "string") campi["legend"] = letti["pieLegend"] !== "none";
+  return campi;
+}
+
 /// Le finestre che partono dal disegno, per id del comando.
 export const PARTENZE_LETTE: Readonly<Record<string, PartenzaLetta>> = {
   "livePaint.gapOptions": { lettura: "livePaint.info", campi: opzioniDegliSpazi },
   "object.blend.options": { lettura: "object.blend.info", campi: opzioniDellaFusione },
+  "graph.setType": { lettura: "graph.setType", campi: opzioniDelGrafico },
 };

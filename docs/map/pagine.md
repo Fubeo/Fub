@@ -125,6 +125,7 @@
 - Come si ritagliano foto e forme con ritagli e maschere? → [product/drawing-masks.md](../product/drawing-masks.md)
 - Come si mettono fotografie, schermate e figure in un disegno? → [product/drawing-images.md](../product/drawing-images.md)
 - Come si riusa lo stesso disegno piccolo come simbolo? → [product/drawing-symbols.md](../product/drawing-symbols.md)
+- Come si disegna un grafico da una tabella di numeri? → [product/drawing-graphs.md](../product/drawing-graphs.md)
 - Come si applicano stili a titoli, note e riquadri? → [product/drawing-styles.md](../product/drawing-styles.md)
 - Come si usano i caratteri del vault nei testi del disegno? → [product/drawing-fonts.md](../product/drawing-fonts.md)
 - Come si compongono titoli, didascalie ed etichette (tipografia)? → [product/drawing-typography.md](../product/drawing-typography.md)

@@ -22,7 +22,7 @@ import type { MenuItem } from "../../../ui/menu";
 import { applicaSpazio, presetDi, type EffettiSpazio } from "./spazi";
 export type { EffettiSpazio, SchedaSpazio, SpazioPreset } from "./spazi";
 // La colonna (K6 T8): le caselle e il cassetto, con il suo pezzo col `import()`.
-import { COMANDO_DEL_CLIC, iconaMotore, layoutCompleto, MOTORE_PRONTO, type GruppoLayout } from "./colonna";
+import { COMANDO_DEL_CLIC, iconaMotore, layoutCompleto, MOTORE_PRONTO, TIPO_DEL_GRAFICO, type GruppoLayout } from "./colonna";
 import { registraAllinea } from "./allinea";
 import { registraElaborazione } from "./elaborazione";
 import { infoDaLettura, registraFusione, COMANDI_FUSIONE } from "./fusione-sezione";
@@ -64,6 +64,7 @@ import { applicaEsito, applicaRisposta, chiama, eseguiVoce, type AzioniEsito, ty
 import { creaAppuntiCompleto } from "./appunti";
 import { creaPortaLivelli, type PortaLivelli } from "./livelli-porta";
 import { apriFinestraLibrerie, creaPortaLibrerie } from "./librerie-finestra";
+import { apriFinestraDatiGrafico, creaPortaDatiGrafico } from "./grafico-dati-finestra";
 export type { EsitoLivello, PortaLivelli, RichiestaLivello } from "./livelli-porta";
 import { registraAppuntiCompleto } from "../tools/clipboard";
 import { PARTENZE_LETTE } from "./partenze";
@@ -126,6 +127,9 @@ export interface Completo {
   /// Con `doppio` (il doppio clic o l'Alt+clic della Fusione) apre la finestra
   /// delle opzioni dello strumento, sulla selezione di adesso.
   clicStrumento(strumento: string, punto: { readonly x: number; readonly y: number }, doppio?: boolean): void;
+  /// Un trascinamento di uno strumento del motore che ha cambiato il disegno: dopo uno strumento
+  /// Grafico si aprono i Dati del grafico nuovo, come VectorCraft. Altrimenti non fa niente.
+  gestoFinito(strumento: string): void;
   /// Canc con dei punti scelti (Selezione diretta, Punto di ancoraggio): toglie quei
   /// punti (`path.deleteAnchors`), non l'oggetto. `true` se c'erano punti scelti e il
   /// comando è partito; `false` senza punti, e Canc resta quello dell'editor.
@@ -417,10 +421,29 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila" | "e
   // volo (il doppio clic) non manda un altro comando al motore, che lo riceverebbe con la stessa copia.
   // Un comando diverso (altri valori, altra selezione) parte lo stesso.
   const inVolo = new Set<string>();
+  /// I Dati del grafico scelto (`grafico-dati-finestra.ts`), con le parole della famiglia
+  /// «grafici», che arriva prima di aprire la finestra.
+  const apriDatiGrafico = async (): Promise<void> => {
+    const stato = await carica.famiglia("grafici");
+    if (chiuso) return;
+    const testi = stato.kind === "pronta" ? carica.testi("grafici") : null;
+    const inglese = languageCurrent().startsWith("en");
+    const parola = (chiave: string, valori: Readonly<Record<string, string>> = {}): string => {
+      const una = testi?.[chiave];
+      const testo = una === undefined ? chiave : inglese ? una.en : una.it;
+      return testo.replace(/\{(\w+)\}/g, (tutto, nome: string) => valori[nome] ?? tutto);
+    };
+    apriFinestraDatiGrafico(creaPortaDatiGrafico(dipendenze, parola("dati:titolo")), parola, ctx.life);
+  };
   const lancia = async (voce: VoceIndice): Promise<void> => {
     // «Modalità di disegno» (K6 T11): la voce senza modo apre la scelta; il comando parte col modo scelto.
     if (voce.id === "view.drawMode" && (voce.chiamata as { readonly valore?: unknown }).valore === undefined) {
       if (!chiuso) await apriModoDisegno(portaModoDisegno);
+      return;
+    }
+    // Dati del grafico: la tabella dei dati al posto della finestra dello schema.
+    if (voce.id === "graph.setData" && (voce.chiamata as { readonly valore?: unknown }).valore === undefined) {
+      if (!chiuso) await apriDatiGrafico();
       return;
     }
     const chiave = JSON.stringify([voce.id, voce.chiamata, dipendenze.selezione()]);
@@ -858,9 +881,15 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila" | "e
       }
       // La finestra parte dal punto del clic e senza selezione: una forma nuova non la
       // usa, e la selezione di prima non entra nel comando.
-      const campi = clic.x !== undefined && clic.y !== undefined ? { [clic.x]: punto.x, [clic.y]: punto.y } : {};
+      const campi = { ...clic.fissi, ...(clic.x !== undefined && clic.y !== undefined ? { [clic.x]: punto.x, [clic.y]: punto.y } : {}) };
       const derivata: VoceIndice = { ...voce, chiamata: { comando: voce.chiamata.comando, valore: campi } };
-      void eseguiVoce(derivata, { ...dipendenze, selezione: () => [] });
+      void eseguiVoce(derivata, { ...dipendenze, selezione: () => [] }).then((andata) => {
+        // Il grafico nuovo è scelto: si aprono i suoi dati, come dopo il trascinamento.
+        if (andata && !chiuso && strumento in TIPO_DEL_GRAFICO) void apriDatiGrafico();
+      });
+    },
+    gestoFinito(strumento) {
+      if (!chiuso && strumento in TIPO_DEL_GRAFICO) void apriDatiGrafico();
     },
     async preparaStrumento(strumento) {
       const famiglia = await famigliaDi(strumento);

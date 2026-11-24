@@ -1411,6 +1411,54 @@
     },
     {
       "fonte": "motore",
+      "id": "graph.create",
+      "chiamata": {
+        "comando": "disegno.graph.create"
+      },
+      "etichetta": {
+        "it": "Crea grafico",
+        "en": "Create Graph"
+      },
+      "posto": "colonna",
+      "famiglia": "grafici",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "graph.setData",
+      "chiamata": {
+        "comando": "disegno.graph.setData"
+      },
+      "etichetta": {
+        "it": "Dati…",
+        "en": "Data…"
+      },
+      "posto": "menu/oggetto",
+      "famiglia": "grafici",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "motore",
+      "id": "graph.setType",
+      "chiamata": {
+        "comando": "disegno.graph.setType"
+      },
+      "etichetta": {
+        "it": "Tipo…",
+        "en": "Type…"
+      },
+      "posto": "menu/oggetto",
+      "famiglia": "grafici",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "motore",
       "id": "layer.delete",
       "chiamata": {
         "comando": "disegno.layer.delete"
@@ -6631,6 +6679,22 @@
     },
     {
       "fonte": "strumento",
+      "id": "areaGraph",
+      "chiamata": {
+        "strumento": "areaGraph"
+      },
+      "etichetta": {
+        "it": "Strumento Grafico ad area",
+        "en": "Area Graph Tool"
+      },
+      "posto": "colonna/oggetti",
+      "famiglia": "grafici",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "strumento",
       "id": "areaType",
       "chiamata": {
         "strumento": "areaType"
@@ -6658,6 +6722,22 @@
       "posto": "colonna/misura",
       "famiglia": "tavole",
       "tasto": "Shift+O",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "strumento",
+      "id": "barGraph",
+      "chiamata": {
+        "strumento": "barGraph"
+      },
+      "etichetta": {
+        "it": "Strumento Grafico a barre",
+        "en": "Bar Graph Tool"
+      },
+      "posto": "colonna/oggetti",
+      "famiglia": "grafici",
+      "tasto": null,
       "effetto": "cambia",
       "finestra": false
     },
@@ -6706,6 +6786,22 @@
       "posto": "colonna/disegna",
       "famiglia": "pennelli",
       "tasto": "Shift+B",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "strumento",
+      "id": "columnGraph",
+      "chiamata": {
+        "strumento": "columnGraph"
+      },
+      "etichetta": {
+        "it": "Strumento Grafico a colonne",
+        "en": "Column Graph Tool"
+      },
+      "posto": "colonna/oggetti",
+      "famiglia": "grafici",
+      "tasto": "J",
       "effetto": "cambia",
       "finestra": false
     },
@@ -6999,6 +7095,22 @@
     },
     {
       "fonte": "strumento",
+      "id": "lineGraph",
+      "chiamata": {
+        "strumento": "lineGraph"
+      },
+      "etichetta": {
+        "it": "Strumento Grafico a linee",
+        "en": "Line Graph Tool"
+      },
+      "posto": "colonna/oggetti",
+      "famiglia": "grafici",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "strumento",
       "id": "lineSegment",
       "chiamata": {
         "strumento": "lineSegment"
@@ -7223,6 +7335,22 @@
     },
     {
       "fonte": "strumento",
+      "id": "pieGraph",
+      "chiamata": {
+        "strumento": "pieGraph"
+      },
+      "etichetta": {
+        "it": "Strumento Grafico a torta",
+        "en": "Pie Graph Tool"
+      },
+      "posto": "colonna/oggetti",
+      "famiglia": "grafici",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "strumento",
       "id": "polarGrid",
       "chiamata": {
         "strumento": "polarGrid"
@@ -7281,6 +7409,22 @@
       },
       "posto": "colonna/trasforma",
       "famiglia": "trasforma",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "strumento",
+      "id": "radarGraph",
+      "chiamata": {
+        "strumento": "radarGraph"
+      },
+      "etichetta": {
+        "it": "Strumento Grafico radar",
+        "en": "Radar Graph Tool"
+      },
+      "posto": "colonna/oggetti",
+      "famiglia": "grafici",
       "tasto": null,
       "effetto": "cambia",
       "finestra": false
@@ -7447,6 +7591,22 @@
     },
     {
       "fonte": "strumento",
+      "id": "scatterGraph",
+      "chiamata": {
+        "strumento": "scatterGraph"
+      },
+      "etichetta": {
+        "it": "Strumento Grafico a dispersione",
+        "en": "Scatter Graph Tool"
+      },
+      "posto": "colonna/oggetti",
+      "famiglia": "grafici",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "strumento",
       "id": "scissors",
       "chiamata": {
         "strumento": "scissors"
@@ -7601,6 +7761,38 @@
       },
       "posto": "colonna/forme",
       "famiglia": "forme",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "strumento",
+      "id": "stackedBarGraph",
+      "chiamata": {
+        "strumento": "stackedBarGraph"
+      },
+      "etichetta": {
+        "it": "Strumento Grafico a barre sovrapposte",
+        "en": "Stacked Bar Graph Tool"
+      },
+      "posto": "colonna/oggetti",
+      "famiglia": "grafici",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "strumento",
+      "id": "stackedColumnGraph",
+      "chiamata": {
+        "strumento": "stackedColumnGraph"
+      },
+      "etichetta": {
+        "it": "Strumento Grafico a colonne sovrapposte",
+        "en": "Stacked Column Graph Tool"
+      },
+      "posto": "colonna/oggetti",
+      "famiglia": "grafici",
       "tasto": null,
       "effetto": "cambia",
       "finestra": false

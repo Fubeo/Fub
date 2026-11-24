@@ -502,6 +502,10 @@ export interface GestiMotoreContext {
   /// `doppio`: il doppio clic o l'Alt+clic di uno strumento che sceglie a clic
   /// (la Fusione apre le sue opzioni).
   clicStrumento: (strumento: string, punto: { readonly x: number; readonly y: number }, doppio?: boolean) => void;
+  /// Un trascinamento di uno strumento del motore che ha cambiato il disegno (il suo id), dopo che
+  /// l'esito è entrato: il Completo apre i Dati del grafico appena disegnato, come VectorCraft
+  /// (`Dialog("graphData")`). Di serie non fa niente.
+  gestoFinito: (strumento: string) => void;
   /// Invio o Esc, quando nessun gesto è in corso: chiude il tracciato aperto
   /// della penna (il tasto va al motore, che lo chiude a modo suo); senza
   /// tracciato aperto, Esc con uno strumento dei tracciati torna alla
@@ -628,6 +632,7 @@ export function installGestiMotore(ctx: EditorContext): void {
   // preparazione (`ctx.preparaStrumento`), che porta la famiglia dall'indice.
   // Di serie il clic non fa niente: il Completo lo sostituisce (`completo/index.ts`).
   ctx.clicStrumento = () => undefined;
+  ctx.gestoFinito = () => undefined;
   ctx.preparaStrumento = (id) => {
     const porta = ctx.options.preparaMotore;
     return porta === undefined ? Promise.resolve(true) : porta(id).catch(() => false);
@@ -1271,6 +1276,7 @@ export function installGestiMotore(ctx: EditorContext): void {
       }
       applyOutcome(g, esito, tap);
       if (clic !== null) ctx.clicStrumento(clic.strumento, clic.punto);
+      else if (typeof g.tool === "object" && esito.refused === null && esito.ops !== null) ctx.gestoFinito(g.tool.engine.id);
       seguiCambio(esito);
     });
     ultimo = done;
