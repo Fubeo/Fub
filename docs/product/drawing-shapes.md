@@ -144,6 +144,17 @@ cambia come nascono le fusioni nuove, e allora l'andamento e il colore restano
 fuori. La fusione va nel file con la ricetta: riaperta, si modifica ancora. Un
 altro programma vede gli oggetti chiave e i passi come forme normali.
 
+La sezione «Fusione», nella scheda Design dell'ispettore, è il pannello Fusione
+di VectorCraft e c'è quando un oggetto è scelto. Crea vuole due oggetti scelti
+o più. Spaziatura (con i passi o la distanza) e orientamento sono quelli della
+fusione scelta, letti dal motore; senza una fusione ma con due oggetti scelti
+sono quelli delle fusioni nuove, e la sezione lo dice. Andamento e rampa
+vogliono una fusione con una dorsale sua (sostituita) o allineata al tracciato;
+lo spostamento del colore vuole una fusione scelta. Ogni cambio è un passo
+della cronologia e manda solo il valore cambiato. Inverti davanti/dietro,
+Inverti dorsale, Sostituisci dorsale, Espandi e Rilascia sono accesi quando lo
+è il loro comando del menu.
+
 La sezione «Allinea», nella scheda Design dell'ispettore, offre gli allineamenti
 e le distribuzioni del motore. Alla selezione servono due oggetti; con «alla
 tavola» ne basta uno per allineare. Un pulsante spento dice perché. La famiglia

@@ -25,6 +25,7 @@ export type { EffettiSpazio, SchedaSpazio, SpazioPreset } from "./spazi";
 import { COMANDO_DEL_CLIC, iconaMotore, layoutCompleto, MOTORE_PRONTO, type GruppoLayout } from "./colonna";
 import { registraAllinea } from "./allinea";
 import { registraElaborazione } from "./elaborazione";
+import { infoDaLettura, registraFusione, COMANDI_FUSIONE } from "./fusione-sezione";
 import { registraTrasforma } from "./trasforma-sezione";
 import { registraColore, type ColoriVisti, type LatoAttivo } from "./colore-sezione";
 // «Selettore colore…» (K6 T14, selettore): il selettore del pozzo da una voce del menu e della ricerca.
@@ -53,7 +54,7 @@ import { t, type DrawKey } from "../strings";
 import { COLONNA_IT } from "../strings/completo";
 // I tasti del motore (K6 T9b): il montaggio sulla radice dell'editor, e il
 // percorso di un comando che fanno partire.
-import { applicaEsito, applicaRisposta, eseguiVoce, type AzioniEsito, type DipendenzeComando, type OpzioniFinestraComando } from "./esegui";
+import { applicaEsito, applicaRisposta, chiama, eseguiVoce, type AzioniEsito, type DipendenzeComando, type OpzioniFinestraComando } from "./esegui";
 // Gli appunti del motore (K6 T11): copia, taglia e incolla passano dal motore.
 import { creaAppuntiCompleto } from "./appunti";
 import { creaPortaLivelli, type PortaLivelli } from "./livelli-porta";
@@ -446,6 +447,22 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila" | "e
     composta: async () => {
       const stato = await statoComandi(ctx.motore, dipendenze.selezione());
       return stato.per?.get("disegno.object.compoundShape.setMode")?.enabled === true;
+    },
+  });
+  // La sezione «Fusione» (K6 T17, pannello): le opzioni lette dal motore (`object.blend.info`) e i
+  // comandi accesi; ogni cambio passa dal percorso unico, senza finestra.
+  registraFusione(sezioni, {
+    esegui: (id, valori = {}) => eseguiPerId(id, valori, { senzaFinestra: true }),
+    leggi: async () => {
+      const selezione = dipendenze.selezione();
+      const [esito, stato] = await Promise.all([
+        chiama(dipendenze, "disegno.object.blend.info", {}, false).catch(() => null),
+        statoComandi(ctx.motore, selezione),
+      ]);
+      const info = esito === null || esito.refused !== null ? null : infoDaLettura(esito.reading);
+      if (info === null) return null;
+      const accesi = new Set(COMANDI_FUSIONE.filter((id) => stato.per?.get(`disegno.${id}`)?.enabled === true));
+      return { info, accesi };
     },
   });
   // La sezione «Trasforma» (K6 T13, giro 3): posizione, misura, rotazione e inclinazione.

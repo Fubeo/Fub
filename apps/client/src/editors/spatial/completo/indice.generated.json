@@ -7255,6 +7255,22 @@
     },
     {
       "fonte": "pannello",
+      "id": "blend",
+      "chiamata": {
+        "client": "blend"
+      },
+      "etichetta": {
+        "it": "Fusione",
+        "en": "Blend"
+      },
+      "posto": "ispettore/design/blend",
+      "famiglia": "dinamici",
+      "tasto": null,
+      "effetto": "mostra",
+      "finestra": false
+    },
+    {
+      "fonte": "pannello",
       "id": "character",
       "chiamata": {
         "client": "character"
