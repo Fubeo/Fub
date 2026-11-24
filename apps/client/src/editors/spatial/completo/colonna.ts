@@ -153,6 +153,7 @@ export const MOTORE_PRONTO: ReadonlySet<string> = new Set([
   // Il Testo in area: trascinato fa il riquadro, sul contorno di un rettangolo lo prende come cornice.
   "areaType",
   "typeOnPath",
+  "verticalType",
   // T15 giro 6: lo strumento Sfumatura, con il suo annotatore.
   "gradient",
   // T14 giro 6: il Contagocce (la casella «colore»).
@@ -256,6 +257,7 @@ export const ICONE_MOTORE: Readonly<Record<string, string>> = {
   type: "draw-text",
   areaType: "draw-area-type",
   typeOnPath: "draw-type-on-path",
+  verticalType: "draw-vertical-type",
   // Lo strumento Sfumatura: l'icona del prototipo (`data-slot="gradient"`).
   gradient: "draw-gradient",
 };

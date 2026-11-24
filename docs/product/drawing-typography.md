@@ -112,6 +112,15 @@ Col Completo il testo si fa e si cambia anche così:
   contorni fa un testo da punto.
 - **Testo su tracciato**, nella stessa casella: un clic su un tracciato ci
   scrive sopra (vedi «Il testo su tracciato»).
+- **Testo verticale**, nella stessa casella, come in VectorCraft: un clic
+  fa un testo da punto che si legge dall'alto in basso, a colonne da destra
+  a sinistra; Invio comincia la colonna dopo. Gli ideogrammi e i kana
+  stanno dritti, le lettere latine e le cifre coricate. **Testo ›
+  Orientamento › Verticale** e **Orizzontale** girano i testi da punto
+  scelti, con lo stesso `id`; il punto d'aggancio resta dov'era. Un testo
+  verticale in area o su tracciato il file non lo scrive ancora: Fub lo
+  rifiuta invece di perderlo. Nel file è `writing-mode="vertical-rl"`
+  ([formato del testo](../reference/scene-format-text.md), §10).
 - **Testo › Converti in testo in area** mette un testo da punto in un
   riquadro largo quanto la sua riga più lunga; **Converti in testo per
   punti** lo toglie, e le righe restano quelle che si vedevano. Lo stesso

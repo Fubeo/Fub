@@ -110,6 +110,9 @@ pub struct InfoTesto {
     pub wrap: Option<f64>,
     /// Il `fub:join` di ogni `<tspan>`, come è scritto.
     pub unioni: Vec<Option<String>>,
+    /// Il `dx` di ogni `<tspan>`: in un testo verticale, quanto la colonna
+    /// si sposta da quella prima (formato del testo, §10).
+    pub scarti: Vec<Option<f64>>,
 }
 
 impl Elemento {

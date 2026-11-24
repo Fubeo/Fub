@@ -373,6 +373,228 @@
       "dopo": "type-nuovo.svg"
     },
     {
+      "id": "verticalType",
+      "fonte": "strumento",
+      "disegno": "base.svg",
+      "gesto": [
+        {
+          "phase": "preview",
+          "events": [
+            {
+              "kind": "down",
+              "x": 600,
+              "y": 40,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "up",
+              "x": 600,
+              "y": 40,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ],
+          "inputs": []
+        },
+        {
+          "phase": "preview",
+          "events": [],
+          "inputs": [
+            {
+              "kind": "text",
+              "text": "縦書き"
+            },
+            {
+              "kind": "key",
+              "key": "Enter",
+              "code": "Enter",
+              "pressed": true
+            },
+            {
+              "kind": "text",
+              "text": "二列 AB"
+            }
+          ]
+        },
+        {
+          "phase": "commit",
+          "events": [],
+          "inputs": [
+            {
+              "kind": "key",
+              "key": "Escape",
+              "code": "Escape",
+              "pressed": true
+            }
+          ]
+        }
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "add",
+            "parent": "l1a2b3c4d",
+            "pos": {
+              "last": true
+            },
+            "elem": {
+              "tag": "text",
+              "attrs": {
+                "x": "597.44",
+                "y": "40",
+                "writing-mode": "vertical-rl",
+                "fill": "#000000",
+                "font-family": "Inter, sans-serif",
+                "font-size": "32",
+                "id": "o0rpq5ny2"
+              },
+              "children": [
+                {
+                  "tag": "tspan",
+                  "attrs": {
+                    "y": "40",
+                    "dx": "0"
+                  },
+                  "text": "縦書き"
+                },
+                {
+                  "tag": "tspan",
+                  "attrs": {
+                    "y": "40",
+                    "dx": "-38.4"
+                  },
+                  "text": "二列 AB"
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "dopo": "verticalType-nuovo.svg"
+    },
+    {
+      "id": "type.orientation.vertical",
+      "disegno": "base.svg",
+      "selezione": [
+        "ot1t1t1t1"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "ot1t1t1t1"
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "first": true
+                },
+                "elem": {
+                  "tag": "text",
+                  "attrs": {
+                    "id": "ot1t1t1t1",
+                    "x": "37.44",
+                    "y": "80",
+                    "fill": "#000000",
+                    "font-family": "Inter, sans-serif",
+                    "font-size": "32",
+                    "writing-mode": "vertical-rl"
+                  },
+                  "children": [
+                    {
+                      "tag": "tspan",
+                      "attrs": {
+                        "y": "80",
+                        "dx": "0"
+                      },
+                      "text": "Pioggia"
+                    },
+                    {
+                      "tag": "tspan",
+                      "attrs": {
+                        "y": "80",
+                        "dx": "-40"
+                      },
+                      "text": "sul mare"
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "type-orientation-vertical.svg"
+    },
+    {
+      "id": "type.orientation.horizontal",
+      "disegno": "type-orientation-vertical.svg",
+      "selezione": [
+        "ot1t1t1t1"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "ot1t1t1t1"
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "first": true
+                },
+                "elem": {
+                  "tag": "text",
+                  "attrs": {
+                    "id": "ot1t1t1t1",
+                    "x": "40",
+                    "y": "80",
+                    "fill": "#000000",
+                    "font-family": "Inter, sans-serif",
+                    "font-size": "32"
+                  },
+                  "children": [
+                    {
+                      "tag": "tspan",
+                      "attrs": {
+                        "x": "40",
+                        "dy": "0"
+                      },
+                      "text": "Pioggia"
+                    },
+                    {
+                      "tag": "tspan",
+                      "attrs": {
+                        "x": "40",
+                        "dy": "40"
+                      },
+                      "text": "sul mare"
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "type-orientation-horizontal.svg"
+    },
+    {
       "id": "view.snapToGlyph",
       "fonte": "interfaccia",
       "prova": "apps/client/src/editors/spatial/tools/editor/chrome/visualizza.test.ts"

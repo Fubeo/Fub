@@ -5171,6 +5171,38 @@
     },
     {
       "fonte": "motore",
+      "id": "type.orientation.horizontal",
+      "chiamata": {
+        "comando": "disegno.type.orientation.horizontal"
+      },
+      "etichetta": {
+        "it": "Orizzontale",
+        "en": "Horizontal"
+      },
+      "posto": "menu/testo",
+      "famiglia": "testo",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "type.orientation.vertical",
+      "chiamata": {
+        "comando": "disegno.type.orientation.vertical"
+      },
+      "etichetta": {
+        "it": "Verticale",
+        "en": "Vertical"
+      },
+      "posto": "menu/testo",
+      "famiglia": "testo",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "type.resetHorizontalScale",
       "chiamata": {
         "comando": "disegno.type.resetHorizontalScale"
@@ -7310,6 +7342,22 @@
       "etichetta": {
         "it": "Strumento Testo su tracciato",
         "en": "Type on a Path Tool"
+      },
+      "posto": "colonna/testo",
+      "famiglia": "testo",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "strumento",
+      "id": "verticalType",
+      "chiamata": {
+        "strumento": "verticalType"
+      },
+      "etichetta": {
+        "it": "Strumento Testo verticale",
+        "en": "Vertical Type Tool"
       },
       "posto": "colonna/testo",
       "famiglia": "testo",

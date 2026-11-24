@@ -391,15 +391,17 @@ fn col_carattere_di_fub(
 /// Il `<text>` di un testo a punto orizzontale fatto da uno strumento del
 /// motore: l'ancora (l'inizio della linea di base della prima riga), il
 /// colore, il carattere e la misura del primo pezzo. Le righe le aggiunge
-/// [`con_le_righe`], che mette il `textPath` a un testo su tracciato; un
-/// testo verticale, o su tracciato con una fine, resta alla differenza, che
-/// non lo sa scrivere.
+/// [`con_le_righe`], che mette il `textPath` a un testo su tracciato. Un
+/// testo di punto verticale ha `writing-mode` e le sue colonne; uno
+/// verticale in area o su tracciato, o su tracciato con una fine, resta alla
+/// differenza, che non lo sa scrivere.
 fn scrivi_testo(nodo: &Node, locale: Affine) -> Option<(String, Map<String, Value>)> {
     let NodeKind::Text(t) = &nodo.kind else {
         return None;
     };
     let su_tracciato = matches!(t.kind, TextKind::OnPath { .. });
-    if t.vertical
+    let verticale = t.vertical && matches!(t.kind, TextKind::Point);
+    if (t.vertical && !verticale)
         || !matches!(
             t.kind,
             TextKind::Point | TextKind::Area { .. } | TextKind::OnPath { end: None, .. }
@@ -412,8 +414,11 @@ fn scrivi_testo(nodo: &Node, locale: Affine) -> Option<(String, Map<String, Valu
     let ancora = m * Point::ZERO;
     // Un testo in area (lo strumento trascinato): `x` e `y` della sua prima
     // riga e la larghezza del riquadro, `fub:wrap` (K6 T16).
+    // Un testo verticale: `x` e `y` della cima della sua prima colonna
+    // (formato del testo, §10).
     let in_area = match t.kind {
         TextKind::Area { .. } => Some(differenza::righe_scritte(t, m, None).ok()?),
+        TextKind::Point if verticale => Some(differenza::righe_scritte(t, m, None).ok()?),
         _ => None,
     };
     let fill = match &primo.style.fill {
@@ -436,6 +441,9 @@ fn scrivi_testo(nodo: &Node, locale: Affine) -> Option<(String, Map<String, Valu
             attrs.insert("x".into(), json!(numero(ancora.x, 2)));
             attrs.insert("y".into(), json!(numero(ancora.y, 2)));
         }
+    }
+    if verticale {
+        attrs.insert("writing-mode".into(), json!("vertical-rl"));
     }
     attrs.insert("fill".into(), json!(fill));
     // Il carattere di Fub si scrive come lo scrive il Testo del Semplice,
@@ -508,7 +516,7 @@ const ID_TRACCIATO_IN_ANTEPRIMA: &str = "fub-anteprima-tracciato";
 /// un testo che c'era già, l'`id` di Fub, perché il client nasconda quello
 /// del file mentre si scrive. Un testo su tracciato è un `<g>` con la sua
 /// risorsa e il `<text>`, che ha l'id del tracciato che sostituisce. `None`
-/// se nessun testo è cambiato o se il testo è verticale.
+/// se nessun testo è cambiato o se il file non lo sa scrivere.
 fn testo_in_scrittura(sessione: &Session, copia: &Copia) -> Option<Value> {
     let stato = sessione.doc().ok()?;
     let dopo = stato.doc.clone();
@@ -583,7 +591,13 @@ fn testo_in_scrittura(sessione: &Session, copia: &Copia) -> Option<Value> {
         attrs.insert("id".into(), json!(id));
     }
     let x = attrs["x"].as_str().unwrap_or("0").to_string();
-    let figli = righe_del_testo(t, &x, indietro * t.xf);
+    let figli = if t.vertical {
+        differenza::righe_scritte(t, indietro * t.xf, None)
+            .ok()?
+            .righe
+    } else {
+        righe_del_testo(t, &x, indietro * t.xf)
+    };
     let forma = json!({ "tag": tag, "attrs": attrs, "children": figli });
     (serde_json::to_string(&forma).ok()?.len() <= fub_abi::MAX_DRAWING_OPS_BYTES).then_some(forma)
 }
@@ -624,10 +638,15 @@ fn con_le_righe(
         };
         let x = elem["attrs"]["x"].as_str().unwrap_or("0").to_string();
         elem["children"] = match &t.kind {
-            TextKind::Area { .. } => match differenza::righe_scritte(t, t.xf, None) {
-                Ok(r) => Value::Array(r.righe),
-                Err(_) => return,
-            },
+            // Le righe di un testo in area e le colonne di uno verticale.
+            TextKind::Area { .. } | TextKind::Point
+                if t.vertical || !matches!(t.kind, TextKind::Point) =>
+            {
+                match differenza::righe_scritte(t, t.xf, None) {
+                    Ok(r) => Value::Array(r.righe),
+                    Err(_) => return,
+                }
+            }
             TextKind::OnPath { path, start, .. } => {
                 let Some(id) = crate::id::nuovo(crate::id::Specie::Risorsa, &|id| {
                     copia.mappa.id_preso(id) || presi.contains(id) || per_id.contains_key(id)

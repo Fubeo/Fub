@@ -185,6 +185,7 @@ pub(crate) fn importa(testo: &str, revisione: u64) -> Result<Copia, ErroreApertu
     let mut mappa = Mappa::nuova(elementi, &mut documento);
     spazi_fra_le_righe(&mappa, &mut documento);
     testi_in_area(&mappa, &mut documento);
+    testi_verticali(&mappa, &mut documento);
     crate::ricetta::nomi_di_ruolo(&ricette, &mut documento);
     mappa.lega_le_facce(&documento);
     mappa.ricette = ricette;
@@ -634,6 +635,99 @@ fn testi_in_area(mappa: &Mappa, documento: &mut Document) {
     }
 }
 
+/// I testi verticali del file (`writing-mode="vertical-rl"`, formato della
+/// scena, testo §10) tornano testi di punto verticali del motore, come li fa
+/// lo strumento Testo verticale: il motore li importa come testo su un
+/// tracciato verticale, una colonna sola. Le colonne tornano paragrafi,
+/// l'interlinea viene dal `dx` della seconda colonna, l'allineamento da
+/// `text-anchor`, e il testo si sposta perché la cima della prima colonna
+/// cada in `x`, `y` come nel file. Un testo con pezzi, ruotato o inclinato
+/// resta com'è importato.
+fn testi_verticali(mappa: &Mappa, documento: &mut Document) {
+    use vectorcraft_doc::text::{Justify, TextKind};
+    use vectorcraft_doc::NodeKind;
+    use vectorcraft_geom::{Affine, Point};
+    for e in mappa.elementi() {
+        let (Some(info), Some(nodo), Some(ctm)) = (&e.testo, e.nodo, e.ctm()) else {
+            continue;
+        };
+        let attributo = |nome: &str| {
+            info.attributi
+                .iter()
+                .find(|(n, _)| n == nome)
+                .map(|(_, v)| v.trim().to_string())
+        };
+        if attributo("writing-mode").as_deref() != Some("vertical-rl")
+            || !info.di_punto
+            || info.pezzi
+            || info.righe.is_empty()
+        {
+            continue;
+        }
+        let numero = |nome: &str| attributo(nome).map_or(Some(0.0), |v| v.parse::<f64>().ok());
+        let (Some(x), Some(y)) = (numero("x"), numero("y")) else {
+            continue;
+        };
+        let [a, b, c, d, _, _] = ctm.as_coeffs();
+        if !(a.is_finite() && a > 1e-9)
+            || b.abs() > 1e-6 * a
+            || c.abs() > 1e-6 * a
+            || (d - a).abs() > 1e-6 * a
+        {
+            continue;
+        }
+        let Some(NodeKind::Text(t)) = documento.node_mut(nodo).map(|n| &mut n.kind) else {
+            continue;
+        };
+        // Un aspetto solo: lo spostamento dalla linea di base che il `dx`
+        // delle colonne dà ai loro pezzi nel tracciato importato non conta.
+        let senza = |r: &vectorcraft_doc::text::TextRun| {
+            let mut s = r.style.clone();
+            s.baseline_shift = 0.0;
+            s.kerning = None;
+            s
+        };
+        if t.runs.is_empty() || t.runs.windows(2).any(|w| senza(&w[0]) != senza(&w[1])) {
+            continue;
+        }
+        t.runs.truncate(1);
+        t.runs[0].text = info.righe.join("\n");
+        t.runs[0].style.baseline_shift = 0.0;
+        t.runs[0].style.leading = info
+            .scarti
+            .get(1)
+            .copied()
+            .flatten()
+            .filter(|v| *v < 0.0)
+            .map(|v| -v);
+        t.normalize_paras();
+        let justify = match attributo("text-anchor").as_deref() {
+            Some("middle") => Justify::Center,
+            Some("end") => Justify::Right,
+            _ => Justify::Left,
+        };
+        t.edit_paras(None, |pa| pa.justify = justify);
+        t.kind = TextKind::Point;
+        t.vertical = true;
+        t.xf = Affine::IDENTITY;
+        // La cima della prima colonna con l'ancora all'origine, come la
+        // scrive `colonne_scritte`.
+        let lay = vectorcraft_text::layout(vectorcraft_text::FontDb::global(), t);
+        let cima = lay.lines.first().map_or(Point::ZERO, |l| {
+            let lungo = match justify {
+                Justify::Center => (l.x0 + l.x1) / 2.0,
+                Justify::Right => l.x1,
+                _ => l.x0,
+            };
+            lay.physical_point(Point::new(lungo, l.baseline + (l.descent - l.ascent) / 2.0))
+        });
+        t.xf = ctm * Affine::translate((x, y)) * Affine::translate(-cima.to_vec2());
+        let lay = vectorcraft_text::layout(vectorcraft_text::FontDb::global(), t);
+        t.cached_bounds = Some(lay.bounds);
+        t.cached_baselines = lay.baselines();
+    }
+}
+
 /// Le righe di un `<text>` e gli attributi dei suoi `<tspan>`.
 fn info_testo(testo: &str, e: &fub_scene::ElementItem) -> crate::mappa::InfoTesto {
     let righe = e.lines.clone().unwrap_or_default();
@@ -641,6 +735,7 @@ fn info_testo(testo: &str, e: &fub_scene::ElementItem) -> crate::mappa::InfoTest
     let mut attributi_delle_righe = std::collections::BTreeSet::new();
     let mut tspan = 0usize;
     let mut unioni = Vec::new();
+    let mut scarti = Vec::new();
     let mut da = 0;
     while let Some(i) = corpo[da..].find("<tspan") {
         let inizio = da + i;
@@ -650,15 +745,25 @@ fn info_testo(testo: &str, e: &fub_scene::ElementItem) -> crate::mappa::InfoTest
         }
         tspan += 1;
         let mut unione = None;
+        let mut scarto = None;
         for a in attributi(corpo, inizio).map(|(_, a)| a).unwrap_or_default() {
             if a.nome == "fub:join" {
                 unione = Some(a.valore.clone());
             }
-            if !matches!(a.nome.as_str(), "x" | "dy" | "fub:join") {
+            if a.nome == "dx" {
+                scarto = a
+                    .valore
+                    .trim()
+                    .parse::<f64>()
+                    .ok()
+                    .filter(|v| v.is_finite());
+            }
+            if !matches!(a.nome.as_str(), "x" | "dy" | "y" | "dx" | "fub:join") {
                 attributi_delle_righe.insert(a.nome);
             }
         }
         unioni.push(unione);
+        scarti.push(scarto);
     }
     let propri = attributi(testo, e.span.bytes[0])
         .map(|(_, a)| a.into_iter().map(|a| (a.nome, a.valore)).collect())
@@ -671,6 +776,7 @@ fn info_testo(testo: &str, e: &fub_scene::ElementItem) -> crate::mappa::InfoTest
         attributi: propri,
         wrap: e.wrap,
         unioni,
+        scarti,
     }
 }
 

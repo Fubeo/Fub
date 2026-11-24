@@ -133,8 +133,8 @@ pub(super) struct TestoRiscritto {
 }
 
 /// Vero se il cambio fra il testo `b` e il testo `a` si scrive solo
-/// riscrivendo il `<text>` intero: un testo in area, prima o dopo, o un
-/// testo di punto con un'altra interlinea (il `dy` di ogni riga).
+/// riscrivendo il `<text>` intero: un testo in area o verticale, prima o
+/// dopo, o un testo di punto con un'altra interlinea (il `dy` di ogni riga).
 pub(super) fn da_riscrivere(b: &Node, a: &Node) -> bool {
     let (NodeKind::Text(tb), NodeKind::Text(ta)) = (&b.kind, &a.kind) else {
         return false;
@@ -142,8 +142,11 @@ pub(super) fn da_riscrivere(b: &Node, a: &Node) -> bool {
     if tb == ta {
         return false;
     }
+    // Le colonne di un testo verticale hanno la posizione che il motore dà
+    // loro (formato del testo, §10): ogni cambio le riscrive, e così il
+    // cambio di verso.
     let area = |t: &TextObject| matches!(t.kind, TextKind::Area { .. });
-    if area(tb) || area(ta) {
+    if area(tb) || area(ta) || tb.vertical || ta.vertical {
         return true;
     }
     // Un'interlinea che nessun pezzo di prima aveva (scrivere o cancellare
@@ -239,6 +242,12 @@ pub(super) fn riscrittura(e: &Elemento, b: &Node, a: &Node) -> Result<TestoRiscr
     }
     attrs.insert("x".into(), json!(scritte.x));
     attrs.insert("y".into(), json!(scritte.y));
+    // Il verso (formato del testo, §10): Orientamento del testo lo cambia.
+    if ta.vertical {
+        attrs.insert("writing-mode".into(), json!("vertical-rl"));
+    } else {
+        attrs.remove("writing-mode");
+    }
     match scritte.wrap {
         Some(w) => {
             attrs.insert("fub:wrap".into(), json!(w));

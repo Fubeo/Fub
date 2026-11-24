@@ -24,7 +24,7 @@ import { composingKey } from "../../../kit/ime";
 
 /// Gli strumenti del motore che scrivono: al rilascio del clic il gesto resta
 /// aperto (`busy`), e la tastiera va a lui finché il testo non si chiude.
-export const STRUMENTI_CHE_SCRIVONO: ReadonlySet<string> = new Set(["type", "areaType", "typeOnPath"]);
+export const STRUMENTI_CHE_SCRIVONO: ReadonlySet<string> = new Set(["type", "areaType", "typeOnPath", "verticalType"]);
 
 /// I tasti che modificano il testo o ci si muovono dentro: vanno al motore
 /// come tasti (`strumento.rs`, `tasto`). Le lettere arrivano come testo.

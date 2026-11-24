@@ -243,6 +243,7 @@ const COLUMN: Readonly<Record<string, readonly string[]>> = {
   "draw-objects-on-path": ["M3 18c4-8 14-8 18 0", "M5 10h3v3H5z", "M10.5 6h3v3h-3z", "M16 10h3v3h-3z"],
   "draw-type-on-path": ["M3 18c4-8 14-8 18 0", "M9 6h6", "M12 6v7"],
   "draw-type": ["M5 6V4h14v2", "M12 4v16", "M9 20h6"],
+  "draw-vertical-type": ["M18 5V3H6v2", "M12 3v8", "M4 21V9", "M2 21h4"],
   "draw-width-tool": ["M3 12c4-6 14-6 18 0", "M3 12c4 6 14 6 18 0", "M12 7v10"],
   "draw-live-paint-bucket": ["m19 11-8-8-8.6 8.6a2 2 0 0 0 0 2.8l5.2 5.2c.8.8 2 .8 2.8 0L19 11Z", "m5 2 5 5", "M2 13h15", "M22 20a2 2 0 1 1-4 0c0-1.6 1.7-2.4 2-4 .3 1.6 2 2.4 2 4Z"],
   "draw-live-paint-selection": ["M12.03 12.68a.5.5 0 0 1 .65-.65l9 3.5a.5.5 0 0 1-.03.94l-3.44 1.07a1 1 0 0 0-.66.66l-1.07 3.44a.5.5 0 0 1-.94.03z", "M3 3h7v7H3z", "M3 14v4", "M14 3h4"],

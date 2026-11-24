@@ -40,6 +40,8 @@ const SUI_TESTI: &[&str] = &[
     "type.size.decreaseByFive",
     "type.resetTracking",
     "type.resetHorizontalScale",
+    "type.orientation.vertical",
+    "type.orientation.horizontal",
 ];
 
 /// Cambia le parole di un testo (`text.editRange`).

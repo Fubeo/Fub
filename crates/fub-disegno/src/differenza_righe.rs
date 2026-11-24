@@ -60,6 +60,69 @@ pub(crate) struct RigheScritte {
     pub righe: Vec<Value>,
 }
 
+/// Le colonne di un testo di punto verticale (formato del testo, §10): il
+/// `<text>` ha in `x` la linea di mezzo della prima colonna e in `y` la sua
+/// cima; ogni `<tspan>` ha la `y` dove la sua colonna comincia, secondo
+/// l'allineamento, e il `dx` dalla colonna prima. Le colonne sono quelle che
+/// il motore dispone; se non tornano con le righe del testo, si va di
+/// un'interlinea del primo pezzo verso sinistra. `m` è già controllata
+/// uniforme e dritta.
+fn colonne_scritte(t: &TextObject, m: Affine, righe_di_punto: Option<Vec<String>>) -> RigheScritte {
+    let s = m.as_coeffs()[0];
+    let testo = t.plain_text();
+    let righe =
+        righe_di_punto.unwrap_or_else(|| dividi(&testo).into_iter().map(str::to_string).collect());
+    let lay = vectorcraft_text::layout(vectorcraft_text::FontDb::global(), t);
+    let o = m * Point::ZERO;
+    // La cima di ogni colonna nello spazio del `<text>`: dove comincia, a
+    // metà o dove finisce, come l'ancora del testo (`text-anchor`).
+    let cime: Option<Vec<Point>> = (lay.vertical && lay.lines.len() == righe.len()).then(|| {
+        lay.lines
+            .iter()
+            .map(|l| {
+                let lungo = match t.para.justify {
+                    Justify::Center => (l.x0 + l.x1) / 2.0,
+                    Justify::Right => l.x1,
+                    _ => l.x0,
+                };
+                let mezzo = l.baseline + (l.descent - l.ascent) / 2.0;
+                m * lay.physical_point(Point::new(lungo, mezzo))
+            })
+            .collect()
+    });
+    let interlinea = t
+        .runs
+        .first()
+        .map(|r| r.style.effective_leading())
+        .unwrap_or(0.0)
+        * s;
+    let punto = |i: usize| match &cime {
+        Some(c) => c[i],
+        None => Point::new(o.x - interlinea * i as f64, o.y),
+    };
+    let geo = |v: f64| numero(v, DECIMALI_GEOMETRIA);
+    let primo = punto(0);
+    let figli = righe
+        .into_iter()
+        .enumerate()
+        .map(|(i, riga)| {
+            let qui = punto(i);
+            let dx = if i == 0 {
+                "0".to_string()
+            } else {
+                geo(qui.x - punto(i - 1).x)
+            };
+            json!({ "tag": "tspan", "attrs": { "y": geo(qui.y), "dx": dx }, "text": riga })
+        })
+        .collect();
+    RigheScritte {
+        x: geo(primo.x),
+        y: geo(primo.y),
+        wrap: None,
+        righe: figli,
+    }
+}
+
 /// Le righe del testo `t`, con `m` dallo spazio del testo a quello del
 /// `<text>`. `righe_di_punto` sono le righe di un testo di punto già pronte
 /// (quelle che non cambiano restano come le scrive il file); senza, sono le
@@ -69,7 +132,7 @@ pub(crate) fn righe_scritte(
     m: Affine,
     righe_di_punto: Option<Vec<String>>,
 ) -> Result<RigheScritte, &'static str> {
-    if t.vertical {
+    if t.vertical && !matches!(t.kind, TextKind::Point) {
         return Err(RIQUADRO_FUORI);
     }
     let [a, b, c, d, _, _] = m.as_coeffs();
@@ -83,6 +146,7 @@ pub(crate) fn righe_scritte(
     }
     let passo = |dy: f64| numero(dy * s, DECIMALI_GEOMETRIA);
     match &t.kind {
+        TextKind::Point if t.vertical => Ok(colonne_scritte(t, m, righe_di_punto)),
         TextKind::Point => {
             let testo = t.plain_text();
             let righe = righe_di_punto
