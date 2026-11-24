@@ -7,10 +7,11 @@
 // lettura del motore limite, allineamento, adattamento dei trattini e punte sono spenti.
 import { describe, expect, it, vi } from "vitest";
 import { openLifetime } from "../../../ui/lifetime";
+import { closeContextMenu } from "../../../ui/menu";
 import type { MotoreDelDisegno } from "../motore/gesti";
 import type { SessioneMotore } from "../motore/sessione";
 import { t } from "../strings";
-import { sezioneContorno, trattiniDaiCampi, unisciLetture } from "./contorno-sezione";
+import { sezioneContorno, spessoriDiSerie, trattiniDaiCampi, unisciLetture } from "./contorno-sezione";
 import { apri } from "./index";
 import { indiceDi } from "./indice";
 import indiceGenerato from "./indice.generated.json";
@@ -128,6 +129,44 @@ describe("la sezione Contorno del Design", () => {
     const ultimo = esegui.mock.calls[esegui.mock.calls.length - 1]!;
     expect(ultimo[0]).toBe("stroke.set");
     expect((ultimo[1] as { weight: number }).weight).toBeCloseTo(1000 * 4 / 3, 6);
+  });
+
+  it("gli spessori di serie, come weight_presets di VectorCraft: valori tondi nell'unità del campo", () => {
+    expect(spessoriDiSerie("pt")).toHaveLength(22);
+    expect(spessoriDiSerie("pt")[0]).toBe(0.25);
+    expect(spessoriDiSerie("pt")[21]).toBe(100);
+    expect(spessoriDiSerie("mm")).toContain(0.35);
+    expect(spessoriDiSerie("in")).toContain(0.0078);
+    // Un'unità senza scala propria usa quella in punti.
+    expect(spessoriDiSerie("m")).toEqual(spessoriDiSerie("pt"));
+  });
+
+  it("il menu degli spessori di serie segna quello che c'è e manda quello scelto", () => {
+    try {
+      const { elemento, esegui } = corpoDi(1, { contorno: contorno() });
+      const freccia = bottone(elemento, "draw-outline-weight-presets");
+      expect(freccia.disabled).toBe(false);
+      freccia.click();
+      const voci = [...document.querySelectorAll<HTMLElement>("#context-menu [role^='menuitem']")];
+      expect(voci).toHaveLength(22);
+      expect(voci[0]!.textContent).toContain("0.25 pt");
+      const segnate = voci.filter((v) => v.getAttribute("aria-checked") === "true");
+      expect(segnate.map((v) => v.textContent)).toEqual([expect.stringContaining("3 pt")]);
+      // Lo spessore che c'è già non è un cambio.
+      segnate[0]!.click();
+      expect(esegui).not.toHaveBeenCalled();
+      freccia.click();
+      const dieci = [...document.querySelectorAll<HTMLElement>("#context-menu [role^='menuitem']")].find((v) => v.querySelector(".menu-label")?.textContent === "10 pt")!;
+      dieci.click();
+      expect(esegui).toHaveBeenLastCalledWith("stroke.set", { weight: 40 / 3 }, { senzaFinestra: true });
+    } finally {
+      closeContextMenu();
+    }
+  });
+
+  it("il menu degli spessori di serie è spento con un oggetto bloccato", () => {
+    const { elemento } = corpoDi(1, { contorno: contorno({ bloccato: true }) });
+    expect(bottone(elemento, "draw-outline-weight-presets").disabled).toBe(true);
   });
 
   it("gli estremi e gli angoli scelti vanno al motore", () => {

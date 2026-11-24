@@ -24,7 +24,8 @@
 //   vista non porta il contorno, e la sezione è spenta col perché; con un oggetto bloccato è spenta
 //   come il comando.
 
-import { numberField, type NumberField } from "../../../kit/number-field";
+import { numberField, numberText, type NumberField } from "../../../kit/number-field";
+import { showContextMenu, type MenuItem } from "../../../ui/menu";
 import { t, type DrawKey } from "../strings";
 import { registraSezione, type ContestoSezione, type ContornoSelezione, type Sezione, type Sezioni } from "./sezioni";
 
@@ -43,6 +44,22 @@ export interface AzioniContorno {
 
 /// Lo spessore più grande che il motore accetta (`stroke.set` lo porta in 0..1000).
 const SPESSORE_MASSIMO = 1000;
+/// Gli spessori di serie del menu accanto allo spessore, come `weight_presets` di VectorCraft: per ogni
+/// unità valori tondi in quell'unità («0,25 mm», non «0,088 mm» di una scala in punti convertita).
+/// Un'unità che non è qui usa la scala in punti.
+export const SPESSORI_DI_SERIE: Readonly<Record<string, readonly number[]>> = {
+  pt: [0.25, 0.5, 0.75, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100],
+  mm: [0.1, 0.25, 0.35, 0.5, 0.75, 1, 1.5, 2, 2.5, 3, 3.5, 4, 5, 6, 7, 8, 9, 10, 15, 20, 25, 30],
+  cm: [0.01, 0.02, 0.03, 0.05, 0.06, 0.07, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1, 1.5, 2, 2.5, 3, 4, 5],
+  in: [0.0078, 0.0156, 0.0313, 0.0625, 0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875, 1, 1.25, 1.5, 1.75, 2, 2.5, 3, 3.5, 4, 4.5, 5],
+  px: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 30, 40],
+};
+
+/// Gli spessori di serie nell'unità `unita` del campo.
+export function spessoriDiSerie(unita: string): readonly number[] {
+  return SPESSORI_DI_SERIE[unita] ?? SPESSORI_DI_SERIE.pt!;
+}
+
 /// Il limite dell'angolo del motore: 1..500 volte lo spessore; 10 dove nessun oggetto ne ha uno.
 const LIMITE_MINIMO = 1;
 const LIMITE_MASSIMO = 500;
@@ -316,6 +333,35 @@ function disegnaCorpo(contesto: ContestoSezione, esegui: EseguiContorno, lettura
     lifetime: contesto.vita,
   });
 
+  // Gli spessori di serie: il menu sotto la freccia accanto al campo, con segnato quello che c'è.
+  const serie = document.createElement("button");
+  serie.type = "button";
+  serie.className = "draw-button draw-outline-weight-presets";
+  serie.textContent = "▾";
+  serie.setAttribute("aria-label", t("draw.contorno.spessoriDiSerie"));
+  serie.title = t("draw.contorno.spessoriDiSerie");
+  serie.setAttribute("aria-haspopup", "menu");
+  serie.setAttribute("aria-expanded", "false");
+  serie.addEventListener("click", () => {
+    if (serie.disabled) return;
+    const adesso = spessoreAdesso === null ? null : Number(spessoreAdesso.toFixed(decimali));
+    const voci: MenuItem[] = spessoriDiSerie(unita).map((valore) => {
+      const segnato = adesso !== null && Math.abs(adesso - valore) < 1e-9;
+      return {
+        label: `${numberText(valore, 4)} ${unita}`,
+        choice: "radio" as const,
+        checked: segnato,
+        ...(segnato ? { selected: true } : {}),
+        run: () => {
+          if (!segnato) manda({ weight: allaScena(valore) });
+        },
+      };
+    });
+    serie.setAttribute("aria-expanded", "true");
+    showContextMenu(serie, voci, { onClose: () => serie.setAttribute("aria-expanded", "false") });
+  });
+  spessore.element.append(serie);
+
   const estremi = scelta("draw-outline-cap", "draw.contorno.estremi", ESTREMI, contorno === undefined ? "butt" : contorno.estremi, (cap) => manda({ cap }));
   const angoliAdesso = contorno === undefined ? "miter" : contorno.angoli;
   const angoli = scelta("draw-outline-join", "draw.contorno.angoli", ANGOLI, angoliAdesso, (join) => manda({ join }));
@@ -475,6 +521,7 @@ function disegnaCorpo(contesto: ContestoSezione, esegui: EseguiContorno, lettura
   );
 
   spessore.setDisabled(spenta);
+  serie.disabled = spenta;
   estremi.select.disabled = spenta;
   angoli.select.disabled = spenta;
   limite.setDisabled(senzaMotore || angoliAdesso === "round" || angoliAdesso === "bevel");
