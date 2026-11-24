@@ -39,6 +39,20 @@
         { "axis": "x", "at": 10, "locked": false }
       ]
     },
+    {
+      "value": "x 120 board=b1 layer=l2; y 8 layer=livello-1 locked board=b3",
+      "guides": [
+        { "axis": "x", "at": 120, "locked": false, "board": "b1", "layer": "l2" },
+        { "axis": "y", "at": 8, "locked": true, "board": "b3", "layer": "livello-1" }
+      ]
+    },
+    { "value": "y 4 locked layer=l1", "guides": [{ "axis": "y", "at": 4, "locked": true, "layer": "l1" }] },
+    { "value": "x 1 board=", "guides": null },
+    { "value": "x 1 board=b1 board=b2", "guides": null },
+    { "value": "x 1 layer=l1 layer=l1", "guides": null },
+    { "value": "x 1 Board=b1", "guides": null },
+    { "value": "x 1 board =b1", "guides": null },
+    { "value": "x board=b1 1", "guides": null },
     { "value": "x 120;", "guides": null },
     { "value": ";x 120", "guides": null },
     { "value": "x 1;;y 2", "guides": null },

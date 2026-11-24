@@ -46,7 +46,9 @@ units = "px" / "mm" / "cm" / "in" / "pt"
 
 ```text
 guides = *wsp / guide *(";" guide)
-guide  = *wsp axis 1*wsp number [1*wsp "locked"] *wsp
+guide  = *wsp axis 1*wsp number *(1*wsp part) *wsp
+part   = "locked" / "board=" ref / "layer=" ref
+ref    = 1*(%x21-3A / %x3C-10FFFF)   ; né spazi né ";"
 axis   = "x" / "y"
 wsp    = %x20 / %x09 / %x0A / %x0C / %x0D
 ```
@@ -57,13 +59,27 @@ wsp    = %x20 / %x09 / %x0A / %x0C / %x0D
   (formato della scena, §4), in unità utente; `-0` vale `0`.
 - **Bloccata:** con `locked` la guida non si sposta e non si prende col
   puntatore.
+- **Tavola:** con `board=` la guida appartiene alla tavola con quell'id
+  (formato della scena, tavole): corre solo sulla tavola, e si sposta, si
+  copia e se ne va con lei. Senza, la guida è del foglio intero.
+- **Livello:** con `layer=` la guida sta sul livello con quell'id: si
+  mostra, si nasconde e si blocca con lui, e se ne va con lui. Senza, la
+  guida non è di nessun livello ed è sempre lì.
+- **Riferimenti persi:** un `board=` o un `layer=` che non nomina una
+  tavola o un livello del disegno si legge come se mancasse; la guida resta.
+- **Parti dopo il numero:** in qualunque ordine, ognuna al più una volta.
 - **Elenco:** le guide valgono nell'ordine del file, e due guide uguali sono
   due guide. Un valore vuoto, o di soli spazi, non ha guide.
 - **Limite:** al più 1 000 guide; oltre, il valore è fuori grammatica.
 - **Fuori grammatica:** fra l'altro un `;` in testa, in coda o ripetuto
   (`x 1;`, `x 1;;y 2`), un asse attaccato al numero (`x1`), un asse diverso
   da `x` e `y`, un numero che manca o non è un numero, una parola dopo il
-  numero che non è `locked`.
+  numero che non è `locked`, `board=…` o `layer=…`, una parte ripetuta, un
+  `board=` o un `layer=` senza id.
+- **Forma ampliata:** `board=` e `layer=` vengono dopo la prima forma
+  (asse, numero e `locked`) e non cambiano il significato di quella:
+  la versione del formato resta 1. Un lettore di prima trova fuori grammatica
+  un valore che li usa e lo lascia nel file com'è (§3), quindi non si perdono.
 
 ## 3. Lettura e diagnostica
 
@@ -82,9 +98,9 @@ superficie non lo sostituisce:
 ## 4. Scrittura
 
 - **Unità:** `px` non si scrive: scegliere i pixel toglie l'attributo.
-- **Guide:** la forma canonica è `x 120; y 340.5 locked`, con uno spazio fra
-  le parti, `; ` fra una guida e l'altra e i numeri della geometria, al più
-  con due decimali (formato della scena, §7, punto 3). Chi cambia l'elenco
+- **Guide:** la forma canonica è `x 120; y 340.5 board=b1 layer=l2 locked`,
+  con le parti in quest'ordine e uno spazio fra l'una e l'altra, `; ` fra
+  una guida e l'altra e i numeri della geometria, al più con due decimali (formato della scena, §7, punto 3). Chi cambia l'elenco
   con un'operazione riscrive l'attributo intero, e senza guide lo toglie.
 - **Ordine sulla radice:** quando la radice si riscrive, gli attributi vanno
   nell'ordine dell'esempio: le dichiarazioni, `fub:version`, `viewBox`,

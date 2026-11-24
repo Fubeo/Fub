@@ -63,12 +63,19 @@ pub enum Axis {
     Y,
 }
 
-/// Una guida. Una guida bloccata non si trascina.
-#[derive(Copy, Clone, Debug, PartialEq, Serialize)]
+/// Una guida. Una guida bloccata non si trascina. `board` è l'id della tavola
+/// a cui appartiene (si sposta, si copia e se ne va con lei), `layer` quello
+/// del livello su cui sta (si mostra, si nasconde e si blocca con lui): senza,
+/// la guida è del foglio intero e di nessun livello.
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct Guide {
     pub axis: Axis,
     pub at: f64,
     pub locked: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub board: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub layer: Option<String>,
 }
 
 /// Le parti di una voce, separate dagli spazi di SVG.
@@ -91,26 +98,37 @@ pub fn parse_guides(value: &str) -> Option<Vec<Guide>> {
     }
     let mut guides = Vec::with_capacity(entries.len());
     for entry in entries {
-        let parts: Vec<&str> = words(entry).collect();
-        let (axis, at, flag) = match parts[..] {
-            [axis, at] => (axis, at, None),
-            [axis, at, flag] => (axis, at, Some(flag)),
-            _ => return None,
-        };
-        let axis = match axis {
+        let mut parts = words(entry);
+        let axis = match parts.next()? {
             "x" => Axis::X,
             "y" => Axis::Y,
             _ => return None,
         };
-        let at = number(at)?;
-        if flag.is_some_and(|flag| flag != "locked") {
-            return None;
+        let at = number(parts.next()?)?;
+        let (mut locked, mut board, mut layer) = (false, None, None);
+        // Le parti dopo il numero, in qualunque ordine, ognuna al più una volta.
+        for part in parts {
+            if part == "locked" && !locked {
+                locked = true;
+            } else if let Some(id) = part.strip_prefix("board=").filter(|id| !id.is_empty()) {
+                if board.replace(id.to_string()).is_some() {
+                    return None;
+                }
+            } else if let Some(id) = part.strip_prefix("layer=").filter(|id| !id.is_empty()) {
+                if layer.replace(id.to_string()).is_some() {
+                    return None;
+                }
+            } else {
+                return None;
+            }
         }
         // `-0` è `0`: una guida non ha segno.
         guides.push(Guide {
             axis,
             at: at + 0.0,
-            locked: flag.is_some(),
+            locked,
+            board,
+            layer,
         });
     }
     Some(guides)
