@@ -153,6 +153,21 @@ oggetto bloccato o su un disegno di sola lettura. Oggi ci sono:
   Ritocca, Trasforma (con le copie), Distorsione libera;
 - **Tracciato ›** Sposta tracciato, Contorna oggetto, Contorna traccia;
 - **Converti in forma ›** Rettangolo, Rettangolo arrotondato, Ellisse.
+- **Effetti tracciato ›** Tratti in geometria, Aggiungi punti di ancoraggio,
+  Estendi tracciato, Chiudi tracciato, Smussa e Semplifica punti di
+  ancoraggio, Ritira maniglie, Inverti direzione, Dividi ai punti di ancoraggio;
+- **Elaborazione tracciati ›** Aggiungi, Intersezione, Escludi, Sottrai, Meno
+  dietro, Dividi, Rifila, Fondi, Ritaglia, Contorno, Miscela intensa, Miscela
+  soffice, Trapping: lavorano sugli oggetti dentro un gruppo (o un livello),
+  come in VectorCraft, e il gruppo resta modificabile;
+- **Regolazioni colore ›** Luminosità/contrasto, Curve, Tonalità/saturazione,
+  Livelli tonali, Sposta verso colore, Temperatura/tinta;
+- **Effetti colore ›** Desatura, Bicromia, Esposizione, Inverti colori, Retino
+  vettoriale;
+- **Deforma ›** le quindici deformazioni (Arco, Arco inferiore e superiore,
+  Arcata, Rigonfiamento, Conchiglia inferiore e superiore, Bandiera, Onda,
+  Pesce, Ascesa, Occhio di pesce, Gonfia, Compressione, Torci), con piega,
+  distorsione orizzontale e verticale e direzione.
 
 Gli altri effetti arrivano uno alla volta, e una voce non ancora pronta non si
 vede. Il file salva il risultato come grafica normale,

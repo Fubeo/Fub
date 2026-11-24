@@ -6919,6 +6919,386 @@
     },
     {
       "fonte": "effetto",
+      "id": "addon.color.desaturate",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "addon.color.desaturate"
+        }
+      },
+      "etichetta": {
+        "it": "Desatura",
+        "en": "Desaturate"
+      },
+      "posto": "menu/effetto/effetti-colore",
+      "famiglia": "effetti",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "effetto",
+      "id": "addon.color.duotone",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "addon.color.duotone"
+        }
+      },
+      "etichetta": {
+        "it": "Bicromia…",
+        "en": "Duotone…"
+      },
+      "posto": "menu/effetto/effetti-colore",
+      "famiglia": "effetti",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "addon.color.exposure",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "addon.color.exposure"
+        }
+      },
+      "etichetta": {
+        "it": "Esposizione…",
+        "en": "Exposure…"
+      },
+      "posto": "menu/effetto/effetti-colore",
+      "famiglia": "effetti",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "addon.color.halftone",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "addon.color.halftone"
+        }
+      },
+      "etichetta": {
+        "it": "Retino vettoriale…",
+        "en": "Vector Halftone…"
+      },
+      "posto": "menu/effetto/effetti-colore",
+      "famiglia": "effetti",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "addon.color.invert",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "addon.color.invert"
+        }
+      },
+      "etichetta": {
+        "it": "Inverti colori",
+        "en": "Invert Colors"
+      },
+      "posto": "menu/effetto/effetti-colore",
+      "famiglia": "effetti",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "effetto",
+      "id": "addon.path.addAnchors",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "addon.path.addAnchors"
+        }
+      },
+      "etichetta": {
+        "it": "Aggiungi punti di ancoraggio…",
+        "en": "Add Anchors…"
+      },
+      "posto": "menu/effetto/effetti-tracciato",
+      "famiglia": "effetti",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "addon.path.close",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "addon.path.close"
+        }
+      },
+      "etichetta": {
+        "it": "Chiudi tracciato…",
+        "en": "Close Path…"
+      },
+      "posto": "menu/effetto/effetti-tracciato",
+      "famiglia": "effetti",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "addon.path.dashes",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "addon.path.dashes"
+        }
+      },
+      "etichetta": {
+        "it": "Tratti in geometria…",
+        "en": "Dashes to Geometry…"
+      },
+      "posto": "menu/effetto/effetti-tracciato",
+      "famiglia": "effetti",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "addon.path.extend",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "addon.path.extend"
+        }
+      },
+      "etichetta": {
+        "it": "Estendi tracciato…",
+        "en": "Extend Path…"
+      },
+      "posto": "menu/effetto/effetti-tracciato",
+      "famiglia": "effetti",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "addon.path.retract",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "addon.path.retract"
+        }
+      },
+      "etichetta": {
+        "it": "Ritira maniglie…",
+        "en": "Retract Handles…"
+      },
+      "posto": "menu/effetto/effetti-tracciato",
+      "famiglia": "effetti",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "addon.path.reverse",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "addon.path.reverse"
+        }
+      },
+      "etichetta": {
+        "it": "Inverti direzione",
+        "en": "Reverse Direction"
+      },
+      "posto": "menu/effetto/effetti-tracciato",
+      "famiglia": "effetti",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "effetto",
+      "id": "addon.path.simplify",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "addon.path.simplify"
+        }
+      },
+      "etichetta": {
+        "it": "Semplifica punti di ancoraggio…",
+        "en": "Simplify Anchors…"
+      },
+      "posto": "menu/effetto/effetti-tracciato",
+      "famiglia": "effetti",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "addon.path.smooth",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "addon.path.smooth"
+        }
+      },
+      "etichetta": {
+        "it": "Smussa punti di ancoraggio…",
+        "en": "Smooth Anchors…"
+      },
+      "posto": "menu/effetto/effetti-tracciato",
+      "famiglia": "effetti",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "addon.path.split",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "addon.path.split"
+        }
+      },
+      "etichetta": {
+        "it": "Dividi ai punti di ancoraggio…",
+        "en": "Split at Anchors…"
+      },
+      "posto": "menu/effetto/effetti-tracciato",
+      "famiglia": "effetti",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "adjust.brightnessContrast",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "adjust.brightnessContrast"
+        }
+      },
+      "etichetta": {
+        "it": "Luminosità/contrasto…",
+        "en": "Brightness/Contrast…"
+      },
+      "posto": "menu/effetto/regolazioni",
+      "famiglia": "effetti",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "adjust.curves",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "adjust.curves"
+        }
+      },
+      "etichetta": {
+        "it": "Curve…",
+        "en": "Curves…"
+      },
+      "posto": "menu/effetto/regolazioni",
+      "famiglia": "effetti",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "adjust.hueSaturation",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "adjust.hueSaturation"
+        }
+      },
+      "etichetta": {
+        "it": "Tonalità/saturazione…",
+        "en": "Hue/Saturation…"
+      },
+      "posto": "menu/effetto/regolazioni",
+      "famiglia": "effetti",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "adjust.levels",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "adjust.levels"
+        }
+      },
+      "etichetta": {
+        "it": "Livelli tonali…",
+        "en": "Levels…"
+      },
+      "posto": "menu/effetto/regolazioni",
+      "famiglia": "effetti",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "adjust.shiftToColor",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "adjust.shiftToColor"
+        }
+      },
+      "etichetta": {
+        "it": "Sposta verso colore…",
+        "en": "Shift to Color…"
+      },
+      "posto": "menu/effetto/regolazioni",
+      "famiglia": "effetti",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "adjust.temperatureTint",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "adjust.temperatureTint"
+        }
+      },
+      "etichetta": {
+        "it": "Temperatura/tinta…",
+        "en": "Temperature/Tint…"
+      },
+      "posto": "menu/effetto/regolazioni",
+      "famiglia": "effetti",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
       "id": "blur.gaussian",
       "chiamata": {
         "comando": "disegno.effect.apply",
@@ -7185,6 +7565,253 @@
     },
     {
       "fonte": "effetto",
+      "id": "pathfinder.add",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "pathfinder.add"
+        }
+      },
+      "etichetta": {
+        "it": "Aggiungi",
+        "en": "Add"
+      },
+      "posto": "menu/effetto/elaborazione",
+      "famiglia": "effetti",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "effetto",
+      "id": "pathfinder.crop",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "pathfinder.crop"
+        }
+      },
+      "etichetta": {
+        "it": "Ritaglia",
+        "en": "Crop"
+      },
+      "posto": "menu/effetto/elaborazione",
+      "famiglia": "effetti",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "effetto",
+      "id": "pathfinder.divide",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "pathfinder.divide"
+        }
+      },
+      "etichetta": {
+        "it": "Dividi",
+        "en": "Divide"
+      },
+      "posto": "menu/effetto/elaborazione",
+      "famiglia": "effetti",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "effetto",
+      "id": "pathfinder.exclude",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "pathfinder.exclude"
+        }
+      },
+      "etichetta": {
+        "it": "Escludi",
+        "en": "Exclude"
+      },
+      "posto": "menu/effetto/elaborazione",
+      "famiglia": "effetti",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "effetto",
+      "id": "pathfinder.hardMix",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "pathfinder.hardMix"
+        }
+      },
+      "etichetta": {
+        "it": "Miscela intensa",
+        "en": "Hard Mix"
+      },
+      "posto": "menu/effetto/elaborazione",
+      "famiglia": "effetti",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "effetto",
+      "id": "pathfinder.intersect",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "pathfinder.intersect"
+        }
+      },
+      "etichetta": {
+        "it": "Intersezione",
+        "en": "Intersect"
+      },
+      "posto": "menu/effetto/elaborazione",
+      "famiglia": "effetti",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "effetto",
+      "id": "pathfinder.merge",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "pathfinder.merge"
+        }
+      },
+      "etichetta": {
+        "it": "Fondi",
+        "en": "Merge"
+      },
+      "posto": "menu/effetto/elaborazione",
+      "famiglia": "effetti",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "effetto",
+      "id": "pathfinder.minusBack",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "pathfinder.minusBack"
+        }
+      },
+      "etichetta": {
+        "it": "Meno dietro",
+        "en": "Minus Back"
+      },
+      "posto": "menu/effetto/elaborazione",
+      "famiglia": "effetti",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "effetto",
+      "id": "pathfinder.outline",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "pathfinder.outline"
+        }
+      },
+      "etichetta": {
+        "it": "Contorno",
+        "en": "Outline"
+      },
+      "posto": "menu/effetto/elaborazione",
+      "famiglia": "effetti",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "effetto",
+      "id": "pathfinder.softMix",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "pathfinder.softMix"
+        }
+      },
+      "etichetta": {
+        "it": "Miscela soffice",
+        "en": "Soft Mix"
+      },
+      "posto": "menu/effetto/elaborazione",
+      "famiglia": "effetti",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "effetto",
+      "id": "pathfinder.subtract",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "pathfinder.subtract"
+        }
+      },
+      "etichetta": {
+        "it": "Sottrai",
+        "en": "Subtract"
+      },
+      "posto": "menu/effetto/elaborazione",
+      "famiglia": "effetti",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "effetto",
+      "id": "pathfinder.trap",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "pathfinder.trap"
+        }
+      },
+      "etichetta": {
+        "it": "Trapping…",
+        "en": "Trap…"
+      },
+      "posto": "menu/effetto/elaborazione",
+      "famiglia": "effetti",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "pathfinder.trim",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "pathfinder.trim"
+        }
+      },
+      "etichetta": {
+        "it": "Rifila",
+        "en": "Trim"
+      },
+      "posto": "menu/effetto/elaborazione",
+      "famiglia": "effetti",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "effetto",
       "id": "stylize.dropShadow",
       "chiamata": {
         "comando": "disegno.effect.apply",
@@ -7292,6 +7919,291 @@
         "en": "Scribble…"
       },
       "posto": "menu/effetto/stilizza",
+      "famiglia": "effetti",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "warp.arc",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "warp.arc"
+        }
+      },
+      "etichetta": {
+        "it": "Arco…",
+        "en": "Arc…"
+      },
+      "posto": "menu/effetto/deforma",
+      "famiglia": "effetti",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "warp.arcLower",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "warp.arcLower"
+        }
+      },
+      "etichetta": {
+        "it": "Arco inferiore…",
+        "en": "Arc Lower…"
+      },
+      "posto": "menu/effetto/deforma",
+      "famiglia": "effetti",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "warp.arcUpper",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "warp.arcUpper"
+        }
+      },
+      "etichetta": {
+        "it": "Arco superiore…",
+        "en": "Arc Upper…"
+      },
+      "posto": "menu/effetto/deforma",
+      "famiglia": "effetti",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "warp.arch",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "warp.arch"
+        }
+      },
+      "etichetta": {
+        "it": "Arcata…",
+        "en": "Arch…"
+      },
+      "posto": "menu/effetto/deforma",
+      "famiglia": "effetti",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "warp.bulge",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "warp.bulge"
+        }
+      },
+      "etichetta": {
+        "it": "Rigonfiamento…",
+        "en": "Bulge…"
+      },
+      "posto": "menu/effetto/deforma",
+      "famiglia": "effetti",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "warp.fish",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "warp.fish"
+        }
+      },
+      "etichetta": {
+        "it": "Pesce…",
+        "en": "Fish…"
+      },
+      "posto": "menu/effetto/deforma",
+      "famiglia": "effetti",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "warp.fisheye",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "warp.fisheye"
+        }
+      },
+      "etichetta": {
+        "it": "Occhio di pesce…",
+        "en": "Fisheye…"
+      },
+      "posto": "menu/effetto/deforma",
+      "famiglia": "effetti",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "warp.flag",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "warp.flag"
+        }
+      },
+      "etichetta": {
+        "it": "Bandiera…",
+        "en": "Flag…"
+      },
+      "posto": "menu/effetto/deforma",
+      "famiglia": "effetti",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "warp.inflate",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "warp.inflate"
+        }
+      },
+      "etichetta": {
+        "it": "Gonfia…",
+        "en": "Inflate…"
+      },
+      "posto": "menu/effetto/deforma",
+      "famiglia": "effetti",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "warp.rise",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "warp.rise"
+        }
+      },
+      "etichetta": {
+        "it": "Ascesa…",
+        "en": "Rise…"
+      },
+      "posto": "menu/effetto/deforma",
+      "famiglia": "effetti",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "warp.shellLower",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "warp.shellLower"
+        }
+      },
+      "etichetta": {
+        "it": "Conchiglia inferiore…",
+        "en": "Shell Lower…"
+      },
+      "posto": "menu/effetto/deforma",
+      "famiglia": "effetti",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "warp.shellUpper",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "warp.shellUpper"
+        }
+      },
+      "etichetta": {
+        "it": "Conchiglia superiore…",
+        "en": "Shell Upper…"
+      },
+      "posto": "menu/effetto/deforma",
+      "famiglia": "effetti",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "warp.squeeze",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "warp.squeeze"
+        }
+      },
+      "etichetta": {
+        "it": "Compressione…",
+        "en": "Squeeze…"
+      },
+      "posto": "menu/effetto/deforma",
+      "famiglia": "effetti",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "warp.twist",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "warp.twist"
+        }
+      },
+      "etichetta": {
+        "it": "Torci…",
+        "en": "Twist…"
+      },
+      "posto": "menu/effetto/deforma",
+      "famiglia": "effetti",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "effetto",
+      "id": "warp.wave",
+      "chiamata": {
+        "comando": "disegno.effect.apply",
+        "valore": {
+          "effect": "warp.wave"
+        }
+      },
+      "etichetta": {
+        "it": "Onda…",
+        "en": "Wave…"
+      },
+      "posto": "menu/effetto/deforma",
       "famiglia": "effetti",
       "tasto": null,
       "effetto": "cambia",

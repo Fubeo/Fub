@@ -4,6 +4,482 @@
   "finestre": [
     {
       "fonte": "effetto",
+      "id": "addon.color.duotone",
+      "campi": [
+        {
+          "nome": "tones",
+          "tipo": "json",
+          "facoltativo": false
+        },
+        {
+          "nome": "skipSpot",
+          "tipo": "sino",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "addon.color.exposure",
+      "campi": [
+        {
+          "nome": "exposure",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "offset",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "gamma",
+          "tipo": "numero",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "addon.color.halftone",
+      "campi": [
+        {
+          "nome": "shape",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "circle",
+            "ellipse",
+            "square",
+            "diamond",
+            "line"
+          ],
+          "aperta": false
+        },
+        {
+          "nome": "frequency",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "angle",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "mode",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "mono",
+            "cmyk"
+          ],
+          "aperta": false
+        },
+        {
+          "nome": "color",
+          "tipo": "testo",
+          "facoltativo": false
+        },
+        {
+          "nome": "fromArt",
+          "tipo": "sino",
+          "facoltativo": false
+        },
+        {
+          "nome": "invert",
+          "tipo": "sino",
+          "facoltativo": false
+        },
+        {
+          "nome": "clip",
+          "tipo": "sino",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "addon.path.addAnchors",
+      "campi": [
+        {
+          "nome": "target",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "all",
+            "curved",
+            "straight"
+          ],
+          "aperta": false
+        },
+        {
+          "nome": "spacing",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "count",
+            "distance"
+          ],
+          "aperta": false
+        },
+        {
+          "nome": "count",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "distance",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "maxCount",
+          "tipo": "numero",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "addon.path.close",
+      "campi": [
+        {
+          "nome": "mode",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "straight",
+            "smooth"
+          ],
+          "aperta": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "addon.path.dashes",
+      "campi": [
+        {
+          "nome": "dash1",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "gap1",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "dash2",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "gap2",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "dash3",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "gap3",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "dash4",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "gap4",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "dash5",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "gap5",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "offset",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "alignCorners",
+          "tipo": "sino",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "addon.path.extend",
+      "campi": [
+        {
+          "nome": "startLength",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "startPercent",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "startShape",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "straight",
+            "arc"
+          ],
+          "aperta": false
+        },
+        {
+          "nome": "endLength",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "endPercent",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "endShape",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "straight",
+            "arc"
+          ],
+          "aperta": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "addon.path.retract",
+      "campi": [
+        {
+          "nome": "handles",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "all",
+            "shorter"
+          ],
+          "aperta": false
+        },
+        {
+          "nome": "length",
+          "tipo": "numero",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "addon.path.simplify",
+      "campi": [
+        {
+          "nome": "tolerance",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "protectCorners",
+          "tipo": "sino",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "addon.path.smooth",
+      "campi": [
+        {
+          "nome": "ratio",
+          "tipo": "numero",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "addon.path.split",
+      "campi": [
+        {
+          "nome": "anchors",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "corner",
+            "smooth",
+            "both"
+          ],
+          "aperta": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "adjust.brightnessContrast",
+      "campi": [
+        {
+          "nome": "brightness",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "contrast",
+          "tipo": "numero",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "adjust.curves",
+      "campi": [
+        {
+          "nome": "points",
+          "tipo": "json",
+          "facoltativo": false
+        },
+        {
+          "nome": "channel",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "rgb",
+            "red",
+            "green",
+            "blue"
+          ],
+          "aperta": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "adjust.hueSaturation",
+      "campi": [
+        {
+          "nome": "hue",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "saturation",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "lightness",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "colorize",
+          "tipo": "sino",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "adjust.levels",
+      "campi": [
+        {
+          "nome": "inputBlack",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "inputWhite",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "gamma",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "outputBlack",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "outputWhite",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "channel",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "rgb",
+            "red",
+            "green",
+            "blue"
+          ],
+          "aperta": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "adjust.shiftToColor",
+      "campi": [
+        {
+          "nome": "color",
+          "tipo": "testo",
+          "facoltativo": false
+        },
+        {
+          "nome": "amount",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "preserveLightness",
+          "tipo": "sino",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "adjust.temperatureTint",
+      "campi": [
+        {
+          "nome": "temperature",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "tint",
+          "tipo": "numero",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
       "id": "convertToShape.ellipse",
       "campi": [
         {
@@ -341,6 +817,47 @@
     },
     {
       "fonte": "effetto",
+      "id": "pathfinder.trap",
+      "campi": [
+        {
+          "nome": "thickness",
+          "tipo": "numero",
+          "facoltativo": true
+        },
+        {
+          "nome": "heightWidth",
+          "tipo": "numero",
+          "facoltativo": true
+        },
+        {
+          "nome": "tintReduction",
+          "tipo": "numero",
+          "facoltativo": true
+        },
+        {
+          "nome": "trapsWithProcessColor",
+          "tipo": "sino",
+          "facoltativo": true
+        },
+        {
+          "nome": "reverseTraps",
+          "tipo": "sino",
+          "facoltativo": true
+        },
+        {
+          "nome": "precision",
+          "tipo": "numero",
+          "facoltativo": true
+        },
+        {
+          "nome": "removeRedundantPoints",
+          "tipo": "sino",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
       "id": "stylize.roundCorners",
       "campi": [
         {
@@ -403,6 +920,471 @@
           "nome": "seed",
           "tipo": "numero",
           "facoltativo": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "warp.arc",
+      "campi": [
+        {
+          "nome": "bend",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "horizontal",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "vertical",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "orientation",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "horizontal",
+            "vertical"
+          ],
+          "aperta": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "warp.arcLower",
+      "campi": [
+        {
+          "nome": "bend",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "horizontal",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "vertical",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "orientation",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "horizontal",
+            "vertical"
+          ],
+          "aperta": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "warp.arcUpper",
+      "campi": [
+        {
+          "nome": "bend",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "horizontal",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "vertical",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "orientation",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "horizontal",
+            "vertical"
+          ],
+          "aperta": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "warp.arch",
+      "campi": [
+        {
+          "nome": "bend",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "horizontal",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "vertical",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "orientation",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "horizontal",
+            "vertical"
+          ],
+          "aperta": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "warp.bulge",
+      "campi": [
+        {
+          "nome": "bend",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "horizontal",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "vertical",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "orientation",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "horizontal",
+            "vertical"
+          ],
+          "aperta": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "warp.fish",
+      "campi": [
+        {
+          "nome": "bend",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "horizontal",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "vertical",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "orientation",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "horizontal",
+            "vertical"
+          ],
+          "aperta": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "warp.fisheye",
+      "campi": [
+        {
+          "nome": "bend",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "horizontal",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "vertical",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "orientation",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "horizontal",
+            "vertical"
+          ],
+          "aperta": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "warp.flag",
+      "campi": [
+        {
+          "nome": "bend",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "horizontal",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "vertical",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "orientation",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "horizontal",
+            "vertical"
+          ],
+          "aperta": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "warp.inflate",
+      "campi": [
+        {
+          "nome": "bend",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "horizontal",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "vertical",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "orientation",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "horizontal",
+            "vertical"
+          ],
+          "aperta": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "warp.rise",
+      "campi": [
+        {
+          "nome": "bend",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "horizontal",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "vertical",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "orientation",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "horizontal",
+            "vertical"
+          ],
+          "aperta": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "warp.shellLower",
+      "campi": [
+        {
+          "nome": "bend",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "horizontal",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "vertical",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "orientation",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "horizontal",
+            "vertical"
+          ],
+          "aperta": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "warp.shellUpper",
+      "campi": [
+        {
+          "nome": "bend",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "horizontal",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "vertical",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "orientation",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "horizontal",
+            "vertical"
+          ],
+          "aperta": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "warp.squeeze",
+      "campi": [
+        {
+          "nome": "bend",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "horizontal",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "vertical",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "orientation",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "horizontal",
+            "vertical"
+          ],
+          "aperta": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "warp.twist",
+      "campi": [
+        {
+          "nome": "bend",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "horizontal",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "vertical",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "orientation",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "horizontal",
+            "vertical"
+          ],
+          "aperta": false
+        }
+      ]
+    },
+    {
+      "fonte": "effetto",
+      "id": "warp.wave",
+      "campi": [
+        {
+          "nome": "bend",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "horizontal",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "vertical",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "orientation",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "horizontal",
+            "vertical"
+          ],
+          "aperta": false
         }
       ]
     }
