@@ -1939,6 +1939,22 @@
     },
     {
       "fonte": "motore",
+      "id": "layer.clippingMask.toggle",
+      "chiamata": {
+        "comando": "disegno.layer.clippingMask.toggle"
+      },
+      "etichetta": {
+        "it": "Crea/rilascia maschera di ritaglio",
+        "en": "Make/Release Clipping Mask"
+      },
+      "posto": "ispettore/livelli",
+      "famiglia": "livelli",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "layer.collectInNew",
       "chiamata": {
         "comando": "disegno.layer.collectInNew"

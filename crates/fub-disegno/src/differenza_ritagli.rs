@@ -16,6 +16,13 @@
 //!   con il suo ultimo riferimento; quello di un altro programma, che non
 //!   dice di chi è, resta nel file com'è.
 //!
+//! - **Il livello che ritaglia** (`layer.clippingMask.toggle`): un livello
+//!   o un gruppo che c'era già comincia a ritagliare col suo oggetto più
+//!   alto, che il motore mette in fondo. Nel file l'oggetto esce ed entra in
+//!   un `clipPath` privato come sopra, nelle coordinate del livello, e il
+//!   livello riceve `clip-path` con un `set`; premuto di nuovo, è un
+//!   Rilascia.
+//!
 //! Un ritaglio che il file non dice con l'attributo `clip-path` (in `style`,
 //! o da un foglio di stile) non si toglie con un `set`: Rilascia è
 //! `unsupported`. Un testo che ritaglia non si scrive ancora.
@@ -68,14 +75,24 @@ impl Lavoro<'_> {
                     }
                 }
                 Some(p) => {
+                    // Un contenitore di prima che comincia a ritagliare: il
+                    // suo primo figlio, di prima, va nel `clipPath`.
+                    if !p.nodo.clips() && dopo.nodo.clips() {
+                        if let Some(c) = taglierina(dopo.nodo) {
+                            let libero = self.elemento(c.id).is_some_and(|e| !e.ritaglia);
+                            if prima.nodi.contains_key(&c.id) && libero {
+                                self.assorbiti.insert(c.id);
+                            }
+                        }
+                        continue;
+                    }
                     if let (Some(c), Some(d)) = (taglierina(p.nodo), taglierina(dopo.nodo)) {
                         let legata = self.elemento(c.id).is_some_and(|e| e.ritaglia);
                         if legata && d.id != c.id {
                             return Err(no(FORMA_TOLTA));
                         }
                     }
-                    let rilasciato = matches!(p.nodo.kind, NodeKind::Group { clip: true, .. })
-                        && matches!(dopo.nodo.kind, NodeKind::Group { clip: false, .. });
+                    let rilasciato = p.nodo.clips() && !dopo.nodo.clips();
                     if !rilasciato {
                         continue;
                     }
@@ -167,20 +184,13 @@ impl Lavoro<'_> {
         Ok(())
     }
 
-    /// Un gruppo di prima che smette di ritagliare (Rilascia): il `set` che
-    /// toglie `clip-path`, e il gruppo di prima come se non ritagliasse, per
-    /// il resto del confronto. `None` se il cambio è un altro.
+    /// Un gruppo o un livello di prima che smette di ritagliare (Rilascia):
+    /// il `set` che toglie `clip-path`, e il contenitore di prima come se non
+    /// ritagliasse, per il resto del confronto. `None` se il cambio è un altro.
     pub(super) fn ritaglio_tolto(&mut self, b: &Node, a: &Node) -> Result<Option<Node>, Rifiuto> {
-        let (
-            NodeKind::Group {
-                children,
-                clip: true,
-            },
-            NodeKind::Group { clip: false, .. },
-        ) = (&b.kind, &a.kind)
-        else {
+        if !b.clips() || a.clips() || a.children().is_none() {
             return Ok(None);
-        };
+        }
         let Some(e) = self.elemento(a.id).cloned() else {
             return Ok(None);
         };
@@ -193,11 +203,56 @@ impl Lavoro<'_> {
         self.set
             .push(json!({ "op": "set", "id": id, "attrs": { "clip-path": null } }));
         let mut sciolto = b.clone();
-        sciolto.kind = NodeKind::Group {
-            children: children.clone(),
-            clip: false,
-        };
+        sciolto.set_clips(false);
         Ok(Some(sciolto))
+    }
+
+    /// Un gruppo o un livello di prima che comincia a ritagliare col suo
+    /// oggetto più alto (il livello che ritaglia): il `clipPath` privato con
+    /// la forma, che [`Lavoro::ritagli`] ha tolto dal file, e il `set` di
+    /// `clip-path` sul contenitore; il contenitore di prima come se
+    /// ritagliasse, per il resto del confronto. `None` se il cambio è un altro.
+    pub(super) fn ritaglio_messo(&mut self, b: &Node, a: &Node) -> Result<Option<Node>, Rifiuto> {
+        if b.clips() || !a.clips() {
+            return Ok(None);
+        }
+        let c = taglierina(a).ok_or_else(|| no("un ritaglio senza la forma che ritaglia"))?;
+        if !self.assorbiti.contains(&c.id) {
+            return Err(no(
+                "la forma che ritaglia non è un oggetto di Fub di quel livello",
+            ));
+        }
+        let e = self
+            .elemento(a.id)
+            .cloned()
+            .ok_or_else(|| no("il livello che ritaglia non viene da Fub"))?;
+        if e.clip_path {
+            return Err(no("il livello ha già un clip-path che il motore non legge"));
+        }
+        let locale = e
+            .ctm()
+            .ok_or_else(|| no("la transform del livello non si legge"))?
+            .inverse();
+        if !locale.is_finite() {
+            return Err(no("il livello ha una transform che non si inverte"));
+        }
+        let mut forma = forma_che_ritaglia(c, locale)?;
+        let risorsa = self.id_nuovo(Specie::Risorsa)?;
+        let id_forma = self.id_nuovo(Specie::Risorsa)?;
+        forma["attrs"]["id"] = json!(id_forma);
+        self.ids.insert(c.id, id_forma);
+        self.sfumature.push(json!({
+            "tag": "clipPath",
+            "attrs": { "id": risorsa, "fub:role": "private", "clipPathUnits": "userSpaceOnUse" },
+            "children": [forma],
+        }));
+        let id = self.bersaglio(a.id)?;
+        self.set.push(
+            json!({ "op": "set", "id": id, "attrs": { "clip-path": format!("url(#{risorsa})") } }),
+        );
+        let mut messo = b.clone();
+        messo.set_clips(true);
+        Ok(Some(messo))
     }
 
     /// Scrive il gruppo di ritaglio nuovo `nodo` (vedi [`ritaglio_nuovo`]):
@@ -236,15 +291,12 @@ impl Lavoro<'_> {
     }
 }
 
-/// Il tracciato che ritaglia di un gruppo di ritaglio: il primo figlio.
+/// Il tracciato che ritaglia di un gruppo o di un livello che ritaglia: il
+/// primo figlio.
 fn taglierina(n: &Node) -> Option<&Arc<Node>> {
-    match &n.kind {
-        NodeKind::Group {
-            children,
-            clip: true,
-        } => children.first(),
-        _ => None,
-    }
+    n.clips()
+        .then(|| n.children().and_then(|f| f.first()))
+        .flatten()
 }
 
 /// Vero per un gruppo di ritaglio nuovo che Crea fa di oggetti di prima: il

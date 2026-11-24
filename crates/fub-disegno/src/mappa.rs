@@ -291,7 +291,6 @@ impl Mappa {
     /// sta nello spazio del gruppo (`userSpaceOnUse`): il suo genitore,
     /// per le matrici, è il gruppo.
     pub(crate) fn lega_i_ritagli(&mut self, doc: &Document) {
-        use vectorcraft_doc::NodeKind;
         let mut usi: HashMap<&str, usize> = HashMap::new();
         for e in &self.elementi {
             if let Some(r) = e.ritaglio.as_deref() {
@@ -306,13 +305,12 @@ impl Mappa {
             if usi.get(r) != Some(&1) {
                 continue;
             }
-            let Some(c) = doc.node(nodo).and_then(|n| match &n.kind {
-                NodeKind::Group {
-                    children,
-                    clip: true,
-                } => children.first(),
-                _ => None,
-            }) else {
+            let Some(c) = doc
+                .node(nodo)
+                .filter(|n| n.clips())
+                .and_then(|n| n.children())
+                .and_then(|f| f.first())
+            else {
                 continue;
             };
             if self.per_nodo.contains_key(&c.id) {

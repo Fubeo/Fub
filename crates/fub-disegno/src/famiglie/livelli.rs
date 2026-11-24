@@ -226,6 +226,7 @@ impl StatoFamiglia for Stato {
             "layer.duplicate" => livelli_del_valore(copia, valore).err(),
             "layer.move" => righe_da_spostare(copia, valore),
             "layer.flatten" => livello_da_appiattire(copia, valore),
+            "layer.clippingMask.toggle" => livello_che_ritaglia(copia, selezione, valore),
             "node.move" => {
                 let Some(chi) = valore.get("id").and_then(Value::as_u64) else {
                     return Some(DrawingRefusal::Empty);
@@ -294,7 +295,10 @@ fn livelli_della_selezione(copia: &Copia, selezione: &[String], mut valore: Valu
 
 /// I comandi che cambiano il documento su un livello: la scheda Livelli li chiama con il suo livello.
 fn cambia_il_livello(id: &str) -> bool {
-    matches!(id, "layer.delete" | "layer.setProps" | "layer.merge" | "layer.reverse" | "node.move" | "layer.move" | "layer.flatten")
+    matches!(
+        id,
+        "layer.delete" | "layer.setProps" | "layer.merge" | "layer.reverse" | "node.move" | "layer.move" | "layer.flatten" | "layer.clippingMask.toggle"
+    )
 }
 
 /// Unire e invertire (T15, giro 2): le righe del comando sono almeno due, e unire vuole dei livelli
@@ -350,6 +354,51 @@ fn genitore_del_sottolivello(copia: &Copia, valore: &Value) -> Option<DrawingRef
         return Some(DrawingRefusal::Unsupported);
     }
     bloccato_con_antenati(copia, genitore).then_some(DrawingRefusal::Locked)
+}
+
+/// Il livello che ritaglia (`layer.clippingMask.toggle`): la riga `id`, un livello o un gruppo, o
+/// senza riga il gruppo scelto da solo. Senza l'una né l'altro il motore prenderebbe il suo livello
+/// corrente, che non è quello del client: `empty`. Un livello o un gruppo bloccato non cambia; uno
+/// vuoto non ha con che ritagliare (`empty`), e uno con in cima un gruppo, un'immagine o un testo
+/// non si fa (`unsupported`).
+fn livello_che_ritaglia(copia: &Copia, selezione: &[String], valore: &Value) -> Option<DrawingRefusal> {
+    let nodo = match valore.get("id") {
+        None | Some(Value::Null) => match nodi_scelti(copia, selezione).as_deref() {
+            Ok([scelto]) => *scelto,
+            Err(DrawingRefusal::Unmapped) => return Some(DrawingRefusal::Unmapped),
+            _ => return Some(DrawingRefusal::Empty),
+        },
+        Some(v) => match v.as_u64() {
+            Some(n) => NodeId(n),
+            None => return Some(DrawingRefusal::Unmapped),
+        },
+    };
+    let Some(riga) = copia.mappa.del_nodo(nodo) else {
+        return Some(DrawingRefusal::Unmapped);
+    };
+    let ruolo = copia.mappa.elemento(riga).map(|e| e.ruolo);
+    // Senza un id il motore prende un gruppo scelto da solo: un altro oggetto scelto non conta.
+    if valore.get("id").is_none_or(Value::is_null) && ruolo != Some(Role::Group) {
+        return Some(DrawingRefusal::Empty);
+    }
+    if !matches!(ruolo, Some(Role::Layer | Role::Group)) {
+        return Some(DrawingRefusal::Unsupported);
+    }
+    if bloccato_con_antenati(copia, riga) {
+        return Some(DrawingRefusal::Locked);
+    }
+    // Fare il ritaglio vuole un oggetto in cima che sia un tracciato (anche composto): un livello
+    // vuoto non ha niente con cui ritagliare, e un gruppo o un'immagine in cima non ritagliano. Il
+    // testo che ritaglia il file non lo scrive ancora.
+    let n = copia.documento.node(nodo)?;
+    if n.clips() {
+        return None;
+    }
+    match n.children().and_then(|f| f.last()).map(|c| &c.kind) {
+        None => Some(DrawingRefusal::Empty),
+        Some(NodeKind::Path { guide: false, .. } | NodeKind::Compound { .. }) => None,
+        Some(_) => Some(DrawingRefusal::Unsupported),
+    }
 }
 
 /// Il livello che Raccogli in un nuovo livello crea prende il primo «Livello N» libero, come Nuovo

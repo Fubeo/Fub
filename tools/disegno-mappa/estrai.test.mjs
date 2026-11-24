@@ -225,7 +225,7 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // frecce, trascinamento), il motore riceve gli indici. Una riga in meno «da fare».
   // Imposta livello corrente (il clic sulla riga del livello) e Individua oggetto (menu Livelli)
   // passano a «fub»: sono vista e sessione del client. Due righe in meno «da fare».
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 687, fub: 117, escluso: 12, fatto: 735 });
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 686, fub: 117, escluso: 12, fatto: 736 });
 });
 
 // --- un motore finto ---------------------------------------------------------------

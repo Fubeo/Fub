@@ -117,6 +117,13 @@ describe("creaPortaLivelli", () => {
     expect(raccogli.chiamate[0]).toMatchObject({ id: "disegno.layer.collectInNew", value: {}, selection: ["oa", "ob"] });
   });
 
+  it("la maschera di ritaglio del livello va al motore col numero del livello", async () => {
+    const ritaglia = prepara();
+    expect(await ritaglia.porta.comando({ kind: "ritaglia", livello: "l2" })).toEqual({ kind: "fatto", ops: SET });
+    expect(ritaglia.chiamate[1]).toMatchObject({ id: "disegno.layer.clippingMask.toggle", value: { id: 7 }, selection: [] });
+    expect(await prepara().porta.comando({ kind: "ritaglia", livello: "nessuno" })).toEqual({ kind: "nativo" });
+  });
+
   it("un livello bloccato rifiutato dal motore ha la sua frase, non quella della selezione", async () => {
     const { porta } = prepara({ risposta: esito({ refused: "locked", ops: null }) });
     expect(await porta.comando({ kind: "proprieta", livello: "l1", nome: "X" })).toEqual({ kind: "rifiuto", motivo: "draw.livelli.bloccato" });

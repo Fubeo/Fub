@@ -22,6 +22,8 @@ import {
   layerName,
   inLayer,
   intoLayerOps,
+  layerClips,
+  layerEmpty,
   lockLayerOps,
   MAX_LAYER_NAME,
   removeLayerOps,
@@ -351,6 +353,23 @@ export function installLayersGrid(ctx: EditorContext): void {
     });
   }
 
+  /// Crea o rilascia la maschera di ritaglio del livello corrente (solo col motore del Completo),
+  /// come in VectorCraft: l'oggetto più alto ritaglia il resto del livello; di nuovo, smette e
+  /// torna un oggetto senza colore.
+  function toggleLayerClip(): void {
+    const layer = layering();
+    if (layer === null || !editable() || layer.locked) return;
+    cancelGesture();
+    const name = layerTitle(layer);
+    const clips = layerClips(ctx.engine.model!, layer);
+    layerWrite({
+      label: "draw.livelli.azione.ritaglio",
+      request: { kind: "ritaglia", livello: layer.id ?? "" },
+      engineKey: () => layer.id,
+      said: () => t(clips ? "draw.livelli.ritaglio.rilasciato" : "draw.livelli.ritaglio.creato", { name }),
+    });
+  }
+
   /// Raccogli in un nuovo livello (solo col motore del Completo): gli oggetti scelti in un livello
   /// nuovo accanto al più alto di loro; dentro un livello è un sottolivello.
   function collectInNew(): void {
@@ -379,6 +398,20 @@ export function installLayersGrid(ctx: EditorContext): void {
       said: () => t("draw.livelli.appiattito", { name }),
     });
   }
+
+  /// La voce della maschera di ritaglio del livello: Crea o Rilascia secondo il file; spenta su un
+  /// livello bloccato (o di sola lettura) e, per crearla, su un livello vuoto.
+  const clipItem = (current: LayerInfo, name: string, frozen: DrawKey | null): MenuItem => {
+    const model = ctx.engine.model!;
+    const clips = layerClips(model, current);
+    const empty = !clips && layerEmpty(model, current);
+    const off = frozen ?? (empty ? "draw.livelli.ritaglio.vuoto" : null);
+    return {
+      label: t(clips ? "draw.livelli.ritaglio.rilascia" : "draw.livelli.ritaglio.crea", { name }),
+      ...(off === null ? {} : { disabled: true, description: t(off) }),
+      run: () => toggleLayerClip(),
+    };
+  };
 
   /// Il menu dei livelli: i livelli dalla cima, per scegliere quello
   /// corrente, e i comandi su quello corrente.
@@ -425,6 +458,7 @@ export function installLayersGrid(ctx: EditorContext): void {
           ...(frozen === null ? {} : { disabled: true, description: t(frozen) }),
           run: () => addSublayer(),
         },
+        clipItem(current, name, frozen),
         {
           label: t("draw.livelli.raccogli"),
           disabled: ctx.selection.length === 0,

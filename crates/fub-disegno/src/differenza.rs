@@ -1632,8 +1632,19 @@ impl Lavoro<'_> {
                 // Ricco. Se i suoi costrutti cambiano, gli attributi non li
                 // direbbero: si riscrive intero con la sua ricetta. Il
                 // tratteggio semplice fa eccezione: `stroke-dasharray` lo
-                // dice, e `foglia` lo scrive (o rifiuta, e si riscrive).
-                if costrutti_non_detti(&propria_a) != costrutti_non_detti(&propria_b) {
+                // dice, e `foglia` lo scrive (o rifiuta, e si riscrive). Un
+                // gruppo che comincia a ritagliare col suo oggetto più alto
+                // (`layer.clippingMask.toggle`) lo dice con `clip-path`: lo
+                // scrive `ritaglio_messo`.
+                let comincia_a_ritagliare = !b.clips() && a.clips();
+                let senza_il_ritaglio = |n: &Node| {
+                    let mut c = costrutti_non_detti(n);
+                    if comincia_a_ritagliare {
+                        c.retain(|c| *c != ricetta::Costrutto::Ritaglio);
+                    }
+                    c
+                };
+                if senza_il_ritaglio(&propria_a) != senza_il_ritaglio(&propria_b) {
                     self.riscritti.insert(a.id);
                     return Ok(());
                 }
@@ -1831,6 +1842,14 @@ impl Lavoro<'_> {
                 Some(c) => {
                     sciolto = c;
                     &sciolto
+                }
+                None => b,
+            };
+            let messo;
+            let b: &Node = match self.ritaglio_messo(b, a)? {
+                Some(c) => {
+                    messo = c;
+                    &messo
                 }
                 None => b,
             };

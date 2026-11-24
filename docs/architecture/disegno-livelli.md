@@ -63,8 +63,19 @@ radice se stanno alla radice, altrimenti un sottolivello del loro livello. Il
 nome libero «Livello N» lo dà la mappa (`famiglie/livelli.rs`,
 `nome_della_raccolta`); `differenza.rs` scrive il livello nuovo con un `add` e
 vi sposta gli oggetti di prima con `move`, e rifiuta un livello nuovo che mescola
-oggetti di prima e oggetti nuovi. Resta «da fare», con la causa nella mappa, il
-livello che ritaglia; Imposta livello corrente e Individua oggetto sono del
+oggetti di prima e oggetti nuovi. Crea o rilascia maschera di ritaglio del
+livello (`layer.clippingMask.toggle`) prende la riga `id`, un livello o un
+gruppo, o senza riga il gruppo scelto da solo: il suo oggetto più alto, un
+tracciato, diventa la forma che ritaglia il resto. Nel file la forma esce ed
+entra in un `clipPath` privato della `fub-defs`, nelle coordinate del
+contenitore, e il contenitore riceve `clip-path` con un `set`; di nuovo, la
+forma torna il primo oggetto, senza colore, e il `clipPath` se ne va
+(`differenza_ritagli.rs`, `ritaglio_messo` e `ritaglio_tolto`). Un contenitore
+vuoto rifiuta `Empty`; uno con in cima un gruppo, un'immagine o un testo
+`Unsupported`; uno bloccato `Locked` (`famiglie/livelli.rs`,
+`livello_che_ritaglia`). Nel client la voce sta nel menu dei livelli, con
+«Crea» o «Rilascia» secondo il `clip-path` del livello, spenta su un livello
+vuoto o bloccato. Imposta livello corrente e Individua oggetto sono del
 client.
 
 Il livello corrente sta nel client, nella sessione del documento

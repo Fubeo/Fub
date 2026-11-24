@@ -43,7 +43,10 @@ export type RichiestaLivello =
   | { readonly kind: "sottolivello"; readonly livello: string }
   /// Raccogli in un nuovo livello: gli `oggetti` (id della scena) in un livello nuovo accanto al
   /// più alto, un sottolivello se stanno in un livello. Solo del motore.
-  | { readonly kind: "raccogli"; readonly oggetti: readonly string[] };
+  | { readonly kind: "raccogli"; readonly oggetti: readonly string[] }
+  /// Crea o rilascia la maschera di ritaglio del livello: il suo oggetto più alto ritaglia il resto,
+  /// e di nuovo torna un oggetto. Solo del motore.
+  | { readonly kind: "ritaglia"; readonly livello: string };
 
 /// Com'è andato un comando di livello.
 /// - `fatto`: le operazioni da scrivere (vuote se non cambiava niente);
@@ -90,6 +93,10 @@ function chiamataDi(
     case "sottolivello": {
       const numero = numeri.get(richiesta.livello);
       return numero === undefined ? null : { id: "disegno.layer.newSublayer", value: { parent: numero } };
+    }
+    case "ritaglia": {
+      const numero = numeri.get(richiesta.livello);
+      return numero === undefined ? null : { id: "disegno.layer.clippingMask.toggle", value: { id: numero } };
     }
     case "raccogli":
       return { id: "disegno.layer.collectInNew", value: {}, selection: richiesta.oggetti };

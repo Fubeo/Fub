@@ -920,6 +920,34 @@ function livelliFinti(bloccato: boolean): { fake: DrawingFake; chiamate: { id: s
               },
             ]),
           });
+        case "disegno.layer.clippingMask.toggle":
+          return esito({
+            ops: JSON.stringify([
+              {
+                op: "batch",
+                ops: [
+                  {
+                    op: "add",
+                    parent: "#root",
+                    pos: { first: true },
+                    elem: {
+                      tag: "defs",
+                      attrs: { id: "fub-defs" },
+                      children: [
+                        {
+                          tag: "clipPath",
+                          attrs: { id: "r00000000", "fub:role": "private", clipPathUnits: "userSpaceOnUse" },
+                          children: [{ tag: "path", attrs: { d: "M60 60 L140 60 L140 120 L60 120 Z", fill: "#000000", id: "r00000001" } }],
+                        },
+                      ],
+                    },
+                  },
+                  { op: "remove", target: "o1a2b3c4d" },
+                  { op: "set", id: "l1", attrs: { "clip-path": "url(#r00000000)" } },
+                ],
+              },
+            ]),
+          });
         case "disegno.layer.newSublayer":
           return esito({
             ops: JSON.stringify([{ op: "add", parent: "l1", pos: { last: true }, elem: { tag: "g", attrs: { id: "l00000000", "fub:layer": "Livello 2" }, children: [] } }]),
@@ -1029,6 +1057,54 @@ describe("la scheda Livelli del Completo", () => {
     bottone()!.click();
     await waitFor("il menu dei livelli", () => voce("Nuovo sottolivello in «Livello 1»") !== undefined);
     expect(voci().filter((each) => each.getAttribute("role") === "menuitemradio").map((each) => each.querySelector(".menu-label")?.textContent)).toEqual(["Livello 1"]);
+  });
+
+  it("la maschera di ritaglio del livello passa dal motore; poi la voce dice Rilascia, e su un livello vuoto è spenta", async () => {
+    const { fake, chiamate } = livelliFinti(false);
+    const host = await start(createFakeHost({ file: VAULT, draw: true, settings: [drawWorkspace("full", "default")], drawing: fake }));
+    await open("casa.svg");
+    await waitFor("la colonna del Completo", () => tools().join(",") === COLUMN_TOOLS_COMPLETO.join(","));
+    const bottone = (): HTMLButtonElement | null => document.querySelector<HTMLButtonElement>(".draw-objects-menu:not([hidden])");
+    await schedaLivelli();
+    await waitFor("il bottone dei livelli", () => bottone() !== null);
+    const voci = (): HTMLButtonElement[] => {
+      const aperti = document.querySelectorAll<HTMLElement>(".context-menu");
+      return aperti.length === 0 ? [] : [...aperti[aperti.length - 1]!.querySelectorAll<HTMLButtonElement>("button")];
+    };
+    const voce = (frase: string): HTMLButtonElement | undefined => voci().find((each) => each.querySelector(".menu-label")?.textContent === frase);
+    bottone()!.click();
+    await waitFor("la voce Crea maschera", () => voce("Crea maschera di ritaglio del livello «Livello 1»") !== undefined);
+    expect(voce("Crea maschera di ritaglio del livello «Livello 1»")!.getAttribute("aria-disabled")).not.toBe("true");
+    voce("Crea maschera di ritaglio del livello «Livello 1»")!.click();
+    await waitFor("il ritaglio arriva al disco", () => written(host, "casa.svg").length === 1);
+    const scritto = written(host, "casa.svg")[0]!;
+    expect(scritto).toMatch(/<clipPath id="r00000000" fub:role="private" clipPathUnits="userSpaceOnUse">/);
+    expect(scritto).toMatch(/<g id="l1" fub:layer="Livello 1" clip-path="url\(#r00000000\)">/);
+    expect(scritto).not.toContain('id="o1a2b3c4d"');
+    expect(chiamate.filter((c) => c.id === "disegno.layer.clippingMask.toggle")).toEqual([{ id: "disegno.layer.clippingMask.toggle", value: { id: 3 } }]);
+    // Ora il livello ritaglia: la stessa voce lo rilascia, anche se il livello non ha più oggetti.
+    bottone()!.click();
+    await waitFor("la voce Rilascia maschera", () => voce("Rilascia maschera di ritaglio del livello «Livello 1»") !== undefined);
+    expect(voce("Rilascia maschera di ritaglio del livello «Livello 1»")!.getAttribute("aria-disabled")).not.toBe("true");
+  });
+
+  it("su un livello vuoto Crea maschera di ritaglio è spenta e dice perché", async () => {
+    const vuota = { ...VAULT, "casa.svg": HOUSE.replace(/\n    <rect[^\n]*/, "") };
+    const { fake } = livelliFinti(false);
+    await start(createFakeHost({ file: vuota, draw: true, settings: [drawWorkspace("full", "default")], drawing: fake }));
+    await open("casa.svg");
+    await waitFor("la colonna del Completo", () => tools().join(",") === COLUMN_TOOLS_COMPLETO.join(","));
+    const bottone = (): HTMLButtonElement | null => document.querySelector<HTMLButtonElement>(".draw-objects-menu:not([hidden])");
+    await schedaLivelli();
+    await waitFor("il bottone dei livelli", () => bottone() !== null);
+    bottone()!.click();
+    const voce = (): HTMLButtonElement | undefined =>
+      [...document.querySelectorAll<HTMLButtonElement>(".context-menu button")].find(
+        (each) => each.querySelector(".menu-label")?.textContent === "Crea maschera di ritaglio del livello «Livello 1»",
+      );
+    await waitFor("la voce Crea maschera", () => voce() !== undefined);
+    expect(voce()!.getAttribute("aria-disabled")).toBe("true");
+    expect(voce()!.textContent).toContain("Il livello è vuoto");
   });
 
   it("nel Semplice l'albero resta com'era: i livelli non si cambiano, e il motore non sente niente", async () => {
