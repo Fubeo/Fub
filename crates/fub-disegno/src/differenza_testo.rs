@@ -3,7 +3,7 @@
 //! Lo strumento Testo del motore e le sezioni Carattere e Paragrafo del
 //! Completo cambiano un `TextObject`: qui il cambio diventa gli attributi
 //! del `<text>` (`font-family`, `font-size`, `font-weight`, `font-style`,
-//! `letter-spacing`, `text-anchor`) e l'operazione `text` per le righe, come
+//! `letter-spacing`, `text-decoration`, `text-anchor`) e l'operazione `text` per le righe, come
 //! li scrive il pannello del Semplice (`tools/look/write.ts`). Ciò che la
 //! scena non dice con un attributo del `<text>` si rifiuta con il perché:
 //! l'interlinea di una riga è il `dy` del suo `<tspan>`, la crenatura e i
@@ -548,6 +548,8 @@ fn carattere(
         s.tracking = 0.0;
         s.leading = None;
         s.fill = Default::default();
+        s.underline = false;
+        s.strikethrough = false;
         s
     };
     let resti: Vec<CharStyle> = tb.runs.iter().map(|r| resto(&r.style)).collect();
@@ -594,6 +596,37 @@ fn carattere(
             }
         }
         _ if uguali_ai_pezzi(&stile) => {}
+        _ => return Err(diverso()),
+    }
+    // Il sottolineato e il barrato: `text-decoration` del `<text>`, che
+    // tiene il sopralineato di prima (il motore non lo ha).
+    let decorazione = |s: &CharStyle| (s.underline, s.strikethrough);
+    match (unico(&tb.runs, decorazione), unico(&ta.runs, decorazione)) {
+        (Some(x), Some(y)) if x == y => {}
+        (_, Some((sotto, barrato))) => {
+            let sopra = e.testo.as_ref().is_some_and(|info| {
+                info.attributi.iter().any(|(nome, valore)| {
+                    nome == "text-decoration" && valore.split_whitespace().any(|p| p == "overline")
+                })
+            });
+            let parole: Vec<&str> = [
+                (sotto, "underline"),
+                (sopra, "overline"),
+                (barrato, "line-through"),
+            ]
+            .into_iter()
+            .filter_map(|(si, parola)| si.then_some(parola))
+            .collect();
+            attrs.insert(
+                "text-decoration".into(),
+                if parole.is_empty() {
+                    Value::Null
+                } else {
+                    json!(parole.join(" "))
+                },
+            );
+        }
+        _ if uguali_ai_pezzi(&|s: &CharStyle| format!("{:?}", decorazione(s))) => {}
         _ => return Err(diverso()),
     }
     // Il corpo e la spaziatura, nello spazio del `<text>`: il corpo del

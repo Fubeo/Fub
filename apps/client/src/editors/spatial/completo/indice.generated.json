@@ -6513,6 +6513,54 @@
     },
     {
       "fonte": "interfaccia",
+      "id": "type.bold",
+      "chiamata": {
+        "client": "type.bold"
+      },
+      "etichetta": {
+        "it": "Grassetto",
+        "en": "Bold"
+      },
+      "posto": "menu/testo",
+      "famiglia": "testo",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "interfaccia",
+      "id": "type.italic",
+      "chiamata": {
+        "client": "type.italic"
+      },
+      "etichetta": {
+        "it": "Corsivo",
+        "en": "Italic"
+      },
+      "posto": "menu/testo",
+      "famiglia": "testo",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "interfaccia",
+      "id": "type.underline",
+      "chiamata": {
+        "client": "type.underline"
+      },
+      "etichetta": {
+        "it": "Sottolineato",
+        "en": "Underline"
+      },
+      "posto": "menu/testo",
+      "famiglia": "testo",
+      "tasto": "Cmd+Shift+U",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "interfaccia",
       "id": "ui.blendOptions",
       "chiamata": {
         "client": "ui.blendOptions"

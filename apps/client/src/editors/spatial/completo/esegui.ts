@@ -23,7 +23,7 @@ import type { VoceIndice } from "./indice";
 
 /// Quanto il comando aspetta la sessione del motore: come `ATTESA_APERTURA_MS`
 /// di `../motore/gesti.ts`, qui un numero suo, come in `carica.ts`.
-const ATTESA_MOTORE_MS = 2_000;
+export const ATTESA_MOTORE_MS = 2_000;
 
 /// Ciò che l'editor sa fare con l'esito di un comando. Lo porta chi ha
 /// l'editor: la lettura delle operazioni è quella dei gesti (`opsDellEsito`).

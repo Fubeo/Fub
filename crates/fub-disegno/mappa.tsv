@@ -1020,12 +1020,12 @@ interfaccia	align.distributeHorizontalCenter	Horizontal Distribute Center		trasf
 interfaccia	align.distributeHorizontalRight	Horizontal Distribute Right		trasforma	F1	T13	fatto	ispettore/design/allinea	famiglia		Distribuisci orizzontalmente i bordi destri
 interfaccia	align.distributeVerticalSpace	Vertical Distribute Space		trasforma	F1	T13	fatto	ispettore/design/allinea	famiglia		Distribuisci spazio verticalmente
 interfaccia	align.distributeHorizontalSpace	Horizontal Distribute Space		trasforma	F1	T13	fatto	ispettore/design/allinea	famiglia		Distribuisci spazio orizzontalmente
-interfaccia	type.bold	Bold		testo	F2	T16	da fare	menu/testo	famiglia		Grassetto
-interfaccia	type.italic	Italic		testo	F2	T16	da fare	menu/testo	famiglia		Corsivo
+interfaccia	type.bold	Bold		testo	F2	T16	fatto	menu/testo	famiglia	text.setRangeStyle {style} con la faccia Bold della famiglia (o di nuovo quella normale), tiene il corsivo; famiglia senza la faccia: resta com'è e lo dice (completo/facce-testo.ts)	Grassetto
+interfaccia	type.italic	Italic		testo	F2	T16	fatto	menu/testo	famiglia	text.setRangeStyle {style} con la faccia Italic (o Oblique) della famiglia (o di nuovo dritta), tiene il peso; famiglia senza la faccia: resta com'è e lo dice (completo/facce-testo.ts)	Corsivo
 interfaccia	type.highlightFontName	Highlight Font Name		testo	F2	T16	da fare	menu/testo	famiglia		Evidenzia nome del font
 interfaccia	type.highlightKerning	Highlight Kerning		testo	F2	T16	da fare	menu/testo	famiglia		Evidenzia crenatura
 interfaccia	type.highlightTracking	Highlight Tracking		testo	F2	T16	da fare	menu/testo	famiglia		Evidenzia spaziatura caratteri
-interfaccia	type.underline	Underline		testo	F2	T16	da fare	menu/testo	famiglia		Sottolineato
+interfaccia	type.underline	Underline		testo	F2	T16	fatto	menu/testo	famiglia	Ctrl+Maiusc+U: text.setRangeStyle {underline} inverso a quello del primo testo scelto; nel file text-decoration (completo/facce-testo.ts)	Sottolineato
 interfaccia	type.lineComposer	Toggle Line Composer		testo	F2	T16	da fare	menu/testo	famiglia		Alterna composizione delle righe
 interfaccia	type.hyphenate	Hyphenate		testo	F2	T16	da fare	menu/testo	famiglia		Sillaba
 interfaccia	effect.last	Last Effect…		effetti	F2	T18	fatto	menu/effetto	famiglia	riapre la finestra dell'ultimo effetto applicato dal menu Effetto, coi valori ricordati; le opzioni di un effetto già applicato (sezione Aspetto) non lo cambiano (completo/index.ts)	Ultimo effetto…

@@ -82,7 +82,7 @@ describe("Allinea il testo dal menu Testo", () => {
       const prima = comando.mock.calls.length;
       una.run();
       await vi.waitFor(() => expect(comando.mock.calls.length).toBe(prima + 1));
-      expect(comando.mock.calls.at(-1)![0], id).toMatchObject({ id: "disegno.text.setStyle", value: { justify } });
+      expect(comando.mock.calls[comando.mock.calls.length - 1]![0], id).toMatchObject({ id: "disegno.text.setStyle", value: { justify } });
     }
     completo.chiudi();
   });
@@ -101,7 +101,7 @@ describe("Allinea il testo dai tasti (Ctrl+Maiusc+L, C, R)", () => {
       const prima = comando.mock.calls.length;
       premi(radice, code);
       await vi.waitFor(() => expect(comando.mock.calls.length, id).toBe(prima + 1));
-      expect(comando.mock.calls.at(-1)![0], id).toMatchObject({ id: "disegno.text.setStyle", value: { justify } });
+      expect(comando.mock.calls[comando.mock.calls.length - 1]![0], id).toMatchObject({ id: "disegno.text.setStyle", value: { justify } });
     }
     conTesto.valore = false;
     const prima = comando.mock.calls.length;

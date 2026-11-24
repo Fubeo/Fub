@@ -35,7 +35,10 @@ quel tasto. Vale questo ordine:
   `Ctrl+Maiusc+E` applica l'ultimo effetto e `Ctrl+Alt+Maiusc+E` lo riapre
   con la sua finestra; `Ctrl+Maiusc+L`, `C` e `R` allineano i testi scelti
   a sinistra, al centro e a destra, spenti senza un testo (il testo
-  giustificato il file non lo scrive). I tasti delle voci di vista che
+  giustificato il file non lo scrive); `Ctrl+Maiusc+U` sottolinea il testo
+  scelto o toglie il sottolineato (Grassetto e Corsivo stanno solo nel menu
+  Testo: passano alla faccia della famiglia, e una famiglia senza quella
+  faccia resta com'è). I tasti delle voci di vista che
   l'editor tiene (sopra) restano suoi.
 - **Due comandi del motore con lo stesso tasto**: vince l'ultimo assegnato, e
   l'altro resta senza tasto.

@@ -48,6 +48,7 @@ import { creaPortaTemi } from "./temi-porta";
 import { registraTemi } from "./temi-sezione";
 import { filaSimbolismo, STRUMENTI_SIMBOLISMO } from "./fila-simbolismo";
 import { registraSimboli, simboloCorrente as nuovoSimboloCorrente, type SimboloCorrente } from "./simboli-sezione";
+import { passoSulTesto, VOCI_DI_STILE } from "./facce-testo";
 import { ALLINEA_TESTO, registraTesto } from "./testo-sezioni";
 import type { Teardown } from "../../../ui/lifetime";
 import { languageCurrent } from "../../../i18n/strings";
@@ -664,6 +665,24 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila" | "e
   // Allinea a sinistra, al centro, a destra (Ctrl+Maiusc+L, C, R di VectorCraft): il comando della
   // sezione Paragrafo sui testi scelti, acceso come lui. Giustifica resta fuori: il file non scrive il
   // testo giustificato.
+  // Grassetto, Corsivo e Sottolineato (menu Testo, Ctrl+Maiusc+U): il carattere del primo testo
+  // scelto, letto dal motore, e `text.setRangeStyle` con la faccia della famiglia o il sottolineato
+  // inverso, come VectorCraft. Una famiglia senza la faccia resta com'è, e la voce dice perché.
+  for (const id of VOCI_DI_STILE) {
+    vociDelCompleto.set(id, {
+      comando: "disegno.text.setRangeStyle",
+      stato: () => null,
+      esegui: () =>
+        void passoSulTesto(dipendenze, id).then((passo) => {
+          if (passo === null || dipendenze.vita.closed) return;
+          if ("perche" in passo) {
+            dipendenze.annuncia(t("draw.testo.facciaMancante", { famiglia: passo.famiglia, faccia: passo.faccia }));
+            return;
+          }
+          return eseguiPerId("text.setRangeStyle", passo.valore, { senzaFinestra: true });
+        }),
+    });
+  }
   for (const [id, justify] of ALLINEA_TESTO) {
     vociDelCompleto.set(id, {
       comando: "disegno.text.setStyle",
