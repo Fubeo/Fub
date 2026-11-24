@@ -137,6 +137,17 @@ tracciati) M vale solo come spostamento. I nuovi sono `add` (`rect`, `ellipse`,
 fratelli. Il resto è `Unsupported`; un oggetto fuori dalla mappa toccato è
 `Unmapped`.
 
+Il client scrive le misure nella scena (le unità del `viewBox`). Prima del
+motore ogni comando le porta nel suo documento con la radice (`copia.radice`):
+un punto la prende intera, uno spostamento, una larghezza o un'altezza solo la
+scala del suo asse, uno spessore o una distanza la scala media. La tabella dei
+comandi con misure semplici (Sposta, Trasforma singolarmente, Contorno, Sposta
+tracciato, Dividi in trattini e in griglia, Opzioni fusione, Grafico, la misura
+di Disponi) sta in `crates/fub-disegno/src/famiglie/scala.rs`, che riporta
+anche lo spessore e il tratteggio letti da `document.node` nella scena; i punti
+del pannello Trasforma, delle tavole, delle forme vive, del testo e degli
+strumenti dei tracciati passano nella loro famiglia.
+
 Dopo ogni gesto la sessione del motore torna alla copia: lo stato vero è il
 file. Un panico del motore lo prende `vectorcraft_engine::guard::catch_panic`:
 il gesto è `Unsupported`, la sessione si ricarica dalla copia e l'istanza

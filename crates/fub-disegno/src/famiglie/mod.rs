@@ -44,6 +44,8 @@ use crate::apertura::Copia;
 use crate::differenza;
 use crate::gesti::{esito_vuoto, selezione_di_fub, Banco};
 
+mod scala;
+
 /// Il prefisso dei comandi del disegno; dopo c'è l'id del motore.
 pub const PREFISSO: &str = "disegno.";
 
@@ -1175,6 +1177,8 @@ pub(crate) fn esegui(
         &richiesta.selection,
         richiesta.value.clone(),
     )?;
+    // Le misure che le finestre scrivono nella scena, nel documento del motore.
+    scala::nel_motore(&riga.id, copia.radice, &mut valore);
     let punti = if famiglia == Famiglia::Tracciati
         && tracciati::SUI_PUNTI.contains(&riga.id.as_str())
     {
@@ -1408,7 +1412,10 @@ pub(crate) fn esegui(
             if !legge || risultato.is_null() {
                 return Ok(rifiuta(DrawingRefusal::Empty));
             }
-            let lettura = nata.stato().lettura(&riga.id, copia, risultato);
+            let mut lettura = nata.stato().lettura(&riga.id, copia, risultato);
+            if riga.id == "document.node" {
+                scala::tratto_nella_scena(copia.radice, &mut lettura);
+            }
             let byte = serde_json::to_vec(&lettura).map_or(usize::MAX, |b| b.len());
             if byte > MAX_DRAWING_OPS_BYTES {
                 return Ok(rifiuta(DrawingRefusal::TooLarge));
