@@ -476,7 +476,7 @@
       "campi": [
         {
           "nome": "color",
-          "tipo": "testo",
+          "tipo": "colore",
           "facoltativo": false
         },
         {

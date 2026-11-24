@@ -29,11 +29,14 @@ import type { DrawingPreview, DrawingRefusal } from "../../../host/contract";
 import { openDialog } from "../../../kit/dialog";
 import { adopt } from "../../../kit/owned";
 import { formBody, formCheck, formChoice, formError, formNote, formNumber, formRow, formText } from "../../../kit/form";
+import { colorWell } from "../../../kit/color/well";
+import { parseColor, toHexText } from "../../../kit/color/model";
 import { composingKey } from "../../../kit/ime";
 import type { QuantityProblem } from "../../../kit/quantity";
 import { openLifetime, type Lifetime } from "../../../ui/lifetime";
 import { skeleton } from "../../../ui/skeleton";
 import { t, type DrawKey } from "../strings";
+import { drawPickerText } from "../tools/color-text";
 
 /// Un campo del modulo come la finestra lo legge. I limiti di un numero li dà
 /// chi porta la famiglia: lo schema del motore dice il tipo, non i limiti.
@@ -41,7 +44,9 @@ export type CampoFinestra =
   | { readonly nome: string; readonly tipo: "testo"; readonly facoltativo: boolean }
   | { readonly nome: string; readonly tipo: "numero"; readonly min?: number; readonly max?: number }
   | { readonly nome: string; readonly tipo: "scelta"; readonly valori: readonly string[] }
-  | { readonly nome: string; readonly tipo: "sino" };
+  | { readonly nome: string; readonly tipo: "sino" }
+  /// Un colore `#rrggbb`: il pozzo del kit, che apre il selettore di colore.
+  | { readonly nome: string; readonly tipo: "colore" };
 
 /// Il modulo dei parametri di un comando: i campi nell'ordine dello schema.
 export interface ModuloFinestra {
@@ -469,6 +474,35 @@ export function apriFinestra(
               nome: campo.nome,
               nodo: casellaCampo.element,
               valore: () => casellaCampo.checked(),
+              controlla: () => true,
+              valido: () => true,
+            };
+          }
+          case "colore": {
+            // Il colore si sceglie col selettore del kit, senza trasparenza: il motore vuole
+            // `#rrggbb`. Un valore di partenza che non è un colore parte dal nero.
+            const letto = parseColor(String(partenza[campo.nome] ?? ""));
+            let colore = letto === null ? "#000000" : toHexText({ ...letto, a: 1 });
+            const pozzo = colorWell({
+              label: etichetta,
+              mixedText: t("draw.chrome.mixed"),
+              text: drawPickerText(),
+              value: colore,
+              alpha: false,
+              now: () => ({ free: true }),
+              onChange: (scelto) => {
+                const nuovo = parseColor(scelto);
+                if (nuovo === null) return;
+                colore = toHexText({ ...nuovo, a: 1 });
+                pianificaAnteprima();
+              },
+              lifetime: own,
+            });
+            righe.push(formRow(pozzo.element));
+            return {
+              nome: campo.nome,
+              nodo: pozzo.element,
+              valore: () => colore,
               controlla: () => true,
               valido: () => true,
             };

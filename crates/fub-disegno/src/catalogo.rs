@@ -524,7 +524,7 @@ pub fn posto_di(posto: &str) -> Option<Posto> {
 /// mancano: il test `copertura` gli dice quali.
 pub const NOMI: &[(&str, Tipo)] = &[
     ("angle", Tipo::Numero),
-    ("color", Tipo::Testo),
+    ("color", Tipo::Colore),
     ("count", Tipo::Numero),
     ("dx", Tipo::Numero),
     ("dy", Tipo::Numero),

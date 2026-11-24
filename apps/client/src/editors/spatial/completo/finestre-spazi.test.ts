@@ -61,7 +61,7 @@ describe("la finestra delle Opzioni spazi vuoti… (riga ui.livePaintGapOptions)
     await apriSpazi(c);
     const [modulo, , , opzioni] = vi.mocked(apriFinestra).mock.calls[0]!;
     expect(modulo.campi.map((campo) => campo.nome)).toEqual(["detect", "size", "points", "color", "closeGaps"]);
-    expect(modulo).toMatchObject({ campi: [{ tipo: "sino" }, { tipo: "scelta", valori: ["small", "medium", "large", "custom"] }, { tipo: "numero" }, { tipo: "testo" }, { tipo: "sino" }] });
+    expect(modulo).toMatchObject({ campi: [{ tipo: "sino" }, { tipo: "scelta", valori: ["small", "medium", "large", "custom"] }, { tipo: "numero" }, { tipo: "colore" }, { tipo: "sino" }] });
     expect(opzioni).toMatchObject({
       titolo: "Opzioni spazi vuoti",
       campi: { detect: "Rileva gli spazi vuoti", closeGaps: "Chiudi gli spazi con tracciati" },

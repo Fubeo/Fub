@@ -70,6 +70,10 @@ pub enum Tipo {
     Intervallo,
     /// Un foglio della cartella, per nome o per posizione.
     Foglio,
+    /// Un colore `#rrggbb` (lo schema scrive `hex` o `"#rrggbb"`): la shell
+    /// lo sceglie col selettore di colore. Chi non lo conosce lo legge come un
+    /// testo, e il valore resta lo stesso.
+    Colore,
     /// Uno dei valori dati dallo schema; `aperta` se lo schema dice che ce
     /// ne sono altri (`thin|medium|…`).
     Scelta {
@@ -94,6 +98,7 @@ impl Tipo {
             Tipo::Cella => "cella",
             Tipo::Intervallo => "intervallo",
             Tipo::Foglio => "foglio",
+            Tipo::Colore => "colore",
             Tipo::Scelta { .. } => "scelta",
             Tipo::Json => "json",
         }
@@ -540,7 +545,8 @@ fn parola_del_tipo(parola: &str) -> Option<(Tipo, bool)> {
     Some(match parola {
         "bool" => (Tipo::SiNo, false),
         "number" | "n" | "index" | "pages" | "percent" => (Tipo::Numero, false),
-        "text" | "string" | "hex" | "#rrggbb" => (Tipo::Testo, false),
+        "text" | "string" => (Tipo::Testo, false),
+        "hex" | "#rrggbb" => (Tipo::Colore, false),
         "name" | "id" | "field" => (Tipo::Testo, true),
         "cell" => (Tipo::Cella, false),
         "range" => (Tipo::Intervallo, false),
@@ -611,8 +617,8 @@ fn riferimento(parte: &str) -> Option<bool> {
     }
 }
 
-/// Il tipo di una stringa fra virgolette: un riferimento, un esempio, o un
-/// letterale (un valore possibile di una scelta).
+/// Il tipo di una stringa fra virgolette: un riferimento, un colore
+/// (`"#rrggbb"`), un esempio, o un letterale (un valore possibile di una scelta).
 fn virgolettato(contenuto: &str) -> Pezzo {
     let parti: Vec<&str> = contenuto.split(',').map(str::trim).collect();
     let rif: Vec<Option<bool>> = parti.iter().map(|p| riferimento(p)).collect();
@@ -622,6 +628,9 @@ fn virgolettato(contenuto: &str) -> Pezzo {
         } else {
             Pezzo::Certo(Tipo::Intervallo)
         };
+    }
+    if contenuto.eq_ignore_ascii_case("#rrggbb") {
+        return Pezzo::Certo(Tipo::Colore);
     }
     if contenuto.is_empty()
         || contenuto.contains('…')

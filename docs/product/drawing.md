@@ -141,7 +141,9 @@ gli altri.
 
 Un comando del Completo che chiede dei parametri, come «Sposta tracciato»,
 apre una finestra con i suoi campi: i numeri con la loro unità e i loro
-limiti, la scelta a segmenti, la casella e il testo. Con **«Anteprima»**
+limiti, la scelta a segmenti, la casella, il testo e il colore, che si
+sceglie col selettore di colore (per esempio quello di «Ombra esterna» o della
+luce del 3D). Con **«Anteprima»**
 accesa il foglio mostra l'esito prima di applicarlo, e la finestra sta di lato
 senza coprirlo; l'anteprima parte appena la finestra è pronta, e poi al più
 ogni 120 millisecondi, col valore dell'ultimo momento. **OK** applica il

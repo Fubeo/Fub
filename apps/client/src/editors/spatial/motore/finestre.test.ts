@@ -357,3 +357,36 @@ describe("i limiti e la chiusura", () => {
     expect(document.querySelector(".kit-dialog-scrim")?.hasAttribute("data-preview")).toBe(true);
   });
 });
+
+describe("il campo colore", () => {
+  const COLORE: ModuloFinestra = { campi: [{ nome: "color", tipo: "colore" }] };
+
+  it("mostra il colore di partenza nel pozzo e manda quello scelto col selettore", async () => {
+    const result = apriFinestra(COLORE, Promise.resolve(), esegui, opzioni({ campi: { color: "Colore" }, iniziali: { color: "#112233" } }));
+    await settle();
+    const pozzo = dialog()!.querySelector<HTMLButtonElement>(".kit-color-well-button")!;
+    expect(pozzo.getAttribute("aria-label")).toContain("Colore");
+    expect(dialog()!.querySelector(".kit-text-input, textarea")).toBeNull();
+    pozzo.click();
+    const codice = document.querySelector<HTMLInputElement>(".kit-color-popover .kit-color-input")!;
+    codice.value = "#ABCDEF";
+    codice.dispatchEvent(new Event("change"));
+    await settle();
+    action("ok").click();
+    await settle();
+    expect(commits()).toHaveLength(1);
+    expect(commits()[0]!.valori).toEqual({ color: "#abcdef" });
+    commits()[0]!.risolvi(VUOTO);
+    await expect(result).resolves.toBe(true);
+  });
+
+  it("un valore di partenza che non è un colore parte dal nero, senza trasparenza", async () => {
+    const result = apriFinestra(COLORE, Promise.resolve(), esegui, opzioni({ iniziali: { color: "nessuno" } }));
+    await settle();
+    action("ok").click();
+    await settle();
+    expect(commits()[0]!.valori).toEqual({ color: "#000000" });
+    commits()[0]!.risolvi(VUOTO);
+    await expect(result).resolves.toBe(true);
+  });
+});

@@ -318,8 +318,8 @@ interface SchemaFamiglia {
   readonly finestre: readonly { readonly id: string; readonly campi: readonly CampoSchema[] }[];
 }
 
-/// Un campo dello schema come lo legge la finestra di T6. I tipi che la
-/// finestra non conosce (`cella`, `json`) si leggono come testo.
+/// Un campo dello schema come lo legge la finestra di T6: un colore col selettore di
+/// colore. I tipi che la finestra non conosce (`cella`, `json`) si leggono come testo.
 function campoDi(campo: CampoSchema): CampoFinestra {
   if (campo.tipo === "numero") {
     return {
@@ -331,6 +331,7 @@ function campoDi(campo: CampoSchema): CampoFinestra {
   }
   if (campo.tipo === "scelta") return { nome: campo.nome, tipo: "scelta", valori: campo.valori ?? [] };
   if (campo.tipo === "sino") return { nome: campo.nome, tipo: "sino" };
+  if (campo.tipo === "colore") return { nome: campo.nome, tipo: "colore" };
   return { nome: campo.nome, tipo: "testo", facoltativo: campo.facoltativo === true };
 }
 

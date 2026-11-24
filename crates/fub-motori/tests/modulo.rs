@@ -283,11 +283,15 @@ fn json_sì_no_e_numeri() {
     ] {
         assert_eq!(un_tipo(numero), Tipo::Numero, "{numero}");
     }
-    // Un colore scritto `#rrggbb` è un testo, non una scelta con un valore solo.
+    // Un colore scritto `#rrggbb` (anche fra virgolette) o `hex` è un colore, non una scelta con
+    // un valore solo; il suo nome nel catalogo è `colore`.
     assert_eq!(
         un_tipo("{lightColor: #rrggbb (white, #ffffff; legacy directional light color)}"),
-        Tipo::Testo
+        Tipo::Colore
     );
+    assert_eq!(un_tipo("{color: \"#rrggbb\" (\"#000000\")}"), Tipo::Colore);
+    assert_eq!(un_tipo("{color: hex}"), Tipo::Colore);
+    assert_eq!(Tipo::Colore.nome(), "colore");
     // Un elenco di oggetti è un valore JSON, anche con un intervallo nella frase.
     assert_eq!(
         un_tipo("{lights: null or array of 1..10 objects (color: #rrggbb, intensity: % 0..100)}"),
