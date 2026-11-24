@@ -6465,6 +6465,54 @@
     },
     {
       "fonte": "interfaccia",
+      "id": "type.alignCenter",
+      "chiamata": {
+        "client": "type.alignCenter"
+      },
+      "etichetta": {
+        "it": "Allinea al centro",
+        "en": "Align center"
+      },
+      "posto": "menu/testo",
+      "famiglia": "testo",
+      "tasto": "Cmd+Shift+C",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "interfaccia",
+      "id": "type.alignLeft",
+      "chiamata": {
+        "client": "type.alignLeft"
+      },
+      "etichetta": {
+        "it": "Allinea a sinistra",
+        "en": "Align left"
+      },
+      "posto": "menu/testo",
+      "famiglia": "testo",
+      "tasto": "Cmd+Shift+L",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "interfaccia",
+      "id": "type.alignRight",
+      "chiamata": {
+        "client": "type.alignRight"
+      },
+      "etichetta": {
+        "it": "Allinea a destra",
+        "en": "Align right"
+      },
+      "posto": "menu/testo",
+      "famiglia": "testo",
+      "tasto": "Cmd+Shift+R",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "interfaccia",
       "id": "ui.blendOptions",
       "chiamata": {
         "client": "ui.blendOptions"

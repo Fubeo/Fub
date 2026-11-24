@@ -14,7 +14,7 @@ import { costruisciFila, type CostruisciFila, type FilaOpzioni } from "./opzioni
 import { creaSezioni, type Sezioni, type VoceDelCompleto } from "./sezioni";
 import type { Indice, VoceIndice } from "./indice";
 // I comandi nel menu ≡ e nella ricerca Ctrl+/ (T9a): le voci, il perché e l'avvio.
-import { menuComando, menuNonCaricato, nomeVoce, statoComandi, METODI_FORMA, OPERAZIONI_ELABORAZIONE, vociRicerca, type StatoComandi, type VoceRicerca } from "./comandi";
+import { menuComando, menuNonCaricato, motivoDelComando, nomeVoce, statoComandi, METODI_FORMA, OPERAZIONI_ELABORAZIONE, vociRicerca, type StatoComandi, type VoceRicerca } from "./comandi";
 import type { CampoFinestra, ModuloFinestra, ValoreCampo } from "../motore/finestre";
 import type { DrawingAnchor, DrawingPreview, DrawingToolState } from "../../../host/contract";
 import type { MenuItem } from "../../../ui/menu";
@@ -48,7 +48,7 @@ import { creaPortaTemi } from "./temi-porta";
 import { registraTemi } from "./temi-sezione";
 import { filaSimbolismo, STRUMENTI_SIMBOLISMO } from "./fila-simbolismo";
 import { registraSimboli, simboloCorrente as nuovoSimboloCorrente, type SimboloCorrente } from "./simboli-sezione";
-import { registraTesto } from "./testo-sezioni";
+import { ALLINEA_TESTO, registraTesto } from "./testo-sezioni";
 import type { Teardown } from "../../../ui/lifetime";
 import { languageCurrent } from "../../../i18n/strings";
 import { confirm } from "../../../platform/confirm";
@@ -661,6 +661,16 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila" | "e
       });
     },
   });
+  // Allinea a sinistra, al centro, a destra (Ctrl+Maiusc+L, C, R di VectorCraft): il comando della
+  // sezione Paragrafo sui testi scelti, acceso come lui. Giustifica resta fuori: il file non scrive il
+  // testo giustificato.
+  for (const [id, justify] of ALLINEA_TESTO) {
+    vociDelCompleto.set(id, {
+      comando: "disegno.text.setStyle",
+      stato: () => null,
+      esegui: () => void eseguiPerId("text.setStyle", { justify }, { senzaFinestra: true }),
+    });
+  }
   // Ricolora grafica (K6 T14): la voce di Modifica › Modifica colori apre la sua finestra. Il suo
   // stato è quello del comando che la finestra scrive (`conVociClient`).
   vociDelCompleto.set(VOCE_RICOLORA, { stato: () => null, esegui: () => void apriRicolora(dipendenze) });
@@ -886,7 +896,8 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila" | "e
     clientVoce: (id) => {
       if (id === VOCE_RICOLORA) return motivoRicolora(stato);
       const propria = vociDelCompleto.get(id);
-      return propria !== undefined ? propria.stato() : opzioni.clientVoce?.(id);
+      if (propria === undefined) return opzioni.clientVoce?.(id);
+      return propria.comando !== undefined ? motivoDelComando(stato, propria.comando) : propria.stato();
     },
     clientStato: opzioni.clientStato,
   });
@@ -921,7 +932,16 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila" | "e
       if ("client" in voce.chiamata) {
         const id = voce.chiamata.client;
         const propria = vociDelCompleto.get(id);
-        if (propria !== undefined) {
+        if (propria?.comando !== undefined) {
+          // Lo stato del suo comando, letto adesso: spento, il perché va detto e niente parte.
+          const comando = propria.comando;
+          void statoComandi(ctx.motore, dipendenze.selezione()).then((stato) => {
+            if (chiuso) return;
+            const motivo = motivoDelComando(stato, comando);
+            if (motivo === null) propria.esegui();
+            else dipendenze.annuncia(motivo);
+          });
+        } else if (propria !== undefined) {
           if (propria.stato() === null) propria.esegui();
         } else if (opzioni.clientVoce?.(id) === null) opzioni.tasti?.client?.(id);
         return;

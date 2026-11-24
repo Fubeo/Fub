@@ -33,8 +33,10 @@ quel tasto. Vale questo ordine:
   trasparenza, `Ctrl+Alt+'` aggancio ai punti, `Ctrl+Maiusc+1` toglie la
   rotazione della vista, `Ctrl+4` ripete l'elaborazione tracciati,
   `Ctrl+Maiusc+E` applica l'ultimo effetto e `Ctrl+Alt+Maiusc+E` lo riapre
-  con la sua finestra. I tasti delle voci di vista che l'editor tiene (sopra)
-  restano suoi.
+  con la sua finestra; `Ctrl+Maiusc+L`, `C` e `R` allineano i testi scelti
+  a sinistra, al centro e a destra, spenti senza un testo (il testo
+  giustificato il file non lo scrive). I tasti delle voci di vista che
+  l'editor tiene (sopra) restano suoi.
 - **Due comandi del motore con lo stesso tasto**: vince l'ultimo assegnato, e
   l'altro resta senza tasto.
 - **Un comando con parametri** apre la sua finestra; **gli altri girano

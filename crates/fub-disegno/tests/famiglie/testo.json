@@ -604,6 +604,9 @@
       "fonte": "pannello",
       "prova": "apps/client/src/editors/spatial/completo/famiglie/testo/testo.test.ts"
     },
+    {"id": "type.alignLeft", "fonte": "interfaccia", "prova": "apps/client/src/editors/spatial/completo/famiglie/testo/allinea.test.ts"},
+    {"id": "type.alignCenter", "fonte": "interfaccia", "prova": "apps/client/src/editors/spatial/completo/famiglie/testo/allinea.test.ts"},
+    {"id": "type.alignRight", "fonte": "interfaccia", "prova": "apps/client/src/editors/spatial/completo/famiglie/testo/allinea.test.ts"},
     {
       "id": "paragraph",
       "fonte": "pannello",

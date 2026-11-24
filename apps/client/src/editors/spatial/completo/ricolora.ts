@@ -26,7 +26,7 @@ import { INTERVALLO_ANTEPRIMA_MS } from "../motore/finestre";
 import { motivoDelRifiuto } from "../motore/rifiuto";
 import { t, type DrawKey } from "../strings";
 import { drawPickerText } from "../tools/color-text";
-import { testoPerche, type StatoComandi } from "./comandi";
+import { motivoDelComando, type StatoComandi } from "./comandi";
 import { applicaEsito, chiamaConArgomenti, type DipendenzeComando } from "./esegui";
 import {
   conProposta,
@@ -50,9 +50,7 @@ export const VOCE_RICOLORA = "ui.recolorDialog";
 /// fare (senza scelta, con un oggetto bloccato o un tratto dell'Inchiostro no). `null` se è accesa
 /// o il motore non ha detto niente.
 export function motivoRicolora(stato: StatoComandi): string | null {
-  const info = stato.per?.get(COMANDO_RICOLORA);
-  if (info === undefined || info.enabled) return null;
-  return testoPerche(info.disabled_reason);
+  return motivoDelComando(stato, COMANDO_RICOLORA);
 }
 
 /// I comandi del motore che la finestra usa, con il prefisso del Completo.

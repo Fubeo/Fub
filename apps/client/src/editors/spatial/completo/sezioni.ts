@@ -187,6 +187,9 @@ export interface CampioniDocumento {
 export interface VoceDelCompleto {
   readonly stato: () => string | null;
   readonly esegui: () => void;
+  /// Il comando del motore (col prefisso `disegno.`) di cui la voce prende lo stato, se ne ha uno:
+  /// il menu la spegne col suo perché, e il tasto non fa niente se è spento.
+  readonly comando?: string;
 }
 
 /// Ciò che una sezione riceve per disegnarsi.

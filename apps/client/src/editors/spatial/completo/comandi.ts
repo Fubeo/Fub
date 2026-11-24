@@ -86,6 +86,14 @@ const CHIAVI_PERCHE: Readonly<Record<Exclude<DrawingDisabledReason, { readonly o
 /// Il perché di una voce spenta: il codice tipato del motore, con il suo testo,
 /// o il testo che il motore ha dato per `other`. Senza codice, una frase
 /// generica.
+/// Perché il comando `id` (col prefisso `disegno.`) è spento, o `null` se è acceso o se il motore non
+/// ha risposto (il motore stesso dirà di no).
+export function motivoDelComando(stato: StatoComandi, id: string): string | null {
+  const info = stato.per?.get(id);
+  if (info === undefined || info.enabled) return null;
+  return testoPerche(info.disabled_reason);
+}
+
 export function testoPerche(motivo: DrawingDisabledReason | null | undefined): string {
   if (motivo === null || motivo === undefined) return t("draw.disabled.generic");
   if (typeof motivo === "string") return t(CHIAVI_PERCHE[motivo]);

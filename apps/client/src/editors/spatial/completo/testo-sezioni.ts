@@ -47,6 +47,13 @@ const ALLINEAMENTI: ReadonlyArray<{ readonly ancora: string; readonly justify: s
   { ancora: "end", justify: "right", chiave: "draw.paragrafo.destra" },
 ];
 
+/// Le voci dei tasti di allineamento di VectorCraft (Ctrl+Maiusc+L, C, R) e il `justify` che mandano.
+export const ALLINEA_TESTO: ReadonlyArray<readonly [string, string]> = [
+  ["type.alignLeft", "left"],
+  ["type.alignCenter", "center"],
+  ["type.alignRight", "right"],
+];
+
 /// Le frasi dei problemi di lettura di un campo numerico (le stesse di Trasforma).
 const PROBLEMI: Readonly<Record<string, DrawKey>> = {
   empty: "draw.properties.problem.empty",

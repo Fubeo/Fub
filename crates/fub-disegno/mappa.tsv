@@ -997,9 +997,9 @@ interfaccia	view.textThreads	Hide Text Threads		testo	F2	T16	da fare	menu/visual
 interfaccia	view.gradientAnnotator	Hide Gradient Annotator		aspetto	F1	T15	da fare	menu/visualizza	famiglia	l'annotatore si vede con lo strumento Sfumatura (T15 giro 6); nasconderlo vuole una scelta che il gesto porti al ponte degli strumenti, che non c'è ancora	Nascondi annotatore sfumatura
 interfaccia	view.livePaintGaps	Show Live Paint Gaps		trame	F2	T21	fatto	menu/visualizza	famiglia	voce che si scambia, spenta all'inizio; coi bordi visibili legge livePaint.info dei gruppi scelti e disegna i loro spazi nel colore d'anteprima del gruppo	Mostra spazi vuoti pittura dinamica
 interfaccia	type.hiddenCharacters	Show Hidden Characters		testo	F2	T16	da fare	menu/testo	famiglia		Mostra caratteri nascosti
-interfaccia	type.alignLeft	Align left		testo	F2	T16	da fare	menu/testo	famiglia		Allinea a sinistra
-interfaccia	type.alignCenter	Align center		testo	F2	T16	da fare	menu/testo	famiglia		Allinea al centro
-interfaccia	type.alignRight	Align right		testo	F2	T16	da fare	menu/testo	famiglia		Allinea a destra
+interfaccia	type.alignLeft	Align left		testo	F2	T16	fatto	menu/testo	famiglia	Ctrl+Maiusc+L: text.setStyle {justify: left} sui testi scelti, acceso come lui (completo/index.ts)	Allinea a sinistra
+interfaccia	type.alignCenter	Align center		testo	F2	T16	fatto	menu/testo	famiglia	Ctrl+Maiusc+C: text.setStyle {justify: center} sui testi scelti, acceso come lui (completo/index.ts)	Allinea al centro
+interfaccia	type.alignRight	Align right		testo	F2	T16	fatto	menu/testo	famiglia	Ctrl+Maiusc+R: text.setStyle {justify: right} sui testi scelti, acceso come lui (completo/index.ts)	Allinea a destra
 interfaccia	type.justifyLeft	Justify with last line aligned left		testo	F2	T16	da fare	menu/testo	famiglia		Giustifica con l'ultima riga allineata a sinistra
 interfaccia	type.justifyAll	Justify all lines		testo	F2	T16	da fare	menu/testo	famiglia		Giustifica tutte le righe
 interfaccia	type.applyBullets	Apply Bullets		testo	F2	T16	da fare	menu/testo	famiglia		Applica punti elenco
