@@ -67,7 +67,11 @@ export type OverlayHandle =
   | { readonly kind: "control"; readonly x: number; readonly y: number }
   /// Il contorno di un tracciato scelto, largo un pixel, coi pezzi già nella
   /// scena (come VectorCraft lo disegna con gli strumenti del motore).
-  | { readonly kind: "outline"; readonly parts: readonly OutlinePart[] };
+  | { readonly kind: "outline"; readonly parts: readonly OutlinePart[] }
+  /// Uno spazio vuoto di un gruppo della pittura dinamica (Visualizza › Mostra
+  /// spazi vuoti): una linea larga due pixel fra i due capi, nel colore
+  /// d'anteprima del gruppo (un colore CSS), sotto le altre maniglie.
+  | { readonly kind: "gap"; readonly from: Point; readonly to: Point; readonly color: string };
 
 /// Un pezzo di [`OverlayHandle`] `outline`, in coordinate di scena.
 export type OutlinePart =
@@ -265,6 +269,18 @@ export function createOverlay(host: HTMLElement, owner: Lifetime): SceneOverlay 
     ctx.lineWidth = 1;
     // Il righello sotto ogni altra cosa.
     for (const handle of handles) if (handle.kind === "ruler") drawRuler(ctx, handle, line, rulerPaper());
+    // Gli spazi vuoti della pittura dinamica, ciascuno nel colore del suo gruppo.
+    ctx.lineWidth = 2;
+    for (const handle of handles) {
+      if (handle.kind !== "gap") continue;
+      ctx.strokeStyle = handle.color;
+      ctx.beginPath();
+      ctx.moveTo(...screen(handle.from[0], handle.from[1]));
+      ctx.lineTo(...screen(handle.to[0], handle.to[1]));
+      ctx.stroke();
+    }
+    ctx.strokeStyle = line;
+    ctx.lineWidth = 1;
     for (const handle of handles) {
       if (handle.kind === "box") {
         const [a, b, c, d, e, f] = handle.matrix;

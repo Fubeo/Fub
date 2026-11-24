@@ -98,6 +98,9 @@ export interface Grid {
   /// Aggancia a glifo (Visualizza, K6): con le guide sensibili, gli strumenti
   /// del motore agganciano i glifi di un testo. Assente, spento.
   readonly snapGlyph?: boolean;
+  /// Mostra spazi vuoti pittura dinamica (Visualizza, K6): coi bordi visibili, gli
+  /// spazi dei gruppi della pittura dinamica scelti. Assente, spento, come in VectorCraft.
+  readonly livePaintGaps?: boolean;
 }
 
 /// Che cosa resta di un tratto della Penna.

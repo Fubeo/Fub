@@ -995,7 +995,7 @@ interfaccia	view.preciseCursors	Use Precise Cursors		vista	F1	T11	fatto	menu/vis
 interfaccia	imageTrace.preview	Image Trace Preview		immagini	F3	T20	da fare	ispettore/design	famiglia		Anteprima di Ricalco immagine
 interfaccia	view.textThreads	Hide Text Threads		testo	F2	T16	da fare	menu/visualizza	famiglia		Nascondi concatenamenti testo
 interfaccia	view.gradientAnnotator	Hide Gradient Annotator		aspetto	F1	T15	da fare	menu/visualizza	famiglia	l'annotatore si vede con lo strumento Sfumatura (T15 giro 6); nasconderlo vuole una scelta che il gesto porti al ponte degli strumenti, che non c'è ancora	Nascondi annotatore sfumatura
-interfaccia	view.livePaintGaps	Show Live Paint Gaps		trame	F2	T21	da fare	menu/visualizza	famiglia		Mostra spazi vuoti pittura dinamica
+interfaccia	view.livePaintGaps	Show Live Paint Gaps		trame	F2	T21	fatto	menu/visualizza	famiglia	voce che si scambia, spenta all'inizio; coi bordi visibili legge livePaint.info dei gruppi scelti e disegna i loro spazi nel colore d'anteprima del gruppo	Mostra spazi vuoti pittura dinamica
 interfaccia	type.hiddenCharacters	Show Hidden Characters		testo	F2	T16	da fare	menu/testo	famiglia		Mostra caratteri nascosti
 interfaccia	type.alignLeft	Align left		testo	F2	T16	da fare	menu/testo	famiglia		Allinea a sinistra
 interfaccia	type.alignCenter	Align center		testo	F2	T16	da fare	menu/testo	famiglia		Allinea al centro

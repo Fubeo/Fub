@@ -204,7 +204,9 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // nel file con la ricetta, le facce hanno l'id del file. Dieci righe in più.
   // La finestra delle Opzioni spazi vuoti (`ui.livePaintGapOptions`) diventa «fatto»: è quella di
   // `livePaint.gapOptions`, che parte dalle opzioni del gruppo scelto. Una riga in più.
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 988, fub: 114, escluso: 12, fatto: 437 });
+  // Visualizza › Mostra spazi vuoti pittura dinamica (`view.livePaintGaps`) diventa «fatto»: legge
+  // gli spazi dal motore e li disegna sul foglio. Una riga in più.
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 987, fub: 114, escluso: 12, fatto: 438 });
 });
 
 // --- un motore finto ---------------------------------------------------------------

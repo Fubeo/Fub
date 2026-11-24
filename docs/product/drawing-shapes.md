@@ -99,8 +99,11 @@ rileva gli spazi, fin dove il colore si ferma (spazi piccoli 3 pt, medi 6,
 grandi 12, o i punti scritti fino a 72), il colore che li mostra e «Chiudi gli
 spazi con tracciati», che aggiunge una linea senza colore su ogni spazio. Il
 gruppo vivo va nel file con la ricetta, opzioni comprese: riaperto, si dipinge
-ancora; un altro programma vede le facce e i bordi come forme normali. Manca
-ancora la vista che mostra gli spazi vuoti.
+ancora; un altro programma vede le facce e i bordi come forme normali.
+Visualizza › «Mostra spazi vuoti pittura dinamica», spenta all'inizio, disegna
+sul foglio gli spazi dei gruppi scelti nel colore d'anteprima di ciascun
+gruppo, finché i bordi sono visibili; la scelta resta fra una sessione e
+l'altra e non va nel file.
 
 La sezione «Allinea», nella scheda Design dell'ispettore, offre gli allineamenti
 e le distribuzioni del motore. Alla selezione servono due oggetti; con «alla

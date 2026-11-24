@@ -287,6 +287,7 @@ export function installMarks(ctx: EditorContext): void {
         });
       }
     }
+    handles.push(...ctx.spaziPitturaHandles());
     handles.push(...frameHandles());
     handles.push(...anchorHandles());
     handles.push(...ctx.nibHandles());

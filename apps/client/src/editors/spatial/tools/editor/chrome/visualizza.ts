@@ -7,7 +7,8 @@
 // (`snap.guides`, `snap.points`, `snap.glyphs`, accesi e spenti come in VectorCraft); il
 // contorno è la vista del contorno; i righelli di bordo stanno in `edge-rulers.ts`;
 // la rotazione è quella della vista; la griglia di trasparenza, i bordi e il
-// riquadro di delimitazione li disegnano `view.ts` e `marks.ts`. Una voce che il
+// riquadro di delimitazione li disegnano `view.ts` e `marks.ts`; gli spazi vuoti della
+// pittura dinamica li legge dal motore `../spazi-pittura.ts`. Una voce che il
 // client non fa non è qui: resta «da fare» in mappa, con la nota del perché.
 
 import { t } from "../../../strings";
@@ -26,6 +27,7 @@ export const COMANDI_VISUALIZZA = [
   "view.rulers",
   "view.edges",
   "view.boundingBox",
+  "view.livePaintGaps",
   "view.preciseCursors",
   "view.rotate",
   "view.rotateReset",
@@ -40,7 +42,7 @@ export const FILE_VISUALIZZA: readonly (readonly ComandoVisualizza[])[] = [
   ["view.grid", "view.snapToGrid", "view.snapToPixel"],
   ["view.smartGuides", "view.snapToPoint", "view.snapToGlyph"],
   ["view.transparencyGrid", "view.outline", "view.rulers"],
-  ["view.edges", "view.boundingBox"],
+  ["view.edges", "view.boundingBox", "view.livePaintGaps"],
   ["view.preciseCursors"],
   ["view.rotate", "view.rotateReset"],
 ];
@@ -88,6 +90,8 @@ export function statoVisualizza(ctx: EditorContext, id: string): boolean | undef
       return ctx.grid.hideEdges === true;
     case "view.boundingBox":
       return ctx.grid.hideBoundingBox === true;
+    case "view.livePaintGaps":
+      return ctx.grid.livePaintGaps === true;
     case "view.preciseCursors":
       return ctx.preciseCursors;
     default:
@@ -131,6 +135,9 @@ export function comandoVisualizza(ctx: EditorContext, id: ComandoVisualizza): vo
       return;
     case "view.boundingBox":
       ctx.changeGrid({ ...ctx.grid, hideBoundingBox: ctx.grid.hideBoundingBox !== true });
+      return;
+    case "view.livePaintGaps":
+      ctx.changeGrid({ ...ctx.grid, livePaintGaps: ctx.grid.livePaintGaps !== true });
       return;
     case "view.rotate":
       void chiediAngoloVista(ctx.camera.angle).then((gradi) => {

@@ -5559,6 +5559,22 @@
     },
     {
       "fonte": "interfaccia",
+      "id": "view.livePaintGaps",
+      "chiamata": {
+        "client": "view.livePaintGaps"
+      },
+      "etichetta": {
+        "it": "Mostra spazi vuoti pittura dinamica",
+        "en": "Show Live Paint Gaps"
+      },
+      "posto": "menu/visualizza",
+      "famiglia": "trame",
+      "tasto": null,
+      "effetto": "mostra",
+      "finestra": false
+    },
+    {
+      "fonte": "interfaccia",
       "id": "view.outline",
       "chiamata": {
         "client": "view.outline"

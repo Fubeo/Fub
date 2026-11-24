@@ -15,6 +15,7 @@ interface GrigliaFinta {
   transparencyGrid?: boolean;
   hideEdges?: boolean;
   hideBoundingBox?: boolean;
+  livePaintGaps?: boolean;
 }
 
 /// Un editor finto con la griglia, il contorno, i righelli di bordo e la vista.
@@ -48,6 +49,7 @@ describe("le righe view.* di ≡ › Visualizza del Disegno completo", () => {
       "view.rulers",
       "view.edges",
       "view.boundingBox",
+      "view.livePaintGaps",
       "view.preciseCursors",
       "view.rotate",
       "view.rotateReset",
@@ -67,7 +69,7 @@ describe("le righe view.* di ≡ › Visualizza del Disegno completo", () => {
 
   it("le file del menu portano ognuna voce una volta sola, nell'ordine dei comandi", () => {
     expect(FILE_VISUALIZZA.flat()).toEqual([...COMANDI_VISUALIZZA]);
-    expect(FILE_VISUALIZZA.map((file) => file.length)).toEqual([3, 3, 3, 2, 1, 2]);
+    expect(FILE_VISUALIZZA.map((file) => file.length)).toEqual([3, 3, 3, 3, 1, 2]);
   });
 
   it("una voce che il client fa è attiva; rotateReset è spenta col perché se la vista non è girata", () => {
@@ -173,6 +175,19 @@ describe("le righe view.* di ≡ › Visualizza del Disegno completo", () => {
     expect(ctx.changeGrid).toHaveBeenLastCalledWith({ shown: false, snap: false, smartGuidesOff: false, snapPointOff: true, snapGlyph: true });
     expect(ctx.setOutline).not.toHaveBeenCalled();
     expect(ctx.turnView).not.toHaveBeenCalled();
+  });
+
+  it("Mostra spazi vuoti pittura dinamica parte spenta e si scambia nella griglia", () => {
+    const ctx = fingi();
+    const editor = ctx as unknown as EditorContext;
+    expect(isComandoVisualizza("view.livePaintGaps")).toBe(true);
+    expect(statoVisualizza(editor, "view.livePaintGaps")).toBe(false);
+    comandoVisualizza(editor, "view.livePaintGaps");
+    expect(ctx.changeGrid).toHaveBeenLastCalledWith({ shown: false, snap: false, livePaintGaps: true });
+    ctx.grid = { shown: false, snap: false, livePaintGaps: true };
+    expect(statoVisualizza(editor, "view.livePaintGaps")).toBe(true);
+    comandoVisualizza(editor, "view.livePaintGaps");
+    expect(ctx.changeGrid).toHaveBeenLastCalledWith({ shown: false, snap: false, livePaintGaps: false });
   });
 
   it("ogni comando cambia lo stato che gli compete, senza toccare gli altri", () => {

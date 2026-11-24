@@ -47,6 +47,7 @@ import type { TreeContext } from "./tree";
 import type { VaultImagesContext } from "./vault-images";
 import type { ViewContext } from "./view";
 import type { GestiMotoreContext } from "../../motore/gesti";
+import type { SpaziPitturaContext } from "./spazi-pittura";
 import type { Lifetime } from "../../../../ui/lifetime";
 import type { SceneEngine } from "../../scene/engine";
 
@@ -59,7 +60,7 @@ export interface EditorContext extends
     ArrangingContext, SelectionCommandsContext, InkShapeContext,
     LayersGridContext, KeysContext, ClipboardCommandsContext, VaultImagesContext, LifeContext, RailContext, PenOptionsContext,
     StatusContext, HandZoomContext, BareContext, OutlineContext, CommandSearchContext, NavigatorContext, CommandsContext,
-    WorkspaceContext, NibContext, ReplayContext, RulerContext, GestiMotoreContext, FilaMotoreContext {
+    WorkspaceContext, NibContext, ReplayContext, RulerContext, GestiMotoreContext, FilaMotoreContext, SpaziPitturaContext {
   readonly host: HTMLElement;
   readonly initial: SceneEngine;
   readonly owner: Lifetime;

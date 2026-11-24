@@ -118,6 +118,7 @@ export function checkedGrid(next: Grid, before: Grid): Grid {
     ...(vistaAccesa(next.smartGuidesOff, before.smartGuidesOff) ? { smartGuidesOff: true } : {}),
     ...(vistaAccesa(next.snapPointOff, before.snapPointOff) ? { snapPointOff: true } : {}),
     ...(vistaAccesa(next.snapGlyph, before.snapGlyph) ? { snapGlyph: true } : {}),
+    ...(vistaAccesa(next.livePaintGaps, before.livePaintGaps) ? { livePaintGaps: true } : {}),
   };
 }
 

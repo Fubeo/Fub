@@ -143,6 +143,7 @@ import { installStage } from "./editor/stage";
 import { installView } from "./editor/view";
 import { installPreciseCursors } from "./editor/precise-cursors";
 import { installMarks } from "./editor/marks";
+import { installSpaziPittura } from "./editor/spazi-pittura";
 import { installTree } from "./editor/tree";
 import { installPanel } from "./editor/panel";
 import { installStyling } from "./editor/styling";
@@ -510,6 +511,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   installView(ctx);
   installPreciseCursors(ctx, options.onPreciseCursorsChange);
   installMarks(ctx);
+  installSpaziPittura(ctx);
   installTree(ctx);
   installPanel(ctx);
   installStyling(ctx);

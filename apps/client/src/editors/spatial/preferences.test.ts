@@ -163,9 +163,9 @@ describe("la griglia ricordata", () => {
   it("gli interruttori della vista (K6 T11) tornano se accesi, e spenti non ci sono; un valore che non è vero o falso butta la griglia", async () => {
     const host = createFakeHost();
     const { readGrid } = await boot(host);
-    await host.module.api.setViewState(GRID_KEY, { shown: true, snap: false, step: 10, transparencyGrid: true, hideEdges: true, hideBoundingBox: false });
+    await host.module.api.setViewState(GRID_KEY, { shown: true, snap: false, step: 10, transparencyGrid: true, hideEdges: true, hideBoundingBox: false, livePaintGaps: true });
     const letta = await readGrid();
-    expect(letta).toEqual({ shown: true, snap: false, step: 10, steps: {}, panel: null, bar: true, shapes: true, closed: [], twist: true, taps: true, pen: DEFAULT_CURVE, transparencyGrid: true, hideEdges: true });
+    expect(letta).toEqual({ shown: true, snap: false, step: 10, steps: {}, panel: null, bar: true, shapes: true, closed: [], twist: true, taps: true, pen: DEFAULT_CURVE, transparencyGrid: true, hideEdges: true, livePaintGaps: true });
     expect("hideBoundingBox" in letta).toBe(false);
     await host.module.api.setViewState(GRID_KEY, { shown: true, snap: false, step: 10, hideBoundingBox: "sì" });
     expect(await readGrid()).toEqual(DEFAULT_GRID);
