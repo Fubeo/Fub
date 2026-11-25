@@ -424,7 +424,8 @@ export function installKeys(ctx: EditorContext): void {
         ["Shift-1", t("draw.fit")],
         ["Shift-2", t("draw.fit.selection")],
         ["Mod-y", t("draw.outlines")],
-        ["Mod-/", t("draw.keys.commands")],
+        // Col motore Ctrl+/ è «Aggiungi nuovo riempimento», come in VectorCraft.
+        ...(ctx.completoMotore?.()?.conMotore?.() === true ? [] : ([["Mod-/", t("draw.keys.commands")]] as const)),
         ["Mod-.", t("draw.bare")],
         ...(at.has("gestures") ? ([["4", t("draw.turn.left")], ["6", t("draw.turn.right")], ["5", t("draw.turn.straighten")]] as const) : []),
         // Col menu della selezione il radiale sta in fondo a quel menu.

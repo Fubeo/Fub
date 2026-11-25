@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 // Tab e Maiusc+Tab del Completo come `window.dock` e `window.panels` di VectorCraft.
 import { describe, expect, it } from "vitest";
-import { pannelliTab } from "./pannelli-tab";
+import { pannelliTab, uscitaDalFoglio } from "./pannelli-tab";
 
 function banco() {
   const barra = document.createElement("div");
@@ -52,5 +52,25 @@ describe("Tab del Completo", () => {
     premi(false);
     premi(null);
     expect(visti()).toBe("barra,colonna,pannelli");
+  });
+});
+
+describe("l'uscita dal foglio col motore", () => {
+  it("Tab è dei pannelli; Fine e poi Tab esce, solo per il tasto subito dopo", () => {
+    const tasto = uscitaDalFoglio();
+    expect(tasto("Tab")).toBe("tab");
+    expect(tasto("End")).toBe("fine");
+    expect(tasto("Tab")).toBe("esce");
+    expect(tasto("Tab")).toBe("tab");
+    expect(tasto("End")).toBe("fine");
+    expect(tasto("a")).toBeNull();
+    expect(tasto("Tab")).toBe("tab");
+  });
+
+  it("Maiusc fra Fine e Tab non spegne l'uscita: Fine e poi Maiusc+Tab esce all'indietro", () => {
+    const tasto = uscitaDalFoglio();
+    expect(tasto("End")).toBe("fine");
+    expect(tasto("Shift")).toBeNull();
+    expect(tasto("Tab")).toBe("esce");
   });
 });

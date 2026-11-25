@@ -104,7 +104,10 @@ Col motore presente i tasti senza `Ctrl` o `Alt` sono quelli di VectorCraft:
   il `Tab` dopo rimostra quelli che aveva nascosto (tutti e tre se non se ne
   vedeva nessuno); `Maiusc+Tab` mostra o nasconde i soli pannelli. Nello
   Scrittoio i pannelli sono l'ispettore. Fuori dal foglio `Tab` va avanti fra i
-  comandi; uscendo dal Completo torna tutto;
+  comandi; uscendo dal Completo torna tutto. `Fine` e poi `Tab` (o `Maiusc+Tab`)
+  esce dal foglio verso il comando dopo (o prima): senza, il fuoco da tastiera
+  non uscirebbe mai dal foglio. Il suggerimento del foglio per i lettori di
+  schermo lo dice;
 - `Spazio` tenuto, col puntatore sul foglio, trascina la vista come la Mano.
 
 Mentre lo strumento Testo scrive, le lettere, le frecce, lo `Spazio`, `Invio` e

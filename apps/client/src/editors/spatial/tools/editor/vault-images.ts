@@ -16,6 +16,7 @@ import type { Edge } from "../arrange";
 import type { EditorContext } from "./context";
 import { adattaTavola } from "./chrome/zoom-menu";
 import { cambiaUnita } from "./chrome/unita";
+import { uscitaDalFoglio } from "./chrome/pannelli-tab";
 import { installCropImage } from "./ritaglio-immagine";
 
 const ROTATE_STEP_SHIFT = 90;
@@ -248,9 +249,13 @@ export function installVaultImages(ctx: EditorContext): void {
     else if (ctx.current?.kind === "select" && (ctx.current.mode === "move" || ctx.current.mode === "resize" || ctx.current.mode === "rotate")) selectUpdate(ctx.current);
   };
 
+  // Col motore Tab nasconde i pannelli e non esce dal foglio: Fine e poi Tab ne
+  // esce (`draw.surface.hint.completo`).
+  const uscita = uscitaDalFoglio();
   life.listen(root, "keyup", onModifiers);
   life.listen(root, "keydown", (event) => {
     onModifiers(event);
+    const tabOFine = uscita(event.key);
     if (event.defaultPrevented || event.target === titleInput || event.target === opacityInput) return;
     // I campi del foglio, come il numero della pagina, tengono i loro tasti.
     if (event.target instanceof HTMLInputElement && folio?.controls?.contains(event.target) === true) return;
@@ -477,6 +482,11 @@ export function installVaultImages(ctx: EditorContext): void {
         } else return;
       } else if (scriveTesto) {
         // Le lettere, Invio e Canc sono del testo che si scrive.
+        return;
+      } else if (onSurface && tabOFine === "fine" && ctx.current === null && !mod && !event.altKey) {
+        // Il Tab che segue esce dal foglio.
+      } else if (onSurface && tabOFine === "esce") {
+        // Esce dal foglio: il Tab è del browser.
         return;
       } else if (onSurface && event.key === "Tab") {
         // Dal foglio Tab nasconde e rimostra barra, colonna e pannelli, Maiusc+Tab i

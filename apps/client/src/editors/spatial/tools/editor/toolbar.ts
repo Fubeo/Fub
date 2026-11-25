@@ -182,10 +182,19 @@ export function installToolbar(ctx: EditorContext): void {
   /// Il suggerimento del foglio dice anche come si arriva ai comandi della
   /// selezione, quando il livello ne ha; sul foglio delle annotazioni, i
   /// tasti che solo lui ha.
+  /// Col motore del Completo i tasti sono quelli di VectorCraft, e il suggerimento
+  /// lo dice (anche come si esce dal foglio); si rilegge a ogni fuoco del foglio.
   const showSurfaceHint = (): void => {
-    surfaceHint.textContent = t(folio !== undefined ? "draw.sheet.keys" : BAR_FEATURES.some(has) ? "draw.surface.hint.arrange" : "draw.surface.hint");
+    surfaceHint.textContent = t(
+      folio !== undefined
+        ? "draw.sheet.keys"
+        : ctx.completoMotore?.()?.conMotore?.() === true
+          ? "draw.surface.hint.completo"
+          : BAR_FEATURES.some(has) ? "draw.surface.hint.arrange" : "draw.surface.hint",
+    );
   };
   ctx.showSurfaceHint = showSurfaceHint;
+  life.listen(surface, "focus", showSurfaceHint);
   /// Il nome del foglio; quello delle annotazioni dice la pagina e il
   /// documento.
   const labelSurface = (): void => surface.setAttribute("aria-label", folio === undefined ? t("draw.surface") : folio.label());
@@ -642,7 +651,10 @@ export function installToolbar(ctx: EditorContext): void {
       titleInput.focus();
       titleInput.select();
     } });
-    items.push({ label: t("draw.commands.open"), hint: displayBinding("Mod-/"), run: () => ctx.searchCommands() });
+    // Col motore Ctrl+/ è «Aggiungi nuovo riempimento», come in VectorCraft: la ricerca
+    // si apre solo da qui.
+    const conMotore = ctx.completoMotore?.()?.conMotore?.() === true;
+    items.push({ label: t("draw.commands.open"), ...(conMotore ? {} : { hint: displayBinding("Mod-/") }), run: () => ctx.searchCommands() });
     items.push({ label: t("draw.keys"), icon: "keyboard", hint: "?", run: () => void ctx.keys() });
     return items;
   };

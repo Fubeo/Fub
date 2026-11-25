@@ -44,3 +44,20 @@ export function pannelliTab(barra: HTMLElement, colonna: HTMLElement, pannelli: 
     }
   };
 }
+
+/// Il Tab del foglio col motore nasconde i pannelli, e il fuoco non ne uscirebbe
+/// mai: Fine e poi Tab esce dal foglio, col Tab del browser (WCAG 2.1.2). Vale
+/// solo per il tasto subito dopo Fine; Maiusc non conta, così Fine e poi
+/// Maiusc+Tab esce all'indietro. Rende che cosa fa il tasto: `fine` arma
+/// l'uscita, `esce` lascia il Tab al browser, `tab` è il Tab dei pannelli.
+export function uscitaDalFoglio(): (tasto: string) => "fine" | "esce" | "tab" | null {
+  let dopoFine = false;
+  return (tasto) => {
+    if (tasto === "Shift") return null;
+    const prima = dopoFine;
+    dopoFine = tasto === "End";
+    if (tasto === "End") return "fine";
+    if (tasto === "Tab") return prima ? "esce" : "tab";
+    return null;
+  };
+}
