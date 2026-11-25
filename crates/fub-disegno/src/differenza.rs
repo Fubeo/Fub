@@ -411,7 +411,7 @@ fn operazione_delle_guide(
         &livello,
     )
     .map_err(|e| match e {
-        crate::guide::NonSiScrive::Ferme(motivo) => no(motivo),
+        crate::guide::NonSiScrive::Ferme(motivo) => no(motivo.motivo()),
         crate::guide::NonSiScrive::Bloccata => {
             no("una guida bloccata non si sposta e non si toglie da sola")
         }

@@ -225,7 +225,7 @@ fn guida_spenta(id: &str, copia: &Copia) -> Option<DrawingDisabledReason> {
         return Some(DrawingDisabledReason::ReadOnly);
     }
     copia.guide.ferme.map(|motivo| DrawingDisabledReason::Other {
-        text: format!("{}{}.", motivo[..1].to_uppercase(), &motivo[1..]),
+        text: motivo.frase().into(),
     })
 }
 

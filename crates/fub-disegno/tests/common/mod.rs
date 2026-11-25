@@ -408,6 +408,30 @@ fn pezzi(s: &str) -> Vec<Result<f64, String>> {
     out
 }
 
+/// Il testo `xml` con ogni ricetta (`<vectorcraft:recipe …>base64</…>`) al posto
+/// `@ricetta`, e le ricette lette come JSON; `None` se non ce n'è una. Una
+/// ricetta tiene i numeri del motore in `f64` interi: la libreria matematica di
+/// Windows ne dà l'ultima cifra diversa (0.8477139135405054 contro …055,
+/// 2026-11-25), e il confronto li vuole con la tolleranza degli altri numeri.
+fn ricette(xml: &str) -> Option<(String, Vec<Value>)> {
+    const APRE: &str = "<vectorcraft:recipe ";
+    const CHIUDE: &str = "</vectorcraft:recipe>";
+    let mut testo = String::new();
+    let mut lette = Vec::new();
+    let mut resto = xml;
+    while let Some(i) = resto.find(APRE) {
+        let dentro = i + resto[i..].find('>')? + 1;
+        let fine = dentro + resto[dentro..].find(CHIUDE)?;
+        let byte = vectorcraft_svg::base64_decode(resto[dentro..fine].trim())?;
+        lette.push(serde_json::from_slice(&byte).ok()?);
+        testo.push_str(&resto[..dentro]);
+        testo.push_str("@ricetta");
+        resto = &resto[fine..];
+    }
+    testo.push_str(resto);
+    (!lette.is_empty()).then_some((testo, lette))
+}
+
 fn uguali(a: &Value, o: &Value, dove: &str) -> Result<(), String> {
     match (a, o) {
         // `"*"` nell'atteso vale qualunque testo: i byte di un PNG dipendono dal
@@ -416,6 +440,14 @@ fn uguali(a: &Value, o: &Value, dove: &str) -> Result<(), String> {
         (Value::String(x), Value::String(y)) => {
             if x == y {
                 return Ok(());
+            }
+            if let (Some((tx, rx)), Some((ty, ry))) = (ricette(x), ricette(y)) {
+                uguali(&Value::String(tx), &Value::String(ty), dove)?;
+                return uguali(
+                    &Value::Array(rx),
+                    &Value::Array(ry),
+                    &format!("{dove}.ricetta"),
+                );
             }
             if let (Some(m), Some(n)) = (matrice(x), matrice(y)) {
                 return if m.iter().zip(n).all(|(p, q)| (p - q).abs() <= 1e-6) {
@@ -525,6 +557,25 @@ mod prove {
         let altro = json!({ "outOfGamut": [{ "deltaE": 13.897602, "count": 1 }], "x": 1.0034 });
         assert!(matches!(
             confronta_ops(&letta, &altro, None),
+            Confronto::Diverse(_)
+        ));
+    }
+
+    #[test]
+    fn una_ricetta_si_confronta_coi_numeri_e_non_coi_byte() {
+        // `{"frame":[0.8477139135405055]}` in base64, da Linux e da Windows.
+        let raw = |b64: &str| {
+            json!([{ "op": "add", "raw": format!(
+                "<g id=\"x\"><metadata><vectorcraft:recipe for=\"x\" v=\"1\">{b64}</vectorcraft:recipe></metadata></g>"
+            ) }])
+        };
+        let linux = raw("eyJmcmFtZSI6WzAuODQ3NzEzOTEzNTQwNTA1NV19");
+        let windows = raw("eyJmcmFtZSI6WzAuODQ3NzEzOTEzNTQwNTA1NF19");
+        assert_eq!(confronta_ops(&linux, &windows, None), Confronto::Uguali);
+        // `{"frame":[0.85]}`: un numero davvero diverso resta una differenza.
+        let lontano = raw("eyJmcmFtZSI6WzAuODVdfQ==");
+        assert!(matches!(
+            confronta_ops(&linux, &lontano, None),
             Confronto::Diverse(_)
         ));
     }

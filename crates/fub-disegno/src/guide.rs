@@ -44,7 +44,34 @@ pub(crate) struct GuideAperte {
     pub del_file: Vec<GuidaDelFile>,
     /// Perché le guide non si cambiano: `fub:guides` fuori grammatica, una
     /// radice ruotata o inclinata.
-    pub ferme: Option<&'static str>,
+    pub ferme: Option<Ferme>,
+}
+
+/// Perché il file tiene ferme le sue guide.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Ferme {
+    /// `fub:guides` è fuori grammatica.
+    FuoriGrammatica,
+    /// La radice è ruotata o inclinata.
+    Storta,
+}
+
+impl Ferme {
+    /// Il perché dentro una frase, che comincia minuscolo.
+    pub(crate) fn motivo(self) -> &'static str {
+        match self {
+            Ferme::FuoriGrammatica => "le guide del file sono fuori grammatica: non cambiano",
+            Ferme::Storta => "il disegno è ruotato o inclinato: le guide non cambiano",
+        }
+    }
+
+    /// Il perché da solo, come frase intera.
+    pub(crate) fn frase(self) -> &'static str {
+        match self {
+            Ferme::FuoriGrammatica => "Le guide del file sono fuori grammatica: non cambiano.",
+            Ferme::Storta => "Il disegno è ruotato o inclinato: le guide non cambiano.",
+        }
+    }
 }
 
 impl GuideAperte {
@@ -106,14 +133,14 @@ pub(crate) fn leggi(
         return g;
     };
     let Some(del_file) = parse_guides(&v) else {
-        g.ferme = Some("le guide del file sono fuori grammatica: non cambiano");
+        g.ferme = Some(Ferme::FuoriGrammatica);
         return g;
     };
     if del_file.is_empty() {
         return g;
     }
     if storta(radice) {
-        g.ferme = Some("il disegno è ruotato o inclinato: le guide non cambiano");
+        g.ferme = Some(Ferme::Storta);
         return g;
     }
     for d in &del_file {
@@ -163,7 +190,7 @@ fn spostamento(prima: &Document, poi: &Document, id: u32, verticale: bool) -> Op
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum NonSiScrive {
     /// Il file le tiene ferme ([`GuideAperte::ferme`]).
-    Ferme(&'static str),
+    Ferme(Ferme),
     /// Il gesto sposta, cambia di livello o toglie una guida bloccata.
     Bloccata,
 }
