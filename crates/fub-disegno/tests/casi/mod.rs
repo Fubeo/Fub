@@ -496,8 +496,13 @@ pub fn esegui(disegni: &Arc<Disegni>, caso: &Caso) -> Result<(), String> {
             // dal coseno della libreria di sistema, che fra Linux e Windows può differire di poco:
             // le operazioni si confrontano senza i byte dell'immagine, e i pixel li prova
             // l'oracolo qui sotto con la sua tolleranza.
+            // E le facce di un solido 3D a pari profondità possono venire scambiate
+            // (`common::facce_in_ordine`): anche quelle le prova l'oracolo.
             let (a, o) = if caso.fonte == FonteMappa::Effetto {
-                (common::senza_pixel(attese), common::senza_pixel(&ottenute))
+                (
+                    common::facce_in_ordine(&common::senza_pixel(attese)),
+                    common::facce_in_ordine(&common::senza_pixel(&ottenute)),
+                )
             } else {
                 (attese.clone(), ottenute.clone())
             };

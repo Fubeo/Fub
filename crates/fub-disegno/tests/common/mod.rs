@@ -155,6 +155,69 @@ pub fn confronta_ops(attese: &Value, ottenute: &Value, ammessa: Option<&str>) ->
     }
 }
 
+/// `v` con ogni fila di elementi vuoti fratelli (`<polygon …/><polygon …/>`) di un
+/// `raw` messa in ordine e senza `id`: per le facce di un solido 3D, che il motore
+/// dipinge dalla più lontana e che a pari profondità vengono nell'ordine che dà
+/// l'ultima cifra della libreria matematica (Windows ne scambia due nella
+/// rivoluzione, 2026-11-25). L'ordine giusto lo prova l'oracolo a pixel, che
+/// confronta col disegno del motore sullo stesso sistema.
+pub fn facce_in_ordine(v: &Value) -> Value {
+    match v {
+        Value::Object(o) => Value::Object(
+            o.iter()
+                .map(|(k, x)| match (k.as_str(), x) {
+                    ("raw", Value::String(t)) => (k.clone(), Value::String(file_in_ordine(t))),
+                    _ => (k.clone(), facce_in_ordine(x)),
+                })
+                .collect(),
+        ),
+        Value::Array(a) => Value::Array(a.iter().map(facce_in_ordine).collect()),
+        _ => v.clone(),
+    }
+}
+
+/// `xml` con ogni fila di elementi vuoti consecutivi in ordine, senza `id`.
+fn file_in_ordine(xml: &str) -> String {
+    let mut out = String::new();
+    let mut fila: Vec<String> = Vec::new();
+    let mut resto = xml;
+    let svuota = |fila: &mut Vec<String>, out: &mut String| {
+        fila.sort();
+        out.push_str(&fila.concat());
+        fila.clear();
+    };
+    while let Some(i) = resto.find('<') {
+        if i > 0 {
+            svuota(&mut fila, &mut out);
+            out.push_str(&resto[..i]);
+        }
+        resto = &resto[i..];
+        let Some(j) = resto.find('>') else { break };
+        let tag = &resto[..=j];
+        if tag.ends_with("/>") && !tag.starts_with("</") {
+            fila.push(senza_id(tag));
+        } else {
+            svuota(&mut fila, &mut out);
+            out.push_str(tag);
+        }
+        resto = &resto[j + 1..];
+    }
+    svuota(&mut fila, &mut out);
+    out.push_str(resto);
+    out
+}
+
+/// L'elemento `tag` senza il suo attributo `id`.
+fn senza_id(tag: &str) -> String {
+    match tag.find(" id=\"") {
+        Some(i) => match tag[i + 5..].find('"') {
+            Some(j) => format!("{}{}", &tag[..i], &tag[i + 5 + j + 1..]),
+            None => tag.to_string(),
+        },
+        None => tag.to_string(),
+    }
+}
+
 /// `v` con i byte di ogni immagine PNG incorporata (`data:image/png;base64,…`) al posto di
 /// `@pixel`: per i casi degli effetti a pixel, i cui pixel prova l'oracolo a pixel.
 pub fn senza_pixel(v: &Value) -> Value {
@@ -576,6 +639,24 @@ mod prove {
         let lontano = raw("eyJmcmFtZSI6WzAuODVdfQ==");
         assert!(matches!(
             confronta_ops(&linux, &lontano, None),
+            Confronto::Diverse(_)
+        ));
+    }
+
+    #[test]
+    fn due_facce_scambiate_sono_le_stesse_un_punto_diverso_no() {
+        let raw =
+            |dentro: &str| json!([{ "op": "add", "raw": format!("<g id=\"g\">{dentro}</g>") }]);
+        let a = raw("<polygon id=\"p1\" points=\"0,0 1,0 1,1\"/><polygon id=\"p2\" points=\"5,5 6,5 6,6\"/>");
+        let b = raw("<polygon id=\"q1\" points=\"5,5 6,5 6,6\"/><polygon id=\"q2\" points=\"0,0 1,0 1,1\"/>");
+        assert!(matches!(confronta_ops(&a, &b, None), Confronto::Diverse(_)));
+        assert_eq!(
+            confronta_ops(&facce_in_ordine(&a), &facce_in_ordine(&b), None),
+            Confronto::Uguali
+        );
+        let c = raw("<polygon id=\"q1\" points=\"5,5 6,5 6,7\"/><polygon id=\"q2\" points=\"0,0 1,0 1,1\"/>");
+        assert!(matches!(
+            confronta_ops(&facce_in_ordine(&a), &facce_in_ordine(&c), None),
             Confronto::Diverse(_)
         ));
     }
