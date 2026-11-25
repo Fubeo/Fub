@@ -5573,6 +5573,11 @@ async function openSezioneDesign(page, selettore) {
   }
   await page.waitForSelector(selettore);
   await page.evaluate(() => document.fonts.ready);
+  await scorriInCima(page, selettore);
+}
+
+/// La sezione `selettore` in cima al pannello che la contiene.
+async function scorriInCima(page, selettore) {
   // Scorre solo il primo contenitore scrollabile sopra la sezione (il pannello), non la pagina.
   // Il pannello si rifà quando arriva il motore (sezioni nuove sopra): si riscorre finché la
   // sezione resta in cima per due controlli di fila, al più dieci volte.
@@ -5679,16 +5684,8 @@ async function openSezioneConUno(page, selettore, sceglie = scegliPrimo) {
     return soggetto !== null && soggetto.textContent.trim() !== "" && !soggetto.textContent.includes("Il disegno");
   });
   await page.waitForSelector(selettore);
-  await page.evaluate((sel) => {
-    const el = document.querySelector(sel);
-    for (let p = el.parentElement; p && p !== document.body; p = p.parentElement) {
-      if (p.scrollHeight > p.clientHeight + 1 && /(auto|scroll)/.test(getComputedStyle(p).overflowY)) {
-        p.scrollTop += el.getBoundingClientRect().top - p.getBoundingClientRect().top - 8;
-        break;
-      }
-    }
-  }, selettore);
   await page.evaluate(() => document.fonts.ready);
+  await scorriInCima(page, selettore);
 }
 
 /// Le due forme sovrapposte di `?elabora=1` scelte col clic (il rettangolo, poi il cerchio con
