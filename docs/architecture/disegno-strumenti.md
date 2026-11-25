@@ -64,7 +64,12 @@ dice `busy`, tiene il tracciato aperto e disegna i segni del motore
 (`segniComeForma`, nello strato dell'anteprima, coi token del tema). Il
 ponte tiene il tracciato nella sua copia finché il gesto continua (stesso
 strumento, stessa revisione); Invio, Esc o lo strumento cambiato mandano il
-`commit` con il tasto (o senza) e l'esito è un passo solo. Con la
+`commit` con il tasto (o senza) e l'esito è un passo solo. Un comando
+chiesto da una persona chiude prima il tracciato (o il testo che si scrive)
+com'è, in un passo; una lettura di un pannello (`chiama` di
+`completo/esegui.ts`, `OpzioniComando.lettura` di `motore/sessione.ts`)
+invece aspetta che si chiuda: un pannello che si rifà dopo il clic non chiude
+il testo appena cominciato. Con la
 Selezione diretta lo stato porta i punti scelti (`DrawingToolState.anchors`).
 Il doppio clic segue VectorCraft: giù, su, giù, su e poi un evento
 `double_click` a parte. `gesti.ts` lo riconosce al secondo rilascio di uno

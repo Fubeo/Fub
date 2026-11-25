@@ -309,6 +309,48 @@ describe("un trascinamento non si interrompe (`trattieni`)", () => {
   });
 });
 
+describe("il testo che si scrive non si perde per una lettura (`lettura`)", () => {
+  const ordine = (host: FakeHost) =>
+    host.calls.filter((call) => call.gate === "drawingGesture" || call.gate === "drawingCommand").map((call) => call.gate);
+  const aperto = (chiuso: (esito: unknown) => void) => ({ chiusura: () => ({ ...GESTO, events: [] }), chiuso });
+
+  it("una lettura del pannello aspetta che il testo aperto finisca, poi parte", async () => {
+    const host = createFakeHost({ drawing: { gesto: (gesture) => esito(gesture.revision), comando: (request) => esito(request.revision) } });
+    const session = await apri(host);
+    const lascia = session.tieniAperto(aperto(() => {}));
+    // La sezione Trasforma che rilegge le preferenze dopo il clic del Testo.
+    const lettura = session.comando({ id: "disegno.prefs.get", selection: [], value: {} }, { lettura: true });
+    await giro();
+    expect(ordine(host)).toEqual([]);
+    // Chi scrive finisce (il testo si è chiuso da sé): la lettura parte, senza un commit in più.
+    lascia();
+    expect(await lettura).toEqual(esito("0"));
+    expect(ordine(host)).toEqual(["drawingCommand"]);
+  });
+
+  it("un comando chiesto da una persona chiude il testo prima di partire, e libera la lettura in attesa", async () => {
+    const host = createFakeHost({ drawing: { gesto: (gesture) => esito(gesture.revision), comando: (request) => esito(request.revision) } });
+    const session = await apri(host);
+    const chiuso = vi.fn();
+    session.tieniAperto(aperto(chiuso));
+    const lettura = session.comando({ id: "disegno.effect.list", selection: [], value: {} }, { lettura: true });
+    const comando = session.comando({ id: "disegno.spessore", selection: ["r-1"], value: 3 });
+    await Promise.all([lettura, comando]);
+    expect(chiuso).toHaveBeenCalledTimes(1);
+    expect(ordine(host)).toEqual(["drawingGesture", "drawingCommand", "drawingCommand"]);
+  });
+
+  it("chiusa col testo aperto: la lettura in attesa non parte", async () => {
+    const host = createFakeHost({ drawing: { comando: (request) => esito(request.revision) } });
+    const session = await apri(host);
+    session.tieniAperto(aperto(() => {}));
+    const lettura = session.comando({ id: "disegno.prefs.get", selection: [], value: {} }, { lettura: true });
+    await session.chiudi();
+    expect(await lettura).toBeNull();
+    expect(host.atGate("drawingCommand")).toHaveLength(0);
+  });
+});
+
 describe("la chiusura", () => {
   it("chiusa, la sessione non manda più niente", async () => {
     const host = createFakeHost({ drawing: { gesto: (gesture) => esito(gesture.revision) } });

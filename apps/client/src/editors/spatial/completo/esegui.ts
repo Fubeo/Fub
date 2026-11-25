@@ -166,11 +166,13 @@ export async function chiamaConArgomenti(
   id: string,
   valore: unknown,
   anteprima: boolean,
+  lettura = false,
 ): Promise<DrawingOutcome | ArgomentiRifiutati | null> {
   if (dipendenze.motore === null) return null;
   const sessione = await dipendenze.motore.pronta(ATTESA_MOTORE_MS);
   if (sessione === null) return null;
-  const esito = await sessione.comando({ id, selection: [...dipendenze.selezione()], value: valore, preview: anteprima });
+  const richiesta = { id, selection: [...dipendenze.selezione()], value: valore, preview: anteprima };
+  const esito = await (lettura ? sessione.comando(richiesta, { lettura }) : sessione.comando(richiesta));
   if (esito === null || ("kind" in esito && esito.kind === "assente")) return null;
   return esito;
 }
@@ -178,14 +180,15 @@ export async function chiamaConArgomenti(
 /// Manda il comando al motore, per una lettura: `null` se il motore non c'è,
 /// non risponde o non ne prende gli argomenti. Un comando che cambia il
 /// disegno, o che una persona ha chiesto, passa da `chiamaConArgomenti` e dice
-/// la frase del motore.
+/// la frase del motore. Un tracciato aperto, o un testo che si scrive, non si
+/// chiude: la lettura aspetta che finisca (`OpzioniComando` di `sessione.ts`).
 export async function chiama(
   dipendenze: DipendenzeComando,
   id: string,
   valore: unknown,
   anteprima: boolean,
 ): Promise<DrawingOutcome | null> {
-  const esito = await chiamaConArgomenti(dipendenze, id, valore, anteprima);
+  const esito = await chiamaConArgomenti(dipendenze, id, valore, anteprima, true);
   return esito === null || "kind" in esito ? null : esito;
 }
 

@@ -124,7 +124,7 @@ describe("color_guide: le letture della guida", () => {
     const ctx = contesto("#ff0000");
     sezione.disegna(ctx);
     await vi.waitFor(() => expect(passi(ctx.corpo).length).toBeGreaterThan(0));
-    expect(comando).toHaveBeenCalledWith(expect.objectContaining({ id: "disegno.color.harmony", value: expect.objectContaining({ color: "#ff0000", rule: "complementary", steps: 4, variation: "tintsShades", amount: 50 }) }));
+    expect(comando).toHaveBeenCalledWith(expect.objectContaining({ id: "disegno.color.harmony", value: expect.objectContaining({ color: "#ff0000", rule: "complementary", steps: 4, variation: "tintsShades", amount: 50 }) }), { lettura: true });
     // La guida non è una scrittura: nessun comando con anteprima falsa, nessun clic.
     expect(comando.mock.calls.every(([r]) => r.id.startsWith("disegno.")) && !esegui.mock.calls.length).toBe(true);
     expect(comando.mock.calls.some(([r]) => r.preview === false && r.id !== "disegno.color.harmony")).toBe(false);
@@ -166,8 +166,8 @@ describe("color_guide: le letture della guida", () => {
     sezione.disegna(ctx);
     await vi.waitFor(() => expect(passi(ctx.corpo).length).toBeGreaterThan(0));
     // Il colore di partenza è quello del riempimento attivo (bianco), letto da paint.proxies.
-    expect(comando).toHaveBeenCalledWith(expect.objectContaining({ id: "disegno.paint.proxies" }));
-    expect(comando).toHaveBeenCalledWith(expect.objectContaining({ id: "disegno.color.harmony", value: expect.objectContaining({ color: "#ffffff" }) }));
+    expect(comando).toHaveBeenCalledWith(expect.objectContaining({ id: "disegno.paint.proxies" }), { lettura: true });
+    expect(comando).toHaveBeenCalledWith(expect.objectContaining({ id: "disegno.color.harmony", value: expect.objectContaining({ color: "#ffffff" }) }), { lettura: true });
     expect(testo(ctx.corpo)).toContain(t("draw.guida.scegli.oggetto"));
     expect(passi(ctx.corpo)[0]!.disabled).toBe(true);
     passi(ctx.corpo)[0]!.click();
@@ -242,7 +242,7 @@ describe("color_guide: le letture della guida", () => {
     await vi.waitFor(() => expect(document.querySelector<HTMLButtonElement>('.kit-dialog [data-action="ok"]')!.disabled).toBe(false));
     document.querySelector<HTMLButtonElement>('.kit-dialog [data-action="ok"]')!.click();
     await vi.waitFor(() => expect(letture()).toBeGreaterThan(prima));
-    expect(comando).toHaveBeenLastCalledWith(expect.objectContaining({ id: "disegno.color.harmony", value: expect.objectContaining({ rule: "triad", steps: 10 }) }));
+    expect(comando).toHaveBeenLastCalledWith(expect.objectContaining({ id: "disegno.color.harmony", value: expect.objectContaining({ rule: "triad", steps: 10 }) }), { lettura: true });
     // La guida si ridisegna, e non scrive niente nel file: nessun clic, nessun comando che cambi il disegno.
     expect(esegui).not.toHaveBeenCalled();
     expect(comando.mock.calls.some(([r]) => r.preview === false && r.id !== "disegno.color.harmony")).toBe(false);

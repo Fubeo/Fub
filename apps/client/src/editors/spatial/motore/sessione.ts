@@ -154,7 +154,11 @@ export interface SessioneMotore {
   /// se la sessione è stata chiusa prima che l'esito arrivasse.
   gesto(gesture: GestoMotore): Promise<RispostaMotore>;
   comandi(selection: string[]): Promise<DrawingCommandInfo[] | MotoreAssente | null>;
-  comando(request: ComandoMotore): Promise<RispostaMotore>;
+  /// Un comando; con `lettura` (un pannello che legge, non una persona che
+  /// chiede) un tracciato aperto non si chiude: la lettura parte quando lui
+  /// si è chiuso, perché un clic arrivato mentre lei aspettava il motore non
+  /// perda il testo appena cominciato.
+  comando(request: ComandoMotore, opzioni?: OpzioniComando): Promise<RispostaMotore>;
   /// Un tracciato aperto: il primo sync che arriva lo chiude prima di
   /// partire (il `commit` alla revisione del gesto), una volta sola. Uno
   /// nuovo prende il posto di quello di prima; il ritorno lo toglie.
@@ -165,6 +169,12 @@ export interface SessioneMotore {
   /// Chiude l'istanza nel motore e si toglie dalla `DocumentSession`. Torna
   /// quando la chiusura è partita e ha risposto (o il suo tempo è scaduto).
   chiudi(): Promise<void>;
+}
+
+export interface OpzioniComando {
+  /// Il comando legge soltanto, per un pannello (`chiama` di
+  /// `completo/esegui.ts`).
+  readonly lettura?: boolean;
 }
 
 export interface OpzioniSessione {
@@ -266,6 +276,8 @@ class Sessione implements SessioneMotore {
   #testo: string;
   /// Il tracciato aperto da chiudere prima del prossimo sync.
   #aperto: TracciatoAperto | null = null;
+  /// Le letture che aspettano che il tracciato aperto si chiuda (`comando`).
+  #inAttesaDelChiuso: (() => void)[] = [];
   /// I trascinamenti in corso (`trattieni`) e la promessa che si risolve
   /// quando l'ultimo è lasciato.
   #trattenuti = 0;
@@ -339,9 +351,14 @@ class Sessione implements SessioneMotore {
     return this.#inFila(() => entro(this.#host.drawingCommands(this.instance, [...selection], this.#vault)));
   }
 
-  comando(request: ComandoMotore): Promise<RispostaMotore> {
+  comando(request: ComandoMotore, opzioni?: OpzioniComando): Promise<RispostaMotore> {
     // Un trascinamento in corso: il comando parte quando è finito.
-    if (this.#trattenuti > 0) return this.#lasciati.then(() => this.comando(request));
+    if (this.#trattenuti > 0) return this.#lasciati.then(() => this.comando(request, opzioni));
+    // Una lettura col tracciato aperto aspetta che si chiuda (chi scrive
+    // finisce, o un comando lo chiude), poi guarda di nuovo.
+    if (opzioni?.lettura === true && this.#aperto !== null && this.#stato === "aperta" && !NON_TOCCANO.has(request.id)) {
+      return new Promise<void>((chiuso) => this.#inAttesaDelChiuso.push(chiuso)).then(() => this.comando(request, opzioni));
+    }
     // Il motore scarta il gesto lasciato a metà quando un comando cambia il
     // disegno: il tracciato aperto o il testo che si scrive si chiudono prima,
     // in un passo, come prima di un sync (K6 T16).
@@ -354,7 +371,7 @@ class Sessione implements SessioneMotore {
     if (this.#stato !== "aperta") return () => {};
     this.#aperto = aperto;
     return () => {
-      if (this.#aperto === aperto) this.#aperto = null;
+      if (this.#aperto === aperto) this.#nessunAperto();
     };
   }
 
@@ -381,7 +398,7 @@ class Sessione implements SessioneMotore {
   async chiudi(): Promise<void> {
     if (this.#stato !== "aperta") return;
     this.#stato = "chiusa";
-    this.#aperto = null;
+    this.#nessunAperto();
     // I comandi in attesa partono e trovano la sessione chiusa.
     this.#trattenuti = 0;
     this.#lascia();
@@ -416,11 +433,17 @@ class Sessione implements SessioneMotore {
   #chiudiAperto(): void {
     const aperto = this.#aperto;
     if (aperto === null) return;
-    this.#aperto = null;
+    this.#nessunAperto();
     const gesture = aperto.chiusura();
     void this.#inFila(() =>
       entro(this.#host.drawingGesture(this.instance, { ...gesture, revision: this.revision() }, this.#vault)),
     ).then((esito) => aperto.chiuso(esito));
+  }
+
+  /// Il tracciato aperto non c'è più: le letture che lo aspettavano partono.
+  #nessunAperto(): void {
+    this.#aperto = null;
+    for (const chiuso of this.#inAttesaDelChiuso.splice(0)) chiuso();
   }
 
   /// Il testo intero alla revisione dopo: da dentro un lavoro della fila.
@@ -479,7 +502,7 @@ class Sessione implements SessioneMotore {
   #guasto(perche: MotoreAssente["perche"]): MotoreAssente {
     const assente: MotoreAssente = { kind: "assente", perche };
     this.#stato = assente;
-    this.#aperto = null;
+    this.#nessunAperto();
     this.#life.close();
     this.#chiuse.clear();
     avvisa(this.#assenti, assente);

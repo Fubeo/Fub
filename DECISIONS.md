@@ -3150,3 +3150,12 @@ La più recente in cima: data · piano · decisione · perché.
   cambiano. Il client li tiene nella griglia ricordata (`smartGuidesOff`,
   `snapPointOff`, `snapGlyph`, scritti solo se diversi da quelli di serie) e
   le tre voci sono in ≡ › Visualizza.
+- 2026-11-25 · K6 le letture dei pannelli non chiudono il testo · Deciso da
+  solo, per la CI della #313. Il banco a 800 px mostrava il difetto: la
+  sezione Trasforma chiedeva `prefs.get` poco prima del clic del Testo, la
+  richiesta arrivava alla sessione dopo, e la sessione chiudeva il testo
+  appena aperto (ogni comando chiude il tracciato aperto). Ora `chiama`
+  (le sole letture dei pannelli) passa `{ lettura: true }` e la sessione la fa
+  aspettare finché il tracciato aperto non si chiude; un comando chiesto da
+  una persona lo chiude ancora prima di partire, come vuole il motore
+  (`prefs.get` e `col_motore` annullano un gesto a metà).
