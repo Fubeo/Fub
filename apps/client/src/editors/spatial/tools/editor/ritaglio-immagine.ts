@@ -19,6 +19,7 @@
 
 import { openLifetime, type Lifetime } from "../../../../ui/lifetime";
 import { isWritingField } from "../../../../ui/field-history";
+import { composingKey } from "../../../../kit/ime";
 import { t } from "../../strings";
 import type { Bounds } from "../../scene/geometry";
 import { apply, compose, invert, type Matrix, type Point } from "../../scene/matrix";
@@ -342,7 +343,7 @@ export function installCropImage(ctx: EditorContext): void {
     applyCrop();
   }, { capture: true });
   ctx.life.listen(ctx.root, "keydown", (event: KeyboardEvent) => {
-    if (session === null || event.isComposing || isWritingField(event.target)) return;
+    if (session === null || composingKey(event) || isWritingField(event.target)) return;
     if (event.key === "Enter") {
       swallow(event);
       applyCrop();

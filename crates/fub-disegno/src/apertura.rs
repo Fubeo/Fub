@@ -1036,7 +1036,7 @@ fn linea_variabile(
         modifiche.push((
             dopo_il_nome,
             dopo_il_nome,
-            format!(" stroke-opacity=\"{}\"", attributo_xml(&valore)),
+            format!(" stroke-opacity=\"{}\"", fub_abi::html::escape(&valore)),
         ));
     }
     modifiche.push((
@@ -1044,17 +1044,10 @@ fn linea_variabile(
         dopo_il_nome,
         format!(
             " stroke=\"{}\" stroke-width=\"{peso}\" stroke-linecap=\"{cap}\" stroke-linejoin=\"{join}\"",
-            attributo_xml(&colore)
+            fub_abi::html::escape(&colore)
         ),
     ));
     Some(profilo)
-}
-
-/// `s` dentro un attributo fra virgolette doppie.
-fn attributo_xml(s: &str) -> String {
-    s.replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('"', "&quot;")
 }
 
 /// Il profilo di ogni linea a spessore variabile del file sul contorno del suo oggetto del motore.
