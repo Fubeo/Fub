@@ -31,7 +31,7 @@ describe("i cicli fra chunk", () => {
   });
 
   it("lascia passare i cicli noti e ferma gli altri", () => {
-    const cycles = [["drawing-commands", "styles"], ["search", "settings-panel"]];
+    const cycles = [["drawing-scene", "outline"], ["search", "settings-panel"]];
     expect(newChunkCycles(cycles)).toEqual([["search", "settings-panel"]]);
     expect(KNOWN_CYCLES.every((group) => group.join() === [...group].sort().join())).toBe(true);
   });

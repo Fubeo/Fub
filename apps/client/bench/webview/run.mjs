@@ -1888,12 +1888,12 @@ const SCENARIOS = {
   },
 };
 
-/// Ciò che si vedeva quando uno scenario è fallito: la finestra e il fuoco,
-/// accanto al referto.
+/// Ciò che si vedeva quando uno scenario è fallito: la finestra, il fuoco e
+/// il perché di un documento che non si apre, accanto al referto.
 async function keep(session, id) {
   try {
     writeFileSync(join(out, `${id}-fallito.png`), await session.screenshot());
-    const state = await session.execute("return { focus: document.activeElement?.className ?? null, title: document.title, palette: document.querySelector('.palette-list, .launcher-list')?.textContent?.slice(0, 400) ?? null, pane: document.querySelector('.pane.focus')?.textContent?.slice(0, 200) ?? null };");
+    const state = await session.execute("return { focus: document.activeElement?.className ?? null, title: document.title, palette: document.querySelector('.palette-list, .launcher-list')?.textContent?.slice(0, 400) ?? null, pane: document.querySelector('.pane.focus')?.textContent?.slice(0, 200) ?? null, error: document.querySelector('.pane.focus .document-surface-error details')?.textContent?.slice(0, 600) ?? null };");
     writeFileSync(join(out, `${id}-fallito.json`), JSON.stringify(state, null, 2) + "\n");
   } catch {
     // Una sessione già persa non ha niente da mostrare.

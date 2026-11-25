@@ -13,7 +13,6 @@
 /// all'avvio dell'app vera: nessuno dei due chunk legge l'altro al
 /// caricamento. Nomi dei chunk, in ordine alfabetico.
 export const KNOWN_CYCLES = [
-  ["drawing-commands", "styles"],
   ["drawing-scene", "outline"],
   ["formula", "grid-editor"],
   ["markdown-render", "ui-views"],

@@ -393,6 +393,12 @@ export default defineConfig({
           if (/\/src\/editors\/spatial\/(scene\/|painter\/|ink\/|number\.ts$)|\/node_modules\/perfect-freehand\//.test(id)) {
             return "drawing-scene";
           }
+          // La curva della pressione e lo stabilizzatore della penna: non
+          // importano niente, e la griglia dei disegni li legge al
+          // caricamento. Senza una regola finivano nel chunk automatico
+          // `styles`, in ciclo con `drawing-commands`: la lavagna non si
+          // apriva più («Cannot access … before initialization»).
+          if (/\/src\/ink\/input\/(pressure|stabilizer)\.ts$/.test(id)) return "ink-input";
           // La geometria dei disegni senza DOM: i nodi dei tracciati, la
           // spina dei tratti, le forme e il loro riconoscimento, le aree
           // booleane, lo scostamento, la semplificazione, la Curvatura, i
@@ -427,8 +433,11 @@ export default defineConfig({
           // trasformazione, le forme coi parametri, il contagocce, le guide
           // intelligenti e la griglia; le librerie di simboli, i nodi di
           // Bézier, dove va la barra della selezione e l'ordine cambiato.
+          // E le risorse, i simboli, l'albero dei riquadri, le forme dei
+          // ritagli e gli stili: senza una regola Rollup li metteva nel chunk
+          // `styles`, in ciclo con questo.
           // Dipendono dal formato e dalla geometria, e l'editor li chiama.
-          if (/\/src\/editors\/spatial\/(tools\/(hit|hit\/[a-z-]+|clips|edit|palette|arrange|outline|transform|topath|look|look\/[a-z-]+|apply|inkshape|paths|width|combine|nodable|scissors|builder|place|layers|selecting|naming|trace-ops|rich|wrap|measure|text-path|boards|swatches|gradients|tips|crop|masks|effects|hatches|patterns|connectors|connector-ops|connector-copies|label-hosts|labels|follow|repeat-ops|symmetry|clipboard|clipboard\/[a-z-]+|history|audit|attributes|quantity|export-plan|frame|reshape|eyedropper|guides|grid|symbol-library|symbol-libraries|bezier|bar|order-changes)|describe)\.ts$/.test(id)) {
+          if (/\/src\/editors\/spatial\/(tools\/(hit|hit\/[a-z-]+|clips|edit|palette|arrange|outline|transform|topath|look|look\/[a-z-]+|apply|inkshape|paths|width|combine|nodable|scissors|builder|place|layers|selecting|naming|trace-ops|rich|wrap|measure|text-path|boards|swatches|gradients|tips|crop|masks|effects|hatches|patterns|connectors|connector-ops|connector-copies|label-hosts|labels|follow|repeat-ops|symmetry|clipboard|clipboard\/[a-z-]+|history|audit|attributes|quantity|export-plan|frame|reshape|eyedropper|guides|grid|symbol-library|symbol-libraries|bezier|bar|order-changes|resources|symbols|box-tree|clip-shapes|styles)|describe)\.ts$/.test(id)) {
             return "drawing-commands";
           }
           // I pannelli dei disegni: le proprietà coi loro campi e coi colori
