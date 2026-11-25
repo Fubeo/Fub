@@ -32,7 +32,7 @@
 // è quella della 0110: *il compilatore prende la variante che non vuol dire
 // niente, il conto prende la variante che nessuno ha elencato, il test prende
 // il comportamento*. Qui c'è il terzo.
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FakeHost } from "./host/fake";
 import type { IndexQuery } from "./host/contract";
 // La finestra si legge da `rules/`, che non tocca il DOM: importare il pannello
@@ -101,14 +101,24 @@ function folderVault(count: number): Record<string, string> {
   return file;
 }
 
+/// Lo smontaggio della shell montata per ultima: i suoi timer (la riga dei
+/// suggerimenti) non devono scattare dopo che l'ambiente se n'è andato.
+let stop: (() => void) | null = null;
+afterAll(() => {
+  stop?.();
+  stop = null;
+});
+
 async function start(file: Record<string, string>): Promise<FakeHost> {
+  stop?.();
+  stop = null;
   vi.resetModules();
   box.host = createFakeHost({ file });
   const body = /<body[^>]*>([\s\S]*)<\/body>/.exec(rawHtml);
   if (!body) throw new Error("index.html non ha un body");
   document.body.innerHTML = body[1].replace(/<script[\s\S]*?<\/script>/g, "");
   const main = await import("./main");
-  await main.startup;
+  stop = await main.startup;
   for (let i = 0; i < 8; i += 1) await Promise.resolve();
   await new Promise((r) => setTimeout(r, 0));
   return box.host;
