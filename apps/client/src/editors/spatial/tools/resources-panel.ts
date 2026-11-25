@@ -396,10 +396,17 @@ export function createResourcesPanel(life: Lifetime, opzioni: OpzioniPannelloRis
   element.className = "draw-properties draw-resources";
   element.id = identifier("draw-resources");
   element.tabIndex = -1;
-  element.setAttribute("aria-label", t("draw.resources.aria"));
+  // Il titolo del pannello, nascosto alla vista: le sezioni sotto sono `h3`, e
+  // senza un `h2` sopra, nel cassetto stretto dove la barra laterale manca,
+  // l'ordine dei titoli salterebbe un livello (come il Design, che ha il suo).
+  const heading = document.createElement("h2");
+  heading.className = "sr-only";
+  heading.id = identifier("draw-resources-title");
+  heading.textContent = t("draw.resources.aria");
+  element.setAttribute("aria-labelledby", heading.id);
   const scroller = document.createElement("div");
   scroller.className = "draw-properties-scroll";
-  element.append(scroller);
+  element.append(heading, scroller);
 
   const campioni = sezioneCampioni(opzioni.modello);
   let sezioni: Sezioni | null = null;

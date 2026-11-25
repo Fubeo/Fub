@@ -68,6 +68,19 @@ const sezione = (id: string, extra: Partial<Sezione> = {}): Sezione => ({
 /// Gli id delle sezioni montate, nell'ordine in cui stanno nella scheda.
 const idMontati = (el: HTMLElement): string[] => [...el.querySelectorAll<HTMLElement>(".draw-properties-section")].map((each) => each.dataset.section ?? "");
 
+describe("il titolo del pannello", () => {
+  it("è un h2 che dà il nome al pannello, sopra i titoli h3 delle sezioni", () => {
+    const panel = pannello(modello(SWATCH));
+    const titolo = panel.element.querySelector("h2")!;
+    expect(titolo.textContent).toBe("Risorse");
+    expect(panel.element.getAttribute("aria-labelledby")).toBe(titolo.id);
+    const livelli = [...panel.element.querySelectorAll("h2, h3")].map((each) => each.tagName);
+    expect(livelli[0]).toBe("H2");
+    expect(livelli.slice(1).every((each) => each === "H3")).toBe(true);
+    expect(livelli.length).toBeGreaterThan(1);
+  });
+});
+
 describe("i campioni del documento", () => {
   it("li legge dalle risorse con un nome e un colore", () => {
     expect(campioniDel(modello(SWATCH, SWATCH_DUE))).toEqual([
