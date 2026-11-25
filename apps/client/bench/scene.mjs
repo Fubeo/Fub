@@ -5784,6 +5784,15 @@ async function openSezioniTesto(page) {
   await page.waitForSelector("#surface-panel-draw-design:not([hidden]) .draw-type .kit-font-button");
   await page.locator("#surface-panel-draw-design .draw-type").scrollIntoViewIfNeeded();
   await page.evaluate(() => document.fonts.ready);
+  // Il testo scritto si salva dopo una pausa: su una macchina lenta il
+  // salvataggio cade fra gli scatti («Da salvare: 1», poi «Tutto salvato»).
+  await aspettaTuttoSalvato(page);
+}
+
+/// Nessun documento aperto ancora da salvare: l'indicatore della barra di
+/// stato non è più occupato.
+async function aspettaTuttoSalvato(page) {
+  await page.waitForFunction(() => document.querySelector("#status-saving")?.dataset.tone !== "busy", null, { timeout: 15000 });
 }
 
 /// Il Testo del Completo (K6 T16, giro 1): la voce «Testo (Completo)» della casella del testo, un
