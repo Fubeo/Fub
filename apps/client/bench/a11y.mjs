@@ -794,10 +794,31 @@ async function inspectKeyboard(page) {
         actual = await readActual();
       }
       if (actual?.application && actual.probe !== expected.probe && actual.probe === previousProbe) {
+        // Il Tab trattenuto può cambiare la scena: sul foglio del disegno
+        // nasconde barra e colonna, come in VectorCraft. I numeri si rifanno
+        // allora sui controlli rimasti, e l'uscita attesa è il primo
+        // controllo che nel documento segue l'applicazione, fuori da lei.
+        await page.evaluate(() => document.activeElement?.closest('[role="application"]')?.setAttribute("data-a11y-uscita", ""));
         await page.keyboard.press("End");
         await page.keyboard.press("Tab");
-        await refreshProbes();
+        candidates = await refreshProbes();
+        const after = await page.evaluate(() => {
+          const app = document.querySelector("[data-a11y-uscita]");
+          if (!app) return null;
+          app.removeAttribute("data-a11y-uscita");
+          for (const one of document.querySelectorAll("[data-a11y-probe]")) {
+            if (!app.contains(one) && (app.compareDocumentPosition(one) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0) return one.dataset.a11yProbe;
+          }
+          return "";
+        });
         actual = await readActual();
+        // L'applicazione era l'ultima fermata: il percorso è finito.
+        if (after === "") break;
+        const next = candidates.find((one) => one.probe === after);
+        if (next) {
+          expected = next;
+          previousApp = null;
+        }
       }
       // Un'applicazione che porta il Tab sui suoi figli in un ordine suo (la
       // lavagna: le schede in ordine di lettura, non del documento) si

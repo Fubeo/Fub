@@ -33,7 +33,11 @@ describe("le risposte delle famiglie del banco", () => {
     // il rettangolo, com'è il motore vero (il clipPath in `fub-defs`, il `<g clip-path>`).
     // Le letture che il Completo fa da sé all'apertura (la Guida colori e i Temi del Design:
     // `paint.proxies`, `color.harmony`, `colorTheme.list`) e la rotazione della finestra «Ruota…»
-    // (`trasforma.json`): senza risposta la sessione del banco si darebbe per spenta.
+    // (`trasforma.json`): senza risposta la sessione del banco si darebbe per spenta. Per la
+    // stessa ragione la lista dei simboli (`simboli.json`), vuota: la leggono la sezione Simboli
+    // e la fila del Simbolismo. E le Opzioni fusione di serie (`dinamici.json`), che la sezione
+    // Fusione legge appena qualcosa è scelto, e la regola di riempimento (`dati.json`) della
+    // sezione Attributi, e la pila degli effetti (`effetti.json`) della sezione Aspetto.
     expect(RISPOSTE.map((r) => r.comando)).toEqual([
       "disegno.transparency.set",
       "disegno.stroke.set",
@@ -56,6 +60,9 @@ describe("le risposte delle famiglie del banco", () => {
       "disegno.paint.proxies",
       "disegno.color.harmony",
       "disegno.colorTheme.list",
+      "disegno.attributes.info",
+      "disegno.object.blend.info",
+      "disegno.effect.list",
       "disegno.shape.rectangle",
       "disegno.object.compoundShape.make",
       "disegno.select.same.fillColor",
@@ -63,6 +70,7 @@ describe("le risposte delle famiglie del banco", () => {
       "disegno.select.allOnArtboard",
       "disegno.select.object.textObjects",
       "disegno.strumento.stato",
+      "disegno.symbol.list",
       "disegno.text.setRangeStyle",
       "disegno.text.setStyle",
       "disegno.path.convertAnchors",
@@ -90,6 +98,10 @@ describe("le risposte delle famiglie del banco", () => {
     expect(elenco.presets.filter((p) => !p.builtIn).map((p) => p.name)).toEqual(["Mare"]);
     expect(rispostaDiFamiglia(richiesta("disegno.gradient.presets.save", { name: "Lago" })).reading).toEqual({ name: "Lago" });
     expect(rispostaDiFamiglia(richiesta("disegno.strumento.stato", { strumento: "lasso" })).state?.cursor).toBe("arrow");
+    expect(rispostaDiFamiglia(richiesta("disegno.symbol.list", {})).reading).toEqual({ symbols: [] });
+    expect(rispostaDiFamiglia(richiesta("disegno.object.blend.info", {})).reading).toMatchObject({ target: "defaults" });
+    expect(rispostaDiFamiglia(richiesta("disegno.attributes.info", {})).reading).toEqual({ fillRule: "nonZero" });
+    expect(rispostaDiFamiglia(richiesta("disegno.effect.list", {})).reading).toEqual({ applied: [{ effects: [], items: [] }] });
   });
 
   it("preparare una famiglia risponde pronta; una famiglia che non c'è è bad_args", () => {

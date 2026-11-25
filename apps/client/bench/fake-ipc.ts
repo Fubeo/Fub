@@ -1213,9 +1213,11 @@ function benchDrawingOutcome(gesture: DrawingGesture, text: string): DrawingOutc
   if (gesture.phase !== "commit") return outcome;
   const vector = GESTURE_VECTORS.find((each) => each.gesture.tool === gesture.tool && each.input === text);
   if (vector === undefined) {
-    // Il clic di Selezione sceglie ciò che sta sotto il punto, come il motore (K6 T15, giro 2); gli altri
-    // gesti senza vettore non cambiano niente.
-    const scelta = gesture.tool === "select" ? selezioneDelClic(gesture) : null;
+    // Il clic di Selezione sceglie ciò che sta sotto il punto, come il motore (K6 T15, giro 2): la
+    // Selezione di Fub e quella del Completo (`selection` del motore), che la sostituisce nella
+    // colonna. Gli altri gesti senza vettore non cambiano niente.
+    const selezione = gesture.tool === "select" || (typeof gesture.tool === "object" && gesture.tool.engine.id === "selection");
+    const scelta = selezione ? selezioneDelClic(gesture) : null;
     return scelta === null ? { ...outcome, refused: "empty" } : { ...outcome, selection: scelta };
   }
   const names = new Map<string, string>();
@@ -1244,6 +1246,60 @@ function benchLivelli(testo: string): { id: number; name: string; kind: "Layer";
     const locked = /\bfub:locked="true"/.test(attributi);
     return [{ id: indice + 1, name: id, kind: "Layer" as const, visible, locked, children: [] as [] }];
   });
+}
+
+/// Seleziona tutto e Deseleziona sul disegno del banco: il Completo li manda al motore con
+/// Ctrl+A e Esc. Tutto vuol dire gli oggetti in cima al disegno o in cima a un livello
+/// visibile e non bloccato, senza le risorse di `<defs>` e senza gli oggetti bloccati, come
+/// il motore vero. `null` per gli altri comandi.
+function benchSelezioneOutcome(request: DrawingCommandRequest, testo: string): DrawingOutcome | null {
+  if (request.id !== "disegno.select.all" && request.id !== "disegno.select.none") return null;
+  const esito: DrawingOutcome = {
+    revision: request.revision, preview: null, ops: null, selection: [], losses: [], refused: null, frame: null,
+  };
+  if (request.id === "disegno.select.none") return esito;
+  const radice = new DOMParser().parseFromString(testo, "image/svg+xml").documentElement;
+  const scelti: string[] = [];
+  const raccogli = (padre: Element): void => {
+    for (const figlio of padre.children) {
+      const nome = figlio.localName;
+      if (nome === "defs" || nome === "metadata" || nome === "title" || nome === "desc" || nome === "style") continue;
+      if (figlio.getAttribute("fub:locked") === "true") continue;
+      if (nome === "g" && figlio.hasAttribute("fub:layer")) {
+        if (figlio.getAttribute("display") !== "none") raccogli(figlio);
+        continue;
+      }
+      const id = figlio.getAttribute("id");
+      if (id !== null && id !== "") scelti.push(id);
+    }
+  };
+  raccogli(radice);
+  return { ...esito, selection: scelti };
+}
+
+/// `disegno.document.node` sul disegno del banco: la lettura di un oggetto, che le sezioni del Design
+/// chiedono appena qualcosa è scelto (Contorno, Quota, Oggetti sul tracciato). Ha l'id e il tipo
+/// e, se l'oggetto ha un contorno, lo spessore e le opzioni come le rende il motore
+/// (`crates/fub-disegno/src/famiglie/nucleo.rs`). Niente quota né oggetti sul tracciato: quelle
+/// sezioni non ci sono. Un id che il disegno non ha è un rifiuto (`unmapped`). `null` per gli
+/// altri comandi.
+function benchNodoOutcome(request: DrawingCommandRequest, testo: string): DrawingOutcome | null {
+  if (request.id !== "disegno.document.node") return null;
+  const esito: DrawingOutcome = {
+    revision: request.revision, preview: null, ops: null, selection: request.selection, losses: [], refused: null, frame: null,
+  };
+  const id = (request.value as { id?: unknown } | null)?.id;
+  const radice = new DOMParser().parseFromString(testo, "image/svg+xml").documentElement;
+  const nodo = typeof id === "string" ? [...radice.querySelectorAll("[id]")].find((el) => el.getAttribute("id") === id) : undefined;
+  if (nodo === undefined) return { ...esito, refused: "unmapped" };
+  const lettura: Record<string, unknown> = { id, type: nodo.localName };
+  const tratto = nodo.getAttribute("stroke");
+  if (tratto !== null && tratto !== "none") {
+    const trattini = (nodo.getAttribute("stroke-dasharray") ?? "").split(/[\s,]+/).filter(Boolean).map(Number).filter(Number.isFinite);
+    lettura.strokeWidth = Number(nodo.getAttribute("stroke-width") ?? "1");
+    lettura.strokeOptions = { dash: trattini, dashOffset: 0, miterLimit: 10, align: "center", arrowScale: [100, 100], canAlign: nodo.localName !== "path" && nodo.localName !== "line" && nodo.localName !== "polyline" };
+  }
+  return { ...esito, reading: lettura };
 }
 
 /// I comandi della famiglia `livelli` sul disegno del banco (K6 T15, giro 4), con la regola del motore vero
@@ -1321,11 +1377,15 @@ function benchDrawingEngine(): DrawingFake | undefined {
     // Il comando delle scene della finestra ha la sua risposta; gli altri
     // comandi del Disegno completo hanno quelle di `disegno-famiglie/`, e
     // `unserved` un comando che non ne ha una.
+    // Le preferenze del motore rispondono sempre: il Completo le legge appena
+    // si apre (`disegno.prefs.get`, la sezione Trasforma), e un `unserved` a
+    // una richiesta della sessione aperta la ferma come motore spento.
+    // Seleziona tutto e Deseleziona leggono la copia del disegno.
     // I livelli (K6 T15, giro 4) leggono e cambiano la copia del disegno, come il motore vero.
     comando: (request, copia) =>
-      benchStatoCoiPunti(request) ?? benchLivelliOutcome(request, copia.text) ?? (request.id === BENCH_WINDOW_COMMAND
+      benchStatoCoiPunti(request) ?? benchSelezioneOutcome(request, copia.text) ?? benchNodoOutcome(request, copia.text) ?? benchLivelliOutcome(request, copia.text) ?? (request.id === BENCH_WINDOW_COMMAND
         ? benchWindowOutcome(request)
-        : MOTORE_PARAM !== null && request.id.startsWith("disegno.prefs.")
+        : request.id.startsWith("disegno.prefs.")
           ? benchPrefsOutcome(request)
           : rispostaDiFamiglia(request)),
   };

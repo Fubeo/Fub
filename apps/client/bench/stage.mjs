@@ -351,6 +351,10 @@ export async function assertCsp(page) {
 /// chiedere un peso che non era servito prima), la quiete per ultima perché è
 /// l'unica cosa che tocca la pagina e deve toccarla il meno possibile.
 export async function prepareScene(page, scene, light, base, url) {
+  // Una scena può bloccare una richiesta per fotografare un guasto (il
+  // Completo che non si carica): il blocco è della pagina, e la pagina passa
+  // alla scena dopo. Si toglie prima di ogni scena.
+  await page.unrouteAll({ behavior: "ignoreErrors" });
   await page.goto(url(base, scene, light), { waitUntil: "load" });
   // Di solito si arriva quando l'avvio è finito. Una scena che fotografa
   // l'avvio stesso (lo strato in attesa, il guasto) non lo vedrà mai finire:

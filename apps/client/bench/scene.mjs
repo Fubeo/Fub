@@ -5312,9 +5312,21 @@ async function openDrawing(page) {
 /// Il bottone «Spazio di lavoro» della banda (K6 T7), col suo menu aperto.
 /// Il primo oggetto scelto da tastiera (`Home`), come lo sceglie chi usa la tastiera.
 async function scegliPrimo(page) {
+  // `Home` sceglie il primo oggetto coi tasti di Fub. Col motore pronto i tasti
+  // sono quelli di VectorCraft, che non hanno `Home`: allora si sceglie
+  // l'ellisse, il primo oggetto, col clic della Selezione. La barra di stato
+  // dice «1 di N scelti» quando la scelta c'è; una scena senza la barra resta
+  // com'era: un tasto e 300 ms. Con l'indice di prova (`?indice=prova`) la
+  // Selezione del motore non c'è e neanche il clic sceglie: la scena va avanti
+  // senza scelta, come prima.
   await page.focus(".draw-editor .draw-surface");
   await page.keyboard.press("Home");
   await page.waitForTimeout(300);
+  if (!(await page.$('[data-surface-item="objects"]'))) return;
+  const scelto = await page
+    .waitForFunction(() => /\bscelt|selected/.test(document.querySelector('[data-surface-item="objects"]')?.textContent ?? ""), null, { timeout: 1500 })
+    .then(() => true, () => false);
+  if (!scelto) await sceltaConIlClic(page).catch(() => undefined);
 }
 
 /// Il menu ≡ del Completo con Oggetto aperto (K6 T9a): le voci dell'indice di
@@ -5336,14 +5348,21 @@ async function openMenuOggetto(page) {
   await page.evaluate(() => document.fonts.ready);
 }
 
-/// La tavolozza di Ctrl+/ con la ricerca «sposta» (K6 T9a): le voci che
+/// La ricerca dei comandi dal menu ≡: col motore Ctrl+/ è «Aggiungi nuovo riempimento»,
+/// come in VectorCraft, e la ricerca si apre solo dal menu.
+async function apriRicercaComandi(page) {
+  await page.click('.draw-header button[aria-label="Disegno"]');
+  await page.locator("#context-menu [role='menuitem']", { hasText: "Cerca un comando" }).first().click();
+  await page.waitForSelector(".draw-commands-dialog .draw-commands-row");
+}
+
+/// La tavolozza del menu ≡ con la ricerca «sposta» (K6 T9a): le voci che
 /// cominciano così, col loro posto, il tasto e il perché di quella spenta.
 async function openTavolozza(page) {
   await openDrawing(page);
   // Un oggetto scelto, come nello stato «un punto scelto» del prototipo.
   await scegliPrimo(page);
-  await page.keyboard.press("Control+/");
-  await page.waitForSelector(".draw-commands-dialog .draw-commands-row");
+  await apriRicercaComandi(page);
   await page.fill(".draw-commands-dialog .draw-commands-field input", "sposta");
   await page.waitForFunction(() => document.querySelectorAll(".draw-commands-dialog .draw-commands-row").length >= 5);
   await page.evaluate(() => document.fonts.ready);
@@ -5459,6 +5478,9 @@ async function openRailFlyout(page, slot) {
 /// prima voce è di Fub (`rect`) o del motore (`motore:rectangle`): si legge dal DOM.
 async function openFormeTendina(page) {
   await openDrawing(page);
+  // Prima le caselle del motore: finché non arrivano la casella è quella di Fub, `rect`, che poi
+  // lascia il posto a `motore:rectangle`.
+  await page.waitForSelector('.draw-rail .kit-rail-slot[data-slot="motore:directSelection"]');
   const selettore = '.draw-rail .kit-rail-slot[data-slot="motore:rectangle"], .draw-rail .kit-rail-slot[data-slot="rect"]';
   await page.waitForSelector(selettore);
   const slot = await page.evaluate((sel) => document.querySelector(sel).dataset.slot, selettore);
@@ -5489,7 +5511,7 @@ async function openSezioneDesign(page, selettore) {
     await openDesignoScelto(page);
   } else {
     await openDrawing(page);
-    await page.click('.draw-rail [aria-label="Selezione"]');
+    await page.click(SELEZIONE_DELLA_ROTAIA);
     const foglio = await page.locator(".draw-editor .draw-surface").first().boundingBox();
     if (!foglio) throw new Error("il foglio del disegno non c'è");
     await page.mouse.click(foglio.x + 30, foglio.y + 30);
@@ -5546,8 +5568,8 @@ const rigaDelLivello = (nome) => `.draw-objects-tree .draw-object[aria-level="1"
 async function openLivelli(page) {
   await openDrawing(page);
   await schedaLivelli(page);
-  // Nel Completo il pulsante dei livelli sta nel «…» della barra: lo si preme da DOM, il menu è lo stesso.
-  await page.$eval(".draw-editor .draw-layer-button", (button) => button.click());
+  // Nel Completo «Nuovo livello» sta nel menu della scheda Livelli, come in VectorCraft.
+  await page.click(".draw-objects-menu:visible");
   await page.click(`#context-menu [role^="menuitem"]:has-text("Nuovo livello")`);
   await page.waitForSelector(rigaDelLivello("Livello 2"));
   await page.evaluate(() => document.fonts.ready);
@@ -5637,6 +5659,8 @@ async function sceltaElaborazione(page, voce) {
       if (maiusc) await p.keyboard.down("Shift");
       await p.mouse.click(x, y);
       if (maiusc) await p.keyboard.up("Shift");
+      // Col motore la scelta torna dopo il gesto: il clic con Maiusc parte da quella del primo.
+      if (!maiusc) await p.waitForFunction(() => /\b1 di \d+ scelt/.test(document.body.innerText), null, { timeout: 4000 }).catch(() => {});
     }
     await p.waitForFunction(() => /\b2 di \d+ scelt/.test(document.body.innerText), null, { timeout: 4000 }).catch(() => {
       throw new Error("il clic con Maiusc non sceglie le due forme");
@@ -5713,7 +5737,8 @@ async function scriviColTesto(page) {
   // La casella del testo ha la tendina solo quando le caselle del motore sono arrivate: prima è
   // quella del Testo di Fub, da sola.
   await page.waitForSelector('.draw-rail .kit-rail-slot[data-slot="motore:directSelection"]');
-  await openRailFlyout(page, "text");
+  // La casella del testo mostra il Testo del Completo, `motore:type`.
+  await openRailFlyout(page, "motore:type");
   await page.click(".kit-rail-flyout [role='menuitemradio'][data-item='motore:type'], .kit-rail-flyout [role='menuitemradio']:has-text('Testo (Completo)')");
   const foglio = await page.locator(".draw-editor .draw-surface").boundingBox();
   await page.mouse.click(foglio.x + foglio.width * 0.3, foglio.y + foglio.height * 0.7);
@@ -5787,8 +5812,7 @@ async function openUgualeTratto(page) {
 async function openSaturaFinestra(page) {
   await openDrawing(page);
   await scegliPrimo(page);
-  await page.keyboard.press("Control+/");
-  await page.waitForSelector(".draw-commands-dialog .draw-commands-row");
+  await apriRicercaComandi(page);
   await page.fill(".draw-commands-dialog .draw-commands-field input", "satura");
   await page.locator(".draw-commands-dialog .draw-commands-row", { hasText: "Satura…" }).first().click();
   await page.waitForSelector(".kit-dialog.draw-effect-dialog .kit-number-input");
@@ -5869,8 +5893,7 @@ async function openSpostaTracciato(page) {
   await openDrawing(page);
   await page.waitForSelector('.draw-rail .kit-rail-slot[data-slot="motore:directSelection"]');
   await scegliPrimo(page);
-  await page.keyboard.press("Control+/");
-  await page.waitForSelector(".draw-commands-dialog .draw-commands-row");
+  await apriRicercaComandi(page);
   await page.fill(".draw-commands-dialog .draw-commands-field input", "sposta tracciato");
   await page.locator(".draw-commands-dialog .draw-commands-row", { hasText: "Sposta tracciato" }).first().click();
   await page.waitForSelector('.kit-dialog.draw-effect-dialog [data-action="ok"]:not([disabled])');
@@ -5939,9 +5962,13 @@ async function openRisorse(page) {
 /// punto vuoto del foglio e seleziona tutto: l'ispettore mostra il Design con la
 /// selezione (K6 T10). Il clic su una forma non la sceglie nel Completo di
 /// oggi, e il punto singolo del prototipo è di T12.
+/// La Selezione della colonna: quella di Fub, o quella del Completo col motore
+/// acceso (`strumento:selection` dei testi del nucleo, «(Completo)» la distingue).
+const SELEZIONE_DELLA_ROTAIA = '.draw-rail [aria-label="Selezione"], .draw-rail [aria-label="Selezione (Completo)"]';
+
 async function openDesignoScelto(page) {
   await openDesignoVuoto(page);
-  await page.click('.draw-rail [aria-label="Selezione"]');
+  await page.click(SELEZIONE_DELLA_ROTAIA);
   const foglio = await page.locator(".draw-editor .draw-surface").first().boundingBox();
   if (!foglio) throw new Error("il foglio del disegno non c'è");
   await page.mouse.click(foglio.x + 30, foglio.y + 30);
