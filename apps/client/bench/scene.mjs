@@ -5313,20 +5313,58 @@ async function openDrawing(page) {
 /// Il primo oggetto scelto da tastiera (`Home`), come lo sceglie chi usa la tastiera.
 async function scegliPrimo(page) {
   // `Home` sceglie il primo oggetto coi tasti di Fub. Col motore pronto i tasti
-  // sono quelli di VectorCraft, che non hanno `Home`: allora si sceglie
-  // l'ellisse, il primo oggetto, col clic della Selezione. La barra di stato
-  // dice «1 di N scelti» quando la scelta c'è; una scena senza la barra resta
-  // com'era: un tasto e 300 ms. Con l'indice di prova (`?indice=prova`) la
-  // Selezione del motore non c'è e neanche il clic sceglie: la scena va avanti
-  // senza scelta, come prima.
+  // sono quelli di VectorCraft, che non hanno `Home`, e il motore può essere
+  // pronto prima o dopo il tasto. Allora si sceglie l'ellisse, il primo
+  // oggetto: col clic della Selezione del motore se la colonna ce l'ha, se no
+  // (l'indice di prova non ha strumenti) dalla scheda Livelli. La barra di
+  // stato dice «1 di N scelti» quando la scelta c'è; una scena senza la barra
+  // resta com'era: un tasto e 300 ms.
   await page.focus(".draw-editor .draw-surface");
   await page.keyboard.press("Home");
   await page.waitForTimeout(300);
   if (!(await page.$('[data-surface-item="objects"]'))) return;
-  const scelto = await page
+  const scelta = () => page
     .waitForFunction(() => /\bscelt|selected/.test(document.querySelector('[data-surface-item="objects"]')?.textContent ?? ""), null, { timeout: 1500 })
     .then(() => true, () => false);
-  if (!scelto) await sceltaConIlClic(page).catch(() => undefined);
+  if (await scelta()) return;
+  const conStrumentiDelMotore = await page.evaluate(() => [...document.querySelectorAll(".draw-rail button")]
+    .some((b) => `${b.dataset.tool ?? ""} ${b.dataset.tools ?? ""}`.includes("motore:")));
+  if (conStrumentiDelMotore) {
+    await sceltaConIlClic(page).catch(() => undefined);
+    return;
+  }
+  // Coi tasti di Fub ancora validi un Home arrivato troppo presto si perde.
+  await page.focus(".draw-editor .draw-surface");
+  await page.keyboard.press("Home");
+  if (await scelta()) return;
+  await sceltaDaiLivelli(page);
+}
+
+/// L'ellisse scelta dalla sua riga nella scheda Livelli, che vale con
+/// qualunque strumento; poi torna la scheda di prima (e il cassetto
+/// dell'ispettore chiuso, sotto i 960 px) e il mouse esce dal foglio.
+async function sceltaDaiLivelli(page) {
+  const id = await page.evaluate(() => document.querySelector(".draw-editor .draw-surface ellipse[data-scene-id]")?.dataset.sceneId ?? null);
+  if (id === null) throw new Error("l'ellisse del disegno non c'è");
+  const primaScheda = await page.evaluate(() => document.querySelector('.inspector-tab[aria-selected="true"]')?.dataset.viewId ?? null);
+  const cassettoChiuso = await page.evaluate(() => window.innerWidth < 960 && document.querySelector('#toggle-inspector[aria-pressed="true"]') === null);
+  await schedaLivelli(page);
+  await page.click(`.draw-objects-tree .draw-object[data-key="${id}"] .draw-object-label`);
+  await page.waitForFunction(() => /\b1 di \d+ scelt/.test(document.body.innerText), null, { timeout: 4000 }).catch(() => {
+    throw new Error("la riga dell'ellisse nei Livelli non la sceglie");
+  });
+  if (primaScheda !== null && primaScheda !== "draw.layers") await page.click(`.inspector-tab[data-view-id="${primaScheda}"]`);
+  if (cassettoChiuso) {
+    await page.click("#toggle-inspector");
+    await page.waitForSelector('#toggle-inspector[aria-pressed="false"]');
+  }
+  await mouseFuori(page);
+  // Il fuoco torna sul foglio, dove l'avrebbe lasciato `Home`, e l'ultimo
+  // gesto è un tasto, come con `Home`: i menu aperti dopo mostrano l'anello
+  // del fuoco allo stesso modo. Il tasto non cambia la scelta: coi tasti di
+  // Fub sceglie di nuovo l'ellisse, col motore pronto non vale.
+  await page.focus(".draw-editor .draw-surface");
+  await page.keyboard.press("Home");
 }
 
 /// Il menu ≡ del Completo con Oggetto aperto (K6 T9a): le voci dell'indice di
@@ -5649,8 +5687,7 @@ async function openElaborazione(page, voce = null, { foglio = false } = {}) {
 
 async function sceltaElaborazione(page, voce) {
   const scegliDue = async (p) => {
-    await p.focus(".draw-editor .draw-surface");
-    await p.keyboard.press("v");
+    await selezioneDelMotore(p);
     for (const [id, maiusc] of [["o0000001a", false], ["o0000001b", true]]) {
       const forma = await p.locator(`.draw-editor .draw-surface [data-scene-id="${id}"]`).first().boundingBox();
       if (!forma) throw new Error(`la forma ${id} del disegno non c'è`);
@@ -5662,6 +5699,7 @@ async function sceltaElaborazione(page, voce) {
       // Col motore la scelta torna dopo il gesto: il clic con Maiusc parte da quella del primo.
       if (!maiusc) await p.waitForFunction(() => /\b1 di \d+ scelt/.test(document.body.innerText), null, { timeout: 4000 }).catch(() => {});
     }
+    await mouseFuori(p);
     await p.waitForFunction(() => /\b2 di \d+ scelt/.test(document.body.innerText), null, { timeout: 4000 }).catch(() => {
       throw new Error("il clic con Maiusc non sceglie le due forme");
     });
@@ -5778,7 +5816,7 @@ async function openMenuUguale(page) {
   // Il primo oggetto, l'ellisse, scelto da tastiera come in openMenuOggetto (K6 T15 giro 1: prima del
   // giro 2 il clic del mouse sul banco non sceglieva, e il clic ora lo fa: `clicSullEllisse`).
   // Lo strumento di selezione col tasto «v», come nella scena «draw-selection»: la penna resterebbe attiva.
-  await page.keyboard.press("v");
+  await selezioneDelMotore(page);
   await scegliPrimo(page);
   await page.click('.draw-header button[aria-label="Disegno"]');
   await page.waitForSelector("#context-menu [role='menuitem']:has-text('Selezione')");
@@ -5828,6 +5866,39 @@ async function sceltaEllisse(page) {
   const forma = await page.locator(".draw-editor .draw-surface ellipse[data-scene-id]").first().boundingBox();
   if (!forma) throw new Error("l'ellisse del disegno non c'è");
   await page.mouse.click(forma.x + forma.width / 2, forma.y + forma.height / 2);
+  await mouseFuori(page);
+}
+
+/// Il tasto «v» sceglie la Selezione. Col motore pronto è quella del motore, e
+/// la colonna la accende (`motore:…`); se il motore non è ancora pronto il
+/// tasto sceglie quella di Fub, che disegna un'altra cornice: allora si
+/// riprova, al più tre volte. Una scena dove il motore non c'è resta con la
+/// Selezione di Fub, com'era. Vero se la Selezione del motore è accesa.
+async function selezioneDelMotore(page) {
+  for (let prova = 0; prova < 3; prova += 1) {
+    await page.focus(".draw-editor .draw-surface");
+    await page.keyboard.press("v");
+    const accesa = await page
+      .waitForFunction(
+        () => [...document.querySelectorAll('.draw-rail button[aria-pressed="true"]')]
+          .some((b) => `${b.dataset.tool ?? ""} ${b.dataset.tools ?? ""}`.includes("motore:")),
+        null,
+        { timeout: 2000 },
+      )
+      .then(() => true, () => false);
+    if (accesa) return true;
+  }
+  return false;
+}
+
+/// Il mouse esce dal foglio, appena sopra il suo bordo: fermo sull'oggetto, il
+/// motore ci disegna i segni del passaggio (la misura) solo se la risposta
+/// arriva prima dello scatto, e la foto cambierebbe da una corsa all'altra.
+async function mouseFuori(page) {
+  const foglio = await page.locator(".draw-editor .draw-surface").first().boundingBox();
+  if (!foglio) return;
+  await page.mouse.move(foglio.x + foglio.width / 2, Math.max(0, foglio.y - 4));
+  await page.waitForTimeout(150);
 }
 
 /// Il clic del mouse sull'ellisse la sceglie: la barra di stato dice «1 di 11 scelti». Se il clic non
@@ -5853,8 +5924,7 @@ async function clicSullEllisseSemplice(page) {
 
 /// Lo strumento di selezione e il clic sull'ellisse, che la barra di stato deve dire scelta (K6 T15, giro 2).
 async function sceltaConIlClic(page) {
-  await page.focus(".draw-editor .draw-surface");
-  await page.keyboard.press("v");
+  await selezioneDelMotore(page);
   await sceltaEllisse(page);
   await page.waitForFunction(() => /\b1 di \d+ scelt/.test(document.body.innerText), null, { timeout: 4000 }).catch(() => {
     throw new Error("il clic sull'ellisse non la sceglie");
