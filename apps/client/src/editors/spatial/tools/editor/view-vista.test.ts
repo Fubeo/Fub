@@ -224,6 +224,24 @@ describe("i segni della selezione con gli strumenti del motore, come in VectorCr
     expect(tipi()).not.toContain("control");
   });
 
+  it("la Selezione del motore mostra la cornice anche se lo strumento di Fub sotto è la penna", () => {
+    const e = mount(TRACCIATO);
+    e.setTool("pen");
+    e.select([UNO]);
+    expect(tipi()).not.toContain("grip");
+    e.setEngineTool("selection");
+    e.select([]);
+    e.select([UNO]);
+    expect(tipi()).toContain("grip");
+    expect(tipi()).toContain("rotor");
+    // Uno strumento del motore senza cornice resta senza, anche sopra la Selezione di Fub.
+    e.setTool("select");
+    e.setEngineTool("directSelection");
+    e.select([]);
+    e.select([UNO]);
+    expect(tipi()).not.toContain("grip");
+  });
+
   it("Nascondi bordi toglie il contorno anche col motore", () => {
     const e = mount(TRACCIATO);
     e.setEngineTool("directSelection");

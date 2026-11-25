@@ -125,10 +125,12 @@ export function installMarks(ctx: EditorContext): void {
   /// mentre si sposta o si sceglie col riquadro, nessuna, e nemmeno mentre
   /// si ritaglia, che ha i suoi segni.
   const frameNow = (): FrameView | null => {
-    if (ctx.tool !== "select" || !editable() || ctx.selection.length === 0) return null;
-    // Uno strumento del motore senza cornice (la Selezione diretta, la
-    // Penna…): niente maniglie da vedere, né da prendere.
-    if (!conCornice()) return null;
+    if (!editable() || ctx.selection.length === 0) return null;
+    // Con uno strumento del motore decide lui, non quello di Fub rimasto
+    // sotto: la Selezione del motore scelta con «v» mentre Fub aveva la penna
+    // mostra la cornice come in VectorCraft. Uno senza cornice (la Selezione
+    // diretta, la Penna…): niente maniglie da vedere, né da prendere.
+    if ((ctx.motoreTool ?? null) === null ? ctx.tool !== "select" : !conCornice()) return null;
     // Nascondi riquadro di delimitazione (K6 T11): senza cornice non ci sono
     // maniglie da vedere, né da prendere col puntatore.
     if (ctx.grid.hideBoundingBox === true) return null;

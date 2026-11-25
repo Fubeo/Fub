@@ -1210,6 +1210,37 @@ describe("lo strumento del motore nei gesti (K6 T8)", () => {
     expect(gestures(fake).slice(prima).every((g) => g.phase === "preview")).toBe(true);
   });
 
+  it("l'esito di un passaggio che arriva col mouse già uscito non rimette i segni", async () => {
+    let esce = false;
+    const fake = createFakeHost({
+      drawing: {
+        comando: statoDiSerie,
+        gesto: (gesture) => {
+          if (gesture.phase !== "preview" || gesture.events[0]?.kind !== "move") return esitoConStato("arrow", null);
+          // Il mouse esce dal foglio mentre la risposta è in viaggio.
+          if (esce) surfaceOf().dispatchEvent(new PointerEvent("pointerleave", { bubbles: false, pointerType: "mouse" }));
+          const overlays: DrawingOverlay[] = [{ kind: "anchor", at: [220, 40], role: "selection", filled: false, size: 7 }];
+          return { ...esitoConStato("crosshair", null), preview: { shape: null, overlays, marquee: null, matrix: null } };
+        },
+      } as DrawingFake,
+    });
+    const editor = await montaConPreparazione(EMPTY, fake);
+    editor.setEngineTool("directSelection");
+    const anteprima = (): number => host.querySelector(".draw-preview g g")?.childElementCount ?? 0;
+    // Il passaggio di sempre mostra i segni.
+    dispatch(editor, point("move", 220, 40));
+    await settle();
+    expect(anteprima()).toBeGreaterThan(0);
+    surfaceOf().dispatchEvent(new PointerEvent("pointerleave", { bubbles: false, pointerType: "mouse" }));
+    await settle();
+    expect(anteprima()).toBe(0);
+    // Ora il mouse esce prima che l'esito torni: il foglio resta pulito.
+    esce = true;
+    dispatch(editor, point("move", 222, 41));
+    await settle();
+    expect(anteprima()).toBe(0);
+  });
+
   it("Esc annulla il gesto e lo strumento del motore resta", async () => {
     const fake = createFakeHost({ drawing: { comando: statoDiSerie } as DrawingFake });
     const editor = await montaConPreparazione(EMPTY, fake);

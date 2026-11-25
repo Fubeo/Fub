@@ -830,6 +830,9 @@ export function installGestiMotore(ctx: EditorContext): void {
   let sopra: Point | null = null;
   let fotogrammaSopra: number | null = null;
   let sopraInVolo = false;
+  /// Cresce a ogni uscita del mouse (o gesto, o strumento cambiato): un esito
+  /// partito prima è vecchio e non rimette i segni.
+  let giroSopra = 0;
   /// I segni del passaggio sono sul foglio, e quelli che il motore ha dato.
   let segniSopra = false;
   let ultimiSopra: readonly DrawingOverlay[] = [];
@@ -845,6 +848,7 @@ export function installGestiMotore(ctx: EditorContext): void {
 
   ctx.motoreSopra = (p) => {
     if (p === null || ctx.motoreTool === null || ctx.current !== null || porta === undefined) {
+      giroSopra += 1;
       sopra = null;
       if (fotogrammaSopra !== null) cancelAnimationFrame(fotogrammaSopra);
       fotogrammaSopra = null;
@@ -885,6 +889,7 @@ export function installGestiMotore(ctx: EditorContext): void {
     if (ctx.folio !== undefined || ctx.isolatedNode() !== null) return;
     sopra = null;
     sopraInVolo = true;
+    const giro = giroSopra;
     const layer = ctx.has("layers") ? (ctx.currentLayer()?.id ?? null) : null;
     const richiesta: GestoMotore = { ...baseDelGesto(motoreDelloStrumento(id), layer, id), phase: "preview", events: [evento("move", { x: p[0], y: p[1] })] };
     const done = ultimo
@@ -892,7 +897,7 @@ export function installGestiMotore(ctx: EditorContext): void {
       .then((esito) => {
         // Un gesto cominciato, un altro strumento, o il mouse uscito: il
         // passaggio è vecchio.
-        if (ctx.disposed || ctx.current !== null || ctx.motoreTool !== id) return;
+        if (ctx.disposed || ctx.current !== null || ctx.motoreTool !== id || giro !== giroSopra) return;
         if (esito === null || "kind" in esito || esito.refused !== null) {
           togliSegniSopra();
           return;
