@@ -8688,6 +8688,13 @@ button.cm-fub-page-icon:focus-visible {
   border-bottom-right-radius: var(--radius-control);
   border-bottom-left-radius: var(--radius-control);
 }
+/* Sulla carta del riquadro il verde dei segni vicini non si legge abbastanza
+   (il tipo scritto a mano, `[!tip`, resta sorgente col cursore dentro): lì i
+   segni prendono il colore dei commenti della Sorgente, il passo sotto. */
+.cm-editor .cm-content .cm-fub-callout-line .cm-fub-near,
+.cm-editor .cm-content .cm-fub-callout-line .cm-fub-near * {
+  color: var(--syn-comment);
+}
 .cm-editor .cm-content .cm-fub-callout-type,
 .cm-editor .cm-content .cm-fub-callout-title {
   color: var(--doc-heading);
