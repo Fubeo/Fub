@@ -5463,15 +5463,31 @@ async function openWorkspaceErrorMenu(page) {
 async function openColumnGroup(page) {
   await openDrawing(page);
   // La prima casella con il triangolino: quella che ha più strumenti.
-  await page.waitForSelector('.draw-rail .kit-rail-slot:has(.kit-rail-corner)');
-  await page.focus('.draw-rail .kit-rail-slot:has(.kit-rail-corner)');
-  await page.evaluate(() => {
-    const casella = document.querySelector('.draw-rail .kit-rail-slot:has(.kit-rail-corner)');
-    // La freccia di lato: destra in colonna, su in fila (il foglio stretto).
-    const lato = casella.closest(".kit-rail").dataset.orientation === "horizontal" ? "ArrowUp" : "ArrowRight";
-    casella.dispatchEvent(new KeyboardEvent("keydown", { key: lato, bubbles: true, cancelable: true }));
-  });
-  await page.waitForSelector(".kit-rail-flyout [role='menuitemradio']");
+  await apriTendina(page, ".draw-rail .kit-rail-slot:has(.kit-rail-corner)");
+}
+
+/// La tendina della casella `casella` (un selettore) con la freccia di lato:
+/// destra in colonna, su in fila (il foglio stretto). La colonna si rifà
+/// quando il motore diventa pronto (o spento): un tasto arrivato sulla
+/// casella di prima si perde, o la tendina si chiude, e allora si ripreme, al
+/// più tre volte.
+async function apriTendina(page, casella) {
+  for (let prova = 0; prova < 3; prova += 1) {
+    await page.waitForSelector(casella);
+    await page.focus(casella);
+    await page.evaluate((selettore) => {
+      const el = document.querySelector(selettore);
+      const lato = el.closest(".kit-rail").dataset.orientation === "horizontal" ? "ArrowUp" : "ArrowRight";
+      el.dispatchEvent(new KeyboardEvent("keydown", { key: lato, bubbles: true, cancelable: true }));
+    }, casella);
+    const voce = ".kit-rail-flyout [role='menuitemradio']";
+    const aperta = await page.waitForSelector(voce, { timeout: 5000 }).then(() => true, () => false);
+    if (!aperta) continue;
+    // Una colonna che si rifà dopo chiude anche la tendina appena aperta.
+    await page.waitForTimeout(500);
+    if (await page.locator(voce).first().isVisible()) return;
+  }
+  throw new Error(`la tendina di ${casella} non si apre`);
 }
 
 /// La Selezione diretta del motore (K6 T11) scelta dalla sua casella: la
@@ -5501,15 +5517,7 @@ async function openZoomMenu(page) {
 /// freccia di lato come fa chi usa la tastiera.
 async function openRailFlyout(page, slot) {
   await openDrawing(page);
-  const casella = `.draw-rail .kit-rail-slot[data-slot="${slot}"]`;
-  await page.waitForSelector(casella);
-  await page.focus(casella);
-  await page.evaluate((selettore) => {
-    const el = document.querySelector(selettore);
-    const lato = el.closest(".kit-rail").dataset.orientation === "horizontal" ? "ArrowUp" : "ArrowRight";
-    el.dispatchEvent(new KeyboardEvent("keydown", { key: lato, bubbles: true, cancelable: true }));
-  }, casella);
-  await page.waitForSelector(".kit-rail-flyout [role='menuitemradio']");
+  await apriTendina(page, `.draw-rail .kit-rail-slot[data-slot="${slot}"]`);
 }
 
 /// La casella delle forme della colonna (K6 T13): quella di Rettangolo. La sua
