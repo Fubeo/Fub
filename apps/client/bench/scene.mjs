@@ -5572,17 +5572,30 @@ async function openSezioneDesign(page, selettore) {
     });
   }
   await page.waitForSelector(selettore);
-  // Scorre solo il primo contenitore scrollabile sopra la sezione (il pannello), non la pagina.
-  await page.evaluate((sel) => {
-    const el = document.querySelector(sel);
-    for (let p = el.parentElement; p && p !== document.body; p = p.parentElement) {
-      if (p.scrollHeight > p.clientHeight + 1 && /(auto|scroll)/.test(getComputedStyle(p).overflowY)) {
-        p.scrollTop += el.getBoundingClientRect().top - p.getBoundingClientRect().top - 8;
-        break;
-      }
-    }
-  }, selettore);
   await page.evaluate(() => document.fonts.ready);
+  // Scorre solo il primo contenitore scrollabile sopra la sezione (il pannello), non la pagina.
+  // Il pannello si rifà quando arriva il motore (sezioni nuove sopra): si riscorre finché la
+  // sezione resta in cima per due controlli di fila, al più dieci volte.
+  const scorri = () =>
+    page.evaluate((sel) => {
+      const el = document.querySelector(sel);
+      if (!el) return null;
+      for (let p = el.parentElement; p && p !== document.body; p = p.parentElement) {
+        if (p.scrollHeight > p.clientHeight + 1 && /(auto|scroll)/.test(getComputedStyle(p).overflowY)) {
+          const scarto = el.getBoundingClientRect().top - p.getBoundingClientRect().top - 8;
+          p.scrollTop += scarto;
+          return `${Math.round(scarto)}:${p.scrollHeight}`;
+        }
+      }
+      return "0:0";
+    }, selettore);
+  let prima = await scorri();
+  for (let prova = 0; prova < 10; prova += 1) {
+    await page.waitForTimeout(250);
+    const ora = await scorri();
+    if (ora !== null && ora === prima) return;
+    prima = ora;
+  }
 }
 
 /// La sezione Allinea nel Design (K6 T13, giro 2) con il disegno scelto per intero.
