@@ -129,7 +129,7 @@ vettori della lettura. Nel dubbio si apre e si conserva.
   somma a quella del pannello (`setReadOnly`) e se ne va da sola quando il
   testo torna riscrivibile, per esempio con la chiave doppia tolta nella
   vista Sorgente. Una scena oltre il limite interattivo mostra solo il suo
-  avviso. I test sono in `apps/client/src/editors/canvas/engine.test.ts`,
+  avviso. I test sono in `apps/client/src/editors/canvas/engine-core-undo.test.ts`,
   coi testi dei vettori 32 e 33 delle toppe.
 - **R4 · Surrogati spaiati.** `"\ud800"`, in una chiave o in un valore, è un
   errore; una coppia intera (`"\ud83d\ude00"`) è un carattere come gli altri.

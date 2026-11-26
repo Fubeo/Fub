@@ -4,7 +4,7 @@
 > dentro un'altra, senza una seconda copia del documento?
 > **Fonti autorevoli:** `apps/client/src/editors/core/range-surface.ts`,
 > `apps/client/src/editors/core/section-anchor.ts`, le prove «una superficie
-> su un tratto della sessione» in `apps/client/src/state/document-session.test.ts`
+> su un tratto della sessione» in `apps/client/src/state/document-session-closing.test.ts`
 > e `apps/client/src/editors/text/range-surface.integration.test.ts`.
 
 ## In breve

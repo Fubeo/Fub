@@ -445,5 +445,5 @@ mano: si rigenera con
   sua prova si dimentica e le altre restano; con un documento ricco aperto
   in un altro vault la cache non si svuota; chiuso l'ultimo è a zero.
 - `apps/client/src/panels/engine-warmup.test.ts` e
-  `state/document-session.test.ts`: il ritardo del puntatore, l'annullamento,
+  `state/document-session-closing.test.ts`: il ritardo del puntatore, l'annullamento,
   una chiamata per estensione, `document_closed` alla vera chiusura.
