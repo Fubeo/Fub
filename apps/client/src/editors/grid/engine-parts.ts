@@ -24,7 +24,6 @@ export const DEFAULT_COLUMN_WIDTH = 120;
 export const ROW_HEADER_WIDTH = 52;
 export const COLUMN_HEADER_HEIGHT = 28;
 export const EMPTY_SHEET: GridSheet = { id: "", name: "", rows: [], columns: [] };
-export { GRID_OVERSCAN, uniformRowRange } from "../core/row-window";
 /// Quante celle già disegnate rifà al più un disegno che arriva nel mezzo
 /// dello scorrimento (una finestra arrivata, il fotogramma dopo): le altre
 /// aspettano il fotogramma seguente, così un giro non si allunga oltre un
