@@ -1,4 +1,6 @@
-// Il motore della lavagna: il menu della lavagna e il menu radiale. Metodi della\n// classe `CanvasEngine`, montati sul suo prototipo da `engine.ts`\n// (`editors/core/mix-methods.ts`).
+// Il motore della lavagna: il menu della lavagna e il menu radiale. Metodi
+// della classe `CanvasEngine`, montati sul suo prototipo da `engine.ts`
+// (`editors/core/mix-methods.ts`).
 
 import { t } from "../../i18n/strings";
 import { MENU_RULE, type SurfaceMenu, type SurfaceMenuEntry, type SurfaceMenuItem } from "../core/editor-menu";

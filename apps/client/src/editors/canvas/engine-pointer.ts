@@ -1,4 +1,6 @@
-// Il motore della lavagna: il puntatore e il dito. Metodi della\n// classe `CanvasEngine`, montati sul suo prototipo da `engine.ts`\n// (`editors/core/mix-methods.ts`).
+// Il motore della lavagna: il puntatore e il dito. Metodi della classe
+// `CanvasEngine`, montati sul suo prototipo da `engine.ts`
+// (`editors/core/mix-methods.ts`).
 
 import { nearFreeSpot } from "./free-spot";
 import { t } from "../../i18n/strings";

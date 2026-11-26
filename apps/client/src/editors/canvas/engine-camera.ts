@@ -1,4 +1,6 @@
-// Il motore della lavagna: la camera (vista, zoom, rotella, salti). Metodi della\n// classe `CanvasEngine`, montati sul suo prototipo da `engine.ts`\n// (`editors/core/mix-methods.ts`).
+// Il motore della lavagna: la camera (vista, zoom, rotella, salti). Metodi
+// della classe `CanvasEngine`, montati sul suo prototipo da `engine.ts`
+// (`editors/core/mix-methods.ts`).
 
 import { commandForKey } from "./chrome/commands";
 import { applyFindMarks, findMarks, type FindTarget } from "./find";

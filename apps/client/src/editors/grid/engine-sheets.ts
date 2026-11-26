@@ -1,4 +1,6 @@
-// Il motore della griglia: i fogli e le linguette. Metodi della\n// classe `GridEngine`, montati sul suo prototipo da `engine.ts`\n// (`editors/core/mix-methods.ts`).
+// Il motore della griglia: i fogli e le linguette. Metodi della classe
+// `GridEngine`, montati sul suo prototipo da `engine.ts`
+// (`editors/core/mix-methods.ts`).
 
 import { t } from "../../i18n/strings";
 import { createTabs } from "../../kit";

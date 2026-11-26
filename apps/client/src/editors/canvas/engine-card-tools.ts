@@ -1,5 +1,6 @@
-// Il motore della lavagna: il selettore delle sezioni e il lettore di una\n// scheda. Metodi della\n// classe `CanvasEngine`, montati sul suo prototipo da `engine.ts`\n// (`editors/core/mix-methods.ts`).
-
+// Il motore della lavagna: il selettore delle sezioni e il lettore di una
+// scheda. Metodi della classe `CanvasEngine`, montati sul suo prototipo da
+// `engine.ts` (`editors/core/mix-methods.ts`).
 
 import { t } from "../../i18n/strings";
 import { type Lifetime } from "../../ui/lifetime";

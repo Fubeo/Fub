@@ -1,4 +1,6 @@
-// Il motore della lavagna: convertire una scheda (in nota, in file). Metodi della\n// classe `CanvasEngine`, montati sul suo prototipo da `engine.ts`\n// (`editors/core/mix-methods.ts`).
+// Il motore della lavagna: convertire una scheda (in nota, in file). Metodi
+// della classe `CanvasEngine`, montati sul suo prototipo da `engine.ts`
+// (`editors/core/mix-methods.ts`).
 
 import { t } from "../../i18n/strings";
 import { openLifetime } from "../../ui/lifetime";

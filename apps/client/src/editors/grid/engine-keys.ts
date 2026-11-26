@@ -1,4 +1,5 @@
-// Il motore della griglia: i tasti. Metodi della\n// classe `GridEngine`, montati sul suo prototipo da `engine.ts`\n// (`editors/core/mix-methods.ts`).
+// Il motore della griglia: i tasti. Metodi della classe `GridEngine`,
+// montati sul suo prototipo da `engine.ts` (`editors/core/mix-methods.ts`).
 
 import { resolvedLanguage } from "../../i18n/strings";
 import { covers, withRange } from "../../tabella/selection";

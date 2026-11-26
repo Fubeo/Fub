@@ -1,4 +1,7 @@
-// Il motore della griglia: la sessione del file (byte, conferme, storia,\n// annulla e ripeti interni, gare). Metodi della\n// classe `GridEngine`, montati sul suo prototipo da `engine.ts`\n// (`editors/core/mix-methods.ts`).
+// Il motore della griglia: la sessione del file (byte, conferme, storia,
+// annulla e ripeti interni, gare). Metodi della classe `GridEngine`, montati
+// sul suo prototipo da `engine.ts` (`editors/core/mix-methods.ts`).
+
 import type {
   GridBytesSession,
   GridBytesWindow,

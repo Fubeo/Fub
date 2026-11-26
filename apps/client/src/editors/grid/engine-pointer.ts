@@ -1,4 +1,6 @@
-// Il motore della griglia: il puntatore e il dito. Metodi della\n// classe `GridEngine`, montati sul suo prototipo da `engine.ts`\n// (`editors/core/mix-methods.ts`).
+// Il motore della griglia: il puntatore e il dito. Metodi della classe
+// `GridEngine`, montati sul suo prototipo da `engine.ts`
+// (`editors/core/mix-methods.ts`).
 
 import { withRange } from "../../tabella/selection";
 import { type GridPosition, type GridSelection } from "./model";

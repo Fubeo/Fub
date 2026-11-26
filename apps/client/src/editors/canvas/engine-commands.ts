@@ -1,5 +1,7 @@
-// Il motore della lavagna: i comandi, la banda di stato, disponi e allinea,\n// lo stile del testo, la barra della selezione, i colori, la ricerca dei\n// comandi. Metodi della\n// classe `CanvasEngine`, montati sul suo prototipo da `engine.ts`\n// (`editors/core/mix-methods.ts`).
-
+// Il motore della lavagna: i comandi, la banda di stato, disponi e allinea,
+// lo stile del testo, la barra della selezione, i colori, la ricerca dei
+// comandi. Metodi della classe `CanvasEngine`, montati sul suo prototipo da
+// `engine.ts` (`editors/core/mix-methods.ts`).
 
 import { t } from "../../i18n/strings";
 import { openLifetime } from "../../ui/lifetime";

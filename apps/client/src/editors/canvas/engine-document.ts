@@ -1,5 +1,6 @@
-// Il motore della lavagna: il nucleo, la storia, la compilazione e la\n// scrittura del documento. Metodi della\n// classe `CanvasEngine`, montati sul suo prototipo da `engine.ts`\n// (`editors/core/mix-methods.ts`).
-
+// Il motore della lavagna: il nucleo, la storia, la compilazione e la
+// scrittura del documento. Metodi della classe `CanvasEngine`, montati sul
+// suo prototipo da `engine.ts` (`editors/core/mix-methods.ts`).
 
 import { t, type Key } from "../../i18n/strings";
 import type { EditorChangeOrigin } from "../core/text-operation";

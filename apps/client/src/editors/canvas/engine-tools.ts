@@ -1,4 +1,6 @@
-// Il motore della lavagna: gli strumenti, il mouse che scrive, il velo, il\n// menu della penna, la barra dei comandi. Metodi della\n// classe `CanvasEngine`, montati sul suo prototipo da `engine.ts`\n// (`editors/core/mix-methods.ts`).
+// Il motore della lavagna: gli strumenti, il mouse che scrive, il velo, il
+// menu della penna, la barra dei comandi. Metodi della classe `CanvasEngine`,
+// montati sul suo prototipo da `engine.ts` (`editors/core/mix-methods.ts`).
 
 import { t } from "../../i18n/strings";
 import { openLifetime } from "../../ui/lifetime";

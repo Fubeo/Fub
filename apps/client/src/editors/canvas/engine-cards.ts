@@ -1,4 +1,6 @@
-// Il motore della lavagna: le schede (render, testata, gemelle, schede vive).\n// Metodi della\n// classe `CanvasEngine`, montati sul suo prototipo da `engine.ts`\n// (`editors/core/mix-methods.ts`).
+// Il motore della lavagna: le schede (render, testata, gemelle, schede vive).
+// Metodi della classe `CanvasEngine`, montati sul suo prototipo da
+// `engine.ts` (`editors/core/mix-methods.ts`).
 
 import { t } from "../../i18n/strings";
 import { openLifetime } from "../../ui/lifetime";

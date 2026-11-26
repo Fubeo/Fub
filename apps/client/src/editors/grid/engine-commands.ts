@@ -1,4 +1,7 @@
-// Il motore della griglia: i comandi del foglio (catalogo, permessi, coda,\n// riempimento, ordinamento). Metodi della\n// classe `GridEngine`, montati sul suo prototipo da `engine.ts`\n// (`editors/core/mix-methods.ts`).
+// Il motore della griglia: i comandi del foglio (catalogo, permessi, coda,
+// riempimento, ordinamento). Metodi della classe `GridEngine`, montati sul
+// suo prototipo da `engine.ts` (`editors/core/mix-methods.ts`).
+
 import type {
   GridCommand,
   GridBytesSession,

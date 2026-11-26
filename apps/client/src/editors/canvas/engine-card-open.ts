@@ -1,4 +1,6 @@
-// Il motore della lavagna: entrare e uscire da una scheda, seguire un link.\n// Metodi della\n// classe `CanvasEngine`, montati sul suo prototipo da `engine.ts`\n// (`editors/core/mix-methods.ts`).
+// Il motore della lavagna: entrare e uscire da una scheda, seguire un link.
+// Metodi della classe `CanvasEngine`, montati sul suo prototipo da
+// `engine.ts` (`editors/core/mix-methods.ts`).
 
 import { t } from "../../i18n/strings";
 import { cardKindOf, type CardEditorContext, type CardEditorState, type CardWriting } from "../core/cards/contract";

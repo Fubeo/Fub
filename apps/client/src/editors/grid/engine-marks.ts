@@ -1,4 +1,6 @@
-// Il motore della griglia: i segni sopra le celle (selezione, formiche,\n// riferimenti, maniglie). Metodi della\n// classe `GridEngine`, montati sul suo prototipo da `engine.ts`\n// (`editors/core/mix-methods.ts`).
+// Il motore della griglia: i segni sopra le celle (selezione, formiche,
+// riferimenti, maniglie). Metodi della classe `GridEngine`, montati sul suo
+// prototipo da `engine.ts` (`editors/core/mix-methods.ts`).
 
 import { t, resolvedLanguage } from "../../i18n/strings";
 import { columnLabel } from "./model";

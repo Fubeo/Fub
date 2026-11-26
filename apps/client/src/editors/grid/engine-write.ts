@@ -1,4 +1,7 @@
-// Il motore della griglia: scrivere nelle celle, gli avvisi, la bozza.\n// Metodi della\n// classe `GridEngine`, montati sul suo prototipo da `engine.ts`\n// (`editors/core/mix-methods.ts`).
+// Il motore della griglia: scrivere nelle celle, gli avvisi, la bozza. Metodi
+// della classe `GridEngine`, montati sul suo prototipo da `engine.ts`
+// (`editors/core/mix-methods.ts`).
+
 import type { GridBytesCell, GridCellPatch as GridRequestPatch } from "../../host/contract";
 import { type EditorChangeOrigin } from "../core/text-operation";
 import {
