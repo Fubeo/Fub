@@ -76,6 +76,7 @@ Per la documentazione (il render dei Mermaid usa Mermaid e Playwright di
 node .github/scripts/check-doc-links.mjs
 node .github/scripts/check-doc-orphans.mjs
 node .github/scripts/check-doc-size.mjs
+node .github/scripts/check-source-size.mjs
 node .github/scripts/check-mermaid.mjs --render
 node .github/scripts/check-markdown-style.mjs
 node .github/scripts/check-prose.mjs
@@ -106,6 +107,7 @@ node .github/scripts/check-inline-theme.mjs
 node .github/scripts/check-doc-links.mjs
 node .github/scripts/check-doc-orphans.mjs
 node .github/scripts/check-doc-size.mjs
+node .github/scripts/check-source-size.mjs
 node .github/scripts/check-markdown-style.mjs
 node .github/scripts/check-mermaid.mjs --render
 node .github/scripts/check-prose.mjs

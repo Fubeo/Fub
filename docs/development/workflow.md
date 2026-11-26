@@ -52,6 +52,19 @@ recuperala quando serve. Non rileggere file o comandi senza cambiamenti per
 rassicurazione. Ferma l'esplorazione quando la prova basta per il passo
 successivo.
 
+### File corti
+
+Un file sorgente scritto a mano resta entro 1500 righe: chi deve cambiarne una
+funzione lo legge per intero, e un file di migliaia di righe costa a ogni
+lettura. Quando un file si avvicina alla soglia si divide per tema: le prove in
+un file accanto (`#[cfg(test)] mod tests;`, `x-casi.test.ts`), le porte, le
+schede o i gruppi di funzioni in moduli loro, che il modulo di partenza
+ri-esporta. Lo controlla `check-source-size.mjs`; i file che la soglia la
+passavano già stanno in `.github/scripts/source-size-ceilings.txt`, col loro
+tetto: possono restare, non crescere. Chi ne accorcia uno lancia
+`node .github/scripts/check-source-size.mjs --aggiorna`, che abbassa i tetti.
+Fuori dal conto: `vendor/`, i file generati, le WIT congelate, le fixture.
+
 ## 4. Verificare durante il lavoro
 
 ### Rust
@@ -87,6 +100,7 @@ npx vitest run -t "<nome>"  # i test che corrispondono a un nome
 node .github/scripts/check-doc-links.mjs
 node .github/scripts/check-doc-orphans.mjs
 node .github/scripts/check-doc-size.mjs
+node .github/scripts/check-source-size.mjs
 node .github/scripts/check-mermaid.mjs
 node .github/scripts/check-markdown-style.mjs
 node .github/scripts/check-prose.mjs

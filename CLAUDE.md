@@ -104,6 +104,7 @@ Checks: `.github/workflows/ci.yml` (+ `npm-supply-chain.yml`; `baseline.yml` com
 - **Plugins and security:** one `Guard`; a WASM component gets no implicit WASI, filesystem, network, DOM or webview; the UI is untrusted ([`permissions-and-security.md`](docs/reference/permissions-and-security.md)).
 - **Failure paths are test cases**, not optional details: denied capabilities, timeouts, memory limits, traps, partial mounts and teardown.
 - **Extensible contracts** have stable ids, ownership, limits and a fallback; no universal untyped JSON port.
+- **File size:** a handwritten source file stays within 1500 lines; split it by topic before it grows past (tests in a sibling file, ports, tabs or helper groups in their own modules that the original re-exports), never by cutting a function in half. `check-source-size.mjs` enforces it; files already over keep a ceiling in `.github/scripts/source-size-ceilings.txt` that only goes down (`--aggiorna`), never up ([`workflow.md`](docs/development/workflow.md#file-corti)).
 - **Reusing code** (WordCraft and similar): read [`workflow.md`](docs/development/workflow.md#riuso-di-codice-da-altri-progetti) first. Features stay format-independent, Markdown native, third-party code in `vendor/<project>/` with `UPSTREAM.md`; license or supply-chain policy never changes without asking.
 
 ## Verifying

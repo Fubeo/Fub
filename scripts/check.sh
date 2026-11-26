@@ -157,6 +157,7 @@ doc_guards() {
   run "link dei documenti" node .github/scripts/check-doc-links.mjs
   run "pagine raggiungibili" node .github/scripts/check-doc-orphans.mjs
   run "soglie delle pagine" node .github/scripts/check-doc-size.mjs
+  run "file sorgente entro la soglia" bash -c 'node .github/scripts/check-source-size.mjs --self-test && node .github/scripts/check-source-size.mjs'
   run "stile del Markdown" node .github/scripts/check-markdown-style.mjs
   run "diagrammi Mermaid" node .github/scripts/check-mermaid.mjs --render
   run "numeri della prosa" bash -c 'node .github/scripts/check-prose.mjs --self-test && node .github/scripts/check-prose.mjs'

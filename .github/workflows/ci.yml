@@ -499,6 +499,8 @@ jobs:
         run: node .github/scripts/check-doc-orphans.mjs
       - name: Le pagine rispettano le soglie dimensionali
         run: node .github/scripts/check-doc-size.mjs
+      - name: I file sorgente restano entro la soglia, e i più lunghi non crescono
+        run: node .github/scripts/check-source-size.mjs --self-test && node .github/scripts/check-source-size.mjs
       - name: Il Markdown rispetta lo stile canonico
         run: node .github/scripts/check-markdown-style.mjs
       # Il render apre i Mermaid della PR in Chromium, e la sandbox resta
