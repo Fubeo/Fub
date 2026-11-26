@@ -101,21 +101,21 @@ schede.
   e dai suoi asciutti, se una scheda di testo o una nota Markdown è larga
   diversamente dall'ultimo tratto con l'ancora `card` (`inkReflowWidth`), e
   mette l'avviso sotto la scheda (`syncInkReflow`). Lo chiamano
-  `#paintCardInk`, a ogni ridisegno dell'inchiostro della scheda, e
-  `#renderLive`, a ogni passo del bordo tirato: l'avviso si vede prima di
+  `_paintCardInk`, a ogni ridisegno dell'inchiostro della scheda, e
+  `_renderLive`, a ogni passo del bordo tirato: l'avviso si vede prima di
   lasciarlo. «Torna a N px» è un `resize` della sola larghezza, col lato
-  sinistro fermo, in un passo d'annulla (`#restoreInkWidth`). Il file non
+  sinistro fermo, in un passo d'annulla (`_restoreInkWidth`). Il file non
   cambia: la larghezza di allora è già nell'ancora.
 - **Ctrl+Z subito dopo il tratto.** La penna non prende il fuoco, quindi
   dopo un tratto (o una gomma, una forma, uno spostamento del Lazo:
-  `#inkGestureDone`) il fuoco che non sta già sulla vista o su una scheda
+  `_inkGestureDone`) il fuoco che non sta già sulla vista o su una scheda
   passa alla vista, senza scorrere: il pulsante della Penna appena premuto,
   la riga delle opzioni, un'altra parte della finestra. Col fuoco dentro una
   scheda che scrive (il campo, l'editor di una nota) i tasti restano del
   campo, ma il passo si ricorda: Ctrl+Z (Ctrl+Maiusc+Z, Ctrl+Y) preso in
   cattura sulla vista prima del campo annulla (rifà) i gesti d'inchiostro
   fatti dall'ultimo tasto, e il campo resta aperto col suo testo
-  (`#inkUndoKey`). Un altro tasto, o una storia cambiata sotto, li lascia:
+  (`_inkUndoKey`). Un altro tasto, o una storia cambiata sotto, li lascia:
   da lì Ctrl+Z torna al campo.
 - **La modifica da fuori a penna giù.** `syncDoc` aggiorna subito modello,
   sorgente e nucleo; il ridisegno passa da `quiet.defer("render", …)` e
@@ -153,13 +153,13 @@ schede.
   sotto il puntatore perde `:hover` e si ridipinge). Il
   bersaglio del tratto si cerca per coordinate e non cambia; il menu, il
   dito, il doppio clic e la rotella vedono ciò che c'è sotto il velo
-  (`#targetOf`, `#elementAt`), e sotto il velo nessun filo si scurisce.
+  (`_targetOf`, `_elementAt`), e sotto il velo nessun filo si scurisce.
 - **L'inizio del tratto senza pittura.** Il bordo tratteggiato della scheda
   bersaglio (`.canvas-ink-frames`) è uno strato composto suo
   (`will-change: opacity`), sopra ogni scheda dello stage (`z-index: 2`) e
   portato sull'angolo della scheda con `transform`: un tratto che comincia
   sulla scheda del tratto prima cambia solo `data-idle`, cioè l'opacità
-  dello strato, e la lavagna sotto non si ridipinge; `#placeInkFrame`
+  dello strato, e la lavagna sotto non si ridipinge; `_placeInkFrame`
   scrive le misure solo quando cambiano. Il velo che compare e la cattura
   del tratto tolgono `:hover` alla scheda sotto il puntatore: la scheda che
   l'aveva (letta ai `pointerover`, mai a ogni movimento) tiene l'aspetto del

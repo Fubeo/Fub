@@ -7,7 +7,7 @@
 > lavagna da tastiera e col lettore di schermo; «Apri a lato per questo»;
 > lo spazio di lavoro (Completo e Semplice) e l'interfaccia nascosta.
 > **Fonti autorevoli:** `apps/client/src/editors/canvas/engine.ts`
-> (`#jumpCamera`, `#paintGrid`, `#refreshDetail`, `#keydown`), `jumps.ts`, `guides.ts`,
+> (`_jumpCamera`, `_paintGrid`, `_refreshDetail`, `_keydown`), `jumps.ts`, `guides.ts`,
 > `chrome/navigator.ts`, `chrome/radial.ts`, `view-state.ts`, `lod.ts`, `find.ts`,
 > `chrome/find-bar.ts`, `chrome/workspace.ts` e `a11y.ts`, con le loro prove;
 > i conti della camera in `apps/client/src/editors/spatial/camera.ts`.
@@ -30,7 +30,7 @@ sono quelli di `spatial/camera.ts` (`zoomAtPoint`, `fit`, `stepCamera`).
   tutto non va oltre il 100% e lascia 80 unità per lato. Il salto vola con
   `stepCamera`; col movimento ridotto (di sistema o delle Impostazioni, letto
   anche a lavagna aperta) arriva subito. Passa tutto da un solo punto
-  (`#jumpCamera`), che ricorda il salto per Indietro e Avanti.
+  (`_jumpCamera`), che ricorda il salto per Indietro e Avanti.
 - **Indietro e Avanti.** Alt+← e Alt+→ (i comandi della shell
   `shell.pane.back` e `shell.pane.forward`, come le frecce della barra del
   titolo; col fuoco su una scheda Alt+← e Alt+→ vanno invece alla scheda
@@ -175,7 +175,7 @@ riquadro di ciò che si vede (`chrome/navigator.ts`). L'inquadratura è
 `navigatorBox` del disegno: la lavagna e la vista, con un margine; una scheda
 lontanissima ci sta.
 
-- **Un clic** porta il centro della vista lì: è un salto (`#jumpCamera`), che
+- **Un clic** porta il centro della vista lì: è un salto (`_jumpCamera`), che
   vola come `Maiusc+1`, o arriva subito col movimento ridotto, e Indietro lo
   ricorda.
 - **Trascinare** sposta la vista sotto la mano, subito, senza volo; preso
@@ -362,7 +362,7 @@ della vista (`chrome/find-bar.ts`, N6 T60): il campo, il contatore
   resta della stessa misura sullo schermo. La ricerca vuota non vela niente.
 - **Invio** porta la vista al risultato del contatore, poi al seguente (e
   gira); **Maiusc+Invio** al precedente; ‹ e › lo stesso. Scrivere non muove
-  la vista. Ogni risultato è un salto (`#jumpCamera`): le sue schede al
+  la vista. Ogni risultato è un salto (`_jumpCamera`): le sue schede al
   centro con lo zoom di adesso, o più lontano se non ci stanno; col movimento
   ridotto senza volo; Indietro torna da dove si era partiti.
 - **Esc** e la × chiudono: il velo se ne va, la vista resta dov'è arrivata e
@@ -370,7 +370,7 @@ della vista (`chrome/find-bar.ts`, N6 T60): il campo, il contatore
 
 ## Da tastiera e col lettore di schermo
 
-Le regole pure stanno in `a11y.ts`; il motore le chiama da `#keydown` e
+Le regole pure stanno in `a11y.ts`; il motore le chiama da `_keydown` e
 scrive i nomi sulle schede.
 
 - **Tab e Maiusc+Tab**, col fuoco sulla lavagna o su una scheda, vanno alla
@@ -422,7 +422,7 @@ scrive i nomi sulle schede.
 
 Ciò che una scheda non fa (righe e colonne di un foglio, un documento Word,
 la nota intera) si fa nell'editor del file, aperto accanto allo stesso punto:
-`canvas.open_beside_here` (`#besideHere` in `engine.ts`). Vale per la scheda
+`canvas.open_beside_here` (`_besideHere` in `engine.ts`). Vale per la scheda
 di file attiva, anche in sola lettura (aprire è guardare); senza, è spento
 col perché. Il punto, e il nome che lo dice:
 

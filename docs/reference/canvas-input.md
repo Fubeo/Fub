@@ -7,7 +7,7 @@
 > degli strumenti, la riga delle opzioni, la barra della selezione e la
 > banda di stato.
 > **Fonti autorevoli:** `apps/client/src/editors/canvas/engine.ts`
-> (`#keydown`, `#wheel`, le schede attive) e le prove in
+> (`_keydown`, `_wheel`, le schede attive) e le prove in
 > `apps/client/src/editors/canvas/engine.test.ts`, `engine-drag-wheel.test.ts`, `engine-radial-keyboard.test.ts`,
 > `engine-cards.test.ts`, `engine-collaudo.test.ts`, `engine-lost-release.test.ts` e `engine-marquee.test.ts`
 > (il rettangolo, con `marquee.test.ts` per la geometria); per i comandi,

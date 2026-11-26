@@ -43,7 +43,7 @@ tiene le schede col nome che contiene ciò che si scrive (senza badare a
 maiuscole e accenti) e della specie scelta (note, testi, gruppi, PDF), coi
 gruppi che le contengono. Un clic, Invio o Spazio porta la vista sulla scheda
 e la sceglie (`revealSource` della tela, al byte dove comincia l'oggetto della
-scheda); la vista ci va come ogni salto (`#jumpCamera`): vola, e Indietro
+scheda); la vista ci va come ogni salto (`_jumpCamera`): vola, e Indietro
 torna da dove si era ([canvas-view.md](canvas-view.md)). La riga resta
 segnata finché la scelta della lavagna non cambia per un'altra strada. Le frecce, Inizio, Fine e PagSu/PagGiù muovono il fuoco fra
 le righe, con una sola fermata del Tab.
