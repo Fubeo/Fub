@@ -61,10 +61,9 @@
 1577 apps/client/src/ui/mermaid.ts
 2003 apps/client/src/ui/node.test.ts
 2168 apps/client/src/ui/node.ts
-2184 crates/fub-abi/src/arena.rs
 1886 crates/fub-abi/src/command.rs
 1928 crates/fub-abi/src/grid_bytes.rs
-2903 crates/fub-abi/tests/a_named_rule_is_declared.rs
+2451 crates/fub-abi/tests/a_named_rule_is_declared/regole.rs # una tabella sola (l'allowlist delle regole di un nome): divisa si leggerebbe peggio
 1603 crates/fub-abi/tests/dependency_invariant.rs
 1677 crates/fub-abi/tests/wit_additivity.rs
 1598 crates/fub-app/src/resources.rs
@@ -83,14 +82,12 @@
 1553 crates/fub-disegno/src/gesti/strumento.rs
 1513 crates/fub-disegno/src/profilo/unione.rs
 1928 crates/fub-features/src/backlinks.rs
-2736 crates/fub-features/src/base.rs
+2054 crates/fub-features/src/base.rs
 1680 crates/fub-features/src/draw/create.rs
 2039 crates/fub-features/src/draw/interop.rs
 1641 crates/fub-features/src/graph.rs
-2028 crates/fub-features/src/lavagna.rs
 1580 crates/fub-features/src/lavagna/note.rs
 1593 crates/fub-features/src/note_types.rs
-2065 crates/fub-features/src/outline.rs
 1849 crates/fub-features/tests/commands_e2e.rs
 2330 crates/fub-features/tests/lavagna.rs
 1614 crates/fub-features/tests/properties_view_e2e.rs
@@ -105,15 +102,13 @@
 1685 crates/fub-format-rich/tests/odt.rs
 2481 crates/fub-format-xlsx/src/grid.rs
 1576 crates/fub-host/src/automation.rs
-2019 crates/fub-host/src/jobs.rs
 2142 crates/fub-host/src/legacy_tests/read_model_lock.rs
 1540 crates/fub-host/src/registry.rs
 1627 crates/fub-host/src/settings/catalog.rs
 1549 crates/fub-host/src/support.rs
-2085 crates/fub-host/src/watcher.rs
 1645 crates/fub-kernel/src/entries.rs
 1817 crates/fub-kernel/src/storage/rooted.rs
-2508 crates/fub-kernel/src/vault.rs
+2149 crates/fub-kernel/src/vault.rs
 1586 crates/fub-kernel/tests/rename_and_events.rs
 1643 crates/fub-scene/src/xml.rs
 1595 crates/fub-sdk/src/testing/conformance.rs
