@@ -5376,8 +5376,20 @@ async function openMenuOggetto(page) {
   // la tastiera: il menu che si apre dopo mostra l'anello del fuoco di chi usa
   // la tastiera (WCAG 2.4.7). Col mouse, senza tastiera, non c'è (misurato).
   await scegliPrimo(page);
-  await page.click(".draw-header button[aria-label=\"Disegno\"]");
-  await page.waitForSelector("#context-menu [role='menuitem']:has-text('Oggetto')");
+  // Il menu si costruisce quando si apre. Prima che il motore sia pronto «Cerca un
+  // comando…» porta ancora «Ctrl /», che col motore è un altro comando
+  // (`toolbar.ts`): la voce più larga cambia e il menu con lei (conformità,
+  // «menu.voce.aperta»). Il menu aperto troppo presto si chiude e si riapre.
+  for (let prova = 0; ; prova += 1) {
+    await page.click(".draw-header button[aria-label=\"Disegno\"]");
+    await page.waitForSelector("#context-menu [role='menuitem']:has-text('Oggetto')");
+    const conTasto = await page.locator("#context-menu [role='menuitem']:has-text('Cerca un comando') .kit-row-keys").count();
+    if (conTasto === 0) break;
+    if (prova === 10) throw new Error("il motore del Completo non è pronto: «Cerca un comando…» porta ancora il tasto");
+    await page.keyboard.press("Escape");
+    await page.waitForSelector("#context-menu", { state: "hidden", timeout: 2000 }).catch(() => undefined);
+    await page.waitForTimeout(500);
+  }
   await page.hover("#context-menu [role='menuitem']:has-text('Oggetto')");
   // Il terzo livello (K6 T9c): Oggetto › Tracciato, aperto come nel prototipo.
   await page.waitForSelector(".context-submenu [role='menuitem']:has-text('Tracciato')");

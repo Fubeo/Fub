@@ -4,5 +4,11 @@
     "proprieta": "box-shadow",
     "motivo": "La ricerca prende il fuoco quando si apre, come vuole il campo di Ctrl+/ (il banco la fotografa col fuoco dentro); il prototipo è fermo, senza fuoco, e il suo anello non si vede. L'anello è lo stesso stile di fuoco del kit.",
     "riferimento": "PLAN.md, T9, «Ctrl+/ (command-search.ts)»: la ricerca si apre con il campo pronto a scrivere"
+  },
+  {
+    "pezzo": "menu.voce.aperta",
+    "proprieta": "width",
+    "motivo": "Col motore pronto «Cerca un comando…» non porta «Ctrl /»: in VectorCraft quel tasto è «Aggiungi nuovo riempimento», e la ricerca si apre solo dal menu. Nel prototipo la voce col tasto è la più larga; senza, la più larga è «Immagine dal vault…» con «Ctrl I», e il menu (con la voce aperta) è più stretto di 1,16 px. Stili e altezza restano uguali.",
+    "riferimento": "editors/spatial/tools/editor/toolbar.ts, la voce «draw.commands.open»: col motore niente tasto"
   }
 ]
