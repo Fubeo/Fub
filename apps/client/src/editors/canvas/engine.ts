@@ -5,7 +5,7 @@ import { errorText } from "../../host/errors";
 import { t, onLanguage, plural, type Key } from "../../i18n/strings";
 import { MENU_RULE, menuBelow, type SurfaceClipboardOp, type SurfaceMenu, type SurfaceMenuClipboard, type SurfaceMenuEntry, type SurfaceMenuItem } from "../core/editor-menu";
 import { clipboardSupports, readClipboard, writeClipboardData, writeClipboardText } from "../../platform/clipboard";
-import { lineFeeds, operationFromText, type EditorChangeOrigin, type TextOperation } from "../core/text-operation";
+import { type EditorChangeOrigin, type TextOperation } from "../core/text-operation";
 import { idleSchedule } from "../../ink/dom/idle";
 import type { InkPointerType } from "../../ink/input/pointer";
 import { PenQuiet, type Schedule } from "../../ink/quiet";
@@ -21,7 +21,6 @@ import { anchorAt, cellAnchorAt, pageAnchorAt, strokeBounds, StrokeBox, type Bou
 import { parseTsv } from "../core/tsv";
 import { DROP_GROUP_THRESHOLD, markdownTable, sortedDrop, type DropFile } from "./drop-layout";
 import { parsePageRanges } from "./page-ranges";
-import type { PdfPagesReader } from "../core/cards/kinds/pdf";
 import { ENTRIES_DRAG_TYPE, NOTE_DRAG_TYPE } from "../../ui/drag-types";
 import {
   cardKindOf,
@@ -30,24 +29,20 @@ import {
   type CardContext,
   type CardEditorContext,
   type CardCellBox,
-  type CardEditorPort,
   type CardEditorState,
   type CardKind,
   type CardMode,
   type CardPageBox,
   type CardQuiet,
-  type CardRegistry,
   type CardRenderer,
-  type CardSize,
   type CardSnapshots,
   type CardTextEditor,
   type CardView,
   type CardWriting,
   type Rect,
 } from "../core/cards/contract";
-import { textCardName } from "./card-name";
-import { boardReading, cardLabel, cardTitle, changeAnnouncement, nearestCard, stepInOrder, type BoardReading, type CardDirection } from "./a11y";
-import { applyCardDetails, cardDetail, detailLevel, farTitle, type CardDetail } from "./lod";
+import { boardReading, cardLabel, cardTitle, changeAnnouncement, nearestCard, stepInOrder, type BoardReading } from "./a11y";
+import { applyCardDetails, cardDetail, detailLevel, farTitle } from "./lod";
 import {
   cutInk,
   cutPath,
@@ -56,7 +51,6 @@ import {
   InkEraseSource,
   inkKey,
   pieceRecords,
-  type CutPiece,
   type ErasableInk,
   type InkEraserMode,
   type StrokeCut,
@@ -91,7 +85,7 @@ import { checkProblemText, clipboardText, codeTextProblem, problemPhrase, readCo
 import { asCopies, asUpdates, codeClashes, placedAt, type CodeClashes } from "./code-paste";
 import { createCanvasNavigator, type CanvasNavigator } from "./chrome/navigator";
 import { CanvasJumps } from "./jumps";
-import { applyFindMarks, boardFindIndex, findMarks, type FindMark, type FindNotesPort, type FindTarget } from "./find";
+import { applyFindMarks, boardFindIndex, findMarks, type FindMark, type FindTarget } from "./find";
 import { createCanvasFindBar, type CanvasFindBar } from "./chrome/find-bar";
 import {
   CANVAS_CLIPBOARD_TYPE,
@@ -129,10 +123,10 @@ import {
   type CanvasStatusPort,
 } from "./chrome/status";
 import type { SurfaceStatusItem } from "../core/registry";
-import { CitationCounts, cardFilePath, headZonePaths, syncCardHead, twinGroups, type CardCitations } from "./card-head";
+import { CitationCounts, cardFilePath, headZonePaths, syncCardHead, twinGroups } from "./card-head";
 import { CanvasDepositError, type DropFolderChoice } from "../../state/canvas-intake";
 import { saveStateKey } from "../../state/saving";
-import { SHARED_RECENT_COMMANDS, openCommandSearch, type CommandSearchHandle, type RecentCommands } from "./chrome/command-search";
+import { SHARED_RECENT_COMMANDS, openCommandSearch, type CommandSearchHandle } from "./chrome/command-search";
 import { inkFitMode, validAspect } from "./ink-fit";
 import { mountInkLayer, type InkGuide, type InkGuideStart, type InkLayer, type InkLayerStroke } from "./ink-layer";
 import { createCanvasRuler, type CanvasRuler } from "./ink-ruler";
@@ -152,17 +146,17 @@ import {
   type CanvasColorChoice,
 } from "./colors";
 import { createColorPicker, openDialog, openPopover, textField, type PopoverHandle } from "../../kit";
-import { PARTS_KEY, cardParts, nodeParts, partsFit, writeParts, type CanvasParts, type PartsExtra } from "./parts";
+import { PARTS_KEY, cardParts, nodeParts, partsFit, writeParts, type PartsExtra } from "./parts";
 import { cardTarget } from "./sources";
-import { WHOLE_ZONE, isWholeZone, openCropEditor, zoneOf, zoneParts, zoneRatio, type CropEditor, type CropPicture, type ImageZone } from "./crop";
-import { PARTS_PICKER_MIN_SECTIONS, openPartsPicker, partsSections, type PartsHeading, type PartsPickerHandle, type PartsPickerPlace, type PartsPickerPort } from "./parts-picker";
+import { WHOLE_ZONE, isWholeZone, openCropEditor, zoneOf, zoneParts, zoneRatio, type CropPicture, type ImageZone } from "./crop";
+import { PARTS_PICKER_MIN_SECTIONS, openPartsPicker, partsSections, type PartsHeading, type PartsPickerHandle, type PartsPickerPlace } from "./parts-picker";
 import { cardFormulaBar, type CardFormulaBar } from "../core/formula-bar";
 import { noteHeadingOf } from "../core/cards/kinds/note";
 import { excerptSourcePath, noteExcerptOf, noteSectionsText, sectionHeading, syncExcerptHead } from "./excerpt";
 import { READER_TAP_MS, READER_TAP_SLOP, openReader, type ReaderHandle } from "./reader";
-import { DEFAULT_PREFERENCES, currentPreferences, snapStepOf, readInkMouse, readPen, saveInkMouse, savePen, watchPreferences, type DragEmptyAction, type PenButtonAction, type WheelAction } from "./preferences";
-import { TAP_MAX_MS, TAP_SLOP_PX, isTap, pinchCamera, type TouchCamera, type TouchPoint, type ZoomLimits } from "./touch";
-import { fit, stepCamera, zoomAtPoint, type Camera, type MotionState, type ScaleLimits } from "../../spatial/camera";
+import { DEFAULT_PREFERENCES, currentPreferences, snapStepOf, watchPreferences, type DragEmptyAction, type PenButtonAction, type WheelAction } from "./preferences";
+import { TAP_MAX_MS, TAP_SLOP_PX, isTap, pinchCamera, type TouchCamera, type TouchPoint } from "./touch";
+import { fit, stepCamera, zoomAtPoint, type MotionState } from "../../spatial/camera";
 import { onReducedMotionChange, reducedMotion } from "../../theme/reduced-motion";
 import {
   DEFAULT_INK_CHOICE,
@@ -203,13 +197,11 @@ import {
   type EdgeSide,
   type PlacedEdge,
 } from "./edges";
-import { CanvasViewRecorder, type CanvasView, type CanvasViewMemory, type CanvasViewSnapshot } from "./view-state";
-import { GUIDE_SCREEN_PX, snapGuides, type GuideRect, type GuideResult, type GuideSegment, type GuideSide } from "./guides";
+import { CanvasViewRecorder, type CanvasView, type CanvasViewSnapshot } from "./view-state";
+import { GUIDE_SCREEN_PX, snapGuides, type GuideRect, type GuideResult, type GuideSegment } from "./guides";
 import {
   CanvasCoreError,
-  canvasCoreReady,
   changedModel,
-  openCoreNow,
   type CanvasCheckReport,
   type CanvasCommitted,
   type CanvasCompiled,
@@ -220,1411 +212,212 @@ import {
   type CanvasSourceEdit,
 } from "./wasm/core";
 import { composingKey } from "../../kit/ime";
-
-export const CANVAS_SNAP = 8;
-/** I bottoni di allineamento e di distribuzione: `align` coi sei lati, `distribute` con i due assi. */
-type CanvasArrange = CanvasAlign | "distribute-x" | "distribute-y";
-/** I pixel dello schermo fra i tratti scelti col Lazo e la loro cornice (T86). */
-const LASSO_FRAME_PAD = 6;
-/**
- * I punti della griglia si vedono ogni tanti passi di `CANVAS_SNAP` (T95: ogni
- * 32 unità): l'aggancio resta di 8, lo sfondo non si riempie di punti.
- */
-export const CANVAS_GRID_DOT_STEPS = 4;
-/** Sotto questi pixel fra due punti, sullo schermo, la griglia non si disegna (T71): sotto il 50%. */
-export const CANVAS_GRID_MIN_PX = 16;
-export const CANVAS_MIN_SIZE = 40;
-export const MAX_CANVAS_HISTORY = 100;
-/** La pausa dopo l'ultimo tasto in una scheda, prima che il suo testo si registri. */
-export const CARD_PAUSE_MS = 250;
-/** Oltre questo numero di schede nuove, «Spargi le pagine» (T72) chiede conferma. */
-export const SPREAD_CONFIRM_ABOVE = 200;
-/** Quanto si aspetta dopo l'ultimo scatto della rotella prima di dire finito il gesto (A-7). */
-export const WHEEL_SETTLE_MS = 150;
-/** Una riga della rotella in pixel: un valore di partenza, come nella lavagna del grafo. */
-const WHEEL_LINE_PX = 16;
-
-/**
- * Il delta della rotella in pixel, qualunque unità abbia scelto il browser:
- * `deltaMode` 1 conta righe, 2 pagine, e la pagina è la misura della vista.
- */
-function wheelPixels(delta: number, deltaMode: number, page: number): number {
-  if (deltaMode === 1) return delta * WHEEL_LINE_PX;
-  if (deltaMode === 2) return delta * page;
-  return delta;
-}
-
-/** I tasti che una scheda scelta e non attiva può prendere (`CardView.key`, T14). */
-const CARD_KEYS: ReadonlySet<string> = new Set(["PageUp", "PageDown", "Home", "End"]);
-
-/**
- * Le frecce che con Alt vanno alla scheda più vicina (T61, M1). Alt+← e Alt+→
- * solo col fuoco su una scheda: altrove sono Indietro e Avanti dello
- * Scrittoio (`CARD_ONLY_NEAREST_KEYS`, DECISIONS.md, T56 e T61).
- */
-const NEAREST_CARD_KEYS: ReadonlyMap<string, CardDirection> = new Map([
-  ["ArrowUp", "up"],
-  ["ArrowDown", "down"],
-  ["ArrowLeft", "left"],
-  ["ArrowRight", "right"],
-]);
-
-/** Le frecce di `NEAREST_CARD_KEYS` che la lavagna senza una scheda a fuoco lascia alla shell. */
-const CARD_ONLY_NEAREST_KEYS: ReadonlySet<string> = new Set(["ArrowLeft", "ArrowRight"]);
-
-/**
- * Quante schede nomina un passo del giro dei nomi (T61), fra un momento libero
- * del thread e l'altro. Misurato in Vitest (Node, non la WebView) sul PC di
- * sviluppo, con 2000 schede, 2000 fili e 50 gruppi: 7–9 ms per tutti i nomi
- * più 2–4 ms per la lettura (`boardReading`, una volta per documento), cioè
- * circa 1 ms ogni 250 nomi.
- */
-const LABEL_BATCH = 250;
-
-/** Le specie in cui il doppio clic entra, come Invio (T14). */
-const DOUBLE_CLICK_ENTERS: ReadonlySet<CardKind> = new Set(["note", "document", "sheet"]);
-/** Che cosa mostra una scheda di file, per il gesto di Invio e del doppio clic (T93). */
-type FileShowing = "missing" | "loading" | "unreadable" | "shown";
-/** Il testo più lungo di una scheda, in byte UTF-8: oltre, il nucleo rifiuta la lavagna (`invalid`). */
-const MAX_CARD_TEXT_BYTES = 1_048_576;
-/** Quanto si aspetta la misura di un'immagine portata dentro, prima di usare quella di serie. */
-export const MEASURE_IMAGE_TIMEOUT_MS = 3_000;
-/** Quante immagini si misurano insieme quando ne arrivano tante. */
-const MEASURE_IMAGE_PARALLEL = 4;
-/**
- * Oltre questi file trascinati i riquadri tratteggiati non si calcolano: la
- * cornice del gruppo li direbbe, ma una compilazione di migliaia di schede a
- * ogni entrata non vale un'anteprima.
- */
-const MAX_DROP_GHOSTS = 1000;
-/**
- * I punti al più del cammino di un `erase_along`: `MAX_ERASE_POINTS` del
- * nucleo (`crates/fub-canvas-core/src/ops/erase.rs`), quanti campioni ha un
- * tratto. Un cammino più lungo va in più operazioni.
- */
-const ERASE_ALONG_MAX_POINTS = 10_000;
-/**
- * Il lavoro che la tela concede a un `erase_along`: metà di `MAX_ERASE_WORK`
- * del nucleo (50 000 000 distanze), perché la stima della tela
- * (`eraseAlongSegments`) non sa i segmenti che il nucleo trova vicini.
- */
-const ERASE_ALONG_WORK = 25_000_000;
-/**
- * Le schede al più di una `move` con `contents`, quelle date più quelle dei
- * gruppi: `MAX_MOVED` del nucleo (`crates/fub-canvas-core/src/ops/adjust.rs`).
- */
-const MOVE_CONTENTS_MAX = 1_000;
-const utf8 = new TextEncoder();
-const MAX_INTERACTIVE_NODES = 2_000;
-const MAX_INTERACTIVE_EDGES = 4_000;
-
-export interface CanvasChange {
-  readonly text: string;
-  readonly operation: CanvasOperation;
-  readonly origin: EditorChangeOrigin;
-}
-
-export interface CanvasMediaPort {
-  readonly openExternal: (target: string) => void | Promise<void>;
-  readonly openViewer?: (target: string) => void | Promise<void>;
-}
-/** External bytes become cards only after deposit returns; no implicit file writes. */
-export interface CanvasAttachmentPort {
-  /** Receipts contain vault-relative paths after collision-safe, explicit deposit.
-   *  `cards` sono le schede che questo gesto farà nascere coi percorsi tornati:
-   *  un gesto dopo (la notifica «Fanne una copia», T32b) le ripunta per id. */
-  readonly deposit: (files: readonly File[], documentId: string, cards: CanvasDepositCards) => Promise<readonly string[]>;
-  /** Resolve only existing trusted vault paths/folders, never local filesystem bytes. */
-  readonly resolvePaths?: (data: DataTransfer, documentId: string) => Promise<readonly string[]>;
-  /** Enumerate direct files and OS folder entries once; every result passes through deposit. */
-  readonly expandFiles?: (data: DataTransfer) => Promise<readonly File[]>;
-}
-
-/** Una scheda da ripuntare: mostrava `from`, mostrerà `to`. */
-export interface CanvasRepoint {
-  readonly from: string;
-  readonly to: string;
-}
-
-/**
- * Le schede nate da un deposito dal computer (T32b). La lavagna le ricorda per
- * id, non per percorso: una scheda tolta dopo non si tocca, una spostata si
- * ripunta lo stesso, e una che mostra già un altro file resta com'è. Una
- * scheda che il vault aveva già sulla lavagna, con lo stesso file, non è di
- * questo gesto e non cambia.
- */
-export interface CanvasDepositCards {
-  /** Falso dopo che la lavagna è stata chiusa o è diventata di sola lettura:
-   *  l'azione di una notifica rimasta a galla non fa più niente. */
-  readonly live: () => boolean;
-  /** Ripunta le schede del gesto in un commit solo (un Ctrl+Z torna ai file di
-   *  prima) e dice quante ne ha cambiate. */
-  readonly repoint: (changes: readonly CanvasRepoint[]) => number;
-}
-
-/**
- * Dove la tela apre le sue lavagne: per difetto il nucleo condiviso della
- * shell (`wasm/core.ts`). `openNow` apre subito, o dà `null` se il nucleo non
- * è carico; `ready` lo carica.
- */
-export interface CanvasCorePort {
-  readonly openNow: (text: string) => CanvasCore | null;
-  readonly ready: () => Promise<void>;
-}
-
-const SHARED_CORE: CanvasCorePort = { openNow: openCoreNow, ready: canvasCoreReady };
-
-/**
- * Dove la lavagna ricorda l'interruttore «Scrivi col mouse»: `read` dà lo
- * stato con cui una lavagna che si apre comincia (spento, salvo «Ricorda se
- * scrivi col mouse» acceso); `save` ricorda una scelta fatta col pulsante.
- * Per difetto lo stato di vista di questo computer (`preferences.ts`).
- */
-export interface CanvasInkMouseMemory {
-  readonly read: () => Promise<boolean>;
-  readonly save: (on: boolean) => void;
-}
-
-const SHARED_INK_MOUSE: CanvasInkMouseMemory = { read: readInkMouse, save: saveInkMouse };
-
-/**
- * Dove la lavagna ricorda la penna scelta nel menu (A19): `read` dà quella
- * con cui una lavagna che si apre comincia, `save` ricorda una scelta fatta.
- * Per difetto lo stato di vista `canvas.pen` di questo computer.
- */
-export interface CanvasPenMemory {
-  readonly read: () => Promise<InkPenChoice>;
-  readonly save: (choice: InkPenChoice) => void;
-}
-
-const SHARED_PEN: CanvasPenMemory = { read: readPen, save: savePen };
-
-type CardField = "text" | "label" | "url" | "file";
-
-/** Il campo aperto su una scheda. */
-interface CardEditor {
-  readonly id: string;
-  readonly field: CardField;
-  /**
-   * Il campo semplice: c'è sempre, ed è dove si scrive finché l'editor delle
-   * note non lo sostituisce (la scheda di testo, T43), o se non si monta.
-   */
-  readonly input: HTMLInputElement | HTMLTextAreaElement;
-  /** Dove si scrive adesso: il campo semplice, o il contenitore dell'editor delle note. */
-  place: HTMLElement;
-  /** L'editor delle note in Live sopra il testo della scheda (T43), quando c'è. */
-  live: CardTextEditor | null;
-  readonly article: HTMLElement;
-  readonly lifetime: AbortController;
-  /** Una composizione dell'IME o un tasto morto in corso: la pausa aspetta la sua fine. */
-  composing: boolean;
-  /** Invio in una scheda di testo: l'a capo che arriva si registra subito. */
-  recordOnInput: boolean;
-  /**
-   * La scheda è nata adesso per essere scritta (lo strumento Testo,
-   * Ctrl+Invio): il passo d'annulla che l'ha messa. Lasciata vuota se ne va
-   * con lui (T44). `null` per una scheda che c'era già.
-   */
-  readonly born: CanvasStep | null;
-  /** La misura a cui la scheda di testo è cresciuta mentre ci si scrive (T44); `null` finché non cresce. */
-  grown: { readonly width: number; readonly height: number } | null;
-  /**
-   * Il punto della finestra del doppio clic che ha aperto la scheda di testo:
-   * l'editor delle note ci mette il cursore, come ogni editor di testo
-   * (IMP-3808). `null` senza un punto (Invio, una scheda nuova).
-   */
-  readonly point: { readonly x: number; readonly y: number } | null;
-}
-
-/** L'ultimo incolla scritto: il testo, il punto sulla griglia e quante volte di fila lì. */
-interface LastPaste {
-  readonly raw: string;
-  readonly x: number;
-  readonly y: number;
-  readonly count: number;
-}
-
-/**
- * Una scelta della finestra di «Incolla codice» (LIC T25): la lista così come
- * si scrive, il riassunto in parole (`""` se non cambia niente o non si può)
- * e il controllo del nucleo che lo dice.
- */
-interface PasteChoice {
-  readonly id: "paste" | "update" | "copies";
-  readonly ops: readonly unknown[];
-  readonly said: string;
-  readonly report: CanvasCheckReport;
-}
-
-/**
- * Un passo d'annulla (o di ripeti). Due vie per farlo: se il testo è ancora
- * quello che il passo ha lasciato (`version`), si rimette il tratto `removed`
- * al posto di `inserted`, byte per byte, e il testo torna alla sua versione di
- * prima (`restores`); se no si passano `patches` al nucleo, che le fonde con
- * ciò che è cambiato da un'altra parte.
- */
-interface CanvasStep {
-  /** Le toppe che fanno questo passo sul modello di adesso. */
-  readonly patches: CanvasPatch[];
-  /** Le toppe che disfano questo passo: valgono sul testo che il passo rimette. */
-  readonly back: CanvasPatch[];
-  /** Dove comincia il tratto, in unità UTF-16. */
-  readonly start: number;
-  /** Il tratto del testo di adesso che il passo toglie. */
-  readonly inserted: string;
-  /** Il tratto che il passo rimette al suo posto. */
-  readonly removed: string;
-  /** La versione del testo che il passo ha lasciato: se è ancora quella, la via è il tratto. */
-  readonly version: number;
-  /** La versione del testo che il passo rimette. */
-  readonly restores: number;
-}
-
-/**
- * Un tratto spezzato al limite dei campioni (`split`) che continua nel pezzo
- * dopo: il passo che tiene i pezzi già scritti e il testo di prima del primo
- * pezzo. Il pezzo dopo si fonde in quel passo (A4).
- */
-interface InkChain {
-  readonly step: CanvasStep;
-  readonly before: string;
-}
-
-/**
- * Una passata della gomma: il tratto dell'adattatore che la fa, il registro
- * di ciò che ha preso e i tratti disegnati che può prendere, fissati quando
- * comincia. Con `"piece"` (T22) anche il cammino fatto, in coordinate della
- * lavagna, e il taglio di adesso di ogni tratto toccato, per chiave.
- */
-/**
- * Il trascinamento delle schede in corso: le schede scelte (`ids`), ognuna
- * col suo posto di partenza in `origin` insieme a ciò che i gruppi scelti
- * portano, e lo spostamento di adesso (`dx`, `dy`, in unità intere della
- * lavagna), lo stesso per tutte: al rilascio è una `move` (T24).
- */
-interface CardDrag {
-  readonly pointerId: number;
-  startX: number;
-  startY: number;
-  readonly ids: readonly string[];
-  readonly origin: Map<string, { x: number; y: number }>;
-  moved: boolean;
-  /** Lo spostamento di adesso, in unità intere: la scheda segue il puntatore 1:1. */
-  dx: number;
-  dy: number;
-  /**
-   * Dove andrà lasciandola (#411 C-05): la guida che vince o la griglia di
-   * `canvas.snap_step`. Uguale a `dx`/`dy` con Alt o con l'aggancio spento.
-   */
-  aimDx: number;
-  aimDy: number;
-}
-
-/**
- * I riquadri tratteggiati di un trascinamento di file (T24): quanti file,
- * il punto agganciato in cui il nucleo li ha disposti, le schede e il gruppo
- * oltre i dodici, in coordinate della lavagna.
- */
-interface DropGhost {
-  readonly count: number;
-  readonly x: number;
-  readonly y: number;
-  readonly cards: readonly Rect[];
-  readonly group: Rect | null;
-}
-
-interface InkErase {
-  readonly id: number;
-  readonly sweep: EraseSweep<ErasableInk>;
-  readonly source: InkEraseSource;
-  readonly mode: InkEraserMode;
-  readonly path: Spot[];
-  readonly cuts: Map<string, InkErasing>;
-  /** Il raggio della gomma in unità della lavagna, allo zoom dell'ultimo passo: `erase_along` lo scrive. */
-  radius: number;
-}
-
-/** Un tratto che la gomma «Solo il pezzo» sta tagliando. */
-interface InkErasing {
-  readonly unit: ErasableInk;
-  readonly pieces: readonly CutPiece[];
-  /** Il contorno dei pezzi, per l'anteprima. */
-  readonly preview: string;
-}
-
-// --- a chi appartiene il tratto (T69) ---
-/**
- * Il tratto della punta in corso e l'ancora che avrebbe se finisse adesso: il
- * riquadro cresce coi punti che la vista vede (`pointermove`, dopo la scia),
- * il bordo tratteggiato e il testo dell'etichetta cambiano solo quando cambia
- * l'ancora.
- */
-/**
- * Lo spostamento col Lazo (T86): le schede scelte e i tratti scelti insieme,
- * di `dx`, `dy` unità della lavagna. Le schede si muovono nel modello in mano
- * come in `#drag`; i tratti si vedono spostati sullo strato del lazo, sopra
- * gli originali attenuati, e al rilascio vanno nel file in un commit solo.
- */
-interface StrokeDrag {
-  readonly pointerId: number;
-  readonly startX: number;
-  readonly startY: number;
-  /** Le schede che si spostano, con la posizione di partenza. */
-  readonly origin: Map<string, { x: number; y: number }>;
-  /** I tratti scelti, come erano alla partenza. */
-  readonly units: readonly ErasableInk[];
-  /** Dove sta la vista sullo schermo, letto alla partenza. */
-  readonly view: DOMRect;
-  moved: boolean;
-  dx: number;
-  dy: number;
-  /** L'ultimo punto del puntatore, per rifare la scheda quando cambia Alt. */
-  clientX: number;
-  clientY: number;
-  /** La scheda che prenderà i tratti, `null` se restano liberi; `undefined` prima del primo giro. */
-  holder: string | null | undefined;
-}
-
-/** Lo strato del lazo sullo stage (T86): i tratti scelti, la loro cornice, il giro in corso. */
-interface LassoLayer {
-  readonly svg: SVGSVGElement;
-  readonly chosen: SVGGElement;
-  readonly frame: SVGRectElement;
-  readonly path: SVGPathElement;
-}
-
-/** Lo strato del rettangolo sullo stage (N6 T20b): un solo riquadro, in coordinate della lavagna. */
-interface MarqueeLayer {
-  readonly svg: SVGSVGElement;
-  readonly box: SVGRectElement;
-}
-
-/**
- * Un trascinamento nel vuoto con la Selezione (N6 T20b): il rettangolo tra il
- * punto di partenza e quello di adesso, in coordinate della lavagna. `base` è la
- * scelta com'era all'inizio, da cui Maiusc aggiunge e Esc torna.
- */
-interface MarqueeGesture {
-  readonly pointerId: number;
-  readonly startX: number;
-  readonly startY: number;
-  readonly from: { x: number; y: number };
-  to: { x: number; y: number };
-  readonly additive: boolean;
-  /** Il puntatore è andato oltre la soglia: è un rettangolo, non un clic. */
-  moved: boolean;
-  readonly base: { readonly nodes: readonly string[]; readonly edges: readonly string[]; readonly strokes: ReadonlySet<string> };
-}
-
-/** I tratti di `units` per livello, nell'ordine in cui arrivano. */
-function strokesByLayer(units: readonly ErasableInk[]): { readonly layer: InkLayerRef; readonly ids: string[] }[] {
-  const groups = new Map<string, { readonly layer: InkLayerRef; readonly ids: string[] }>();
-  for (const unit of units) {
-    const key = unit.node === null ? "board" : `node\u0000${unit.node}`;
-    let group = groups.get(key);
-    if (!group) {
-      group = { layer: unit.layer, ids: [] };
-      groups.set(key, group);
-    }
-    group.ids.push(unit.id);
-  }
-  return [...groups.values()];
-}
-
-/**
- * Le chiavi dei tratti scelti dopo le toppe `patches`: un tratto tolto da un
- * livello e aggiunto a un altro (`move_strokes` con `to`) resta scelto dove è
- * andato, col suo id nuovo se l'ha cambiato.
- */
-function keysAfter(chosen: ReadonlySet<string>, patches: readonly CanvasPatch[]): Set<string> {
-  const keys = new Set(chosen);
-  let carried = 0;
-  for (const patch of patches) {
-    if (patch.kind !== "ink") continue;
-    if (patch.before && !patch.after && keys.delete(inkKey(patch.layer, patch.before.id))) carried += 1;
-    else if (!patch.before && patch.after && carried > 0) {
-      keys.add(inkKey(patch.layer, patch.after.id));
-      carried -= 1;
-    }
-  }
-  return keys;
-}
-
-/** Un seme per gli id nuovi del nucleo: 64 bit a caso. */
-function randomSeed(): bigint {
-  const word = new BigUint64Array(1);
-  crypto.getRandomValues(word);
-  return word[0]!;
-}
-
-interface InkTarget {
-  readonly pointerId: number;
-  readonly box: StrokeBox;
-  /** Lo spessore del tratto in unità della lavagna: il pennello che la scia usa. */
-  readonly size: number;
-  /** Dove sta la vista sullo schermo, letto all'inizio del tratto: nessuna lettura del layout mentre si scrive. */
-  readonly view: DOMRect;
-  readonly label: HTMLElement;
-  /** Il contenitore dei quattro lati del bordo, sullo stage. */
-  readonly frames: HTMLElement;
-  /** L'id della scheda mostrata, `null` se il tratto è libero; `undefined` prima del primo giro. */
-  holder: string | null | undefined;
-}
-
-/**
- * L'etichetta e i lati del bordo, nati al primo tratto e tenuti per i tratti
- * dopo (nascosti a penna su): un tratto che comincia non crea nodi e non
- * chiede il layout. La misura dell'etichetta arriva da un `ResizeObserver`,
- * dopo il layout che il browser fa comunque: mai una lettura forzata.
- */
-interface InkMarks {
-  readonly label: HTMLElement;
-  /**
-   * Il bordo tratteggiato attorno alla scheda: quattro lati sottili in un
-   * contenitore sullo stage, non il contorno della scheda. Mostrarlo o
-   * toglierlo ridipinge solo i lati: il contorno ridipingerebbe tutta la
-   * scheda (una tabella di diecimila celle in S8) due volte per tratto. Il
-   * contenitore resta sullo stage: un tratto non vi aggiunge né toglie nodi.
-   */
-  readonly frames: HTMLElement;
-  /** La misura dell'etichetta e lo stacco dalla punta; zero finché non è misurata. */
-  width: number;
-  height: number;
-  gap: number;
-}
-
-/** I quattro lati del bordo tratteggiato della scheda sotto la penna. */
-const INK_FRAME_SIDES = ["top", "right", "bottom", "left"] as const;
-
-/** Il punto dove comincia il tratto che sta per nascere: l'ultimo appoggio, poi l'ultimo movimento visto. */
-interface InkPoint {
-  pointerId: number;
-  clientX: number;
-  clientY: number;
-}
-
-/** Il tasto che fa scrivere il mouse finché è giù (regola 1). */
-function isInkKey(event: KeyboardEvent): boolean {
-  return event.key.toLowerCase() === "d";
-}
-
-/** I comandi della vista che cambiano lo zoom: valgono anche fuori dalla vista (IMP-040). */
-const VIEW_ZOOM_COMMANDS: ReadonlySet<string> = new Set(["canvas.zoom_in", "canvas.zoom_out", "canvas.zoom_reset", "canvas.fit"]);
-
-/** I comandi della storia: valgono anche col fuoco su un pulsante fuori dalla vista (IMP-6300). */
-const HISTORY_COMMANDS: ReadonlySet<string> = new Set(["canvas.undo", "canvas.redo"]);
-
-/** Il tasto Menu o Maiusc+F10: il menu del tasto destro dalla tastiera (IMP-6301). */
-function isMenuKey(event: KeyboardEvent): boolean {
-  if (event.ctrlKey || event.metaKey || event.altKey) return false;
-  return (event.key === "ContextMenu" && !event.shiftKey) || (event.key === "F10" && event.shiftKey);
-}
-
-/** I campi senza testo: Ctrl+Z lì non ha niente da annullare, e va alla lavagna. */
-const NO_TEXT_INPUTS: ReadonlySet<string> = new Set(["button", "checkbox", "color", "radio", "range", "reset", "submit"]);
-
-/** Un campo che ha il suo annulla (il testo che si scrive): Ctrl+Z resta a lui. */
-function keepsItsUndo(target: EventTarget | null): boolean {
-  if (target instanceof HTMLInputElement) return !NO_TEXT_INPUTS.has(target.type);
-  return isTextTarget(target);
-}
-
-/** Un campo dove i tasti scrivono. */
-function isTextTarget(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) return false;
-  return target.tagName === "TEXTAREA" || target.tagName === "INPUT" || target.isContentEditable;
-}
-
-/** Gli stati dei livelli d'inchiostro, per il modello e i livelli del nucleo da cui vengono. */
-interface InkStates {
-  readonly doc: CanvasDocument;
-  readonly layers: readonly CanvasInkLayer[];
-  readonly states: readonly InkLayerState[];
-}
-
-/** Il testo del campo non ancora registrato: la scheda com'era, il campo, il testo. */
-interface PendingText {
-  card: CanvasNode;
-  readonly field: CardField;
-  text: string;
-  /** La misura a cui la scheda di testo è cresciuta col testo (T44): va nello stesso commit. */
-  size?: { readonly width: number; readonly height: number };
-}
-
-/**
- * Una voce del menu del tasto destro dal comando `id` del catalogo: `args`
- * dice su che cosa, `refocus` rimette il fuoco sulla tela dopo il gesto.
- */
-/** Il ritaglio aperto su una scheda d'immagine (T78). */
-interface CropSession {
-  readonly node: string;
-  /** Il file della scheda quando si è aperto: se cambia, il ritaglio si chiude. */
-  readonly path: string;
-  editor: CropEditor | null;
-  /** L'altezza che la scheda mostra intanto; `null` finché l'immagine non ha misure. */
-  height: number | null;
-}
-
-type MenuEntryMaker = (id: string, args?: CanvasCommandArgs, refocus?: boolean, extra?: Partial<SurfaceMenuItem>) => SurfaceMenuItem;
-
-/**
- * «Colore ›» col colore di adesso segnato (`undefined` quello di serie, `null`
- * nessuno: colori diversi), le voci come scelte esclusive (T47).
- */
-type ColorMenuMaker = (current: string | null | undefined, args?: CanvasCommandArgs) => SurfaceMenuItem;
-
-/**
- * Dove porta un link scritto in una scheda (N6 T57): un wikilink
- * `[[pagina#sezione^blocco]]`, o un percorso del vault che la montatura
- * riconosce come file (`a.internal-path`).
- */
-export type CardLinkRef =
-  | { readonly kind: "wiki"; readonly page: string; readonly heading: string | null; readonly block: string | null }
-  | { readonly kind: "path"; readonly path: string };
-
-export interface CanvasEngineOptions {
-  readonly surfaceId: string;
-  /** Il nucleo che apre le lavagne; i test ne passano uno che conta le chiamate. */
-  readonly core?: CanvasCorePort;
-  readonly formatId?: string | null;
-  readonly revision?: string;
-  readonly onChange: (change: CanvasChange) => void;
-  readonly onSelectionChange: () => void;
-  readonly onOpenWikilink?: (page: string, heading: string | null, block: string | null) => void | Promise<void>;
-  readonly onOpenPath?: (path: string, from?: string) => void | Promise<void>;
-  /** «Apri a lato» dal menu di una scheda di file: come `onOpenPath`, in un riquadro accanto. */
-  readonly onOpenPathBeside?: (path: string, from?: string) => void | Promise<void>;
-  /** «Apri a lato» di un wikilink di una scheda che non è sulla lavagna (T57), come quello di una nota. */
-  readonly onOpenWikilinkBeside?: (page: string, heading: string | null, block: string | null) => void | Promise<void>;
-  /**
-   * Dove porta un link scritto in una scheda (T57): il file del vault a cui
-   * punta, o `null` se non c'è (un link rotto). `from` è la nota in cui il link
-   * è scritto, o la lavagna. La risolve la shell come per le note: la tela non
-   * conosce i nomi. Assente, i link delle schede si seguono come prima, dalla
-   * montatura.
-   */
-  readonly resolveCardLink?: (link: CardLinkRef, from?: string) => Promise<string | null>;
-  /**
-   * «Sposta anche il file nel cestino» (T17): il file `path` del vault nel
-   * cestino, con il gesto dell'albero. `true` se il file è nel cestino,
-   * `false` se è rimasto (una domanda a cui si è detto di no); un rifiuto
-   * dell'host arriva come errore. Mai la conseguenza di un tasto.
-   */
-  readonly onTrashPath?: (path: string) => Promise<boolean>;
-  /**
-   * Le note per «Estrai in una nota» e «Copia il testo qui» (T70): il nome
-   * libero da proporre, la nota che nasce col testo, il testo di una nota.
-   * Assente: i due comandi non ci sono.
-   */
-  readonly notes?: CanvasNotesPort;
-  /**
-   * Sceglie il file del vault a cui punta una nuova card file; `null` o niente
-   * se l'utente rinuncia. Assente = niente bottone «aggiungi file»: una card
-   * che punta a un file inventato è un rimando rotto scritto nel documento.
-   * Con `name` (il nome del file di una scheda che non c'è più, «Ritrova…») la
-   * scelta mette per prima una voce con quel nome.
-   */
-  readonly onPickFile?: (name?: string) => string | null | void | Promise<string | null | void>;
-  readonly documentId?: string;
-  readonly media?: CanvasMediaPort;
-  readonly attachments?: CanvasAttachmentPort;
-  readonly theme?: Theme;
-  /**
-   * Il testo in sospeso di una scheda è cambiato: `true` se ne resta. Nessun
-   * lavoro in più: chi ascolta chiede `pendingText` quando gli serve.
-   */
-  readonly onPendingChange?: (pending: boolean) => void;
-  /**
-   * Una voce della banda di stato può essere cambiata: a fine gesto, mai a
-   * ogni fotogramma (`chrome/status.ts`). Chi ascolta la rilegge con
-   * `statusItems`.
-   */
-  readonly onStatusChange?: () => void;
-  /** Apre le Impostazioni su una voce (la cartella dei file trascinati, dalla banda). */
-  readonly onOpenSettings?: (key: string) => void;
-  /**
-   * Resa markdown reale di una card testo (stesso `renderMarkdown` della
-   * lettura, con `mountMarkdown` per sanitizzazione/embed). Assente = testo
-   * non interattivo: nessun secondo parser né scanner locale. `forms` sono le
-   * sintassi che il vault dà al Markdown delle card (`EMBEDDED_GRAMMAR`);
-   * assenti finché la superficie non le ha ricevute.
-   */
-  readonly renderMarkdownForCard?: (
-    nodeId: string,
-    text: string,
-    host: HTMLElement,
-    forms: readonly SyntaxForm[] | undefined,
-  ) => (() => void) | void;
-  /**
-   * «Il dito sposta le schede», letto quando il primo dito si posa: un cambio
-   * vale dal tocco dopo. I test lo passano; assente, la lavagna segue le
-   * Impostazioni di questo computer (`watchPreferences`).
-   */
-  readonly fingerMovesCard?: () => boolean;
-  /**
-   * Dove si ricorda «Scrivi col mouse»: letto una volta all'apertura, scritto
-   * a ogni clic sul pulsante. I test lo passano; assente, lo stato di vista
-   * di questo computer.
-   */
-  readonly inkMouseMemory?: CanvasInkMouseMemory;
-  /**
-   * Dove si ricorda la penna del menu: letta una volta all'apertura, scritta
-   * a ogni scelta. I test lo passano; assente, lo stato di vista di questo
-   * computer.
-   */
-  readonly penMemory?: CanvasPenMemory;
-  /**
-   * Dove si ricordano i comandi usati di recente in ogni lavagna, per la
-   * ricerca dei comandi (T48). I test lo passano; assente, lo stato di vista
-   * di questo computer.
-   */
-  readonly recentCommands?: RecentCommands;
-  /**
-   * Le schede di file e di link: chi le disegna per specie e le immagini
-   * ferme. Assente (un'altra finestra, le prove vecchie): il corpo di sempre,
-   * col percorso e il segnaposto.
-   */
-  readonly cards?: CanvasCards;
-  /**
-   * La misura in pixel dell'immagine `path` del vault, per la misura di
-   * nascita della sua scheda (T15); `null` se non si sa. Assente, o una
-   * risposta che non arriva in tempo: la misura di serie della specie.
-   */
-  readonly measureImage?: (path: string) => Promise<{ readonly width: number; readonly height: number } | null>;
-  /**
-   * Il Markdown dell'HTML degli appunti (una tabella copiata da un foglio o da
-   * una pagina), come lo incolla l'editor Markdown; `null` se non ce n'è.
-   * Assente: l'HTML non si legge, e le celle arrivano solo dal testo a
-   * tabulazioni.
-   */
-  readonly clipboardMarkdown?: (data: DataTransfer) => Promise<string | null>;
-  /**
-   * Dove si ricorda la vista della lavagna su questo computer (T36): la
-   * camera, la scelta e la pagina dei PDF, lette all'apertura e scritte con
-   * un ritardo. Assente, o senza `documentId`: si inquadra tutto a ogni
-   * apertura, come prima.
-   */
-  readonly viewMemory?: CanvasViewMemory;
-  /**
-   * Il sommario di una nota e la resa di una sua sezione, per il selettore
-   * delle sezioni (T74). Assente: niente selettore e niente «Parti…».
-   */
-  readonly parts?: PartsPickerPort;
-  /**
-   * Chi chiede all'indice del vault quali note della lavagna contengono una
-   * ricerca (T60); senza, la richiesta `documents` di `searchBoardNotes`. I
-   * test ne passano una che conta le chiamate.
-   */
-  readonly findNotes?: FindNotesPort;
-  /**
-   * Il seme degli id che il nucleo dà alle schede, ai fili e ai tratti nati
-   * da un'azione (`compile`, `docs/reference/canvas-code.md` § «Gli id
-   * nuovi»): uno nuovo per ogni azione. Di serie un numero a caso
-   * (`crypto.getRandomValues`); i test lo fissano, così l'azione della tela
-   * dà la stessa lavagna della sua forma in codice.
-   */
-  readonly seed?: () => bigint;
-  /**
-   * L'id di una scheda che un gesto fa nascere e che altre operazioni della
-   * stessa lista nominano (il rilascio di file, Collega nel vuoto, Ctrl+Invio
-   * in una scheda): di serie `newNodeId()`. Le prove lo fissano, come `seed`.
-   */
-  readonly newId?: () => string;
-}
-
-/**
- * Le note che la lavagna crea e legge (T70). La shell le fa coi suoi gesti
- * (`note.create`, la lettura di un documento); la tela non conosce il vault.
- */
-export interface CanvasNotesPort {
-  /**
-   * Il nome da proporre per una nota `name` nella cartella `folder` (`""` è la
-   * radice): `name` se è libero, se no `name 1`, `name 2`… È solo una
-   * proposta: se nel frattempo il nome si occupa, lo dice `create`.
-   */
-  freeName(folder: string, name: string): Promise<string>;
-  /**
-   * Crea la nota `name` nella cartella `folder` col testo `text` e torna il
-   * suo percorso nel vault. Un nome già preso è un errore, mai una nota
-   * sovrascritta.
-   */
-  create(folder: string, name: string, text: string): Promise<string>;
-  /** Il testo della nota `path` com'è adesso (anche non ancora salvato). */
-  read(path: string): Promise<string>;
-}
-
-/**
- * Le schede della tela: il registro dei renderer, la cache delle immagini ferme
- * e l'ascolto dei file. Una scheda il cui file manca non ha una vista: `watch`
- * avvisa quando il file torna, e la scheda si rimonta da sé (T16).
- */
-export interface CanvasCards {
-  readonly registry: CardRegistry;
-  readonly snapshots: CardSnapshots;
-  /**
-   * La porta per scrivere dentro le schede (T40), che la tela passa alle
-   * viste (`CardContext.editors`); assente, le schede si leggono e basta.
-   */
-  readonly editors?: CardEditorPort;
-  /** Avvisa quando il file `path` cambia, sparisce o torna; restituisce come smettere. */
-  watch(path: string, changed: () => void): () => void;
-  /**
-   * Le pagine di un PDF per «Spargi le pagine» (T72). Assente (senza il lettore
-   * dei PDF): il comando è spento col perché.
-   */
-  readonly pdfPages?: PdfPagesReader;
-  /**
-   * Quante note citano il file di una scheda, per «↩ N» nella testata (T22):
-   * l'indice, con la domanda `backlinks`. Assente, la testata non lo dice.
-   */
-  readonly citations?: CardCitations;
-}
-
-/**
- * Una scheda sulla scena, tenuta per id da una resa all'altra: l'elemento, il
- * corpo e ciò che lo tiene vivo (il Markdown montato, la vista del renderer).
- */
-interface CardEntry {
-  readonly id: string;
-  readonly article: HTMLElement;
-  readonly title: HTMLElement;
-  readonly connect: HTMLButtonElement;
-  /** La scheda com'è nel documento di adesso. */
-  node: CanvasNode;
-  type: CanvasNode["type"];
-  body: HTMLElement;
-  /** La chiave del corpo (`cardBodyKey`): se cambia, il corpo si rifà; `null`, da rifare. */
-  bodyKey: string | null;
-  /** Le quattro maniglie agli angoli (T66); `null` in sola lettura. */
-  resize: readonly HTMLElement[] | null;
-  /** Lo smontaggio del Markdown di una scheda di testo. */
-  teardown: (() => void) | null;
-  /**
-   * La vista del renderer e la sua vita; `null` col corpo di sempre. Col file
-   * mancante la vita tiene l'ascolto del file e i gesti, al posto della vista.
-   */
-  view: CardView | null;
-  viewLife: Lifetime | null;
-  /** La misura che la vista conosce: quella del montaggio o dell'ultimo `resize()`. */
-  viewSize: CardSize | null;
-  /** Il titolo grande da lontano (T54): sempre nel nodo, lo mostra il CSS. */
-  readonly far: HTMLElement;
-  /** Il `data-card-detail` che la scheda ha adesso (`applyCardDetails`); `null` da vicino. */
-  detail: CardDetail | null;
-  /** Il segno della ricerca che la scheda ha adesso (`applyFindMarks`, T60); `null` senza ricerca. */
-  find: FindMark;
-  /**
-   * Il file della scheda non c'è: la chiave della vista (`cardBodyKey`) con cui
-   * il renderer l'ha detto. `null` se il file c'è, o non si sa.
-   */
-  missingFor: string | null;
-  /** Il nome per il lettore di schermo scritto adesso su `article` (T61); `null` se non ancora. */
-  label: string | null;
-  /**
-   * La scheda e il giro della lingua con cui la testata ha scritto i suoi nomi (il
-   * titolo, quello da lontano, quello di →); `null` se non ancora. Uguali, la resa
-   * non li ricalcola.
-   */
-  titled: { readonly node: CanvasNode; readonly round: number } | null;
-}
-
-interface Viewport {
-  x: number;
-  y: number;
-  zoom: number;
-}
-
-/** Un punto della scia di uno spostamento, in px del client, col suo tempo in ms (T53). */
-interface PanSample {
-  readonly t: number;
-  readonly x: number;
-  readonly y: number;
-}
-
-/** Dove sta il puntatore di un trascinamento, e i tasti tenuti: ciò che serve per rifare il passo (T53). */
-type PointerAt = Pick<PointerEvent, "pointerId" | "clientX" | "clientY" | "shiftKey" | "altKey">;
-
-/** Sotto il dito fanno come col mouse: i controlli sempre, le maniglie se la lavagna si cambia. */
-const FINGER_CONTROLS = "button, a, input, textarea, select, [contenteditable]:not([contenteditable='false'])";
-/**
- * Fino a questa larghezza della finestra, in px, la colonna degli strumenti
- * sta sotto la lavagna; e così in un riquadro largo fino a `NARROW_PANE`,
- * anche in una finestra larga (gli stessi valori del disegno).
- */
-const NARROW_WIDTH = 700;
-const NARROW_PANE = 480;
-
-/**
- * I nomi di «Apri a lato per questo» (T45), per il punto: accanto, o «qui»
- * nella finestra stretta, dove si apre nello stesso riquadro.
- */
-const BESIDE_HERE_NAMES = {
-  beside: {
-    cell: "canvas.open_beside.cell",
-    section: "canvas.open_beside.section",
-    page: "canvas.open_beside.page",
-    none: "canvas.open_beside_here",
-  },
-  here: {
-    cell: "canvas.open_here.cell",
-    section: "canvas.open_here.section",
-    page: "canvas.open_here.page",
-    none: "canvas.open_here_this",
-  },
-} as const satisfies Record<"beside" | "here", Record<"cell" | "section" | "page" | "none", Key>>;
-/** Il filo con cui nasce una scheda lasciata nel vuoto (T67): da `from`, dal lato `fromSide` se c'è. */
-interface CardLink {
-  readonly from: string;
-  readonly fromSide?: EdgeSide;
-}
-
-/**
- * Il filo che si sta tirando (T67): da `from`, partito dal punto `fromSide`
- * (senza: il lato lo sceglie `edges.ts` al rilascio), o l'estremità
- * `endpoint` del filo `edgeId` che si riattacca. `back`: il filo di
- * «Collega…», finito il quale la colonna torna alla Selezione. `moved` dice
- * se il puntatore si è mosso: un clic fermo su un punto non fa una scheda.
- */
-interface ConnectGesture {
-  readonly pointerId: number;
-  readonly from: string;
-  readonly fromSide?: EdgeSide;
-  readonly edgeId?: string;
-  readonly endpoint?: "from" | "to";
-  readonly back?: boolean;
-  readonly startX: number;
-  readonly startY: number;
-  moved: boolean;
-}
-
-const FINGER_HANDLES = ".canvas-node-handle, [data-resize], [data-resize-frame], [data-reconnect], [data-connect], .canvas-port";
-
-/**
- * I gesti del dito (T63). Il tocco lungo apre il menu radiale (o, sopra una
- * scheda, il suo menu) dopo tanti ms con il dito fermo entro `TAP_SLOP_PX`.
- */
-export const LONG_PRESS_MS = 500;
-/** Due dita che toccano e si alzano entro tanti ms dal primo appoggio annullano, tre ripetono. */
-export const FINGERS_TAP_MS = 250;
-/** Il secondo tocco di un doppio tocco: entro tanti ms dal primo rilascio, e tanti px dal primo. */
-export const DOUBLE_TAP_MS = 300;
-export const DOUBLE_TAP_PX = 24;
-/**
- * Il menu contestuale che il sistema manda dietro al tasto laterale della
- * penna o al tocco lungo non apre il menu della lavagna: per tanti ms dopo il
- * rilascio si ferma (come `ECHO_MS` del menu radiale).
- */
-const MENU_ECHO_MS = 500;
-
-/** I limiti dello zoom, dal 5% al 400% (T53): la rotella, i tasti, i pulsanti e il pizzico. */
-const ZOOM_LIMITS: ZoomLimits = { min: 0.05, max: 4 };
-
-function clampZoom(zoom: number): number {
-  return Math.min(ZOOM_LIMITS.max, Math.max(ZOOM_LIMITS.min, zoom));
-}
-
-// --- muoversi (T53) ---------------------------------------------------------
-
-/** Il passo di + e −, lo stesso del disegno (`ZOOM_STEP` dei disegni, 1,25). */
-export const CANVAS_ZOOM_STEP = 1.25;
-
-/**
- * «Mostra tutto» non ingrandisce oltre il 100%, e lascia attorno alle schede
- * un margine di `FIT_MARGIN` unità della lavagna per lato, come prima.
- */
-const FIT_LIMITS: ScaleLimits = { min: ZOOM_LIMITS.min, max: 1 };
-const FIT_MARGIN = 80;
-
-/** A meno di tanti px dal bordo della vista, un trascinamento la fa scorrere. */
-export const EDGE_SCROLL_ZONE = 40;
-
-/** La velocità dello scorrimento al bordo, in px dello schermo al ms, sul bordo e fuori. */
-export const EDGE_SCROLL_MAX = 1.2;
-
-/** L'inerzia parte solo da un dito che va almeno a tanto, in px al ms. */
-const INERTIA_MIN_SPEED = 0.05;
-
-/**
- * Quanto resta il lampo di una scheda raggiunta da un link (T57): l'animazione
- * del CSS dura un po' meno; col movimento ridotto l'anello resta fermo per tutto.
- */
-const CARD_FLASH_MS = 1000;
-
-/** La velocità del dito si misura sugli ultimi ms del gesto. */
-const INERTIA_WINDOW_MS = 100;
-
-/** Il passo più lungo di un fotogramma, in ms: dopo una pausa del browser la vista non salta. */
-const MAX_FRAME_MS = 64;
-
-/** La camera della tela nella forma di `spatial/camera.ts`, e ritorno. */
-function toCamera(view: Viewport): Camera {
-  return { scale: view.zoom, tx: view.x, ty: view.y };
-}
-
-function fromCamera(camera: Camera): Viewport {
-  return { x: camera.tx, y: camera.ty, zoom: camera.scale };
-}
-
-/**
- * La velocità dello scorrimento al bordo su un asse, in px al ms: `near` è la
- * distanza dal bordo di inizio, `far` da quello di fine (negative fuori dalla
- * vista). Positiva verso la fine, negativa verso l'inizio, zero fuori dalla
- * fascia; più veloce più si è vicini, la massima sul bordo e oltre.
- */
-export function edgeScrollSpeed(near: number, far: number): number {
-  const pull = (distance: number): number =>
-    distance >= EDGE_SCROLL_ZONE ? 0 : EDGE_SCROLL_MAX * Math.min(1, 1 - Math.max(0, distance) / EDGE_SCROLL_ZONE);
-  return pull(far) - pull(near);
-}
-
-/** Le due camere sono la stessa. */
-function sameViewport(a: Viewport, b: Viewport): boolean {
-  return a.x === b.x && a.y === b.y && a.zoom === b.zoom;
-}
-
-/**
- * Il rettangolo di `node` e `view` si sovrappongono davvero: una scheda che
- * tocca la vista solo sul bordo è fuori.
- */
-function overlaps(node: Rect, view: Rect): boolean {
-  return node.x < view.x + view.width && node.x + node.width > view.x
-    && node.y < view.y + view.height && node.y + node.height > view.y;
-}
-
-/**
- * Le schede libere, come le sceglie `layout` senza `ids` (`loose_cards` di
- * `ops/layout.rs`): non gruppi, e non dentro un gruppo (tutto il rettangolo
- * nel suo, bordi compresi).
- */
-export function looseCards(nodes: readonly CanvasNode[]): CanvasNode[] {
-  const groups = nodes.filter((node) => node.type === "group");
-  const inside = (card: CanvasNode, group: CanvasNode): boolean =>
-    card.id !== group.id && card.x >= group.x && card.y >= group.y
-    && card.x + card.width <= group.x + group.width && card.y + card.height <= group.y + group.height;
-  return nodes.filter((node) => node.type !== "group" && !groups.some((group) => inside(node, group)));
-}
-
-function snap(value: number): number {
-  return Math.round(value / CANVAS_SNAP) * CANVAS_SNAP;
-}
-
-/** `value` al multiplo di `step` più vicino (`canvas.snap_step`, #411 C-05). */
-function snapTo(value: number, step: number): number {
-  return Math.round(value / step) * step;
-}
-
-/**
- * Quanto dura la scheda che scivola al suo posto agganciato quando la si
- * lascia (#411 C-05); col movimento ridotto ci va subito.
- */
-const SETTLE_MS = 120;
-
-/** Spostando una scheda o una selezione, tutti e tre i punti di ogni asse si agganciano (T71). */
-const MOVE_SIDES: readonly GuideSide[] = ["start", "center", "end"];
-
-// --- ridimensionare (T66) -------------------------------------------------------
-
-/** Un angolo di una scheda, o della cornice della scelta: dove sta una maniglia. */
-export type ResizeCorner = "nw" | "ne" | "sw" | "se";
-
-/**
- * Le quattro maniglie, nell'ordine in cui stanno nel DOM: prima quella in
- * basso a destra, la maniglia di sempre, che resta l'unica sotto
- * `RESIZE_ONE_HANDLE_PX`.
- */
-const RESIZE_CORNERS: readonly ResizeCorner[] = ["se", "sw", "ne", "nw"];
-
-/** Sotto questa misura sullo schermo, in px, una scheda ha solo la maniglia in basso a destra. */
-export const RESIZE_ONE_HANDLE_PX = 24;
-
-/**
- * La metà della presa del dito, in px sullo schermo: un'area di 44 px
- * centrata sull'angolo. Col mouse la presa è l'elemento della maniglia, 20
- * px, misurata dalla pelle.
- */
-export const RESIZE_FINGER_GRIP_PX = 22;
-
-/**
- * La larghezza più grande che una scheda di testo prende da sé: col doppio
- * clic su una maniglia (T66) e mentre ci si scrive (T44). Oltre, il testo va a
- * capo e la scheda cresce in altezza.
- */
-export const CANVAS_TEXT_FIT_MAX_WIDTH = 480;
-
-/** L'altezza di nascita di una scheda di testo, come la mette lo strumento Testo. */
-const TEXT_CARD_HEIGHT = 160;
-
-/** Lo spazio fra una scheda e quella che Ctrl+Invio (sotto) o Ctrl+Maiusc+Invio (a destra) le apre accanto (T44). */
-export const NEXT_CARD_GAP = 24;
-
-/** Quante volte la scheda di Ctrl+Invio scende cercando un posto libero, prima di cadere sopra un'altra (T44). */
-export const NEXT_CARD_TRIES = 20;
-
-/** Un rettangolo nella lavagna. */
-export interface ResizeBox {
-  readonly x: number;
-  readonly y: number;
-  readonly width: number;
-  readonly height: number;
-}
-
-/** Come si tira una maniglia. */
-export interface ResizeOptions {
-  /** Maiusc: le proporzioni di partenza restano. */
-  readonly keepRatio: boolean;
-  /** Alt: il centro resta fermo e la misura cambia dai due lati. */
-  readonly fromCenter: boolean;
-  /** L'aggancio delle misure alla griglia (A-23); con le proporzioni tenute non c'è. */
-  readonly snap: boolean;
-  /**
-   * Il passo della griglia (`canvas.snap_step`, #411 C-05): di serie
-   * `CANVAS_SNAP`; `null` senza griglia, e la misura si aggancia solo alle guide.
-   */
-  readonly step?: number | null;
-  /** Gli assi che una guida ha già messo (T71): su quelli la misura non si aggancia alla griglia. */
-  readonly guided?: { readonly x: boolean; readonly y: boolean };
-  readonly minWidth: number;
-  readonly minHeight: number;
-}
-
-/**
- * Il rettangolo `start` tirato dalla maniglia `corner` di `(dx, dy)`, in
- * unità della lavagna. Senza Alt sta fermo l'angolo opposto, con Alt il
- * centro; con Maiusc vince il lato che cresce di più, e l'altro lo segue.
- * Mai sotto il minimo, mai `NaN`.
- */
-export function resizeBox(start: ResizeBox, corner: ResizeCorner, dx: number, dy: number, options: ResizeOptions): ResizeBox {
-  const east = corner === "ne" || corner === "se";
-  const south = corner === "sw" || corner === "se";
-  const reach = options.fromCenter ? 2 : 1;
-  let width = start.width + (east ? dx : -dx) * reach;
-  let height = start.height + (south ? dy : -dy) * reach;
-  if (options.keepRatio && start.width > 0 && start.height > 0) {
-    const scale = Math.max(
-      width / start.width,
-      height / start.height,
-      options.minWidth / start.width,
-      options.minHeight / start.height,
-    );
-    width = start.width * scale;
-    height = start.height * scale;
-  } else if (options.snap && options.step !== null) {
-    const step = options.step ?? CANVAS_SNAP;
-    if (!options.guided?.x) width = snapTo(width, step);
-    if (!options.guided?.y) height = snapTo(height, step);
-  }
-  width = Math.round(Math.max(options.minWidth, Number.isFinite(width) ? width : start.width));
-  height = Math.round(Math.max(options.minHeight, Number.isFinite(height) ? height : start.height));
-  const x = options.fromCenter
-    ? Math.round(start.x + (start.width - width) / 2)
-    : east ? start.x : start.x + start.width - width;
-  const y = options.fromCenter
-    ? Math.round(start.y + (start.height - height) / 2)
-    : south ? start.y : start.y + start.height - height;
-  return { x, y, width, height };
-}
-
-/** Il rettangolo che contiene tutte le schede `nodes`; `null` senza schede. */
-export function boxAround(nodes: readonly ResizeBox[]): ResizeBox | null {
-  if (nodes.length === 0) return null;
-  let left = Infinity;
-  let top = Infinity;
-  let right = -Infinity;
-  let bottom = -Infinity;
-  for (const node of nodes) {
-    left = Math.min(left, node.x);
-    top = Math.min(top, node.y);
-    right = Math.max(right, node.x + node.width);
-    bottom = Math.max(bottom, node.y + node.height);
-  }
-  return { x: left, y: top, width: right - left, height: bottom - top };
-}
-
-/**
- * La scheda `node` dentro la cornice `from` portata nella cornice `to`: la
- * posizione e la misura scalano come la cornice (le maniglie della scelta).
- */
-export function scaleInto(node: ResizeBox, from: ResizeBox, to: ResizeBox, min: number): ResizeBox {
-  const sx = from.width > 0 ? to.width / from.width : 1;
-  const sy = from.height > 0 ? to.height / from.height : 1;
-  return {
-    x: Math.round(to.x + (node.x - from.x) * sx),
-    y: Math.round(to.y + (node.y - from.y) * sy),
-    width: Math.max(min, Math.round(node.width * sx)),
-    height: Math.max(min, Math.round(node.height * sy)),
-  };
-}
-
-/** Il primo multiplo di `CANVAS_SNAP` che non taglia `value`. */
-function snapUp(value: number): number {
-  return Math.ceil(value / CANVAS_SNAP) * CANVAS_SNAP;
-}
-
-/** L'angolo scritto su una maniglia; senza, quello in basso a destra. */
-function cornerOf(value: string | undefined): ResizeCorner {
-  return value === "nw" || value === "ne" || value === "sw" ? value : "se";
-}
-
-/** Un lato del rettangolo `box` è sotto `RESIZE_ONE_HANDLE_PX` sullo schermo. */
-function tinyOnScreen(box: ResizeBox, zoom: number): boolean {
-  return box.width * zoom < RESIZE_ONE_HANDLE_PX || box.height * zoom < RESIZE_ONE_HANDLE_PX;
-}
-
-/**
- * Una maniglia: l'area di presa all'angolo `corner`, che la pelle misura e
- * disegna. `node` è la scheda che ridimensiona; `null` per la cornice della
- * scelta, che ridimensiona tutte le schede scelte.
- */
-function resizeHandle(corner: ResizeCorner, node: string | null): HTMLElement {
-  const handle = document.createElement("div");
-  handle.className = "canvas-resize";
-  handle.dataset.corner = corner;
-  if (node === null) handle.dataset.resizeFrame = "";
-  else handle.dataset.resize = node;
-  handle.setAttribute("aria-hidden", "true");
-  return handle;
-}
-
-/** Una scheda (o la cornice) troppo piccola sullo schermo tiene solo la maniglia in basso a destra: le altre la coprirebbero. */
-function markHandles(el: HTMLElement, box: ResizeBox, zoom: number): void {
-  if (tinyOnScreen(box, zoom)) el.dataset.handles = "one";
-  else delete el.dataset.handles;
-}
-
-/**
- * La misura del testo di una scheda (`article`, col corpo `body`): la
- * larghezza che il testo vuole senza andare a capo, fino a
- * `CANVAS_TEXT_FIT_MAX_WIDTH`, e l'altezza che allora gli serve, la testata
- * compresa; agganciate per eccesso a `CANVAS_SNAP`, così niente si taglia.
- * Misura sullo stile della scheda e lo rimette com'era. `null` senza
- * impaginazione.
- */
-function measureText(article: HTMLElement, body: HTMLElement): { width: number; height: number } | null {
-  const { width, height } = article.style;
-  try {
-    article.style.width = "max-content";
-    // La larghezza usata, coi decimali: `offsetWidth` arrotonda, e un testo
-    // largo 320,3 px a 320 andrebbe a capo.
-    let measured = Math.max(article.offsetWidth, parseFloat(getComputedStyle(article).width) || 0);
-    if (measured > CANVAS_TEXT_FIT_MAX_WIDTH) {
-      article.style.width = `${CANVAS_TEXT_FIT_MAX_WIDTH}px`;
-      measured = CANVAS_TEXT_FIT_MAX_WIDTH;
-    } else {
-      article.style.width = `${measured}px`;
-    }
-    // La testata e i bordi: quello che non è il corpo. Poi il corpo a zero,
-    // perché scorra tutto e `scrollHeight` dica l'altezza del testo.
-    const chrome = Math.max(0, article.offsetHeight - body.offsetHeight);
-    article.style.height = `${chrome}px`;
-    const content = body.scrollHeight;
-    if (measured <= 0 || content <= 0) return null;
-    return { width: Math.min(CANVAS_TEXT_FIT_MAX_WIDTH, snapUp(measured)), height: snapUp(chrome + content) };
-  } finally {
-    article.style.width = width;
-    article.style.height = height;
-  }
-}
-
-/**
- * La misura che vuole la scheda di testo `article` mentre ci si scrive in
- * `place` (il campo semplice, o il contenitore dell'editor delle note, T44):
- * la larghezza del testo senza andare a capo, fino a
- * `CANVAS_TEXT_FIT_MAX_WIDTH` (se `keepWidth`, quella di adesso), e l'altezza
- * che allora gli serve. Mai più piccola della misura di adesso; agganciata per
- * eccesso a `CANVAS_SNAP` solo dove cresce. Misura sullo stile della scheda e
- * lo rimette com'era. `null` senza impaginazione.
- */
-function measureWriting(article: HTMLElement, place: HTMLElement, keepWidth: boolean): { width: number; height: number } | null {
-  const current = { width: article.offsetWidth, height: article.offsetHeight };
-  if (current.width <= 0 || current.height <= 0) return null;
-  const { width, height } = article.style;
-  try {
-    let wanted = current.width;
-    if (!keepWidth && current.width < CANVAS_TEXT_FIT_MAX_WIDTH) {
-      const natural = naturalWritingWidth(article, place);
-      if (natural > current.width) wanted = Math.min(CANVAS_TEXT_FIT_MAX_WIDTH, snapUp(natural));
-      article.style.width = `${wanted}px`;
-    }
-    // L'altezza alla larghezza nuova: quanto il testo esce da ciò che scorre.
-    const overflow = writingOverflow(place);
-    return { width: wanted, height: overflow > 0 ? snapUp(current.height + overflow) : current.height };
-  } finally {
-    article.style.width = width;
-    article.style.height = height;
-  }
-}
-
-/**
- * La larghezza che la scheda vorrebbe perché il testo che si scrive in
- * `place` stia senza andare a capo. Il campo semplice non ha una misura sua:
- * lo si mette per un attimo su righe che non vanno a capo, e conta quanto
- * esce. L'editor delle note sì: la scheda larga quanto il suo contenuto
- * (`max-content`), come il doppio clic su una maniglia.
- */
-function naturalWritingWidth(article: HTMLElement, place: HTMLElement): number {
-  if (place instanceof HTMLTextAreaElement || place instanceof HTMLInputElement) {
-    const wrap = place.style.whiteSpace;
-    place.style.whiteSpace = "pre";
-    try {
-      const out = place.scrollWidth - place.clientWidth;
-      // Un pixel in più: `scrollWidth` è arrotondato all'intero.
-      return out > 0 ? article.offsetWidth + out + 1 : 0;
-    } finally {
-      place.style.whiteSpace = wrap;
-    }
-  }
-  article.style.width = "max-content";
-  // Coi decimali: `offsetWidth` arrotonda, e un testo largo 320,3 px a 320 andrebbe a capo.
-  return Math.max(article.offsetWidth, parseFloat(getComputedStyle(article).width) || 0);
-}
-
-/**
- * Quanto il testo che si scrive in `place` esce in basso da ciò che lo fa
- * scorrere: il campo semplice stesso, o gli elementi dell'editor delle note
- * dal contenuto modificabile fino al contenitore escluso (il contenitore
- * tiene sotto l'editor anche ciò che non si vede, e non conta).
- */
-function writingOverflow(place: HTMLElement): number {
-  const start = place.querySelector<HTMLElement>('[contenteditable="true"]') ?? place;
-  let overflow = start === place ? place.scrollHeight - place.clientHeight : 0;
-  for (let el: HTMLElement | null = start; el && el !== place; el = el.parentElement) {
-    overflow = Math.max(overflow, el.scrollHeight - el.clientHeight);
-  }
-  return overflow;
-}
-
-/**
- * Il primo posto libero per una scheda `box` nuova: se cadrebbe sopra
- * un'altra scheda (i gruppi no: ci stanno sotto), scende sotto di lei, a
- * `NEXT_CARD_GAP`, al più `NEXT_CARD_TRIES` volte; poi resta dove doveva
- * nascere, sopra l'altra (T44).
- */
-function freeSpot(nodes: readonly CanvasNode[], box: ResizeBox): ResizeBox {
-  let y = box.y;
-  for (let tries = 0; tries < NEXT_CARD_TRIES; tries++) {
-    const at = { ...box, y };
-    const blocker = nodes.find((node) => node.type !== "group"
-      && node.x < at.x + at.width && at.x < node.x + node.width
-      && node.y < at.y + at.height && at.y < node.y + node.height);
-    if (!blocker) return at;
-    y = blocker.y + blocker.height + NEXT_CARD_GAP;
-  }
-  return box;
-}
-
-/** La misura del contenuto disegnato nel corpo: l'immagine, o la pagina del PDF. `null` se non c'è ancora. */
-function naturalSize(body: HTMLElement): { width: number; height: number } | null {
-  for (const picture of body.querySelectorAll<HTMLImageElement | HTMLCanvasElement>("img, canvas")) {
-    const width = picture instanceof HTMLImageElement ? picture.naturalWidth : picture.width;
-    const height = picture instanceof HTMLImageElement ? picture.naturalHeight : picture.height;
-    if (width > 0 && height > 0) return { width, height };
-  }
-  return null;
-}
-
-/**
- * Il colore `color` sull'elemento `el` di una scheda o di un filo (T47): la
- * chiave in `data-canvas-color` e, per un colore libero, il suo valore in
- * `--canvas-color`, com'è nel file. L'aspetto lo dà la pelle; un valore che
- * non è un colore non segna niente.
- */
-function paintColor(el: HTMLElement | SVGElement, color: string | undefined): void {
-  const look = colorLook(color);
-  if (look) el.dataset.canvasColor = look.key;
-  else delete el.dataset.canvasColor;
-  if (look?.custom) el.style.setProperty("--canvas-color", look.custom);
-  else el.style.removeProperty("--canvas-color");
-}
-
-/**
- * La misura e l'allineamento del testo di una scheda (T92, `fub:text`) su
- * `el`, in `data-text-size` e `data-text-align`; quelli di serie non si
- * segnano. L'aspetto lo dà la pelle.
- */
-function paintTextStyle(el: HTMLElement, node: CanvasNode): void {
-  const style = node.type === "text" ? textStyle(node) : DEFAULT_TEXT_STYLE;
-  if (style.size === DEFAULT_TEXT_STYLE.size) delete el.dataset.textSize;
-  else if (el.dataset.textSize !== style.size) el.dataset.textSize = style.size;
-  if (style.align === DEFAULT_TEXT_STYLE.align) delete el.dataset.textAlign;
-  else if (el.dataset.textAlign !== style.align) el.dataset.textAlign = style.align;
-}
-
-/**
- * La misura di un'immagine dalla porta, o `null` se non arriva entro
- * `MEASURE_IMAGE_TIMEOUT_MS`, fallisce o non è una misura.
- */
-async function measuredImage(
-  measure: NonNullable<CanvasEngineOptions["measureImage"]>,
-  path: string,
-): Promise<{ width: number; height: number } | null> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const late = new Promise<null>((resolve) => {
-    timer = setTimeout(() => resolve(null), MEASURE_IMAGE_TIMEOUT_MS);
-  });
-  try {
-    const size = await Promise.race([measure(path).catch(() => null), late]);
-    return size && Number.isFinite(size.width) && Number.isFinite(size.height) && size.width > 0 && size.height > 0
-      ? { width: size.width, height: size.height }
-      : null;
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-/** Un path relativo alla radice del vault, senza risalite né caratteri di controllo. */
-function isVaultPath(path: unknown): path is string {
-  return typeof path === "string" && path.length > 0 && path.length <= 8192
-    && !path.startsWith("/") && !path.includes("\\") && !path.split("/").includes("..")
-    && !/[\u0000-\u001f]/u.test(path);
-}
-
-function externalUrl(value: string): string | null {
-  try {
-    const url = new URL(value);
-    return url.protocol === "https:" || url.protocol === "http:" ? url.href : null;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Quanti segmenti al più ha il cammino di un `erase_along` sui tratti `units`
- * (i punti in coordinate della lavagna) con la gomma di raggio `radius`:
- * sotto `MAX_ERASE_POINTS` del nucleo, e sotto metà del suo `MAX_ERASE_WORK`.
- * Il lavoro del nucleo (`split_work` in `crates/fub-ink-codec/src/cut.rs`) è,
- * per ogni segmento del cammino vicino a un tratto, uno più un passo per
- * coppia di campioni più la lunghezza del tratto diviso metà della portata
- * (raggio più metà dello spessore): la stima prende il raggio da solo, e
- * conta ogni segmento vicino a ogni tratto. In unità della lavagna la scala
- * della scheda si semplifica.
- */
-export function eraseAlongSegments(units: readonly { readonly points: readonly number[] }[], radius: number): number {
-  let work = 0;
-  for (const { points } of units) {
-    let length = 0;
-    for (let i = 2; i + 1 < points.length; i += 2) {
-      length += Math.hypot(points[i]! - points[i - 2]!, points[i + 1]! - points[i - 1]!);
-    }
-    work += 1 + points.length / 2 + (2 * length) / radius;
-  }
-  const perSegment = Number.isFinite(work) && work > 0 ? work : 1;
-  return Math.max(1, Math.min(ERASE_ALONG_MAX_POINTS - 1, Math.floor(ERASE_ALONG_WORK / perSegment)));
-}
-
-/**
- * Il cammino `path` in pezzi di fila di al più `segments` segmenti: l'ultimo
- * punto di un pezzo è il primo del seguente, così nessun tratto fra due punti
- * resta senza gomma. Un cammino corto è un pezzo solo.
- */
-export function erasePathPieces(path: readonly Spot[], segments: number): Spot[][] {
-  const step = Math.max(1, Math.floor(segments));
-  if (path.length <= step + 1) return [path.slice()];
-  const pieces: Spot[][] = [];
-  for (let start = 0; start < path.length - 1; start += step) {
-    pieces.push(path.slice(start, Math.min(path.length, start + step + 1)));
-  }
-  return pieces;
-}
+import {
+  CANVAS_SNAP,
+  CanvasArrange,
+  LASSO_FRAME_PAD,
+  CANVAS_GRID_DOT_STEPS,
+  CANVAS_GRID_MIN_PX,
+  CANVAS_MIN_SIZE,
+  MAX_CANVAS_HISTORY,
+  CARD_PAUSE_MS,
+  SPREAD_CONFIRM_ABOVE,
+  WHEEL_SETTLE_MS,
+  wheelPixels,
+  CARD_KEYS,
+  NEAREST_CARD_KEYS,
+  CARD_ONLY_NEAREST_KEYS,
+  LABEL_BATCH,
+  DOUBLE_CLICK_ENTERS,
+  FileShowing,
+  MAX_CARD_TEXT_BYTES,
+  MEASURE_IMAGE_PARALLEL,
+  MAX_DROP_GHOSTS,
+  MOVE_CONTENTS_MAX,
+  utf8,
+  MAX_INTERACTIVE_NODES,
+  MAX_INTERACTIVE_EDGES,
+  CanvasDepositCards,
+  CanvasCorePort,
+  SHARED_CORE,
+  CanvasInkMouseMemory,
+  SHARED_INK_MOUSE,
+  CanvasPenMemory,
+  SHARED_PEN,
+  CardLinkRef,
+  CanvasEngineOptions,
+  CanvasCards,
+} from "./engine-options";
+import {
+  CardField,
+  CardEditor,
+  LastPaste,
+  PasteChoice,
+  CanvasStep,
+  InkChain,
+  CardDrag,
+  DropGhost,
+  InkErase,
+  InkErasing,
+  StrokeDrag,
+  LassoLayer,
+  MarqueeLayer,
+  MarqueeGesture,
+  strokesByLayer,
+  keysAfter,
+  randomSeed,
+  InkTarget,
+  InkMarks,
+  INK_FRAME_SIDES,
+  InkPoint,
+  isInkKey,
+  VIEW_ZOOM_COMMANDS,
+  HISTORY_COMMANDS,
+  isMenuKey,
+  keepsItsUndo,
+  isTextTarget,
+  InkStates,
+  PendingText,
+  CropSession,
+  MenuEntryMaker,
+  ColorMenuMaker,
+  CardEntry,
+  Viewport,
+  PanSample,
+  PointerAt,
+  FINGER_CONTROLS,
+  NARROW_WIDTH,
+  NARROW_PANE,
+  BESIDE_HERE_NAMES,
+  CardLink,
+  ConnectGesture,
+  FINGER_HANDLES,
+  LONG_PRESS_MS,
+  FINGERS_TAP_MS,
+  DOUBLE_TAP_MS,
+  DOUBLE_TAP_PX,
+  MENU_ECHO_MS,
+  ZOOM_LIMITS,
+  clampZoom,
+  CANVAS_ZOOM_STEP,
+  FIT_LIMITS,
+  FIT_MARGIN,
+  INERTIA_MIN_SPEED,
+  CARD_FLASH_MS,
+  INERTIA_WINDOW_MS,
+  MAX_FRAME_MS,
+} from "./engine-parts";
+import {
+  toCamera,
+  fromCamera,
+  edgeScrollSpeed,
+  sameViewport,
+  overlaps,
+  looseCards,
+  snap,
+  snapTo,
+  SETTLE_MS,
+  MOVE_SIDES,
+  ResizeCorner,
+  RESIZE_CORNERS,
+  RESIZE_FINGER_GRIP_PX,
+  TEXT_CARD_HEIGHT,
+  NEXT_CARD_GAP,
+  ResizeBox,
+  resizeBox,
+  boxAround,
+  scaleInto,
+  cornerOf,
+  tinyOnScreen,
+  resizeHandle,
+  markHandles,
+  measureText,
+  measureWriting,
+  freeSpot,
+  naturalSize,
+  paintColor,
+  paintTextStyle,
+  measuredImage,
+  isVaultPath,
+  externalUrl,
+  eraseAlongSegments,
+  erasePathPieces,
+} from "./engine-geometry";
+import {
+  setOp,
+  withPending,
+  inkPatches,
+  copyPatches,
+  mergeSteps,
+  passesToShell,
+  lostCore,
+  sourceOperation,
+  cardBodyKey,
+  inkHolderText,
+  setPixels,
+  fileName,
+  cardMenuName,
+  relinkedFile,
+  proposedNoteName,
+  noteDisplayName,
+  writingName,
+  nodeTitle,
+  nodeText,
+  SECTIONS_PROBE,
+  partsChosen,
+  cardLinkOf,
+  linkedCardOf,
+} from "./engine-names";
+export {
+  CANVAS_SNAP,
+  CANVAS_GRID_DOT_STEPS,
+  CANVAS_GRID_MIN_PX,
+  CANVAS_MIN_SIZE,
+  MAX_CANVAS_HISTORY,
+  CARD_PAUSE_MS,
+  SPREAD_CONFIRM_ABOVE,
+  WHEEL_SETTLE_MS,
+  MEASURE_IMAGE_TIMEOUT_MS,
+  CanvasChange,
+  CanvasMediaPort,
+  CanvasAttachmentPort,
+  CanvasRepoint,
+  CanvasDepositCards,
+  CanvasCorePort,
+  CanvasInkMouseMemory,
+  CanvasPenMemory,
+  CardLinkRef,
+  CanvasEngineOptions,
+  CanvasNotesPort,
+  CanvasCards,
+} from "./engine-options";
+export {
+  LONG_PRESS_MS,
+  FINGERS_TAP_MS,
+  DOUBLE_TAP_MS,
+  DOUBLE_TAP_PX,
+  CANVAS_ZOOM_STEP,
+  EDGE_SCROLL_ZONE,
+  EDGE_SCROLL_MAX,
+} from "./engine-parts";
+export {
+  edgeScrollSpeed,
+  looseCards,
+  ResizeCorner,
+  RESIZE_ONE_HANDLE_PX,
+  RESIZE_FINGER_GRIP_PX,
+  CANVAS_TEXT_FIT_MAX_WIDTH,
+  NEXT_CARD_GAP,
+  NEXT_CARD_TRIES,
+  ResizeBox,
+  ResizeOptions,
+  resizeBox,
+  boxAround,
+  scaleInto,
+  eraseAlongSegments,
+  erasePathPieces,
+} from "./engine-geometry";
+export { proposedNoteName } from "./engine-names";
 
 export class CanvasEngine {
   readonly #root: HTMLElement;
@@ -13769,331 +12562,4 @@ export class CanvasEngine {
     const untouched = input.value === (node.text ?? "");
     if (focused && !(untouched && editor.point && live.focusAtPoint?.(editor.point))) live.focus(caret);
   }
-}
-
-/**
- * La `set` che porta la scheda o il filo `before` a `after` (lo stesso id):
- * i campi cambiati col valore nuovo, quelli tolti a `null`. `null` se non
- * cambia niente. Un valore uguale scritto con le chiavi in un altro ordine
- * entra lo stesso: il nucleo lo trova uguale, e non ne fa una toppa.
- */
-function setOp<T extends { readonly id: string }>(before: T, after: T): CanvasIntentOp | null {
-  const was = before as unknown as Record<string, unknown>;
-  const now = after as unknown as Record<string, unknown>;
-  const fields: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(now)) {
-    if (key !== "id" && JSON.stringify(was[key]) !== JSON.stringify(value)) fields[key] = value === undefined ? null : value;
-  }
-  for (const key of Object.keys(was)) {
-    if (!(key in now) && key !== "id") fields[key] = null;
-  }
-  return Object.keys(fields).length > 0 ? { op: "set", id: before.id, fields } : null;
-}
-
-/**
- * La scheda `card` col testo in sospeso dentro, e la misura a cui è cresciuta
- * scrivendo (T44): mai più piccola di com'è adesso.
- */
-function withPending(card: CanvasNode, pending: PendingText): CanvasNode {
-  const next = { ...card };
-  next[pending.field] = pending.text;
-  if (pending.size) {
-    next.width = Math.max(next.width, pending.size.width);
-    next.height = Math.max(next.height, pending.size.height);
-  }
-  return next;
-}
-
-/** Le toppe dei tratti fra quelle compilate: le operazioni d'inchiostro danno solo quelle. */
-function inkPatches(patches: readonly CanvasPatch[]): InkPatch[] {
-  return patches.filter((patch): patch is InkPatch => patch.kind === "ink");
-}
-
-/** Una copia delle toppe, che chi le ha date può ancora cambiare. */
-function copyPatches(patches: readonly CanvasPatch[]): CanvasPatch[] {
-  return JSON.parse(JSON.stringify(patches)) as CanvasPatch[];
-}
-
-/**
- * Due passi di fila in uno: `first` ha portato il testo da `before` a un
- * testo di mezzo, `second` da quello ad `after`. Le toppe si fanno in fila
- * (le inverse al contrario); il tratto del testo è la parte che cambia fra
- * `before` e `after`, senza spezzare una coppia surrogata.
- */
-function mergeSteps(before: string, first: CanvasStep, second: CanvasStep, after: string): CanvasStep {
-  const shorter = Math.min(before.length, after.length);
-  let start = 0;
-  while (start < shorter && before.charCodeAt(start) === after.charCodeAt(start)) start++;
-  let endBefore = before.length;
-  let endAfter = after.length;
-  while (endBefore > start && endAfter > start && before.charCodeAt(endBefore - 1) === after.charCodeAt(endAfter - 1)) {
-    endBefore--;
-    endAfter--;
-  }
-  if (start > 0 && isHighSurrogate(before.charCodeAt(start - 1))) start--;
-  // Il tratto finale si allarga di un'unità in tutti e due i testi, che lì sono uguali.
-  if (endBefore < before.length && isLowSurrogate(before.charCodeAt(endBefore))) {
-    endBefore++;
-    endAfter++;
-  }
-  return {
-    patches: [...second.patches, ...first.patches],
-    back: [...first.back, ...second.back],
-    start,
-    inserted: after.slice(start, endAfter),
-    removed: before.slice(start, endBefore),
-    version: second.version,
-    restores: first.restores,
-  };
-}
-
-function isHighSurrogate(unit: number): boolean {
-  return unit >= 0xd800 && unit <= 0xdbff;
-}
-
-function isLowSurrogate(unit: number): boolean {
-  return unit >= 0xdc00 && unit <= 0xdfff;
-}
-
-/** I tasti con Ctrl (Cmd) che scrivono in un campo: restano sempre al campo. */
-const FIELD_CHORDS: ReadonlySet<string> = new Set(["a", "c", "v", "x", "y", "z"]);
-
-/**
- * Un tasto premuto nel campo di una scheda che sale alla shell: ha Ctrl (o
- * Cmd), il campo non l'ha usato (`defaultPrevented`), non è Invio (la scheda
- * dopo, T44) né un tasto che scrive (scegli tutto, copia, incolla, taglia,
- * annulla, ripeti). Ctrl+W chiude la linguetta anche mentre si scrive.
- */
-function passesToShell(event: KeyboardEvent): boolean {
-  if (!(event.ctrlKey || event.metaKey) || event.defaultPrevented || composingKey(event)) return false;
-  if (event.key === "Enter" || event.key === "Escape") return false;
-  return !FIELD_CHORDS.has(event.key.toLowerCase());
-}
-
-/** Una trappola o un'istanza persa: il nucleo va riaperto. */
-function lostCore(error: unknown): boolean {
-  return error instanceof CanvasCoreError && (error.code === "trap" || error.code === "handle");
-}
-
-/**
- * La modifica al testo che il nucleo ha fatto, come `TextOperation`: il tratto
- * cambiato così com'è, o, con dei CR nel testo, la differenza contata sui `\n`.
- */
-function sourceOperation(before: string, after: string, edit: CanvasSourceEdit): Pick<TextOperation, "beforeLength" | "afterLength" | "edits"> {
-  if (before.includes("\r") || after.includes("\r")) {
-    return operationFromText(lineFeeds(before), lineFeeds(after));
-  }
-  const deleted = before.slice(edit.start, edit.end);
-  if (deleted === edit.text) return { beforeLength: before.length, afterLength: after.length, edits: [] };
-  return {
-    beforeLength: before.length,
-    afterLength: after.length,
-    edits: [{ from: edit.start, to: edit.end, deleted, inserted: edit.text }],
-  };
-}
-
-/**
- * La chiave del corpo di una scheda: ciò che il corpo mostra (`type`, `file`,
- * `subpath`, `url`, `text`, `label`, lo sfondo di un gruppo) più `extra`, ciò
- * che il corpo legge da fuori. Posto, misura, colore e scelta non ci sono:
- * cambiarli non rifà il corpo.
- */
-function cardBodyKey(node: CanvasNode, extra: string): string {
-  return JSON.stringify([
-    node.type, node.file ?? null, node.subpath ?? null, node.url ?? null,
-    node.text ?? null, node.label ?? null, node.background ?? null, extra,
-  ]);
-}
-
-/** Che cosa dice l'etichetta della penna (T69): la scheda col suo nome, o il tratto libero. */
-function inkHolderText(holder: CanvasNode | null): string {
-  if (!holder) return t("canvas.ink.free");
-  const name = cardMenuName(holder);
-  return name ? t("canvas.ink.attach", { name }) : t("canvas.ink.attach_card");
-}
-
-/**
- * Scrive la proprietà `name` di `element` a `value` pixel solo se è cambiata:
- * leggere lo stile in linea non chiede il layout, e non tutti i motori
- * riconoscono uguale una scrittura col valore di prima (rifarebbero lo stile).
- */
-function setPixels(element: HTMLElement, name: string, value: number): void {
-  const text = `${value}px`;
-  if (element.style.getPropertyValue(name) !== text) element.style.setProperty(name, text);
-}
-
-/** Il nome di un file senza le cartelle: `Corsi/foto.png` → `foto.png`. */
-function fileName(path: string): string {
-  return path.split("/").pop() ?? path;
-}
-
-/** Quanto è lungo, al più, il nome di una scheda nella testata del menu. */
-const MENU_NAME_MAX = 40;
-
-/**
- * Il nome di una scheda nella testata del menu (T17): il file senza le
- * cartelle, l'host di una pagina web, la prima riga di un testo senza i segni
- * del Markdown (`textCardName`), l'etichetta di un gruppo; accorciato con «…».
- * `""` se non ne ha.
- */
-function cardMenuName(node: CanvasNode): string {
-  let name = "";
-  if (node.type === "file") name = fileName(cardTarget(node).path);
-  else if (node.type === "link") {
-    const address = externalUrl(node.url ?? "");
-    name = address === null ? node.url ?? "" : new URL(address).host;
-  } else if (node.type === "text") name = textCardName(typeof node.text === "string" ? node.text : "");
-  else name = node.label ?? "";
-  name = name.trim();
-  return name.length > MENU_NAME_MAX ? `${name.slice(0, MENU_NAME_MAX - 1).trimEnd()}…` : name;
-}
-
-/**
- * Il `file` di una scheda dopo «Ritrova…»: il percorso scelto, col `#…` che la
- * scheda aveva in linea (il titolo o la pagina). Il `subpath` separato resta com'è.
- */
-function relinkedFile(node: CanvasNode, chosen: string): string {
-  const file = typeof node.file === "string" ? node.file : "";
-  const hash = file.indexOf("#");
-  return hash < 0 ? chosen : `${chosen}${file.slice(hash)}`;
-}
-
-/**
- * Il nome che «Estrai in una nota» propone per il testo `text` (T70): la
- * prima riga senza i `#` di un titolo, pulita come il nome di una nota nuova
- * (`searchedName`: niente caratteri vietati, al più 80 caratteri). Una prima
- * riga vuota, o fatta solo di caratteri vietati, dà il nome di serie.
- */
-export function proposedNoteName(text: string): string {
-  const first = (text.split(/\r?\n/, 1)[0] ?? "").replace(/^\s*#{1,6}(?=\s|$)/, "");
-  return searchedName(first) ?? t("canvas.extract.untitled");
-}
-
-/** Il nome di una nota come lo si legge: il file senza cartella e senza `.md`. */
-function noteDisplayName(path: string): string {
-  return fileName(path).replace(/\.(md|markdown)$/i, "");
-}
-
-/** Il nome di una scheda che scrive, per la banda (T41): il file senza cartella né `.md`. */
-function writingName(node: CanvasNode): string {
-  if (node.type !== "file" || !node.file) return nodeTitle(node);
-  const base = node.file.split("/").pop() || node.file;
-  return base.replace(/\.(md|markdown)$/i, "");
-}
-
-/** Quanto è lungo, al più, il nome di un testo nella testata della scheda. */
-const TITLE_TEXT_MAX = 48;
-
-/**
- * Il titolo nella testata di una scheda e nell'elenco del filo: il file, l'indirizzo,
- * il nome di un testo (`textCardName`: la prima riga non vuota senza i segni del
- * Markdown), l'etichetta di un gruppo. Una scheda che non ha ancora niente da dire
- * (un testo appena nato, mentre si scrive) dice la sua specie a parole, «Scheda di
- * testo»: mai l'id interno, che una persona non deve vedere né sentire.
- */
-function nodeTitle(node: CanvasNode): string {
-  let title = "";
-  switch (node.type) {
-    case "text":
-      title = textCardName(typeof node.text === "string" ? node.text : "").slice(0, TITLE_TEXT_MAX);
-      break;
-    case "file":
-      title = node.file ?? "";
-      break;
-    case "link":
-      title = node.url ?? "";
-      break;
-    case "group":
-      title = (node.label ?? "").trim();
-      break;
-  }
-  return title || cardTitle(node, "");
-}
-
-function nodeText(node: CanvasNode): string {
-  switch (node.type) {
-    case "text": return node.text ?? "";
-    case "file": return node.subpath ? `${node.file ?? ""}${node.subpath}` : node.file ?? "";
-    case "link": return node.url ?? "";
-    default: return node.label ?? "";
-  }
-}
-
-/// Una specie `sections` qualunque: dice se un file è una nota per `fub:parts`.
-const SECTIONS_PROBE: CanvasParts = { kind: "sections", sections: ["_"], extra: {} };
-
-/**
- * Le sezioni che la scheda mostra adesso, come chiavi del selettore (T74):
- * quelle di un `fub:parts` di sezioni valido, sennò quella del `subpath`
- * (`#Titolo`, anche `#Capitolo#Titolo`); nessuna per la nota intera o un
- * blocco `#^id`.
- */
-function partsChosen(node: CanvasNode): string[] {
-  return [...(noteExcerptOf(node)?.sections ?? [])];
-}
-
-/**
- * Il link di un'ancora della resa di una scheda, se porta a un file del vault
- * (T57). Le stesse classi che la montatura riconosce: `a.internal-path` col
- * percorso, `a.wikilink` con i dati del wikilink. Il resto (un indirizzo web)
- * `null`: lo segue la montatura.
- */
-function cardLinkOf(anchor: HTMLAnchorElement): CardLinkRef | null {
-  if (anchor.classList.contains("internal-path")) {
-    const path = anchor.dataset.path ?? "";
-    return path === "" ? null : { kind: "path", path };
-  }
-  const page = anchor.dataset.wikilinkPage;
-  if (anchor.classList.contains("wikilink") && page !== undefined) {
-    return {
-      kind: "wiki",
-      page,
-      heading: anchor.dataset.wikilinkHeading ?? null,
-      block: anchor.dataset.wikilinkBlock ?? null,
-    };
-  }
-  return null;
-}
-
-/**
- * Il percorso di un file del vault senza la barra in testa e senza il frammento
- * (`#page=3`, o la query), come `pdfIdWithoutFragment`: così un `doc` risolto e
- * il `file` di una scheda si confrontano.
- */
-function vaultPathOf(id: string): string {
-  const cut = [id.indexOf("#"), id.indexOf("?")].filter((at) => at >= 0);
-  const bare = cut.length ? id.slice(0, Math.min(...cut)) : id;
-  return bare.replace(/^\/+/, "");
-}
-
-/**
- * La scheda di `nodes` che un link porta a vedere (T57): una scheda del file
- * `doc`, quella che ha la sezione del link nel suo `subpath` se ce n'è una, poi
- * la più vicina al centro della vista `center`. `undefined` se il file non ha
- * schede sulla lavagna.
- */
-function linkedCardOf(
-  nodes: readonly CanvasNode[],
-  doc: string,
-  link: CardLinkRef,
-  center: { readonly x: number; readonly y: number },
-): CanvasNode | undefined {
-  const target = vaultPathOf(doc);
-  const cards = nodes.filter((node) => node.type === "file" && vaultPathOf(node.file ?? "") === target);
-  if (cards.length === 0) return undefined;
-  const heading = link.kind === "wiki" ? link.heading?.trim() : undefined;
-  const sectioned = heading ? cards.filter((node) => noteHeadingOf(node.subpath ?? null) === heading) : [];
-  const pool = sectioned.length > 0 ? sectioned : cards;
-  let best: CanvasNode | undefined;
-  let bestDistance = Infinity;
-  for (const node of pool) {
-    const dx = node.x + node.width / 2 - center.x;
-    const dy = node.y + node.height / 2 - center.y;
-    const distance = dx * dx + dy * dy;
-    if (distance < bestDistance) {
-      best = node;
-      bestDistance = distance;
-    }
-  }
-  return best;
 }

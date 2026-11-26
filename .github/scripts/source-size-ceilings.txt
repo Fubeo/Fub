@@ -15,7 +15,7 @@
 2617 apps/client/src/editors/base/surface.ts
 2182 apps/client/src/editors/canvas/chrome/inspector.ts
 2578 apps/client/src/editors/canvas/engine-ink.test.ts
-14099 apps/client/src/editors/canvas/engine.ts
+12565 apps/client/src/editors/canvas/engine.ts
 1543 apps/client/src/editors/canvas/parity.test.ts
 1678 apps/client/src/editors/grid/card.test.ts
 1668 apps/client/src/editors/grid/card.ts

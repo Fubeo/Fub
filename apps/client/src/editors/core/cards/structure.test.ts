@@ -39,8 +39,8 @@ const state = import.meta.glob("../../../state/*.ts", {
 const SAME_NAME_ELSEWHERE: Readonly<Record<string, string>> = {
   // Il campo semplice aperto su una scheda di testo della lavagna (T43/T44),
   // privato del motore: non è l'editor vero della porta (`CardEditor` del
-  // contratto) e non esce dal file.
-  "engine.ts CardEditor": "il campo aperto su una scheda di testo, privato del motore",
+  // contratto) e non esce dai file del motore.
+  "engine-parts.ts CardEditor": "il campo aperto su una scheda di testo, privato del motore",
 };
 
 /// I nomi che l'ospite esporta: tipi, funzioni, costanti, classi.
