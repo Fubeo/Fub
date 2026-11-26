@@ -1,0 +1,426 @@
+// La mappa dell'editor: i pezzi della formula, della tabella e della testata.
+// Un pezzo di `bench/conformita/mappa-editor.mjs`, che lo monta.
+import { BASE } from "../confronto.mjs";
+import { ALLINEAMENTO, DIMENSIONI } from "./comuni.mjs";
+
+export const PEZZI_FORMULA_TABELLA_TESTATA = [
+  // ── le proposte dei simboli della formula (T61) ───────────────────────────
+  {
+    id: "formula.proposte",
+    vista: "formula-simboli",
+    prototipo: ".mx-ac",
+    app: ".cm-fub-mx-popover .cm-fub-mx-symbols",
+    // La larghezza è quella del riquadro (T60): il prototipo lo stringe a 380 px
+    // col `max-width` di `.pop`, l'app lo tiene a 392 come il piano.
+    proprieta: BASE,
+  },
+  {
+    id: "formula.proposta-scelta",
+    vista: "formula-simboli",
+    prototipo: ".mx-ac button.act",
+    app: '.cm-fub-mx-popover .cm-fub-mx-symbol[aria-selected="true"]',
+    proprieta: [...BASE, "height", ...ALLINEAMENTO],
+  },
+  {
+    id: "formula.proposta",
+    vista: "formula-simboli",
+    prototipo: ".mx-ac button:not(.act)",
+    app: '.cm-fub-mx-popover .cm-fub-mx-symbol[aria-selected="false"]',
+    proprieta: ["padding", "gap", "font", "color", "background", "height"],
+  },
+  {
+    id: "formula.proposta-disegno",
+    vista: "formula-simboli",
+    prototipo: ".mx-ac button.act .g",
+    app: '.cm-fub-mx-popover .cm-fub-mx-symbol[aria-selected="true"] .cm-fub-mx-symbol-glyph',
+    proprieta: ["width", "font", "color", ...ALLINEAMENTO],
+  },
+  // ── la tavolozza della formula (T62) ──────────────────────────────────────
+  {
+    id: "formula.tavolozza",
+    vista: "formula-tavolozza",
+    prototipo: ".mx-pal",
+    app: ".cm-fub-mx-popover .cm-fub-mx-palette",
+    proprieta: ["border", "padding", "background"],
+  },
+  {
+    id: "formula.pezzi",
+    vista: "formula-tavolozza",
+    prototipo: ".mx-quick",
+    app: ".cm-fub-mx-popover .cm-fub-mx-quick",
+    proprieta: ["padding", "gap", "height", ...ALLINEAMENTO],
+  },
+  {
+    id: "formula.pezzo",
+    vista: "formula-tavolozza",
+    prototipo: ".mx-quick .mx-s",
+    app: ".cm-fub-mx-popover .cm-fub-mx-quick .cm-fub-mx-tile",
+    proprieta: [...DIMENSIONI, "border-radius", "font", "color", "background"],
+  },
+  {
+    id: "formula.tutti",
+    vista: "formula-tavolozza",
+    prototipo: ".mx-all",
+    app: ".cm-fub-mx-popover .cm-fub-mx-all",
+    // Non il margine a sinistra: spinge «Tutti» in fondo alla fila, e la fila
+    // è larga quanto il riquadro, 392 px nell'app e 380 nel prototipo (T60).
+    proprieta: ["padding", "font", "color", "background", "border-radius", "height", "gap", ...ALLINEAMENTO],
+  },
+  {
+    id: "formula.tutti-aperto",
+    vista: "formula-tavolozza",
+    prototipo: ".mx-full",
+    app: ".cm-fub-mx-popover .cm-fub-mx-full",
+    proprieta: ["padding"],
+  },
+  {
+    id: "formula.cerca",
+    vista: "formula-tavolozza",
+    // La scatola del prototipo è l'etichetta; nell'app è il campo, che ha il
+    // fuoco e il suo anello (la lente gli sta sopra).
+    prototipo: ".mx-find",
+    app: ".cm-fub-mx-popover .cm-fub-mx-find-input",
+    proprieta: ["height", "border-radius", "background"],
+  },
+  {
+    id: "formula.cerca-spazio",
+    vista: "formula-tavolozza",
+    prototipo: ".mx-find",
+    app: ".cm-fub-mx-popover .cm-fub-mx-find",
+    proprieta: ["margin-bottom"],
+  },
+  {
+    id: "formula.gruppo-scelto",
+    vista: "formula-tavolozza",
+    prototipo: '.mx-tabs button[aria-selected="true"]',
+    app: '.cm-fub-mx-popover .cm-fub-mx-group[aria-selected="true"]',
+    proprieta: ["height", "border-radius", "font", "color", "background"],
+  },
+  {
+    id: "formula.gruppo",
+    vista: "formula-tavolozza",
+    prototipo: '.mx-tabs button[aria-selected="false"]',
+    app: '.cm-fub-mx-popover .cm-fub-mx-group[aria-selected="false"]',
+    proprieta: ["height", "border-radius", "font", "color", "background"],
+  },
+  {
+    id: "formula.griglia",
+    vista: "formula-tavolozza",
+    prototipo: ".mx-grid",
+    app: ".cm-fub-mx-popover .cm-fub-mx-grid",
+    // Le colonne sono dieci dai due lati; la loro misura segue la larghezza
+    // del riquadro (392 px contro 380, T60), e non si confronta.
+    proprieta: ["gap", "min-height"],
+  },
+  {
+    id: "formula.simbolo",
+    vista: "formula-tavolozza",
+    prototipo: ".mx-grid .mx-s",
+    app: ".cm-fub-mx-popover .cm-fub-mx-grid .cm-fub-mx-tile",
+    proprieta: ["height", "border-radius", "font", "color", "background"],
+  },
+  {
+    id: "formula.nome",
+    vista: "formula-tavolozza",
+    prototipo: ".mx-tip",
+    app: ".cm-fub-mx-popover .cm-fub-mx-tip",
+    proprieta: ["height", "padding", "font", "color"],
+  },
+  // ── il LaTeX a vista e i tre puntini (T63) ────────────────────────────────
+  {
+    id: "formula.latex-riga",
+    vista: "formula-latex",
+    prototipo: ".mx .mx-row",
+    app: ".cm-fub-mx-popover .cm-fub-mx-row",
+    proprieta: ["padding", "gap", ...ALLINEAMENTO],
+  },
+  {
+    id: "formula.latex",
+    vista: "formula-latex",
+    prototipo: ".mx .mx-tex",
+    app: ".cm-fub-mx-popover .cm-fub-mx-latex",
+    proprieta: ["height", "padding", "font", "color", "border-radius", "box-shadow"],
+  },
+  {
+    id: "formula.puntini",
+    vista: "formula-latex",
+    prototipo: ".mx .mx-row .mx-more",
+    app: ".cm-fub-mx-popover .cm-fub-mx-row .cm-fub-mx-more",
+    proprieta: [...DIMENSIONI, "border-radius", "color", "background"],
+  },
+  {
+    id: "formula.opzioni",
+    vista: "formula-latex-opzioni",
+    prototipo: ".mx .mx-opts",
+    app: ".cm-fub-mx-popover .cm-fub-mx-options",
+    proprieta: ["padding", "gap"],
+  },
+  {
+    id: "formula.opzione",
+    vista: "formula-latex-opzioni",
+    prototipo: ".mx .mx-opts > div",
+    app: ".cm-fub-mx-popover .cm-fub-mx-option",
+    proprieta: ["font", "color", "gap", ...ALLINEAMENTO],
+  },
+  {
+    id: "formula.opzione-scelta",
+    vista: "formula-latex-opzioni",
+    prototipo: '.mx .mx-opts .seg2 button[aria-pressed="true"]',
+    app: '.cm-fub-mx-popover .cm-fub-mx-segment[aria-pressed="true"]',
+    proprieta: ["height", "padding", "border-radius", "font", "color", "background", "box-shadow"],
+  },
+  {
+    id: "formula.opzione-altra",
+    vista: "formula-latex-opzioni",
+    prototipo: '.mx .mx-opts .seg2 button[aria-pressed="false"]',
+    app: '.cm-fub-mx-popover .cm-fub-mx-segment[aria-pressed="false"]',
+    proprieta: ["height", "padding", "border-radius", "font", "color", "background"],
+  },
+  // ── il posto della formula nei tre puntini (T65) ─────────────────────────
+  {
+    id: "formula.posto",
+    vista: "formula-latex-opzioni",
+    prototipo: ".mx .mx-opts > div:last-child",
+    app: ".cm-fub-mx-popover .cm-fub-mx-option:last-child",
+    proprieta: ["font", "color", "gap", ...ALLINEAMENTO],
+  },
+  {
+    id: "formula.posto-scelto",
+    vista: "formula-latex-opzioni",
+    prototipo: '.mx .mx-opts [data-disp="0"]',
+    app: '.cm-fub-mx-popover [data-place="inline"]',
+    proprieta: ["height", "padding", "border-radius", "font", "color", "background", "box-shadow"],
+  },
+  // ── gli errori in chiaro (T64) ────────────────────────────────────────────
+  {
+    id: "formula.errore",
+    vista: "formula-latex-errore",
+    prototipo: ".mx .mx-err",
+    app: ".cm-fub-mx-popover .cm-fub-mx-error",
+    proprieta: ["margin", "padding", "gap", "border-radius", "background", "font", "color", ...ALLINEAMENTO],
+  },
+  {
+    id: "formula.errore-codice",
+    vista: "formula-latex-errore",
+    prototipo: ".mx .mx-err code",
+    app: ".cm-fub-mx-popover .cm-fub-mx-error code",
+    proprieta: ["font", "background", "padding"],
+  },
+  {
+    id: "formula.errore-correzione",
+    vista: "formula-latex-errore",
+    prototipo: ".mx .mx-err button",
+    app: ".cm-fub-mx-popover .cm-fub-mx-error-fix",
+    proprieta: ["height", "padding", "border-radius", "font", "color", "background"],
+  },
+  // Le maniglie: «+» e la presa a due occhi.
+  {
+    id: "maniglie.aggiungi",
+    vista: "maniglie",
+    contesto: "documento",
+    prototipo: "#g-add",
+    app: '.cm-fub-block-handles[data-active="true"] .cm-fub-block-add',
+    proprieta: [...DIMENSIONI, "border-radius", "color", "background", "opacity"],
+  },
+  {
+    id: "maniglie.aggiungi-icona",
+    vista: "maniglie",
+    contesto: "documento",
+    prototipo: "#g-add svg",
+    app: '.cm-fub-block-handles[data-active="true"] .cm-fub-block-add svg',
+    proprieta: DIMENSIONI,
+  },
+  {
+    id: "maniglie.presa",
+    vista: "maniglie",
+    contesto: "documento",
+    prototipo: "#g-grip",
+    app: '.cm-fub-block-handles[data-active="true"] .cm-fub-block-grip',
+    proprieta: [...DIMENSIONI, "border-radius", "color", "background", "opacity"],
+  },
+  {
+    id: "maniglie.occhi",
+    vista: "maniglie",
+    contesto: "documento",
+    prototipo: "#g-grip svg.ea",
+    app: '.cm-fub-block-handles[data-active="true"] .cm-fub-block-grip-eyes svg',
+    proprieta: DIMENSIONI,
+  },
+
+  // ── la tabella Markdown (T50) e la somma nella banda (T55): #432 ─────────
+  // Le celle si scelgono lontano dal bordo esterno, che nel prototipo è un
+  // anello della scatola (`.gr-box`) e nell'app il bordo delle celle di
+  // fuori: i fili di dentro si confrontano sul lato basso.
+  {
+    id: "tabella.intestazione",
+    vista: "tabella",
+    contesto: "documento",
+    prototipo: ".gr tr:first-child td:nth-child(2)",
+    app: '.tb-grid .tb-cell.tb-head[data-col="0"]',
+    proprieta: ["padding", "font", "color", "background", "height", "white-space", "border-bottom-width", "border-bottom-style", "border-bottom-color"],
+  },
+  {
+    id: "tabella.cella",
+    vista: "tabella",
+    contesto: "documento",
+    prototipo: ".gr tr:nth-child(2) td:nth-child(2)",
+    app: '.tb-grid .tb-cell[data-row="1"][data-col="1"]',
+    proprieta: ["padding", "font", "color", "background", "height", "white-space", "border-bottom-width", "border-bottom-style", "border-bottom-color"],
+  },
+  {
+    id: "tabella.lettera",
+    vista: "tabella",
+    contesto: "documento",
+    prototipo: ".gr-let span:not(.on)",
+    app: ".tb-grid .tb-letter:not(.is-selected)",
+    proprieta: ["font", "color", "background"],
+  },
+  {
+    id: "tabella.lettera-scelta",
+    vista: "tabella",
+    contesto: "documento",
+    prototipo: ".gr-let span.on",
+    app: ".tb-grid .tb-letter.is-selected",
+    proprieta: ["font", "color"],
+  },
+  // Nell'app il fondo della scelta è un `::before` sotto la lettera.
+  {
+    id: "tabella.lettera-scelta-fondo",
+    vista: "tabella",
+    contesto: "documento",
+    prototipo: ".gr-let span.on",
+    app: ".tb-grid .tb-letter.is-selected::before",
+    proprieta: ["background"],
+  },
+  {
+    id: "tabella.numero",
+    vista: "tabella",
+    contesto: "documento",
+    prototipo: ".gr-num span:not(.on)",
+    app: ".tb-grid .tb-rowhead:not(.is-selected)",
+    proprieta: ["font", "color", "background"],
+  },
+  {
+    id: "tabella.numero-scelto",
+    vista: "tabella",
+    contesto: "documento",
+    prototipo: ".gr-num span.on",
+    app: ".tb-grid .tb-rowhead.is-selected",
+    proprieta: ["font", "color"],
+  },
+  {
+    id: "tabella.numero-scelto-fondo",
+    vista: "tabella",
+    contesto: "documento",
+    prototipo: ".gr-num span.on",
+    app: ".tb-grid .tb-rowhead.is-selected::before",
+    proprieta: ["background"],
+  },
+  {
+    id: "tabella.riempi",
+    vista: "tabella",
+    contesto: "documento",
+    prototipo: ".tg-fill",
+    app: ".tb-grid .tb-fill",
+    proprieta: [...DIMENSIONI, "border-radius", "background", "box-shadow"],
+  },
+  {
+    id: "tabella.aggiungi-riga",
+    vista: "tabella",
+    contesto: "documento",
+    prototipo: ".tg-add.row",
+    app: '.tb-add[data-add="row"]',
+    proprieta: ["height", "bottom", "border-radius", "color", "background", "opacity"],
+  },
+  {
+    id: "tabella.aggiungi-colonna",
+    vista: "tabella",
+    contesto: "documento",
+    prototipo: ".tg-add.col",
+    app: '.tb-add[data-add="column"]',
+    proprieta: ["width", "right", "border-radius", "color", "background", "opacity"],
+  },
+  {
+    id: "somma.valore",
+    vista: "somma",
+    prototipo: "#band-words b",
+    app: ".status-sum-part[data-lead] > .status-sum-value",
+    proprieta: ["font", "color"],
+  },
+
+  // ── la testata (T7) e le proprietà (T8): #421 ────────────────────────────
+  {
+    id: "testata.copertina",
+    vista: "testata",
+    attende: "#421",
+    contesto: "documento",
+    prototipo: ".cover",
+    app: ".cm-fub-page-cover",
+    proprieta: ["height", "border-radius"],
+  },
+  {
+    id: "testata.strumenti",
+    vista: "testata",
+    attende: "#421",
+    contesto: "documento",
+    prototipo: ".ptools",
+    app: ".cm-fub-page-tools",
+    proprieta: ["display", "gap", "height", "margin", "opacity"],
+  },
+  {
+    id: "testata.strumento",
+    vista: "testata",
+    attende: "#421",
+    contesto: "documento",
+    prototipo: ".ptools button",
+    app: ".cm-fub-page-tool",
+    proprieta: [...BASE, "height", ...ALLINEAMENTO],
+  },
+  {
+    id: "testata.titolo",
+    vista: "testata",
+    attende: "#421",
+    contesto: "documento",
+    prototipo: ".ptitle",
+    app: ".cm-fub-page-title",
+    proprieta: ["font", "color", "margin", "padding"],
+  },
+  {
+    id: "testata.dati",
+    vista: "testata",
+    attende: "#421",
+    contesto: "documento",
+    prototipo: ".facts",
+    app: ".note-facts",
+    proprieta: [...BASE, ...ALLINEAMENTO],
+  },
+  {
+    id: "testata.dato",
+    vista: "testata",
+    attende: "#421",
+    contesto: "documento",
+    prototipo: ".facts button:not(.tag)",
+    app: ".note-fact:not(.note-fact-tags)",
+    proprieta: ["padding", "margin", "gap", "border-radius", "font", "color"],
+  },
+  {
+    id: "testata.etichetta",
+    vista: "testata",
+    attende: "#421",
+    contesto: "documento",
+    prototipo: ".facts .tag",
+    app: ".note-tag",
+    proprieta: BASE,
+  },
+  // Aggiunta dal controllo del 2026-11-21: l'icona della nota, a cavallo
+  // della copertina.
+  {
+    id: "testata.icona",
+    vista: "testata",
+    contesto: "documento",
+    prototipo: ".picon",
+    app: ".cm-fub-page-icon",
+    proprieta: ["margin-top", ...DIMENSIONI, "border-radius", "font-size", "line-height", "background", ...ALLINEAMENTO],
+  },
+
+];
