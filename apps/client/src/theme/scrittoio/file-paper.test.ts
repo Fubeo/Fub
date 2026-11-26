@@ -9,7 +9,7 @@
 import { describe, expect, it } from "vitest";
 import structure from "./structure.css?raw";
 import sheetDark from "./sheet-dark.css?raw";
-import { EDITORS_SKIN as editors } from "./editors-skin";
+import { EDITORS_SKIN as editors } from "./skin-text";
 import drawers from "./skin/drawers.css?raw";
 
 interface Rule {

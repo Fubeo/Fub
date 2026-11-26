@@ -124,7 +124,7 @@ const nameOf = (el: Element): string => `${el.tagName.toLowerCase()}.${[...el.cl
 const KNOWN_AT_REST: ReadonlyMap<string, string> = new Map([
   [
     ".cm-fub-code-header button",
-    "Lingua, A capo e Copia nella testata del blocco di codice si vedono sempre (skin/document.css): " +
+    "Lingua, A capo e Copia nella testata del blocco di codice si vedono sempre (skin/document-blocks.css): " +
       "vanno nel gruppo «Codice» della barra di formato (T11) o al passaggio",
   ],
 ]);

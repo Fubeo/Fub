@@ -49,7 +49,6 @@
 5405 apps/client/src/state/document-controller.ts
 2293 apps/client/src/state/document-session.ts
 1758 apps/client/src/tabella/frame/frame.ts
-3617 apps/client/src/theme/scrittoio/skin/document.css
 1986 apps/client/src/theme/scrittoio/skin/draw.css
 1856 apps/client/src/theme/scrittoio/skin/export.css
 1910 apps/client/src/theme/scrittoio/skin/kit.css

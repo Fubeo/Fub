@@ -109,7 +109,7 @@ cartella dei tipi o la nota viene rinominata dentro o fuori.
   `note_types::notes_of_type` (la stessa risoluzione dei conti di
   `typed_notes`, ordinando solo le righe mostrate); il posto in
   fondo alla nota è `markdown/type-page.ts`, acceso da `markdown/surface.ts`.
-- Stile: `skin/document.css` (`.cm-fub-page-type-*`), `skin/drawers.css`
+- Stile: `skin/document-page.css` (`.cm-fub-page-type-*`), `skin/drawers.css`
   (`.note-type-menu*`). Scene del banco `tipi-*` e `mobile-tipi-*`; prove in
   `src/note-types.e2e.test.ts`, `src/state/new-note.test.ts` e
   `page/note-type.dom.test.ts`, `markdown/type-page.dom.test.ts`; scene

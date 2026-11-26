@@ -6431,7 +6431,10 @@ kbd,
 
 /* ── skin/document.css ──────────────────────────────────────────────────── */
 
-/* Il documento reso: anteprima, lettura, incorporamenti. */
+/* Il documento reso: anteprima, lettura, incorporamenti. Questo pezzo tiene
+   la colonna, il corpo, il ritmo, i titoli e i collegamenti; la testata, i
+   blocchi e il resto stanno in `document-page`, `document-blocks` e
+   `document-meta`. */
 
 /* Live è CodeMirror, Lettura è HTML reso: sono due alberi diversi che devono
    sembrare la stessa pagina. Ogni regola qui sotto ha perciò due facce — le
@@ -7206,6 +7209,11 @@ kbd,
 .cm-fub-block-menu [data-danger="true"] {
   color: var(--doc-danger);
 }
+
+/* ── skin/document-page.css ─────────────────────────────────────────────── */
+
+/* La pelle del documento: la testata della pagina, le proprietà, le definizioni e i commenti. */
+
 /* ── La testata della pagina (E3, H12) ──────────────────────────────────── */
 /* La stessa in Scrittura e in Lettura: copertina, icona, titolo, proprietà
    in evidenza, poi la riga dei dati. Il titolo è il nome del file, nel
@@ -8523,6 +8531,10 @@ button.cm-fub-page-icon:focus-visible {
   color: var(--muted);
 }
 
+/* ── skin/document-blocks.css ───────────────────────────────────────────── */
+
+/* La pelle del documento: i blocchi (citazioni, ripiegabili, colonne, indice, elenchi, codice, tabelle, filetti, formule, immagini, incorporamenti). */
+
 /* ── Citazioni e richiami ────────────────────────────────────────────────── */
 
 /* La citazione è un filo e un corsivo in grafite: nessun fondo. */
@@ -9406,6 +9418,10 @@ button.cm-fub-page-icon:focus-visible {
 .markdown-rendered .embed[data-embed-path] {
   min-height: var(--text-3xl);
 }
+
+/* ── skin/document-meta.css ─────────────────────────────────────────────── */
+
+/* La pelle del documento: proprietà, note a piè, UI dichiarativa, anteprima al passaggio e riga dei dati. */
 
 /* ── Proprietà, note a piè, blocchi che nessuno disegna ──────────────────── */
 

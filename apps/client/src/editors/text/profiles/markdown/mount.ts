@@ -129,7 +129,7 @@ export type TranscludeSlot = (slot: HTMLElement, embed: TranscludedEmbed, life: 
 
 const MAX_EMBED_DEPTH = 5;
 const mounts = new WeakMap<HTMLElement, Teardown>();
-/// L'involucro che scorre attorno a ogni tabella resa (`skin/document.css`).
+/// L'involucro che scorre attorno a ogni tabella resa (`skin/document-blocks.css`).
 const TABLE_SCROLL = "markdown-table-scroll";
 
 

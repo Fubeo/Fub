@@ -6,7 +6,7 @@
 // Con «Il dito scrive» (T64) un dito scrive e due dita spostano.
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { t } from "../../i18n/strings";
-import { EDITORS_SKIN } from "../../theme/scrittoio/editors-skin";
+import { EDITORS_SKIN } from "../../theme/scrittoio/skin-text";
 import structure from "../../theme/scrittoio/structure.css?raw";
 import { parseInkBrush, penOf } from "../../ink/brush";
 import { quantizeInk, type InkSample } from "../../ink/sample";

@@ -16,6 +16,9 @@ import { CENTRES } from "./anatomia/centres";
 import { CONTROLS } from "./anatomia/controls";
 import { DIAGRAMS } from "./anatomia/diagrams";
 import { DOCUMENT } from "./anatomia/document";
+import { DOCUMENT_BLOCKS } from "./anatomia/document-blocks";
+import { DOCUMENT_META } from "./anatomia/document-meta";
+import { DOCUMENT_PAGE } from "./anatomia/document-page";
 import { DRAW } from "./anatomia/draw";
 import { DRAW_DIALOGS } from "./anatomia/draw-dialogs";
 import { DRAWERS } from "./anatomia/drawers";
@@ -57,6 +60,9 @@ const DECLARED: readonly PartAnatomy[] = [
   SEARCH,
   SHEETS,
   DOCUMENT,
+  DOCUMENT_PAGE,
+  DOCUMENT_BLOCKS,
+  DOCUMENT_META,
   TABELLA,
   MATH,
   EDITORS,

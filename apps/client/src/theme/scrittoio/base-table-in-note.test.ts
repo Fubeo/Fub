@@ -7,8 +7,7 @@
 // tabelle Markdown lascia fuori la Base senza peso in più, e il vassoio che
 // porta una Base si allarga lui, non la Base dentro.
 import { describe, expect, it } from "vitest";
-import document from "./skin/document.css?raw";
-import { EDITORS_SKIN as editors } from "./editors-skin";
+import { DOCUMENT_SKIN as document, EDITORS_SKIN as editors } from "./skin-text";
 import structure from "./structure.css?raw";
 
 const ESCLUSA = ":not(:where(.base-surface *))";
@@ -30,7 +29,7 @@ function markdownTableSelectors(css: string): string[] {
 
 describe("la tabella della Base dentro una nota", () => {
   for (const [name, css] of [
-    ["skin/document.css", document],
+    ["skin/document*.css", document],
     ["structure.css", structure],
   ] as const) {
     it(`${name}: le tabelle Markdown lasciano fuori la Base`, () => {

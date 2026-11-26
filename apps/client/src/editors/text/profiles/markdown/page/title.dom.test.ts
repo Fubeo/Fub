@@ -285,7 +285,7 @@ function reading(doc: string, name: string) {
   return { element, before, unmount };
 }
 
-/// L'H1 che la pelle nasconde (`skin/document.css`).
+/// L'H1 che la pelle nasconde (`skin/document-meta.css`).
 const hidden = (element: HTMLElement) => element.querySelector(".markdown-rendered > .cm-fub-page[data-title-fold] ~ h1:first-of-type");
 
 describe("il primo H1 in Lettura", () => {

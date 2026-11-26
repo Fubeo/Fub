@@ -798,7 +798,7 @@ export function canMoveProperty(direction: -1 | 1): (state: EditorState) => bool
 }
 
 // La forma del riquadro. L'angolo, il fondo, l'interlinea e gli inchiostri
-// sono della pelle (`theme/scrittoio/skin/document.css`, issue #242).
+// sono della pelle (`theme/scrittoio/skin/document.css` e `document-meta.css`, issue #242).
 const theme = EditorView.baseTheme({
   ".cm-fub-properties": {
     cursor: "text",
