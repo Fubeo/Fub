@@ -42,6 +42,10 @@ const ALLOWED_TIMER_FILES = new Set([
   // Le attese dei banchi, che soltanto i test importano: ogni giro di
   // `waiter` aspetta un timer che muore con la promessa che risolve.
   "apps/client/src/test-wait.ts",
+  // Il supporto delle prove dell'editor del disegno, che soltanto i test
+  // importano: aspetta un giro di macrotask con un timer che muore con la
+  // promessa che risolve (prima stava nel file di prova, escluso dal controllo).
+  "apps/client/src/editors/spatial/tools/editor-test-support.ts",
 ]);
 
 /// `const nome = <un globale>`: la finestra, il documento e i loro figli
