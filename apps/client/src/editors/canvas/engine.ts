@@ -1,7 +1,6 @@
 import type { Theme } from "../../theme/theme";
 import { nearFreeSpot } from "./free-spot";
 import type { SyntaxForm } from "../../host/contract";
-import { errorText } from "../../host/errors";
 import { t, onLanguage, plural, type Key } from "../../i18n/strings";
 import { MENU_RULE, menuBelow, type SurfaceClipboardOp, type SurfaceMenu, type SurfaceMenuClipboard, type SurfaceMenuEntry, type SurfaceMenuItem } from "../core/editor-menu";
 import { clipboardSupports, readClipboard, writeClipboardData, writeClipboardText } from "../../platform/clipboard";
@@ -9,14 +8,9 @@ import { type TextOperation } from "../core/text-operation";
 import { idleSchedule } from "../../ink/dom/idle";
 import { PenQuiet, type Schedule } from "../../ink/quiet";
 import { openLifetime, type Lifetime } from "../../ui/lifetime";
-import { notify } from "../../ui/notify";
-import { searchedName } from "../../rules/searched-name";
-import { focusableElements, focusZone } from "../../ui/a11y";
+import { focusZone } from "../../ui/a11y";
 import { mediaKindOfId } from "../media/media-types";
-import { parseTsv } from "../core/tsv";
-import { DROP_GROUP_THRESHOLD, markdownTable, sortedDrop, type DropFile } from "./drop-layout";
 import { parsePageRanges } from "./page-ranges";
-import { ENTRIES_DRAG_TYPE, NOTE_DRAG_TYPE } from "../../ui/drag-types";
 import {
   cardKindOf,
   liveCardIds,
@@ -35,7 +29,7 @@ import {
   type CardWriting,
   type Rect,
 } from "../core/cards/contract";
-import { boardReading, cardLabel, cardTitle, nearestCard, stepInOrder, type BoardReading } from "./a11y";
+import { cardTitle, type BoardReading } from "./a11y";
 import { applyCardDetails, cardDetail, detailLevel, farTitle } from "./lod";
 import { inkKey, type InkEraserMode } from "./ink-erase";
 import {
@@ -45,9 +39,7 @@ import {
   CANVAS_TIPS,
   CANVAS_TOOL_KEYS,
   buildCanvasCommands,
-  commandForKey,
   commandHint,
-  isCommandSearchKey,
   menuChord,
   toolOfCommand,
   type CanvasAlign,
@@ -61,14 +53,14 @@ import {
   type CanvasToolId,
 } from "./chrome/commands";
 import { CANVAS_INK_TOOLS, CANVAS_WRITING_TOOLS, createCanvasRail, saveFingerWrites, type CanvasRail } from "./chrome/rail";
-import { openCanvasRadial, rememberRecent } from "./chrome/radial";
+import { openCanvasRadial } from "./chrome/radial";
 import type { Radial, RadialPointer } from "../spatial/tools/radial";
 import { createCanvasEmpty, isEmptyBoard, transferOf, type CanvasEmpty } from "./chrome/empty";
 import { checkProblemText, clipboardText, codeTextProblem, problemPhrase, readCodeList, summaryText, warningsText } from "./code-text";
 import { asCopies, asUpdates, codeClashes, placedAt, type CodeClashes } from "./code-paste";
 import { createCanvasNavigator, type CanvasNavigator } from "./chrome/navigator";
 import { CanvasJumps } from "./jumps";
-import { applyFindMarks, boardFindIndex, findMarks, type FindMark, type FindTarget } from "./find";
+import { applyFindMarks, boardFindIndex, type FindMark } from "./find";
 import { createCanvasFindBar, type CanvasFindBar } from "./chrome/find-bar";
 import {
   CANVAS_CLIPBOARD_TYPE,
@@ -105,10 +97,10 @@ import {
 } from "./chrome/status";
 import type { SurfaceStatusItem } from "../core/registry";
 import { CitationCounts, cardFilePath, headZonePaths, syncCardHead, twinGroups } from "./card-head";
-import { CanvasDepositError, type DropFolderChoice } from "../../state/canvas-intake";
+import { type DropFolderChoice } from "../../state/canvas-intake";
 import { saveStateKey } from "../../state/saving";
 import { SHARED_RECENT_COMMANDS, openCommandSearch, type CommandSearchHandle } from "./chrome/command-search";
-import { mountInkLayer, type InkLayer } from "./ink-layer";
+import { type InkLayer } from "./ink-layer";
 import { createCanvasRuler, type CanvasRuler } from "./ink-ruler";
 import { StrokeGuide } from "./ink-shapes";
 import { InkPathCache, type DryStroke } from "./ink-paint";
@@ -131,20 +123,13 @@ import { cardTarget } from "./sources";
 import { PARTS_PICKER_MIN_SECTIONS, openPartsPicker, partsSections, type PartsHeading, type PartsPickerHandle, type PartsPickerPlace } from "./parts-picker";
 import { cardFormulaBar, type CardFormulaBar } from "../core/formula-bar";
 import { noteHeadingOf } from "../core/cards/kinds/note";
-import { excerptSourcePath, noteExcerptOf, noteSectionsText, sectionHeading, syncExcerptHead } from "./excerpt";
+import { excerptSourcePath, noteExcerptOf, syncExcerptHead } from "./excerpt";
 import { READER_TAP_MS, READER_TAP_SLOP, openReader, type ReaderHandle } from "./reader";
 import { DEFAULT_PREFERENCES, currentPreferences, snapStepOf, watchPreferences, type DragEmptyAction, type PenButtonAction, type WheelAction } from "./preferences";
 import { TAP_MAX_MS, TAP_SLOP_PX, isTap, pinchCamera, type TouchCamera, type TouchPoint } from "./touch";
-import { fit, stepCamera, zoomAtPoint, type MotionState } from "../../spatial/camera";
+import { type MotionState } from "../../spatial/camera";
 import { onReducedMotionChange, reducedMotion } from "../../theme/reduced-motion";
-import {
-  DEFAULT_INK_CHOICE,
-  inkLook,
-  inkStrokeTool,
-  type InkPenChoice,
-  INK_KEY,
-  type InkLayerRef,
-} from "./ink-record";
+import { DEFAULT_INK_CHOICE, inkStrokeTool, type InkPenChoice, INK_KEY, type InkLayerRef } from "./ink-record";
 import { newNodeId, upsertNodePatch, type CanvasPatch } from "./operation";
 import { edgeEnd, type CanvasDocument, type CanvasEdge, type CanvasNode } from "./model";
 import {
@@ -152,23 +137,15 @@ import {
   edgeAt,
   edgePathData,
   insideBox,
-  linkedCardPlacement,
   nearestSides,
   sidePoint,
   type EdgePoint,
   type EdgeSide,
   type PlacedEdge,
 } from "./edges";
-import { CanvasViewRecorder, type CanvasView, type CanvasViewSnapshot } from "./view-state";
+import { CanvasViewRecorder, type CanvasView } from "./view-state";
 import { GUIDE_SCREEN_PX, snapGuides, type GuideRect, type GuideResult, type GuideSegment } from "./guides";
-import {
-  CanvasCoreError,
-  type CanvasCheckReport,
-  type CanvasCompiled,
-  type CanvasCore,
-  type CanvasIntentOp,
-} from "./wasm/core";
-import { composingKey } from "../../kit/ime";
+import { CanvasCoreError, type CanvasCheckReport, type CanvasCore, type CanvasIntentOp } from "./wasm/core";
 import {
   CANVAS_SNAP,
   CanvasArrange,
@@ -176,27 +153,14 @@ import {
   CANVAS_GRID_MIN_PX,
   CANVAS_MIN_SIZE,
   SPREAD_CONFIRM_ABOVE,
-  WHEEL_SETTLE_MS,
-  wheelPixels,
-  CARD_KEYS,
-  NEAREST_CARD_KEYS,
-  CARD_ONLY_NEAREST_KEYS,
-  LABEL_BATCH,
   DOUBLE_CLICK_ENTERS,
   FileShowing,
-  MAX_CARD_TEXT_BYTES,
-  MEASURE_IMAGE_PARALLEL,
-  MAX_DROP_GHOSTS,
   MOVE_CONTENTS_MAX,
-  utf8,
   MAX_INTERACTIVE_NODES,
   MAX_INTERACTIVE_EDGES,
-  CanvasDepositCards,
   CanvasCorePort,
   SHARED_CORE,
-  CanvasInkMouseMemory,
   SHARED_INK_MOUSE,
-  CanvasPenMemory,
   SHARED_PEN,
   CardLinkRef,
   CanvasEngineOptions,
@@ -219,10 +183,6 @@ import {
   InkMarks,
   InkPoint,
   isInkKey,
-  VIEW_ZOOM_COMMANDS,
-  HISTORY_COMMANDS,
-  isMenuKey,
-  keepsItsUndo,
   isTextTarget,
   InkStates,
   PendingText,
@@ -234,8 +194,6 @@ import {
   PanSample,
   PointerAt,
   FINGER_CONTROLS,
-  NARROW_WIDTH,
-  NARROW_PANE,
   BESIDE_HERE_NAMES,
   CardLink,
   ConnectGesture,
@@ -248,18 +206,11 @@ import {
   ZOOM_LIMITS,
   clampZoom,
   CANVAS_ZOOM_STEP,
-  FIT_LIMITS,
   FIT_MARGIN,
-  INERTIA_MIN_SPEED,
   CARD_FLASH_MS,
   INERTIA_WINDOW_MS,
-  MAX_FRAME_MS,
 } from "./engine-parts";
 import {
-  toCamera,
-  fromCamera,
-  edgeScrollSpeed,
-  sameViewport,
   overlaps,
   looseCards,
   snap,
@@ -270,7 +221,6 @@ import {
   RESIZE_CORNERS,
   RESIZE_FINGER_GRIP_PX,
   TEXT_CARD_HEIGHT,
-  NEXT_CARD_GAP,
   ResizeBox,
   resizeBox,
   boxAround,
@@ -280,11 +230,9 @@ import {
   resizeHandle,
   markHandles,
   measureText,
-  freeSpot,
   naturalSize,
   paintColor,
   paintTextStyle,
-  measuredImage,
   isVaultPath,
   externalUrl,
 } from "./engine-geometry";
@@ -296,8 +244,6 @@ import {
   fileName,
   cardMenuName,
   relinkedFile,
-  proposedNoteName,
-  noteDisplayName,
   writingName,
   nodeTitle,
   nodeText,
@@ -312,6 +258,11 @@ import { documentMethods, type DocumentMethods } from "./engine-document";
 import { textMethods, type TextMethods } from "./engine-text";
 import { inkMethods, type InkMethods } from "./engine-ink";
 import { lassoMethods, type LassoMethods } from "./engine-lasso";
+import { toolsMethods, type ToolsMethods } from "./engine-tools";
+import { cameraMethods, type CameraMethods } from "./engine-camera";
+import { keysMethods, type KeysMethods } from "./engine-keys";
+import { intakeMethods, type IntakeMethods } from "./engine-intake";
+import { convertMethods, type ConvertMethods } from "./engine-convert";
 export {
   CANVAS_SNAP,
   CANVAS_GRID_DOT_STEPS,
@@ -1854,64 +1805,6 @@ export class CanvasEngine {
     return this._quiet.active || (this._inkLayer?.drawing ?? false);
   }
 
-  /**
-   * Monta lo strato della penna quando la lavagna si può cambiare e smontarlo
-   * quando no (sola lettura del pannello o della tela, scena troppo grande,
-   * lavagna chiusa: A8). Smontarlo annulla il tratto in corso: la scia sparisce.
-   */
-  _syncInkLayer(): void {
-    const wanted = !this._destroyed && this._doc !== null && !this._readOnly && !this._isSceneOversized();
-    if (wanted === (this._inkLayer !== null)) return;
-    if (!wanted) {
-      const life = this._inkLife;
-      this._inkGuides.clear();
-      clearTimeout(this._shapeTimer);
-      this._inkLayer = null;
-      this._inkLife = null;
-      this._inkChain = null;
-      life?.close();
-      this._inkTargetClose();
-      this._eraseDrop();
-      this._applyInkMouse();
-      return;
-    }
-    const life = openLifetime();
-    this._inkLife = life;
-    this._inkLayer = mountInkLayer({
-      viewport: this._viewport,
-      toWorld: (clientX, clientY) => this._screenToWorld(clientX, clientY),
-      // La penna scelta (A11 prima di ogni scelta) allo zoom di quando il
-      // tratto comincia: una scelta a metà tratto vale dal tratto dopo.
-      look: (input) => {
-        const look = inkLook(this._penChoice, this._camera.zoom, input.pressure);
-        this._inkTargetStarting(look.brush.size);
-        return look;
-      },
-      // Lo strumento Gomma: la punta e il mouse che scrive cancellano (A21).
-      tipErases: () => this._penChoice.tool === "eraser",
-      // «Il dito scrive» (T64): letto a ogni appoggio.
-      fingerWrites: () => this._fingerWritesSetting,
-      quiet: this._quiet,
-      mouse: this._inkMouseOn ? "ink" : "ignore",
-      // Il righello, Maiusc e la penna ferma (T87).
-      guide: (start) => this._inkGuideStart(start),
-      onStroke: (stroke) => this._inkStroke(stroke),
-      onCancel: (id) => {
-        this._inkGuideDrop(id);
-        this._inkTargetClose();
-        this._eraseCancel(id);
-      },
-      onEraseStart: (id, pointerType) => this._eraseStart(id, pointerType),
-      onErase: (id, points) => this._eraseAlong(id, points),
-      onEraseEnd: (id) => this._eraseEnd(id),
-      // Il tasto laterale (T63): la gomma, o ciò che dicono le Impostazioni.
-      barrelErases: () => this._penButtonSetting === "eraser",
-      onBarrel: (event) => this._barrelDown(event),
-    }, life);
-    this._inkLayer.setCamera(this._camera.x, this._camera.y, this._camera.zoom);
-    this._applyInkMouse();
-  }
-
   /** L'interruttore «Scrivi col mouse»: lo strumento della colonna è dell'inchiostro. */
   get _inkMouse(): boolean {
     return CANVAS_INK_TOOLS.has(this._tool);
@@ -1941,229 +1834,6 @@ export class CanvasEngine {
     return this._tool;
   }
 
-  /**
-   * Sceglie lo strumento (il comando `canvas.tool.<id>`, la colonna, il suo
-   * tasto). In sola lettura gli strumenti che scrivono non si scelgono. Penna,
-   * Evidenziatore e Gomma chiamano la penna del menu di N4 (la scelta si
-   * ricorda come una scelta del menu) e fanno scrivere il mouse.
-   */
-  _pickTool(tool: CanvasToolId): void {
-    if (this._destroyed) return;
-    if (CANVAS_WRITING_TOOLS.has(tool) && (this._readOnly || this._isSceneOversized())) return;
-    // Uno strumento scelto: l'interruttore ricordato non arriva più a cambiarlo.
-    this._inkMouseTurns += 1;
-    if (CANVAS_INK_TOOLS.has(tool) && this._penChoice.tool !== tool) {
-      this._choosePen({ ...this._penChoice, tool: tool as InkPenChoice["tool"] }, true);
-    }
-    this._setTool(tool);
-  }
-
-  /**
-   * «Collega…» (T17): il filo parte dalla scheda `id`, come dal pulsante →
-   * della sua testata; il prossimo clic su un'altra scheda lo chiude. La
-   * colonna mostra Collega finché il filo non c'è.
-   */
-  _beginConnectFrom(id: string): void {
-    if (this._destroyed || this._readOnly || this._isSceneOversized()) return;
-    if (!this._doc?.nodes.some((node) => node.id === id)) return;
-    this._pickTool("connect");
-    this._connectFrom = id;
-  }
-
-  /** Il pulsante «Mostra l'anteprima» della scheda di pagina web `id`, se c'è adesso. */
-  _webPreviewButton(id: string): HTMLButtonElement | null {
-    return this._cards.get(id)?.article.querySelector<HTMLButtonElement>(".canvas-card-web-preview") ?? null;
-  }
-
-  /** Lo strumento di adesso, mostrato nella colonna, sull'interruttore e sul viewport. */
-  _setTool(tool: CanvasToolId): void {
-    // Uno strumento scelto rinuncia al filo cominciato da «Collega…».
-    this._connectFrom = null;
-    // Lasciando il Lazo i tratti scelti non lo sono più: solo lui li sposta (T86).
-    if (tool !== "lasso" && this._strokeSelection.size > 0) {
-      this._strokeSelection = new Set();
-      this._paintLasso();
-      this._syncSelectionBar();
-    }
-    // Lo strumento di prima va fra i recenti del menu radiale (T63).
-    if (tool !== this._tool) this._recentTools = rememberRecent(this._recentTools, tool, this._tool);
-    this._tool = tool;
-    this._inkMouseButton.setAttribute("aria-pressed", String(this._inkMouse));
-    this._viewport.dataset.tool = tool;
-    this._rail.sync();
-    this._canvasOptions.sync();
-    this._applyInkMouse();
-  }
-
-  /**
-   * L'interruttore con cui la lavagna si apre: lo stato ricordato (spento con
-   * «Ricorda se scrivi col mouse» spento), letto una volta sola, così un
-   * cambio dell'impostazione a lavagna aperta vale dalla prossima apertura.
-   * Arriva solo se nel frattempo nessuno ha toccato l'interruttore; una
-   * lettura che non riesce lo lascia spento.
-   */
-  _restoreInkMouse(memory: CanvasInkMouseMemory): void {
-    const turns = this._inkMouseTurns;
-    void memory.read().then((on) => {
-      if (on && !this._destroyed && turns === this._inkMouseTurns) this.setInkMouse(true);
-    }, () => undefined);
-  }
-
-  /** Il clic sul pulsante: cambia l'interruttore e lo ricorda. */
-  _toggleInkMouse(): void {
-    this.setInkMouse(!this._inkMouse);
-    (this._options.inkMouseMemory ?? SHARED_INK_MOUSE).save(this._inkMouse);
-  }
-
-  /** D lasciato, la finestra senza fuoco o nascosta: il mouse torna com'era. */
-  _releaseInkKey(): void {
-    if (!this._inkKeyDown) return;
-    this._inkKeyDown = false;
-    this._applyInkMouse();
-  }
-
-  /**
-   * Dice allo strato che cosa fa il mouse, e lo mostra solo quando scrive
-   * davvero (lo strato c'è): `data-ink="pen"`, o `"eraser"` con lo strumento
-   * Gomma del menu, sul viewport; la croce (o la cella) la porta il velo
-   * (T20d), mostrato solo con un mouse o una penna sospesa sopra la vista.
-   * Ogni attributo si scrive solo se cambia.
-   */
-  _applyInkMouse(): void {
-    // Con Spazio tenuto il mouse sposta la vista (T53).
-    const on = this._inkMouseOn && !this._spaceHeld;
-    const layer = this._inkLayer;
-    layer?.setMouse(on ? "ink" : "ignore");
-    const ink = on && layer ? (this._penChoice.tool === "eraser" ? "eraser" : "pen") : null;
-    if (ink === null) {
-      if (this._viewport.dataset.ink !== undefined) delete this._viewport.dataset.ink;
-    } else if (this._viewport.dataset.ink !== ink) {
-      this._viewport.dataset.ink = ink;
-    }
-    const veil = this._penVeil;
-    const shown = ink !== null && this._veilPointer;
-    if (shown && veil.dataset.tool !== ink) veil.dataset.tool = ink;
-    if (shown === veil.hasAttribute("data-idle")) veil.toggleAttribute("data-idle", !shown);
-  }
-
-  /**
-   * Un mouse o una penna sospesa entra nella vista o ci si muove (`true`), la
-   * penna esce dal raggio o un dito si appoggia (`false`): il velo della croce c'è solo per i
-   * primi. Il dito non ha cursore, e sotto il velo non toccherebbe il
-   * contenuto delle schede.
-   */
-  _setVeilPointer(over: boolean): void {
-    if (this._veilPointer === over) return;
-    this._veilPointer = over;
-    this._applyInkMouse();
-  }
-
-  /**
-   * Il puntatore passa su un altro elemento della vista (T20f). Sul velo della
-   * croce la scheda di prima tiene l'aspetto del passaggio: il velo gliel'ha
-   * tolto, ma il puntatore non se n'è andato. Durante un tratto il passaggio
-   * va alla vista per la cattura, e non conta. Altrove il passaggio è quello
-   * vero: la scheda sotto (o nessuna) e niente più da tenere, nello stesso
-   * fotogramma in cui `:hover` torna, così la scheda non cambia aspetto.
-   * Solo ai confini, mai a ogni movimento, e senza ricerche per punto.
-   */
-  _pointerOver(event: PointerEvent): void {
-    if (event.pointerType === "touch") return;
-    const target = event.target;
-    if (target === this._penVeil) {
-      this._holdHover(this._hoverCard);
-      return;
-    }
-    if (this._penDown) return;
-    this._hoverCard = target instanceof Element && this._stage.contains(target)
-      ? target.closest<HTMLElement>(".canvas-node")
-      : null;
-    this._holdHover(null);
-  }
-
-  /** La scheda `card` tiene l'aspetto del passaggio (`data-hover-held`); `null` lo lascia. */
-  _holdHover(card: HTMLElement | null): void {
-    if (card === this._heldCard) return;
-    this._heldCard?.removeAttribute("data-hover-held");
-    this._heldCard = card;
-    card?.setAttribute("data-hover-held", "");
-  }
-
-  /**
-   * L'elemento in cima nel punto `clientX`, `clientY` della finestra come se
-   * il velo della croce non ci fosse: le ricerche per punto della lavagna
-   * (il menu, il filo, il deposito) guardano le schede, non il velo.
-   */
-  _elementAt(clientX: number, clientY: number): Element | null {
-    const top = document.elementFromPoint?.(clientX, clientY) ?? null;
-    if (top !== this._penVeil) return top;
-    const stack = document.elementsFromPoint?.(clientX, clientY) ?? [];
-    const at = stack.indexOf(this._penVeil);
-    return at < 0 ? null : stack[at + 1] ?? null;
-  }
-
-  /**
-   * Il bersaglio di un evento del puntatore come se il velo della croce non
-   * ci fosse: ciò che c'è sotto il punto, cercato una volta per evento (la
-   * vista se sotto non c'è niente). Un evento che non ha preso il velo dà il
-   * suo bersaglio, senza ricerche.
-   */
-  _targetOf(event: MouseEvent): EventTarget | null {
-    if (event.target !== this._penVeil) return event.target;
-    let under = this._underVeil.get(event);
-    if (under === undefined) {
-      const found = this._elementAt(event.clientX, event.clientY);
-      under = found !== null && this._viewport.contains(found) ? found : this._viewport;
-      this._underVeil.set(event, under);
-    }
-    return under;
-  }
-
-  // --- il menu della penna (T21) -------------------------------------------
-
-  /**
-   * Una scelta del menu della penna: vale dal prossimo tratto o dalla
-   * prossima passata (quelli in corso finiscono come sono cominciati). Una
-   * scelta fatta (`settled`) si ricorda per le lavagne che si aprono dopo;
-   * quelle aperte tengono la loro.
-   */
-  _choosePen(next: InkPenChoice, settled: boolean): void {
-    if (this._destroyed) return;
-    this._penTurns += 1;
-    // Un colore nuovo va fra i recenti del menu radiale (T63), col colore di prima.
-    const before = this._penColor;
-    const after = next.color[inkStrokeTool(next)];
-    if (after !== before) this._recentColors = rememberRecent(this._recentColors, after, before);
-    this._penChoice = next;
-    this._followPen();
-    this._penMenu.sync();
-    if (settled) (this._options.penMemory ?? SHARED_PEN).save(next);
-  }
-
-  /**
-   * La penna cambiata: se il mouse scrive con la colonna, la colonna passa
-   * allo strumento della penna (la Gomma del menu è la Gomma della colonna).
-   */
-  _followPen(): void {
-    if (this._inkMouse && this._tool !== this._penChoice.tool) this._setTool(this._penChoice.tool);
-    else this._applyInkMouse();
-  }
-
-  /**
-   * La penna con cui la lavagna si apre: quella ricordata, letta una volta.
-   * Arriva solo se nel frattempo nessuno ha scelto; una lettura che non
-   * riesce lascia quella di serie.
-   */
-  _restorePen(memory: CanvasPenMemory): void {
-    const turns = this._penTurns;
-    void memory.read().then((choice) => {
-      if (this._destroyed || turns !== this._penTurns) return;
-      this._penChoice = choice;
-      this._followPen();
-      this._penMenu.sync();
-    }, () => undefined);
-  }
-
   // --- la gomma: «Il tratto intero» (A20) e «Solo il pezzo» (T22) -----------
 
   /**
@@ -2188,129 +1858,6 @@ export class CanvasEngine {
   /** `_contentAspectOf` come funzione, per la gomma e il Lazo (`erasableInk`). */
   readonly _aspectsShown = (id: string): number | null => this._contentAspectOf(id);
 
-
-  // --- camera ---------------------------------------------------------------
-
-  _applyCamera(): void {
-    // Camera transforms are immediate for both motion preferences.
-    this._stage.style.transform = `translate(${this._camera.x}px, ${this._camera.y}px) scale(${this._camera.zoom})`;
-    // Il filo sta nello stage (T91): la sua camera è quella dello stage. Le prese no.
-    this._handleLayer.style.transform = `translate(${this._camera.x}px, ${this._camera.y}px) scale(${this._camera.zoom})`;
-    this._inkLayer?.setCamera(this._camera.x, this._camera.y, this._camera.zoom);
-    this._inkRuler?.place();
-    this._paintGrid();
-    // Le maniglie e i segni sopra le schede restano della stessa misura sullo
-    // schermo a ogni zoom (T66): la pelle divide per `--canvas-zoom`.
-    this._stage.style.setProperty("--canvas-zoom", String(this._camera.zoom));
-    this._markAllHandles();
-    // Il selettore delle sezioni resta attaccato alla sua scheda (T74).
-    this._partsPicker?.handle.reposition();
-    // E la barra del ritaglio alla sua (T78), e quella della selezione alle
-    // schede scelte, anche durante lo zoom (#411 C-06).
-    this._placeCropBar();
-    this._followSelectionBar();
-    // Anche la resa passa di qui: la scelta cambiata si ricorda con la camera.
-    this._viewMemo?.changed();
-    // Ogni cambio di zoom passa di qui (bottoni, tasti, menu, `fitCamera`): la
-    // banda lo legge a fine gesto, dentro un gesto `_statusSettle` tace.
-    this._statusSettle();
-  }
-
-  // --- riaprire dove eri (T36) ------------------------------------------------
-
-  /** Ciò che si ricorda adesso: `null` se la lavagna non mostra un documento. */
-  _viewSnapshot(): CanvasViewSnapshot {
-    if (!this._doc) return null;
-    const camera = { ...this._camera };
-    const selection = [...this._selection];
-    return {
-      camera,
-      selection,
-      ...(this._navigatorHidden ? { navigatorHidden: true } : {}),
-      ...(this._gridOverride !== null ? { grid: this._gridOverride } : {}),
-    };
-  }
-
-  /** La lavagna si è appena mostrata: la vista ricordata, se arriva, parte da qui. */
-  _markOpenView(): void {
-    if (!this._viewMemo) return;
-    this._openView = {
-      camera: { ...this._camera },
-      selection: this._selection.join("\n"),
-      navigatorHidden: this._navigatorHidden,
-      grid: this._gridOverride,
-    };
-  }
-
-  /**
-   * La vista ricordata per l'apertura `round`: la camera, se nessuno l'ha
-   * mossa e se almeno una scheda cade nella vista ricordata (se no resta
-   * «inquadra tutto»); la scelta, se è ancora vuota, con le sole schede che ci
-   * sono; e le schede PDF già montate su un'altra pagina si rimontano sulla
-   * loro. Arrivata prima che il nucleo aprisse il testo, aspetta `_revive`.
-   */
-  _restoreView(round: number, view: CanvasView | null): void {
-    if (this._destroyed || round !== this._viewRound || view === null) return;
-    const doc = this._doc;
-    const open = this._openView;
-    if (!doc || !open) {
-      this._heldView = { round, view };
-      return;
-    }
-    this._heldView = null;
-    this._openView = null;
-    let moved = false;
-    const camera = view.camera;
-    if (camera && sameViewport(this._camera, open.camera)) {
-      const next: Viewport = { x: camera.x, y: camera.y, zoom: clampZoom(camera.zoom) };
-      const seen = this._viewRectOf(next);
-      if (doc.nodes.some((node) => overlaps(node, seen))) {
-        this._camera = next;
-        moved = true;
-      }
-    }
-    let selected = false;
-    if (view.selection.length > 0 && this._selection.join("\n") === open.selection && this._edgeSelection.length === 0) {
-      const present = new Set(doc.nodes.map((node) => node.id));
-      const selection = view.selection.filter((id) => present.has(id));
-      if (selection.length > 0) {
-        this._selection = selection;
-        selected = true;
-      }
-    }
-    // «Nascondi il navigatore» (T55), se nessuno l'ha cambiato nel frattempo.
-    const hidden = view.navigatorHidden === true;
-    if (this._navigatorHidden === open.navigatorHidden && hidden !== this._navigatorHidden) {
-      this._navigatorHidden = hidden;
-      this._statusSettle();
-    }
-    // La griglia di Ctrl+' per questa lavagna (T71), se nessuno l'ha cambiata nel frattempo.
-    if (view.grid !== undefined && this._gridOverride === open.grid && this._gridOverride !== view.grid) {
-      this._gridOverride = view.grid;
-      this._paintGrid();
-    }
-    let remount = false;
-    for (const entry of this._cards.values()) {
-      const page = this._viewMemo?.page(entry.id) ?? null;
-      const shown = entry.view?.page?.();
-      if (page === null || shown === undefined || shown === page) continue;
-      // Una chiave che nessun corpo ha: la resa smonta la vista e la rimonta.
-      entry.bodyKey = null;
-      remount = true;
-    }
-    if (!moved && !selected && !remount) return;
-    this._render();
-    if (selected) this._options.onSelectionChange();
-  }
-
-  _screenToWorld(clientX: number, clientY: number): { x: number; y: number } {
-    const rect = this._viewport.getBoundingClientRect();
-    return {
-      x: (clientX - rect.left - this._camera.x) / this._camera.zoom,
-      y: (clientY - rect.top - this._camera.y) / this._camera.zoom,
-    };
-  }
-
   _fitCamera(announce = true, nodes = this._doc?.nodes ?? []): void {
     this._stopMotion(false);
     this._camera = this._fitTarget(nodes);
@@ -2318,82 +1865,6 @@ export class CanvasEngine {
       this._applyCamera();
       this._refreshLive();
     }
-  }
-
-  /**
-   * La camera che mostra tutte le schede `nodes` (T53: con `fit` di
-   * `spatial/camera.ts`): al centro, con `FIT_MARGIN` per lato, mai oltre il
-   * 100%. Senza schede, il 100% con l'origine in alto a sinistra.
-   */
-  _fitTarget(nodes: readonly CanvasNode[], margin = FIT_MARGIN): Viewport {
-    if (!nodes.length) return { x: 24, y: 24, zoom: 1 };
-    let minX = Infinity;
-    let minY = Infinity;
-    let maxX = -Infinity;
-    let maxY = -Infinity;
-    for (const node of nodes) {
-      minX = Math.min(minX, node.x);
-      minY = Math.min(minY, node.y);
-      maxX = Math.max(maxX, node.x + node.width);
-      maxY = Math.max(maxY, node.y + node.height);
-    }
-    const rect = this._viewport.getBoundingClientRect();
-    const view = { w: Math.max(1, rect.width || 800), h: Math.max(1, rect.height || 600) };
-    // Il margine sta nei bordi, in unità della lavagna: il centro non cambia.
-    const bounds = {
-      minX: minX - margin,
-      minY: minY - margin,
-      maxX: Math.max(minX + 1, maxX) + margin,
-      maxY: Math.max(minY + 1, maxY) + margin,
-    };
-    return fromCamera(fit(bounds, view, 0, 0, FIT_LIMITS));
-  }
-
-  _zoomAt(clientX: number, clientY: number, factor: number): void {
-    this._stopMotion(false);
-    const rect = this._viewport.getBoundingClientRect();
-    const at = { x: clientX - rect.left, y: clientY - rect.top };
-    this._camera = fromCamera(zoomAtPoint(toCamera(this._camera), factor, at, ZOOM_LIMITS));
-    this._applyCamera();
-    // Dai pulsanti e dai tasti lo zoom è un gesto finito; dalla rotella il
-    // gesto è ancora in corso e `_refreshLive` aspetta che finisca.
-    this._refreshLive();
-  }
-
-  // --- muoversi (T53) ---------------------------------------------------------
-
-  /**
-   * Il salto della camera a `target`: Maiusc+1, Maiusc+2, 0 e il clic nel
-   * navigatore (T55). È il solo posto da cui la vista salta: qui il salto entra
-   * nella storia di Indietro e Avanti (T56), se sposta la vista. Vola con
-   * `stepCamera`; col movimento ridotto arriva subito, senza volo.
-   */
-  _jumpCamera(target: Viewport): void {
-    const goal: Viewport = { x: target.x, y: target.y, zoom: clampZoom(target.zoom) };
-    // Un salto che non sposta niente non entra nella storia.
-    if (!sameViewport(goal, this._camera)) this._jumps.record(this._camera, goal);
-    this._flyCamera(goal);
-  }
-
-  /**
-   * Porta la vista a `target` senza ricordarlo: è il volo di ogni salto, e
-   * anche di Indietro e Avanti (T56), che non scrivono una storia loro.
-   */
-  _flyCamera(target: Viewport): void {
-    this._stopMotion(false);
-    const goal: Viewport = { x: target.x, y: target.y, zoom: clampZoom(target.zoom) };
-    if (this._reducedMotion || sameViewport(goal, this._camera)) {
-      this._camera = goal;
-      this._applyCamera();
-      this._refreshLive();
-      return;
-    }
-    const from = this._camera;
-    this._runMotion({
-      scale: from.zoom, tx: from.x, ty: from.y,
-      targetScale: goal.zoom, targetTx: goal.x, targetTy: goal.y,
-      vx: 0, vy: 0,
-    });
   }
 
   // --- cerca nella lavagna (T60) ---------------------------------------------
@@ -2407,44 +1878,6 @@ export class CanvasEngine {
     if (this._destroyed || !this._doc) return false;
     this._findBar.open();
     return true;
-  }
-
-  /**
-   * Il velo dei risultati `matches` (`null` lo toglie), con quello di adesso
-   * segnato: un giro sulle schede che scrive solo dove il segno cambia.
-   */
-  _showFound(matches: readonly FindTarget[] | null, current: number): void {
-    this._findMarkOf = findMarks(matches, current);
-    applyFindMarks(this._cards, this._findMarkOf);
-  }
-
-  /**
-   * Il salto a un risultato (T60): le sue schede al centro della vista, con lo
-   * zoom di adesso, o più lontano se non ci stanno. È un salto come gli altri
-   * (`_jumpCamera`): Indietro torna da dove si era partiti; col movimento
-   * ridotto arriva senza volo.
-   */
-  _jumpToFound(target: FindTarget): void {
-    const ids = new Set(target.nodes);
-    const nodes = (this._doc?.nodes ?? []).filter((node) => ids.has(node.id));
-    if (nodes.length === 0) return;
-    let minX = Infinity;
-    let minY = Infinity;
-    let maxX = -Infinity;
-    let maxY = -Infinity;
-    for (const node of nodes) {
-      minX = Math.min(minX, node.x);
-      minY = Math.min(minY, node.y);
-      maxX = Math.max(maxX, node.x + node.width);
-      maxY = Math.max(maxY, node.y + node.height);
-    }
-    const rect = this._viewport.getBoundingClientRect();
-    const zoom = Math.min(this._camera.zoom, this._fitTarget(nodes).zoom);
-    this._jumpCamera({
-      x: (rect.width || 800) / 2 - ((minX + maxX) / 2) * zoom,
-      y: (rect.height || 600) / 2 - ((minY + maxY) / 2) * zoom,
-      zoom,
-    });
   }
 
   // --- indietro e avanti (T56) ------------------------------------------------
@@ -2471,35 +1904,6 @@ export class CanvasEngine {
   }
 
   /**
-   * «Nascondi il navigatore» e «Mostra il navigatore» (T55): per questa
-   * lavagna, ricordato nella vista (T36). Il fuoco che stava sul navigatore
-   * torna alla lavagna.
-   */
-  _setNavigatorHidden(hidden: boolean): void {
-    if (this._navigatorClosed() === hidden) return;
-    const focused = this._navigator.element.contains(document.activeElement);
-    if (this._workspace.workspace === "simple") {
-      // Nello spazio Semplice la scelta vale per questa apertura (T65).
-      this._simpleNavigator = !hidden;
-      this._statusSettle();
-      if (focused && this._navigator.element.hidden) this._viewport.focus();
-      return;
-    }
-    this._navigatorHidden = hidden;
-    this._viewMemo?.changed();
-    this._statusSettle();
-    if (focused && this._navigator.element.hidden) this._viewport.focus();
-  }
-
-  /**
-   * Il navigatore è chiuso per scelta: nello spazio Semplice finché non lo si
-   * mostra (T65), nello Completo come dice la vista (T55).
-   */
-  _navigatorClosed(): boolean {
-    return this._workspace.workspace === "simple" ? !this._simpleNavigator : this._navigatorHidden;
-  }
-
-  /**
    * F6 dentro la lavagna (`EditorSurface.zone`): la vista, il navigatore se si
    * vede (T55), la colonna degli strumenti e la riga delle opzioni (T61); dopo,
    * la shell passa all'ispettore. `false` quando non resta una zona da quella
@@ -2519,502 +1923,6 @@ export class CanvasEngine {
     if (own.has(target)) target.focus();
     else focusZone(target);
     return true;
-  }
-
-  // --- tastiera e lettore di schermo (T61) ------------------------------------
-
-  /** La lettura della lavagna di adesso (`boardReading`): si rifà solo se il documento è cambiato. */
-  _boardReading(): BoardReading | null {
-    const doc = this._doc;
-    if (!doc) return null;
-    if (this._reading?.doc !== doc) this._reading = { doc, value: boardReading(doc) };
-    return this._reading.value;
-  }
-
-  /** I nomi scritti sulle schede sono quelli del documento e della lingua di adesso. */
-  _labelsCurrent(): boolean {
-    const done = this._labelled;
-    return !done.stale && done.doc === this._doc && done.round === this._languageRound;
-  }
-
-  /**
-   * I nomi delle schede vecchi (un documento nuovo, una scheda nuova, un'altra
-   * lingua): li riscrive quando il thread è libero, non durante la resa. La
-   * scheda che prende il fuoco prima non aspetta: il suo lo scrive subito.
-   */
-  _scheduleLabels(): void {
-    if (this._labelsPending !== null || this._destroyed || this._labelsCurrent()) return;
-    this._labelsPending = this._labelsSchedule(() => this._labelStep());
-  }
-
-  /**
-   * Un passo del giro dei nomi: `LABEL_BATCH` schede, poi il thread torna
-   * libero e il giro riprende dove era. Un documento nuovo, una lingua nuova o
-   * una scheda nata nel frattempo lo fanno ricominciare da capo.
-   */
-  _labelStep(): void {
-    this._labelsPending = null;
-    const doc = this._doc;
-    if (!doc || this._destroyed || this._isSceneOversized()) return;
-    let run = this._labelRun;
-    if (!run || run.doc !== doc || run.round !== this._languageRound || this._labelled.stale) {
-      run = { doc, round: this._languageRound, queue: [...this._cards.values()], at: 0 };
-      this._labelled = { doc: null, round: -1, stale: false };
-    }
-    const end = Math.min(run.queue.length, run.at + LABEL_BATCH);
-    for (; run.at < end; run.at++) {
-      const entry = run.queue[run.at]!;
-      if (this._cards.get(entry.id) === entry) this._labelCard(entry);
-    }
-    if (run.at < run.queue.length) {
-      this._labelRun = run;
-      this._labelsPending = this._labelsSchedule(() => this._labelStep());
-      return;
-    }
-    this._labelRun = null;
-    this._labelled = { doc, round: run.round, stale: false };
-  }
-
-  /** Il nome della scheda `entry` com'è adesso, scritto sul suo nodo se è cambiato. */
-  _labelCard(entry: CardEntry): void {
-    const doc = this._doc;
-    const reading = this._boardReading();
-    if (!doc || !reading) return;
-    const label = cardLabel(entry.node, doc, reading);
-    if (entry.label === label) return;
-    entry.label = label;
-    entry.article.setAttribute("aria-label", label);
-  }
-
-  /**
-   * Sceglie la scheda `node`, la porta in vista e le dà il fuoco: Tab e
-   * Alt+frecce. In vista vuol dire tutta dentro la vista; se no la vista vola
-   * fino a metterla al centro col zoom di adesso (col movimento ridotto arriva
-   * subito). Non è un salto di Indietro e Avanti: è un passo della tastiera,
-   * come uno spostamento a mano.
-   */
-  _focusCard(node: CanvasNode): void {
-    const entry = this._cards.get(node.id);
-    if (!entry) return;
-    if (this._selection.length !== 1 || this._selection[0] !== node.id || this._edgeSelection.length > 0) {
-      this._selection = [node.id];
-      this._edgeSelection = [];
-      this._options.onSelectionChange();
-      this._displaySelection();
-    }
-    const { view, zoom } = this._viewRect();
-    const inside = node.x >= view.x && node.y >= view.y
-      && node.x + node.width <= view.x + view.width && node.y + node.height <= view.y + view.height;
-    if (!inside) {
-      const rect = this._viewport.getBoundingClientRect();
-      this._flyCamera({
-        x: (rect.width || 800) / 2 - (node.x + node.width / 2) * zoom,
-        y: (rect.height || 600) / 2 - (node.y + node.height / 2) * zoom,
-        zoom,
-      });
-    }
-    entry.article.focus({ preventScroll: true });
-  }
-
-  /**
-   * Tab e Maiusc+Tab col fuoco sulla lavagna o su una scheda: la scheda dopo
-   * o prima nell'ordine di lettura (T58). Dalla lavagna Tab va alla scheda
-   * scelta, o alla prima; Maiusc+Tab dalla lavagna esce come sempre. Prima
-   * della prima scheda si torna alla lavagna; dopo l'ultima il fuoco esce
-   * dalla vista, verso ciò che la segue. Una lavagna senza schede non prende
-   * il Tab: va ai pulsanti della lavagna vuota (T62). `true` se il tasto è suo.
-   */
-  _tabKey(event: KeyboardEvent): boolean {
-    if (event.key !== "Tab" || event.ctrlKey || event.metaKey || event.altKey) return false;
-    if (!this._onCardOrBoard(event.target)) return false;
-    const reading = this._boardReading();
-    if (!reading || reading.order.length === 0) return false;
-    const step = event.shiftKey ? -1 : 1;
-    const from = event.target === this._viewport ? null : this._nodeAt(event.target);
-    if (from === null && step < 0) return false;
-    const next = from === null ? this._selectionFocus() ?? stepInOrder(reading, null, 1) : stepInOrder(reading, from, step);
-    if (next) {
-      event.preventDefault();
-      this._focusCard(next);
-      return true;
-    }
-    if (step < 0) {
-      event.preventDefault();
-      this._viewport.focus({ preventScroll: true });
-      return true;
-    }
-    const after = this._afterViewport();
-    if (!after) return false;
-    event.preventDefault();
-    after.focus();
-    return true;
-  }
-
-  /** Il primo elemento che il Tab raggiunge dopo la vista e fuori da lei. */
-  _afterViewport(): HTMLElement | null {
-    const viewport = this._viewport;
-    return focusableElements(document.body).find((el) => !viewport.contains(el)
-      && (viewport.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0) ?? null;
-  }
-
-  /**
-   * Alt+frecce col fuoco sulla lavagna o su una scheda (M1): la scheda più
-   * vicina in quella direzione (`nearestCard`), da quella col fuoco o da
-   * quella scelta; senza, la prima nell'ordine di lettura. Se da quella parte
-   * non c'è niente lo dice la regione viva. Alt+← e Alt+→ solo col fuoco su
-   * una scheda: sulla lavagna senza una scheda a fuoco, e fuori, restano
-   * Indietro e Avanti dello Scrittoio (`shell.pane.back`/`forward`,
-   * DECISIONS.md, T56). Il tasto preso non arriva al registro della shell.
-   * `true` se il tasto è suo.
-   */
-  _nearestKey(event: KeyboardEvent): boolean {
-    if (!event.altKey || event.shiftKey || event.ctrlKey || event.metaKey) return false;
-    const direction = NEAREST_CARD_KEYS.get(event.key);
-    if (direction === undefined || !this._onCardOrBoard(event.target)) return false;
-    if (CARD_ONLY_NEAREST_KEYS.has(event.key) && this._nodeAt(event.target) === null) return false;
-    const reading = this._boardReading();
-    if (!reading || reading.order.length === 0) return false;
-    event.preventDefault();
-    event.stopPropagation();
-    const fromId = this._nodeAt(event.target) ?? (this._selection.length === 1 ? this._selection[0]! : null);
-    const from = fromId === null ? undefined : reading.byId.get(fromId);
-    const next = from ? nearestCard(from, reading, direction) : stepInOrder(reading, null, 1);
-    if (next) this._focusCard(next);
-    else this._sayGesture(t("canvas.a11y.none_that_way"));
-    return true;
-  }
-
-  /** «0»: il 100% sul centro della vista. */
-  _zoomToActual(): void {
-    const rect = this._viewport.getBoundingClientRect();
-    const center = { x: (rect.width || 800) / 2, y: (rect.height || 600) / 2 };
-    this._jumpCamera(fromCamera(zoomAtPoint(toCamera(this._camera), 1 / this._camera.zoom, center, ZOOM_LIMITS)));
-  }
-
-  /**
-   * L'inerzia dopo uno spostamento col dito: la vista va avanti alla
-   * velocità del gesto (px al ms) e rallenta con `stepCamera`. Col movimento
-   * ridotto niente.
-   */
-  _fling(vx: number, vy: number): void {
-    if (this._reducedMotion || Math.hypot(vx, vy) < INERTIA_MIN_SPEED) return;
-    const at = this._camera;
-    this._runMotion({ scale: at.zoom, tx: at.x, ty: at.y, targetScale: at.zoom, targetTx: at.x, targetTy: at.y, vx, vy });
-  }
-
-  /** La velocità alla fine di uno spostamento, in px al ms, sugli ultimi `INERTIA_WINDOW_MS` della scia. */
-  _panSpeed(trail: readonly PanSample[], end: PanSample): { vx: number; vy: number } {
-    const first = trail.find((point) => end.t - point.t <= INERTIA_WINDOW_MS);
-    if (!first || end.t - first.t <= 0) return { vx: 0, vy: 0 };
-    return { vx: (end.x - first.x) / (end.t - first.t), vy: (end.y - first.y) / (end.t - first.t) };
-  }
-
-  _runMotion(state: MotionState): void {
-    this._motion = { state, last: null };
-    if (this._motionFrame === undefined) this._motionFrame = requestAnimationFrame((now) => this._motionStep(now));
-  }
-
-  _motionStep(now: number): void {
-    this._motionFrame = undefined;
-    const motion = this._motion;
-    if (!motion || this._destroyed) return;
-    if (this._reducedMotion) {
-      this._stopMotion(true);
-      return;
-    }
-    const dt = motion.last === null ? 16 : Math.min(MAX_FRAME_MS, Math.max(0, now - motion.last));
-    motion.last = now;
-    const state = stepCamera(motion.state, dt);
-    motion.state = state;
-    const resting = Math.abs(state.scale - state.targetScale) < 0.001
-      && Math.abs(state.tx - state.targetTx) < 0.5
-      && Math.abs(state.ty - state.targetTy) < 0.5
-      && state.vx === 0 && state.vy === 0;
-    if (resting) {
-      this._stopMotion(true);
-      return;
-    }
-    this._camera = { x: state.tx, y: state.ty, zoom: state.scale };
-    this._applyCamera();
-    this._motionFrame = requestAnimationFrame((later) => this._motionStep(later));
-  }
-
-  /**
-   * Ferma il volo o l'inerzia. Con `arrive` la vista va dove andava (il volo
-   * finisce sul suo bersaglio, l'inerzia dov'è) e le schede vive si rifanno.
-   */
-  _stopMotion(arrive: boolean): void {
-    if (this._motionFrame !== undefined) cancelAnimationFrame(this._motionFrame);
-    this._motionFrame = undefined;
-    const motion = this._motion;
-    if (!motion) return;
-    this._motion = null;
-    if (!arrive || this._destroyed) return;
-    const { targetScale, targetTx, targetTy } = motion.state;
-    this._camera = { x: targetTx, y: targetTy, zoom: targetScale };
-    this._applyCamera();
-    this._refreshLive();
-  }
-
-  /** La finestra perde il fuoco: niente scorre più da solo, e Spazio non è più tenuto. */
-  _stillCamera(): void {
-    this._releaseSpace();
-    this._stopEdgeScroll();
-    this._stopMotion(true);
-  }
-
-  /**
-   * Spazio giù sulla lavagna o su una scheda (non in un campo né dentro la
-   * scheda attiva): `true` se l'ha preso. Con una penna giù non vale (la
-   * penna ha la precedenza), ma la pagina non scorre.
-   */
-  _holdSpace(event: KeyboardEvent): boolean {
-    if (event.key !== " " || event.ctrlKey || event.metaKey || event.altKey) return false;
-    if (isTextTarget(event.target) || !this._onCardOrBoard(event.target)) return false;
-    event.preventDefault();
-    if (this._spaceHeld || this._penDown) return true;
-    this._spaceHeld = true;
-    // Il tocco conta dal primo tasto giù, non dalla ripetizione del sistema.
-    this._spaceTap = event.repeat ? null : { at: event.timeStamp, from: this._pointerSeen, spoiled: false };
-    this._viewport.toggleAttribute("data-space-pan", true);
-    // Il mouse che scrive torna alla lavagna finché Spazio è giù.
-    this._applyInkMouse();
-    return true;
-  }
-
-  _releaseSpace(): void {
-    this._spaceTap = null;
-    if (!this._spaceHeld) return;
-    this._spaceHeld = false;
-    this._viewport.removeAttribute("data-space-pan");
-    if (!this._destroyed) this._applyInkMouse();
-  }
-
-  /**
-   * Un trascinamento (una scheda, una maniglia, un filo) si è mosso a
-   * `event`: vicino al bordo della vista la fa scorrere, fuori dalla fascia
-   * smette. Il primo fotogramma parte da qui.
-   */
-  _trackEdge(event: PointerEvent): void {
-    const speed = this._edgeSpeed(event.clientX, event.clientY);
-    if (speed.x === 0 && speed.y === 0) {
-      this._stopEdgeScroll();
-      return;
-    }
-    const last = this._edgeScroll?.last ?? null;
-    this._edgeScroll = {
-      pointerId: event.pointerId, clientX: event.clientX, clientY: event.clientY,
-      shiftKey: event.shiftKey, altKey: event.altKey, last,
-    };
-    if (this._edgeFrame === undefined) this._edgeFrame = requestAnimationFrame((now) => this._edgeStep(now));
-  }
-
-  /** La velocità dello scorrimento al bordo nel punto, in px al ms, verso dove va la vista. */
-  _edgeSpeed(clientX: number, clientY: number): { x: number; y: number } {
-    const rect = this._viewport.getBoundingClientRect();
-    if (!rect.width || !rect.height) return { x: 0, y: 0 };
-    return {
-      x: edgeScrollSpeed(clientX - rect.left, rect.right - clientX),
-      y: edgeScrollSpeed(clientY - rect.top, rect.bottom - clientY),
-    };
-  }
-
-  _edgeStep(now: number): void {
-    this._edgeFrame = undefined;
-    const edge = this._edgeScroll;
-    if (!edge || this._destroyed) return;
-    const drag = this._drag?.pointerId === edge.pointerId ? this._drag : null;
-    const resize = this._resize?.pointerId === edge.pointerId ? this._resize : null;
-    const connect = this._connect?.pointerId === edge.pointerId ? this._connect : null;
-    if (!drag && !resize && !connect) {
-      this._stopEdgeScroll();
-      return;
-    }
-    const dt = edge.last === null ? 16 : Math.min(MAX_FRAME_MS, Math.max(0, now - edge.last));
-    edge.last = now;
-    const speed = this._edgeSpeed(edge.clientX, edge.clientY);
-    // La vista va verso il bordo: la lavagna scorre al contrario.
-    const dx = -speed.x * dt;
-    const dy = -speed.y * dt;
-    this._camera = { ...this._camera, x: this._camera.x + dx, y: this._camera.y + dy };
-    this._applyCamera();
-    // Ciò che si tira resta sotto il puntatore fermo: il punto di partenza
-    // del gesto scorre con la lavagna.
-    if (drag) {
-      drag.startX += dx;
-      drag.startY += dy;
-      this._moveDrag(edge);
-    } else if (resize) {
-      resize.startX += dx;
-      resize.startY += dy;
-      this._moveResize(edge);
-    } else {
-      this._moveConnect(edge.clientX, edge.clientY);
-    }
-    this._edgeFrame = requestAnimationFrame((later) => this._edgeStep(later));
-  }
-
-  _stopEdgeScroll(): void {
-    if (this._edgeFrame !== undefined) cancelAnimationFrame(this._edgeFrame);
-    this._edgeFrame = undefined;
-    this._edgeScroll = null;
-  }
-
-  // --- toolbar ----------------------------------------------------------------
-
-  _drawToolbar(): void {
-    // La barra di N4 si rifà da capo, salvo l'interruttore «Scrivi col
-    // mouse», che resta lo stesso elemento in testa: il fuoco non si perde.
-    // Ciò che è passato nella riga delle opzioni (T50: il menu della penna,
-    // davanti e dietro, allinea e distribuisci, la Vista) non c'è più; il
-    // resto aspetta i suoi task (la barra della selezione T51, i fili e il
-    // colore esatto T47 e T59, la lavagna vuota T62). I controlli nascono in
-    // `bar`, staccata, e passano alla barra del kit (`_toolbarBar`), che
-    // lascia al suo posto chi c'è già e manda in «…» ciò che non ci sta.
-    const bar = document.createElement("div");
-    const inkMouse = this._inkMouseButton;
-    this._penMenu.sync();
-    // La colonna e la riga delle opzioni: lo strumento, la scelta e la sola
-    // lettura di adesso.
-    this._rail.sync();
-    this._canvasOptions.sync();
-    // «Scrivi col mouse», in testa.
-    inkMouse.textContent = t("canvas.ink.mouse");
-    inkMouse.title = t("canvas.ink.mouse_hint");
-    inkMouse.setAttribute("aria-pressed", String(this._inkMouse));
-    inkMouse.disabled = this._readOnly || this._isSceneOversized();
-    const mk = (
-      action: string,
-      label: string,
-      run: () => void,
-      disabled = false,
-      mutates = true,
-      focusViewport = true,
-    ): HTMLButtonElement => {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.dataset.canvasAction = action;
-      button.textContent = label;
-      button.disabled = disabled || (mutates && (this._readOnly || this._isSceneOversized()));
-      button.addEventListener("click", (e) => {
-        e.preventDefault();
-        this._recordPending();
-        run();
-        if (focusViewport) this._viewport.focus();
-      });
-      bar.append(button);
-      return button;
-    };
-    // La scheda nasce in scrittura (IMP-042): il fuoco va nel suo testo, non sulla vista.
-    mk("add-text", t("canvas.add_text"), () => this._placeText(), false, true, false);
-    if (this._options.onPickFile) {
-      mk("add-file", t("canvas.add_file"), () => {
-        void this._addFileNode().catch((error: unknown) => this._showIntakeError(error));
-      });
-    }
-    mk("add-link", t("canvas.add_link"), () => this._addNode("link"));
-    mk("add-group", t("canvas.add_group"), () => this._addNode("group"));
-    const hasSelection = this._selection.length > 0 || this._edgeSelection.length > 0;
-    mk("duplicate", t("canvas.duplicate"), () => this._duplicateSelection(), !hasSelection);
-    mk("delete", t("canvas.delete"), () => this._deleteSelection(), !hasSelection);
-    mk("fit-selection", t("canvas.fit_selection"), () => this._fitCamera(true, this._selectedNodes()), this._selection.length === 0, false);
-    if (!this._isSceneOversized() && this._doc?.edges.length && this._doc.edges.length <= MAX_INTERACTIVE_EDGES) {
-      const picker = document.createElement("select");
-      picker.dataset.canvasField = "select-edge";
-      picker.setAttribute("aria-label", t("canvas.select_edge"));
-      const empty = document.createElement("option");
-      empty.value = "";
-      empty.textContent = t("canvas.select_edge");
-      picker.append(empty);
-      for (const edge of this._doc.edges) {
-        const option = document.createElement("option");
-        option.value = edge.id;
-        option.textContent = edge.label || edge.id;
-        picker.append(option);
-      }
-      picker.value = this._edgeSelection[0] ?? "";
-      picker.addEventListener("change", () => {
-        this._edgeSelection = picker.value ? [picker.value] : [];
-        this._selection = [];
-        this._options.onSelectionChange();
-        this._displaySelection();
-        // Il campo del nome, se si vede; se è finito in «…», il fuoco va lì.
-        const label = this._toolbar.querySelector<HTMLInputElement>('[data-canvas-field="edge-label"]');
-        if (label && !label.closest("[hidden]")) label.focus();
-        else this._toolbar.querySelector<HTMLElement>(".kit-options-more:not([hidden])")?.focus();
-      });
-      bar.append(picker);
-    }
-    // Il colore delle schede e dei fili non sta più qui: è nel menu «Colore»
-    // del tasto destro e nel pozzo della riga delle opzioni (T47).
-    if (!this._isSceneOversized() && this._edgeSelection.length === 1) this._drawEdgeInspector(bar);
-    // Un avviso solo, nel suo posto all'inizio della barra, dove si legge
-    // senza scorrere: quello dell'ultimo gesto, o la sola lettura della tela.
-    // Una scena oltre il limite ha già il suo, nella tela.
-    const head: HTMLElement[] = [];
-    const notice = this._intakeError
-      || (this._unwritable && !this._isSceneOversized() ? t("canvas.unwritable") : "");
-    if (notice) {
-      const error = document.createElement("output");
-      error.setAttribute("role", "alert");
-      error.className = "canvas-intake-error";
-      error.textContent = notice;
-      head.push(error);
-    }
-    // L'avviso di «Togli dalla lavagna» (T17), dopo quello dell'ultimo gesto
-    // e dopo «Scrivi col mouse»: una notizia e non un guasto, con «Annulla»
-    // accanto.
-    const told: HTMLElement[] = [];
-    const removal = this._removal;
-    if (removal) {
-      const said = document.createElement("output");
-      said.setAttribute("role", "status");
-      said.className = "canvas-removal";
-      said.textContent = removal.text;
-      told.push(said);
-      if (removal.undo && removal.step !== undefined) {
-        const undo = document.createElement("button");
-        undo.type = "button";
-        undo.dataset.canvasAction = "undo-removal";
-        undo.textContent = t("app.undo");
-        undo.title = t(removal.free ? "canvas.ink.moved_undo" : "canvas.card.removed_undo");
-        // Il pulsante si rifà con la barra: l'ascolto se ne va con lui.
-        undo.addEventListener("click", () => this._undoRemoval());
-        told.push(undo);
-        // I tratti passati a una scheda col Lazo (T86): «Rendilo libero».
-        if (removal.free) {
-          const free = document.createElement("button");
-          free.type = "button";
-          free.dataset.canvasAction = "free-ink";
-          free.textContent = t("canvas.ink.make_free");
-          free.title = t("canvas.ink.make_free_hint");
-          free.addEventListener("click", () => this._freeMovedInk());
-          told.push(free);
-        }
-      }
-    }
-    // Gli avvisi e i loro pulsanti restano nella riga più a lungo dei comandi
-    // (priorità 1): si leggono senza aprire «…».
-    const notices = new Set<HTMLElement>([...head, ...told]);
-    const controls: HTMLElement[] = [...head, inkMouse, ...told, ...(bar.children as HTMLCollectionOf<HTMLElement>)];
-    this._toolbarBar.setItems(controls.map((element, index) => {
-      element.classList.add("canvas-toolbar-item");
-      return {
-        id: element.dataset.canvasAction ?? element.dataset.canvasField ?? `${element.className}-${index}`,
-        element,
-        priority: notices.has(element) ? 1 : 0,
-      };
-    }));
-    this._toolbarKeys.refresh();
-  }
-
-  _showIntakeError(error: unknown): void {
-    if (this._destroyed) return;
-    // Qui arrivano anche i messaggi che l'editor scrive di proposito (il
-    // deposito, un allegato troppo grande): `errorText` li tiene, e legge
-    // l'errore tipizzato dell'host senza «[object Object]».
-    this._intakeError = errorText(error).slice(0, 300);
-    this._drawToolbar();
   }
 
   _layoutSelection(axis: CanvasArrange): void {
@@ -3138,337 +2046,6 @@ export class CanvasEngine {
     }
   }
 
-  async _intake(event: DragEvent | ClipboardEvent): Promise<void> {
-    if (event.target instanceof Element && event.target.closest("input,textarea,[contenteditable=true]")) return;
-    const drop = event.type === "drop" && "dataTransfer" in event;
-    const data = drop ? event.dataTransfer : "clipboardData" in event ? event.clipboardData : null;
-    const port = this._options.attachments;
-    const documentId = this._options.documentId;
-    if (!data || this._readOnly || !this._doc || this._destroyed || this._isSceneOversized()) return;
-    // Le schede di Fub negli appunti (T68) vincono sul loro Markdown; una
-    // forma rotta si incolla come testo.
-    const cards = drop ? "" : data.getData(CANVAS_CLIPBOARD_TYPE) || "";
-    if (cards && this._pasteCards(event, cards)) return;
-    if (!port && data.files.length) return;
-    const text = data.getData("text/plain") || cards;
-    if (!port && !text) return;
-    this._intakeError = "";
-    this._drawToolbar();
-    event.preventDefault();
-    const before = this._source;
-    const epoch = this._epoch;
-    const stale = (): boolean => this._destroyed || this._readOnly || this._source !== before
-      || this._epoch !== epoch || !this._doc;
-    // Il punto e la scheda sotto si prendono subito: durante il deposito il
-    // puntatore si muove.
-    const point = this._intakePoint(event, drop);
-    const existing = drop ? this._nodeAt(this._elementAt(event.clientX, event.clientY) ?? null) : null;
-    const files = [...new Set(port?.expandFiles ? await port.expandFiles(data) : [...data.files])];
-    if (files.length && (!port || !documentId)) return;
-    // Le schede che questo gesto fa nascere, per percorso: «Fanne una copia»
-    // le ripunta per id (T32b).
-    const born = new Map<string, string[]>();
-    const bear = (path: string, id: string): void => { born.set(path, [...(born.get(path) ?? []), id]); };
-    // External bytes pass the explicit deposit. Internal folder paths resolve
-    // only via the host port; never trust a raw DataTransfer path.
-    // Un deposito fermato a metà porta i percorsi già fatti: le loro schede
-    // nascono lo stesso, e l'errore si mostra dopo, in ogni uscita (T15b).
-    let paths: readonly string[] = [];
-    let failure: CanvasDepositError | null = null;
-    if (files.length) {
-      try {
-        paths = await port!.deposit(files, documentId!, this._depositCards(born));
-      } catch (error) {
-        if (!(error instanceof CanvasDepositError)) throw error;
-        paths = error.paths;
-        failure = error;
-      }
-    } else if (port?.resolvePaths && documentId) {
-      paths = await port.resolvePaths(data, documentId);
-    }
-    try {
-      if (stale()) return;
-      const unique = [...new Set(paths)].filter(isVaultPath);
-      if ((!unique.length && !text) || (paths.length > 0 && !unique.length)) return;
-      const ops: CanvasIntentOp[] = [];
-      // Una nota sola rilasciata dal vault, senza Alt: dopo il commit si apre
-      // il selettore delle sezioni (T74). Un file depositato dal computer non
-      // è ancora nell'indice: lo si sceglie dopo, con «Parti…».
-      const single = drop && !files.length && unique.length === 1 && !(event as DragEvent).altKey ? unique[0]! : null;
-      const file = this._doc!.nodes.find((node) => node.id === existing && node.type === "file");
-      // Su una scheda di file il primo file ne prende il posto (A-8): una `set`.
-      if (file && unique.length) {
-        const path = unique.shift()!;
-        const op = setOp(file, { ...file, file: path, subpath: undefined });
-        if (op) ops.push(op);
-        bear(path, file.id);
-      }
-      if (unique.length) {
-        const items = await this._bornItems(unique);
-        if (stale()) return;
-        ops.push(...this._dropOps(items, point, bear));
-      }
-      // Gli appunti diventano testo solo se non c'era un file da depositare:
-      // un file rifiutato non si trasforma in una scheda di testo (T15b).
-      if (!paths.length && text && !failure) {
-        const table = await this._pastedTable(data, text);
-        if (stale()) return;
-        const url = table === null ? externalUrl(text.trim()) : null;
-        // La forma breve di `add_card` (T9): la misura la dà il nucleo.
-        ops.push({ op: "add_card", ...(url ? { url } : { text: table ?? text }), x: snap(point.x), y: snap(point.y) });
-      }
-      // Una lista sola: un annulla toglie tutto ciò che è nato.
-      const committed = this._writeOps(ops) !== null;
-      const card = single === null ? undefined : born.get(single)?.[0];
-      if (committed && card !== undefined && this._partsPickerSetting) void this._openParts(card, "drop");
-    } finally {
-      // Dopo le schede, e in ogni uscita: uscire presto non deve perdere l'errore.
-      if (failure) this._showIntakeError(failure);
-    }
-  }
-
-  /**
-   * La porta con cui un gesto dopo il deposito ripunta le schede che il
-   * deposito ha fatto nascere (`born`: percorso → id, riempita quando nascono).
-   * Ogni scheda si cerca per id e cambia solo se mostra ancora il file di
-   * prima: tolta, o già puntata altrove, resta com'è. Tutte in un commit solo.
-   */
-  _depositCards(born: ReadonlyMap<string, readonly string[]>): CanvasDepositCards {
-    const live = (): boolean => !this._destroyed && !this._readOnly && this._doc !== null;
-    return {
-      live,
-      repoint: (changes) => {
-        if (!live()) return 0;
-        const doc = this._doc!;
-        const ops: CanvasIntentOp[] = [];
-        const touched = new Set<string>();
-        for (const { from, to } of changes) {
-          if (!isVaultPath(to)) continue;
-          for (const id of born.get(from) ?? []) {
-            const node = doc.nodes.find((candidate) => candidate.id === id);
-            if (!node || touched.has(id) || node.type !== "file" || node.file !== from) continue;
-            ops.push({ op: "set", id, fields: { file: to } });
-            touched.add(id);
-          }
-        }
-        return ops.length > 0 && this._writeOps(ops) !== null ? ops.length : 0;
-      },
-    };
-  }
-
-  /**
-   * Il punto della lavagna in cui nasce ciò che arriva: quello del rilascio;
-   * per un incolla, l'ultimo punto in cui il puntatore è stato visto sulla
-   * vista, sennò il centro della vista.
-   */
-  _intakePoint(event: DragEvent | ClipboardEvent | null, drop: boolean): { x: number; y: number } {
-    if (drop && event && "clientX" in event) return this._screenToWorld(event.clientX, event.clientY);
-    if (this._pointerSeen) return this._screenToWorld(this._pointerSeen.x, this._pointerSeen.y);
-    const rect = this._viewport.getBoundingClientRect();
-    return this._screenToWorld(rect.left + this._viewport.clientWidth / 2, rect.top + this._viewport.clientHeight / 2);
-  }
-
-  /**
-   * I file lasciati cadere, ognuno con le dimensioni del suo contenuto quando
-   * si sanno: le immagini chiedono i loro pixel alla porta, poche alla volta;
-   * una misura che non c'è, fallisce o non arriva in tempo non si dà, e il
-   * nucleo prende la misura di serie della specie.
-   */
-  async _bornItems(paths: readonly string[]): Promise<DropFile[]> {
-    const items: DropFile[] = paths.map((path) => ({ path }));
-    const measure = this._options.measureImage;
-    if (!measure) return items;
-    const images = items
-      .map((item, index) => ({ item, index }))
-      .filter(({ item }) => cardKindOf({ id: "", type: "file", file: item.path, x: 0, y: 0, width: 0, height: 0 }) === "image");
-    let next = 0;
-    const worker = async (): Promise<void> => {
-      while (next < images.length && !this._destroyed) {
-        const { item, index } = images[next++]!;
-        const size = await measuredImage(measure, item.path);
-        if (size) items[index] = { ...item, contentSize: [size.width, size.height] };
-      }
-    };
-    await Promise.all(Array.from({ length: Math.min(MEASURE_IMAGE_PARALLEL, images.length) }, worker));
-    return items;
-  }
-
-  /**
-   * Le operazioni dei file lasciati cadere in `at` (T24): la tela li ordina
-   * per nome (`sortedDrop`), poi un `add_card` per file, con il suo `id` e
-   * `content_size` quando la misura si sa; con più file la griglia del
-   * nucleo (`layout` `grid`) dal punto del rilascio, agganciato a 8, e oltre
-   * `DROP_GROUP_THRESHOLD` il gruppo che li tiene (`group`). Un file solo
-   * nasce già lì: la griglia di una scheda è il suo angolo agganciato.
-   * `bear` riceve ogni scheda che nasce, col suo percorso; `newId` dà gli id.
-   */
-  _dropOps(
-    items: readonly DropFile[],
-    at: { readonly x: number; readonly y: number },
-    bear: (path: string, id: string) => void,
-    newId: () => string = () => this._newId(),
-  ): CanvasIntentOp[] {
-    const x = snap(at.x);
-    const y = snap(at.y);
-    const sorted = sortedDrop(items);
-    const ops: CanvasIntentOp[] = [];
-    const ids: string[] = [];
-    for (const item of sorted) {
-      const id = newId();
-      ids.push(id);
-      bear(item.path, id);
-      ops.push({
-        op: "add_card",
-        id,
-        file: item.path,
-        ...(item.contentSize ? { content_size: [...item.contentSize] } : {}),
-        ...(sorted.length === 1 ? { x, y } : {}),
-      });
-    }
-    if (sorted.length > 1) ops.push({ op: "layout", ids, kind: "grid", x, y });
-    if (sorted.length > DROP_GROUP_THRESHOLD) {
-      ops.push({ op: "group", ids, label: t("canvas.intake.group", { count: String(sorted.length) }) });
-    }
-    return ops;
-  }
-
-  /**
-   * Le celle copiate come tabella Markdown: l'HTML con una tabella, tramite
-   * la porta; sennò il testo a tabulazioni su più righe. `null` se non sono
-   * celle.
-   */
-  async _pastedTable(data: DataTransfer, text: string): Promise<string | null> {
-    const convert = this._options.clipboardMarkdown;
-    if (convert && /<table[\s>]/i.test(data.getData("text/html") ?? "")) {
-      const markdown = await convert(data).catch(() => null);
-      if (markdown && markdown.trim()) return markdown;
-    }
-    if (!text.includes("\t")) return null;
-    const rows = parseTsv(text);
-    if (rows.length < 2) return null;
-    return markdownTable(rows) || null;
-  }
-
-  /**
-   * I rettangoli tratteggiati dove nasceranno le schede di un trascinamento
-   * di file o di voci dell'albero: uno per file, se si sa quanti sono, sennò
-   * uno (le voci dell'albero non si leggono prima del rilascio).
-   */
-  _showDropGhosts(event: DragEvent): void {
-    const data = event.dataTransfer;
-    if (!data || !this._options.attachments) return;
-    const types = [...(data.types ?? [])];
-    // Senza tipi leggibili (WebKit durante il trascinamento) può essere un file.
-    const carries = types.length === 0 || types.includes("Files")
-      || types.includes(ENTRIES_DRAG_TYPE) || types.includes(NOTE_DRAG_TYPE);
-    if (!carries) {
-      this._hideDropGhosts();
-      return;
-    }
-    const count = Math.max(1, [...(data.items ?? [])].filter((item) => item.kind === "file").length);
-    const pointer = this._screenToWorld(event.clientX, event.clientY);
-    // I riquadri si calcolano una volta, all'entrata (o quando cambia il
-    // numero dei file): poi seguono il puntatore sulla griglia, senza
-    // chiamare il nucleo a ogni movimento.
-    if (this._dropGhostCount !== count) {
-      this._dropGhost = this._dropGhostShape(count, pointer);
-      this._dropGhostCount = count;
-    }
-    const ghost = this._dropGhost;
-    if (!ghost) {
-      this._dropGhosts?.remove();
-      this._dropGhosts = null;
-      return;
-    }
-    const shiftX = snap(pointer.x) - ghost.x;
-    const shiftY = snap(pointer.y) - ghost.y;
-    let layer = this._dropGhosts;
-    if (!layer) {
-      layer = document.createElement("div");
-      layer.className = "canvas-drop-ghosts";
-      layer.setAttribute("aria-hidden", "true");
-      this._viewport.append(layer);
-      this._dropGhosts = layer;
-    }
-    layer.style.transform = `translate(${this._camera.x}px, ${this._camera.y}px) scale(${this._camera.zoom})`;
-    // Il filo e il numero restano della stessa misura sullo schermo (la pelle divide per lo zoom).
-    layer.style.setProperty("--canvas-zoom", String(this._camera.zoom));
-    // Oltre i dodici (prototipo T25), la cornice del gruppo che li terrà col
-    // numero in mezzo: mentre si trascina si sa quanti sono, non come si chiamano.
-    const rects = ghost.group ? [ghost.group] : ghost.cards;
-    const grouped = ghost.group !== null;
-    while (layer.children.length > rects.length) layer.lastElementChild!.remove();
-    rects.forEach((card, index) => {
-      let ghost = layer.children[index] as HTMLElement | undefined;
-      if (!ghost) {
-        ghost = document.createElement("div");
-        ghost.className = "canvas-drop-ghost";
-        layer.append(ghost);
-      }
-      ghost.classList.toggle("canvas-drop-ghost-group", grouped);
-      if (grouped) {
-        let name = ghost.firstElementChild as HTMLElement | null;
-        if (!name) {
-          name = document.createElement("span");
-          name.className = "canvas-drop-ghost-name";
-          ghost.append(name);
-        }
-        const text = t("canvas.intake.group", { count });
-        if (name.textContent !== text) name.textContent = text;
-      } else {
-        ghost.replaceChildren();
-      }
-      ghost.style.transform = `translate(${card.x + shiftX}px, ${card.y + shiftY}px)`;
-      ghost.style.width = `${card.width}px`;
-      ghost.style.height = `${card.height}px`;
-    });
-  }
-
-  /**
-   * I riquadri di `count` file che nascerebbero in `at`: le operazioni del
-   * rilascio (`_dropOps`, con nomi che tengono l'ordine dato e la misura di
-   * serie di un file) compilate dal nucleo senza scrivere niente, così la
-   * griglia e il gruppo sono quelli che il rilascio farà. `null` se il nucleo
-   * non c'è o le rifiuta (una lavagna piena): allora nessun riquadro.
-   */
-  _dropGhostShape(count: number, at: { readonly x: number; readonly y: number }): DropGhost | null {
-    const core = this._core;
-    if (!core || this._destroyed || count > MAX_DROP_GHOSTS) return null;
-    const items = Array.from({ length: count }, (_, index) => ({ path: String(index).padStart(8, "0") }));
-    // Gli id dei riquadri sono suoi: non consumano quelli di `newId`.
-    const ids: string[] = [];
-    const ops = this._dropOps(items, at, (_path, id) => ids.push(id), () => `drop-ghost-${ids.length}`);
-    let compiled: CanvasCompiled;
-    try {
-      compiled = core.compile(ops, this._seed());
-    } catch (error) {
-      if (lostCore(error)) {
-        this._lose();
-        return null;
-      }
-      if (error instanceof CanvasCoreError) return null;
-      throw error;
-    }
-    const placed = new Map<string, Rect>();
-    for (const patch of compiled.patches) {
-      if (patch.kind === "upsert-node") {
-        const { x, y, width, height } = patch.after;
-        placed.set(patch.after.id, { x, y, width, height });
-      }
-    }
-    const cards = ids.flatMap((id) => placed.get(id) ?? []);
-    const groupId = count > DROP_GROUP_THRESHOLD ? compiled.created[compiled.created.length - 1] : undefined;
-    const group = groupId === undefined ? null : placed.get(groupId) ?? null;
-    return { count, x: snap(at.x), y: snap(at.y), cards, group };
-  }
-
-  _hideDropGhosts(): void {
-    this._dropGhosts?.remove();
-    this._dropGhosts = null;
-    this._dropGhost = null;
-    this._dropGhostCount = null;
-  }
-
   // --- la griglia e le guide (T71) -------------------------------------------
 
   /**
@@ -3553,336 +2130,6 @@ export class CanvasEngine {
       if (!moving.has(node.id) && overlaps(node, view)) out.push(node);
     }
     return out;
-  }
-
-  // --- convertire (T70) ---------------------------------------------------------
-
-  /** La cartella della lavagna nel vault, `""` alla radice: lì nascono le note estratte. */
-  _boardFolder(): string {
-    const id = (this._options.documentId ?? "").replace(/^\/+/, "");
-    const cut = id.lastIndexOf("/");
-    return cut < 0 ? "" : id.slice(0, cut);
-  }
-
-  /**
-   * «Estrai in una nota» (T70): chiede il nome (proposto dalla prima riga,
-   * libero nella cartella della lavagna), fa nascere la nota col testo e
-   * mette al posto della scheda di testo una scheda di file su di lei, con lo
-   * stesso id: posto, misura, colore, fili e inchiostro restano. Un commit, un
-   * annulla; la nota resta nel vault anche annullando, e la notifica lo dice.
-   */
-  async _extractNote(id: string): Promise<void> {
-    const notes = this._options.notes;
-    if (!notes || this._readOnly || this._destroyed || !this._doc) return;
-    // Il testo che si sta scrivendo nella scheda va nella nota.
-    if (!this._closeField(false)) return;
-    const node = this._doc?.nodes.find((one) => one.id === id);
-    if (node?.type !== "text") return;
-    const text = node.text ?? "";
-    const folder = this._boardFolder();
-    const proposed = await notes.freeName(folder, proposedNoteName(text));
-    if (this._destroyed || this._readOnly) return;
-    const name = await this._askNoteName(proposed, folder);
-    if (name === null || this._destroyed || this._readOnly) return;
-    // La scheda è cambiata mentre si sceglieva il nome: nessuna nota nasce.
-    const before = this._doc?.nodes.find((one) => one.id === id);
-    if (before?.type !== "text" || (before.text ?? "") !== text) return;
-    const path = await notes.create(folder, name, text);
-    const opened = (): void => {
-      void Promise.resolve(this._options.onOpenPath?.(`/${path.replace(/^\/+/, "")}`, this._options.documentId))
-        .catch((error: unknown) => this._showIntakeError(error));
-    };
-    const shown = noteDisplayName(path);
-    const open = { label: t("canvas.extract.open"), hint: t("canvas.extract.open_hint", { name: shown }), run: opened };
-    const current = this._doc?.nodes.find((one) => one.id === id);
-    if (this._destroyed || this._readOnly || !this._doc || current?.type !== "text" || (current.text ?? "") !== text) {
-      // La nota c'è, la scheda no (o è cambiata): la scheda resta com'è, e la notifica lo dice.
-      if (!this._destroyed) notify(t("canvas.extract.stale", { name: shown }), "info", open);
-      return;
-    }
-    // La nota c'è: la scheda diventa sua con `convert` (id, posto, fili e
-    // inchiostro restano). Se il nucleo la rifiuta l'avviso è uno solo,
-    // `canvas.extract.stale`: dice che la nota c'è e la apre.
-    if (!this._writeOps([{ op: "convert", id, file: path }], null)) {
-      notify(t("canvas.extract.stale", { name: shown }), "info", open);
-      return;
-    }
-    this._statusSettle();
-    notify(t("canvas.extract.done", { name: shown }), "info", open);
-  }
-
-  /**
-   * Il nome della nota da estrarre (T70), con `proposed` già scritto: `null`
-   * se si rinuncia. Il nome che si conferma è pulito come quello di una nota
-   * nuova (`searchedName`); un nome fatto solo di caratteri vietati non chiude
-   * il dialogo.
-   */
-  _askNoteName(proposed: string, folder: string): Promise<string | null> {
-    const own = openLifetime();
-    this._life.add(() => own.close());
-    const field = textField({
-      label: t("canvas.extract.field"),
-      value: proposed,
-      lifetime: own,
-    });
-    const handle = openDialog<"extract" | "cancel">({
-      title: t("canvas.extract.title"),
-      description: folder === ""
-        ? t("canvas.extract.description_root")
-        : t("canvas.extract.description", { folder }),
-      body: field.element,
-      actions: [
-        { id: "cancel", label: t("app.cancel"), value: "cancel" },
-        { id: "extract", label: t("canvas.extract.action"), kind: "primary", value: "extract" },
-      ],
-      dismissValue: "cancel",
-      lifetime: own,
-      submit: "extract",
-      confirm: (value) => value === "cancel" || searchedName(field.value()) !== null,
-    });
-    return handle.result.then((value) => {
-      own.close();
-      return value === "extract" ? searchedName(field.value()) : null;
-    });
-  }
-
-  /**
-   * «Copia il testo qui» (T70): una scheda di testo col testo della nota (di
-   * un estratto, le sole sezioni mostrate: T99), accanto alla sua scheda, al
-   * primo posto libero; la nota non cambia. Larga
-   * come la scheda della nota, alta come lei ma non più della vista: una
-   * nota lunga scorre dentro la scheda. Un commit, un annulla.
-   */
-  async _copyNoteText(id: string): Promise<void> {
-    const notes = this._options.notes;
-    if (!notes || this._readOnly || this._destroyed || !this._doc) return;
-    const node = this._doc.nodes.find((one) => one.id === id);
-    if (!node || cardKindOf(node) !== "note") return;
-    const path = cardTarget(node).path;
-    const epoch = this._epoch;
-    // Di un estratto serve anche il sommario del provider (i titoli col loro
-    // byte), chiesto insieme al testo; senza, si copia la nota intera.
-    const parts = this._options.parts;
-    const outline: Promise<readonly PartsHeading[] | null> = noteExcerptOf(node) && parts
-      ? parts.outline(path).catch(() => null)
-      : Promise.resolve(null);
-    const [whole, headings] = await Promise.all([notes.read(path), outline]);
-    if (this._destroyed || this._readOnly || !this._doc || this._epoch !== epoch) return;
-    const source = this._doc.nodes.find((one) => one.id === id);
-    if (!source || cardKindOf(source) !== "note" || cardTarget(source).path !== path) return;
-    // Una scheda-estratto (T75) copia solo le sezioni che mostra (T99), nel
-    // suo ordine; una sezione sparita dalla nota non si copia. Se non ne resta
-    // nessuna non nasce niente, e la lavagna dice quali mancano. Se il
-    // sommario non arriva, o non combacia col testo, la nota intera.
-    let text = whole;
-    const excerpt = noteExcerptOf(source);
-    const shown = excerpt && headings ? noteSectionsText(whole, headings, excerpt.sections) : null;
-    if (excerpt && shown) {
-      if (shown.missing.length === excerpt.sections.length) {
-        const names = shown.missing.map((key) => sectionHeading(key) ?? key);
-        this._showNotice(names.length === 1
-          ? t("canvas.excerpt.section_missing", { name: names[0]! })
-          : t("canvas.excerpt.sections_missing", { names: names.join(", ") }));
-        return;
-      }
-      text = shown.text;
-    }
-    if (utf8.encode(text).length > MAX_CARD_TEXT_BYTES) {
-      this._showNotice(t("canvas.card_too_long"));
-      return;
-    }
-    const card = this._writeOps(this._copyNoteTextOps(source, text))?.[0];
-    if (card === undefined) return;
-    this._selection = [card];
-    this._edgeSelection = [];
-    this._options.onSelectionChange();
-    this._displaySelection();
-    this._statusSettle();
-  }
-
-  /**
-   * L'`add_card` di «Copia il testo qui»: il testo `text` accanto alla scheda
-   * della nota `source`, al primo posto libero di `freeSpot` (a
-   * `NEXT_CARD_GAP` e scendendo sotto una scheda che c'è già, come la scheda
-   * dopo, T44); larga come lei, alta come lei ma non più della vista. Il posto
-   * è scritto: `near` del nucleo lascia 48 a destra e scivola con la misura di
-   * nascita (rapporto di T23).
-   */
-  _copyNoteTextOps(source: CanvasNode, text: string): CanvasIntentOp[] | null {
-    const doc = this._doc;
-    if (!doc) return null;
-    const { view } = this._viewRect();
-    const height = Math.max(TEXT_CARD_HEIGHT, Math.min(source.height, Math.floor(view.height)));
-    const spot = freeSpot(doc.nodes, { x: source.x + source.width + NEXT_CARD_GAP, y: source.y, width: source.width, height });
-    return [{ op: "add_card", text, ...spot }];
-  }
-
-  /**
-   * «Sostituisci il file…» (T70): il selettore dei file di sempre, e la
-   * scheda punta al file scelto. Tiene id, posto, misura, colore, fili e
-   * inchiostro; perde ciò che era del file di prima (la sezione o la pagina,
-   * le parti). Con un file di un'altra specie la scheda cambia specie;
-   * l'inchiostro (`fub:ink` della scheda) resta com'era e si disegna con la
-   * regola della specie nuova (`inkFitMode`). Un commit, un annulla.
-   */
-  async _replaceFile(id: string): Promise<void> {
-    const pick = this._options.onPickFile;
-    if (!pick || this._readOnly || this._destroyed || !this._doc) return;
-    const node = this._doc.nodes.find((one) => one.id === id);
-    if (node?.type !== "file") return;
-    const chosen = await pick();
-    if (!isVaultPath(chosen) || this._destroyed || this._readOnly || !this._doc) return;
-    const current = this._doc.nodes.find((one) => one.id === id);
-    if (current?.type !== "file" || current.file === chosen) return;
-    if (this._writeOps(this._replaceFileOps(current, chosen))) this._statusSettle();
-  }
-
-  /** La `set` che punta la scheda di file `node` a `file`, togliendo la sezione o la pagina e le parti di prima. */
-  _replaceFileOps(node: CanvasNode, file: string): CanvasIntentOp[] | null {
-    const next: CanvasNode = { ...node, file };
-    delete next.subpath;
-    delete next[PARTS_KEY];
-    const op = setOp(node, next);
-    return op ? [op] : null;
-  }
-
-  async _addFileNode(at?: { x: number; y: number }): Promise<void> {
-    const pick = this._options.onPickFile;
-    if (!pick || this._readOnly || this._destroyed || !this._doc) return;
-    const source = this._source;
-    const epoch = this._epoch;
-    const path = await pick();
-    if (!isVaultPath(path) || this._destroyed || this._readOnly || source !== this._source
-      || this._epoch !== epoch) return;
-    this._addNode("file", path, at);
-  }
-
-  /** Una card nuova al centro della vista, o in `at` (coordinate del mondo);
-   *  una card file vuole il suo `file`. Torna la card messa, o `null`. */
-  _addNode(type: CanvasNode["type"], file?: string, at?: { x: number; y: number }, link?: CardLink): CanvasNode | null {
-    if (!this._doc || this._readOnly || (type === "file" && !file)) return null;
-    if (!link) {
-      // Dal menu, dalla barra o dallo strumento Testo: la sua `add_card` (T23).
-      const id = this._writeOps(this._addOps(type, file, at))?.[0];
-      const node = id === undefined ? undefined : this._doc?.nodes.find((one) => one.id === id);
-      if (!node) return null;
-      this._selection = [node.id];
-      this._edgeSelection = [];
-      this._options.onSelectionChange();
-      return node;
-    }
-    // Collegata (T67): la scheda nasce col filo dal gesto di Collega (T24).
-    const rect = this._viewport.getBoundingClientRect();
-    const width = type === "group" ? 480 : 320;
-    const height = type === "group" ? 320 : type === "link" ? 120 : 160;
-    // Collegata (T67): il lato verso l'altro capo cade sotto il puntatore.
-    const source = link ? this._doc.nodes.find((one) => one.id === link.from) : undefined;
-    const anchor = source && (link?.fromSide
-      ? sidePoint(source, link.fromSide)
-      : { x: source.x + source.width / 2, y: source.y + source.height / 2 });
-    const facing = anchor && at ? linkedCardPlacement(anchor, at, width, height) : null;
-    const center = facing
-      ? { x: facing.x + 160, y: facing.y + 80 }
-      : at
-      ? { x: at.x + 160, y: at.y + 80 }
-      : this._screenToWorld(rect.left + (rect.width || 800) / 2, rect.top + (rect.height || 600) / 2);
-    const born: CanvasNode = {
-      id: this._newId(),
-      type,
-      x: snap(center.x - 160),
-      y: snap(center.y - 80),
-      width,
-      height,
-      ...(type === "text" ? { text: "" } : {}),
-      ...(type === "file" ? { file } : {}),
-      ...(type === "link" ? { url: "https://" } : {}),
-      ...(type === "group" ? { label: "" } : {}),
-    };
-    // Una scheda dello strumento Testo nasce con la misura e l'allineamento
-    // scelti nella sua riga (T92).
-    const node = (type === "text" && this._tool === "text" ? withTextStyle(born, this._textNext) : null) ?? born;
-    // La scheda con il suo `id`, poi il filo verso di lei, in una lista sola
-    // (T24): un passo d'annulla.
-    const ops: CanvasIntentOp[] = [{ op: "add_card", node: { ...node } }];
-    if (source && facing) {
-      const fromSide = link?.fromSide ?? nearestSides(node, source, facing.side).toSide;
-      const edge = this._connectOps(source.id, node.id, { from: fromSide, to: facing.side }, node.id);
-      if (edge) ops.push(...edge);
-    }
-    const id = this._writeOps(ops)?.[0];
-    const placed = id === undefined ? undefined : this._doc?.nodes.find((one) => one.id === id);
-    if (!placed) return null;
-    this._selection = [placed.id];
-    this._edgeSelection = [];
-    this._options.onSelectionChange();
-    return placed;
-  }
-
-  /**
-   * L'id di una scheda che un gesto fa nascere e che le operazioni della
-   * stessa lista nominano (il filo verso di lei, la griglia del rilascio):
-   * quello di `newId` delle opzioni, o uno a caso (T24).
-   */
-  _newId(): string {
-    return this._options.newId?.() ?? newNodeId("n");
-  }
-
-  /**
-   * La `add_card` di una scheda nuova dal menu, dalla barra o dallo strumento
-   * Testo: al centro della vista, o in `at` (coordinate del mondo), con la
-   * misura di sempre della GUI per il tipo (scritta, così non cambia con la
-   * specie del file). Una scheda dello strumento Testo nasce con la misura e
-   * l'allineamento scelti nella sua riga (T92): allora la forma intera, che
-   * porta `fub:text`. `null` senza una lavagna, o un file senza percorso.
-   */
-  _addOps(type: CanvasNode["type"], file?: string, at?: { x: number; y: number }): CanvasIntentOp[] | null {
-    if (!this._doc || (type === "file" && !file)) return null;
-    const rect = this._viewport.getBoundingClientRect();
-    const width = type === "group" ? 480 : 320;
-    const height = type === "group" ? 320 : type === "link" ? 120 : 160;
-    const center = at
-      ? { x: at.x + 160, y: at.y + 80 }
-      : this._screenToWorld(rect.left + (rect.width || 800) / 2, rect.top + (rect.height || 600) / 2);
-    const place = { x: snap(center.x - 160), y: snap(center.y - 80), width, height };
-    if (type === "text" && this._tool === "text") {
-      const styled = withTextStyle({ id: "", type, ...place, text: "" }, this._textNext);
-      if (styled) {
-        const { id: _id, ...node } = styled;
-        return [{ op: "add_card", node }];
-      }
-    }
-    switch (type) {
-      case "text": return [{ op: "add_card", text: "", ...place }];
-      case "file": return [{ op: "add_card", file, ...place }];
-      case "link": return [{ op: "add_card", url: "https://", ...place }];
-      case "group": return [{ op: "add_card", label: "", ...place }];
-    }
-  }
-
-  _duplicateSelection(): void {
-    if (!this._doc || this._readOnly) return;
-    const nodes = this._selectedNodes();
-    const created = this._writeOps(this._duplicateOps());
-    if (!created) return;
-    // Le schede copiate vengono prima dei fili fra loro (`created`).
-    const copies = created.slice(0, nodes.length);
-    this._lastDuplicate = { sources: nodes.map((node) => node.id), copies };
-    this._selection = copies;
-    this._edgeSelection = [];
-    this._options.onSelectionChange();
-  }
-
-  /**
-   * `duplicate` delle schede scelte, con i fili fra loro (D1). Le copie
-   * dell'ultimo Ctrl+D ripetono il suo spostamento (T68); se no lo
-   * spostamento di serie del nucleo, 32 e 32 agganciato a 8.
-   */
-  _duplicateOps(): CanvasIntentOp[] | null {
-    const nodes = this._selectedNodes();
-    if (nodes.length === 0) return null;
-    const ids = nodes.map((node) => node.id);
-    const repeat = this._repeatedOffset(nodes);
-    return [repeat ? { op: "duplicate", ids, dx: repeat.x, dy: repeat.y } : { op: "duplicate", ids }];
   }
 
   // --- copia e incolla le schede (T68) --------------------------------------------
@@ -6750,15 +4997,6 @@ export class CanvasEngine {
     });
   }
 
-  /**
-   * Ciò che la lavagna vuota riceve, dagli appunti o dal selettore dei file: lo
-   * stesso evento di Ctrl+V sulla vista, così passa dalla stessa strada
-   * (`_intake`) e dal deposito, come un rilascio.
-   */
-  _receive(data: DataTransfer): void {
-    this._viewport.dispatchEvent(new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true }));
-  }
-
   /** La scheda `nodeId` presa col clic: `additive` (Maiuscolo) la aggiunge o la toglie. */
   _selectNode(nodeId: string, additive: boolean): void {
     if (additive) {
@@ -8235,80 +6473,6 @@ export class CanvasEngine {
     return ops.length > 0 ? ops : null;
   }
 
-  _wheel(event: WheelEvent): void {
-    const target = this._targetOf(event);
-    // Sopra la scheda attiva la rotella scorre lei (A-11); Ctrl+rotella e il
-    // pizzico ingrandiscono sempre la lavagna.
-    if (!event.ctrlKey && !event.metaKey && this._insideActive(target, true)) {
-      this._wheelUnderVeil(event, target);
-      return;
-    }
-    // Sopra il testo che si scrive in una scheda la rotella scorre il testo
-    // (una scheda di testo lunga, T43).
-    if (!event.ctrlKey && !event.metaKey && target instanceof Node && this._editor?.place.contains(target)) {
-      this._wheelUnderVeil(event, target);
-      return;
-    }
-    event.preventDefault();
-    // La rotella prende la vista: un volo o un'inerzia si fermano (T53).
-    this._stopMotion(false);
-    // Prima di muovere la camera: lo zoom della rotella è un gesto in corso.
-    clearTimeout(this._wheelTimer);
-    this._wheelTimer = setTimeout(() => {
-      this._wheelTimer = undefined;
-      this._refreshLive();
-      // La rotella finita è un gesto finito: la banda legge lo zoom nuovo.
-      this._statusSettle();
-    }, WHEEL_SETTLE_MS);
-    // Il delta in pixel: la pagina della rotella è la vista, misurata solo se serve.
-    const page = event.deltaMode === 2 ? this._viewport.getBoundingClientRect() : null;
-    const dx = wheelPixels(event.deltaX, event.deltaMode, page?.width ?? 0);
-    const dy = wheelPixels(event.deltaY, event.deltaMode, page?.height ?? 0);
-    // Ctrl+rotella e il pizzico ingrandiscono con qualunque impostazione; uno
-    // scatto senza parte verticale non ingrandisce.
-    if (event.ctrlKey || event.metaKey) {
-      if (dy !== 0) this._zoomAt(event.clientX, event.clientY, dy < 0 ? 1.1 : 1 / 1.1);
-      return;
-    }
-    // Maiusc sposta di lato. Dove il sistema non manda `deltaX`, si usa `deltaY`.
-    if (event.shiftKey) {
-      this._camera.x -= dx !== 0 ? dx : dy;
-      this._applyCamera();
-      return;
-    }
-    // `zoom`: la rotella ingrandisce. Un evento con una parte orizzontale (le due
-    // dita sul touchpad) sposta, come in `pan`, così il touchpad resta usabile.
-    if (this._wheelSetting === "zoom" && dx === 0) {
-      if (dy !== 0) this._zoomAt(event.clientX, event.clientY, dy < 0 ? 1.1 : 1 / 1.1);
-      return;
-    }
-    this._camera.x -= dx;
-    this._camera.y -= dy;
-    this._applyCamera();
-  }
-
-  /**
-   * La rotella sopra la scheda attiva, presa dal velo della croce (T20d): il
-   * browser scorrerebbe gli antenati del velo, cioè niente. La scorre la
-   * lavagna: il primo antenato di `under` che può scorrere in quella
-   * direzione, dentro la vista. Senza velo scorre il browser, come sempre.
-   */
-  _wheelUnderVeil(event: WheelEvent, under: EventTarget | null): void {
-    if (event.target !== this._penVeil || !(under instanceof Element)) return;
-    for (let element: Element | null = under; element && element !== this._viewport; element = element.parentElement) {
-      const dx = wheelPixels(event.deltaX, event.deltaMode, element.clientWidth);
-      const dy = wheelPixels(event.deltaY, event.deltaMode, element.clientHeight);
-      const style = getComputedStyle(element);
-      const free = (overflow: string): boolean => overflow === "auto" || overflow === "scroll";
-      const vertical = dy !== 0 && free(style.overflowY) && element.scrollHeight > element.clientHeight;
-      const horizontal = dx !== 0 && free(style.overflowX) && element.scrollWidth > element.clientWidth;
-      if (!vertical && !horizontal) continue;
-      event.preventDefault();
-      element.scrollBy({ left: horizontal ? dx : 0, top: vertical ? dy : 0 });
-      return;
-    }
-  }
-
   _dblclick(event: MouseEvent): void {
     const target = this._targetOf(event);
     if (this._readOnly || this._nodeAt(target)) return;
@@ -8332,190 +6496,6 @@ export class CanvasEngine {
     if (!(at instanceof Element) || !this._emptyTarget(at)) return;
     // Nel punto del clic, già in scrittura, come il doppio tocco (T63, T100).
     this._placeText(event.clientX, event.clientY);
-  }
-
-  _keydown(event: KeyboardEvent): void {
-    if (!this._doc || event.defaultPrevented || composingKey(event) || this._shellKeys.has(event)) return;
-    // Col ritaglio aperto Invio lo scrive ed Esc lo chiude, da ogni punto della lavagna (T78).
-    if (this._crop?.editor?.key(event)) {
-      event.preventDefault();
-      return;
-    }
-    // Spazio tenuto sulla lavagna sposta la vista, anche in una lavagna troppo
-    // grande (T53); in un campo o dentro la scheda attiva resta uno spazio.
-    if (!(this._activeId !== null && this._insideActive(event.target, false)) && this._holdSpace(event)) return;
-    if (this._isSceneOversized()) return;
-    // Esc mentre si tira un filo lo lascia, e nient'altro (T67).
-    if (event.key === "Escape" && this._connect) {
-      event.preventDefault();
-      this._cancelConnect();
-      return;
-    }
-    // Esc mentre si trascina o si ridimensiona una scheda ferma il gesto: le
-    // schede tornano dov'erano e il file non cambia (T24).
-    if (event.key === "Escape" && (this._drag !== null || this._resize !== null)) {
-      event.preventDefault();
-      this._cancelGestures();
-      return;
-    }
-    // Esc mentre si trascina il rettangolo lo annulla, e la scelta torna com'era (N6 T20b).
-    if (event.key === "Escape" && this._marquee !== null) {
-      event.preventDefault();
-      this._cancelMarquee();
-      return;
-    }
-    // D da solo, fuori dai campi: il mouse scrive finché il tasto è giù
-    // (regola 1). La ripetizione del tasto non cambia niente.
-    if (isInkKey(event) && !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey
-      && !isTextTarget(event.target)) {
-      if (!event.repeat && !this._inkKeyDown) {
-        this._inkKeyDown = true;
-        this._applyInkMouse();
-      }
-      return;
-    }
-    // Dentro la scheda attiva i tasti sono del contenuto; Esc, se il
-    // contenuto non lo usa (un rettangolo di celle che si sta scegliendo),
-    // esce e rimette il fuoco sulla scheda.
-    if (this._activeId !== null && this._insideActive(event.target, false)) {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        this._leaveCard(true);
-      } else if (isCommandSearchKey(event)) {
-        // Ctrl+/ si apre anche da dentro la scheda, ed Esc ci torna.
-        event.preventDefault();
-        this._openCommandSearch();
-      }
-      return;
-    }
-    // Il tasto Menu o Maiusc+F10 su una scheda o sulla lavagna: il menu del
-    // tasto destro, sulla scelta e accanto a lei (IMP-6301). In un campo resta
-    // quello del campo.
-    if (isMenuKey(event) && !isTextTarget(event.target)) {
-      event.preventDefault();
-      this._keyboardMenu(event.target);
-      return;
-    }
-    this._recordPending();
-    // Tab e Alt+frecce muovono il fuoco fra le schede (T61): non sono comandi,
-    // non cambiano il file.
-    if (this._tabKey(event) || this._nearestKey(event)) return;
-    const commands = this.commands();
-    const where = { writing: isTextTarget(event.target), onBoard: this._onCardOrBoard(event.target) };
-    // Prima i tasti con Ctrl o Alt: valgono anche col fuoco in un campo.
-    const held = commandForKey(commands, event, { ...where, writing: true });
-    if (held) {
-      this._runKey(event, held);
-      return;
-    }
-    const focus = this._selectionFocus();
-    // La scheda scelta e non attiva riceve le pagine (il PDF), se li vuole.
-    if (focus && this._selection.length === 1 && CARD_KEYS.has(event.key) && this._onCardOrBoard(event.target)) {
-      const view = this._cards.get(focus.id)?.view;
-      let used = false;
-      try {
-        used = view?.key?.(event) === true;
-      } catch (error) {
-        console.warn(`canvas: la scheda ${focus.id} non prende il tasto`, error);
-      }
-      if (used) {
-        event.preventDefault();
-        return;
-      }
-    }
-    // Poi i tasti che scrivono (Canc, le frecce, Invio, i segni): mai mentre
-    // si scrive in un campo.
-    const bare = commandForKey(commands, event, where);
-    if (bare) this._runKey(event, bare);
-  }
-
-  /** Il tasto è del comando `command`: lo prende, e il comando parte se si può. */
-  _runKey(event: KeyboardEvent, command: CanvasCommand): void {
-    // Esc senza niente da togliere resta a chi sta fuori (la shell).
-    if (command.id === "canvas.escape" && command.disabled() !== null) return;
-    event.preventDefault();
-    if (command.disabled() === null) command.run();
-    this._statusSettle();
-  }
-
-  /**
-   * Un tasto dello zoom fuori dalla vista (la riga delle opzioni, la colonna, il
-   * navigatore) zooma, come i tasti degli strumenti sulla colonna (IMP-040).
-   * Dentro la vista lo prende `_keydown`, che sa della scheda attiva e dei campi.
-   */
-  _zoomKeydown(event: KeyboardEvent): void {
-    if (event.defaultPrevented || !this._doc || this._isSceneOversized()) return;
-    if (event.target instanceof Node && this._viewport.contains(event.target)) return;
-    const zoom = this.commands().filter((command) => VIEW_ZOOM_COMMANDS.has(command.id));
-    // In una casella a discesa (i campi del filo nella barra della selezione) un
-    // numero o un segno cerca l'opzione, come in un campo: solo Ctrl zooma.
-    const writing = isTextTarget(event.target) || event.target instanceof HTMLSelectElement;
-    const command = commandForKey(zoom, event, { writing, onBoard: false });
-    if (command) this._runKey(event, command);
-  }
-
-  /**
-   * Annulla e Ripeti fuori dalla vista (la colonna, la riga delle opzioni, la
-   * barra della scelta, il navigatore), come i tasti dello zoom (IMP-6300). Un
-   * campo che scrive tiene il suo Ctrl+Z; dentro la vista lo prende `_keydown`.
-   */
-  _historyKeydown(event: KeyboardEvent): void {
-    if (event.defaultPrevented || composingKey(event) || !this._doc || this._isSceneOversized()) return;
-    if (event.target instanceof Node && this._viewport.contains(event.target)) return;
-    if (keepsItsUndo(event.target)) return;
-    const history = this.commands().filter((command) => HISTORY_COMMANDS.has(command.id));
-    const command = commandForKey(history, event, { writing: false, onBoard: false });
-    if (command) this._runKey(event, command);
-  }
-
-  /**
-   * Il menu del tasto destro aperto dalla tastiera (IMP-6301): lo stesso
-   * `contextmenu` che il riquadro apre col tasto destro, ma senza un punto
-   * (`clientX`/`clientY` a zero, nessun tasto del mouse), così il menu va sulla
-   * scelta e si apre accanto a lei. Un `contextmenu` che il sistema mandasse
-   * subito dopo per lo stesso tasto non ne apre un secondo.
-   */
-  _keyboardMenu(target: EventTarget | null): void {
-    const from = target instanceof Element && this._viewport.contains(target) ? target : this._viewport;
-    const menu = new MouseEvent("contextmenu", { bubbles: true, cancelable: true, composed: true, button: 0 });
-    this._ownMenu = menu;
-    try {
-      from.dispatchEvent(menu);
-    } finally {
-      this._ownMenu = null;
-    }
-    this._menuEchoUntil = performance.now() + MENU_ECHO_MS;
-  }
-
-  /**
-   * Un tasto col fuoco sulla colonna: gli strumenti e la ricerca dei comandi
-   * valgono anche qui; frecce, Invio e Spazio restano della colonna (il kit).
-   */
-  _railKeydown(event: KeyboardEvent): void {
-    if (event.defaultPrevented || !this._doc || this._isSceneOversized()) return;
-    if (isCommandSearchKey(event)) {
-      event.preventDefault();
-      this._openCommandSearch();
-      return;
-    }
-    const tools = this.commands().filter((command) => toolOfCommand(command.id) !== null);
-    const command = commandForKey(tools, event, { writing: false, onBoard: false });
-    if (command) this._runKey(event, command);
-  }
-
-  /**
-   * Stretta (la finestra fino a 700 px, o il riquadro fino a 480): la colonna
-   * va sotto la lavagna, in riga, come nel disegno.
-   */
-  _syncNarrow(): void {
-    const width = this._root.clientWidth;
-    if (width === 0) return;
-    const narrow = width <= NARROW_PANE || window.innerWidth <= NARROW_WIDTH;
-    if (narrow === this._root.hasAttribute("data-narrow")) return;
-    this._root.toggleAttribute("data-narrow", narrow);
-    this._rail.setNarrow(narrow);
-    // «Apri a lato» diventa «Apri qui» e al contrario (T45).
-    this._canvasOptions.sync();
   }
 
   // --- render -------------------------------------------------------------------
@@ -9953,3 +7933,13 @@ export interface CanvasEngine extends InkMethods {}
 mixMethods(CanvasEngine.prototype, inkMethods);
 export interface CanvasEngine extends LassoMethods {}
 mixMethods(CanvasEngine.prototype, lassoMethods);
+export interface CanvasEngine extends ToolsMethods {}
+mixMethods(CanvasEngine.prototype, toolsMethods);
+export interface CanvasEngine extends CameraMethods {}
+mixMethods(CanvasEngine.prototype, cameraMethods);
+export interface CanvasEngine extends KeysMethods {}
+mixMethods(CanvasEngine.prototype, keysMethods);
+export interface CanvasEngine extends IntakeMethods {}
+mixMethods(CanvasEngine.prototype, intakeMethods);
+export interface CanvasEngine extends ConvertMethods {}
+mixMethods(CanvasEngine.prototype, convertMethods);
