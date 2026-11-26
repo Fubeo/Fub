@@ -260,10 +260,12 @@ jobs:
           bundle: ${{ steps.nome.outputs.bundle }}
           arch: x86_64
           # Il prefisso `flatpak-builder-x86_64` è quello che l'azione usa
-          # quando la chiave esatta non c'è: così una release riparte dalla
-          # cache della precedente, e il modulo di WebKitGTK (ore di build su
-          # questo runner) si ricompila solo quando cambia il suo pezzo di
-          # manifest.
+          # quando la chiave esatta non c'è. GitHub separa le cache per ref:
+          # un tag vede le sue e quelle del ramo predefinito, non quelle di un
+          # altro tag. La cache che i tag riusano è quindi quella di una corsa
+          # avviata a mano su `main` (workflow_dispatch, non pubblica niente):
+          # con quella il modulo di WebKitGTK (ore di build su questo runner)
+          # non si ricompila finché il suo pezzo di manifest non cambia.
           cache-key: flatpak-builder-x86_64-${{ hashFiles('Cargo.lock', 'apps/client/package-lock.json', 'packaging/flatpak/io.github.Fubeo.Fub.yml', 'packaging/flatpak/patches/**') }}
           upload-artifact: false
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6

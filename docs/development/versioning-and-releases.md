@@ -231,9 +231,13 @@ stessa su ogni distribuzione. Non sostituisce `.deb`, `.rpm` e AppImage, e non
   documentazione e introspezione. **Gli aggiornamenti di sicurezza di
   WebKitGTK sono a carico nostro**: a ogni release stabile si cambiano `url` e
   `sha256` del modulo (l'impronta è nel file `.sums` accanto al tarball) e si
-  fa una release di Fub; i passi sono nel README di `packaging/flatpak/`. Il
-  job della release riusa la cache di flatpak-builder della release
-  precedente, e WebKitGTK si ricompila solo quando cambia il suo modulo.
+  fa una release di Fub; i passi sono nel README di `packaging/flatpak/`.
+  GitHub separa le cache per ref: un tag non vede la cache di un altro tag,
+  solo la sua e quella di `main`. Senza una cache di `main` il job del
+  Flatpak ricompila WebKitGTK (ore; il tetto del job è 360 minuti). Per
+  evitarlo, dopo ogni cambio del manifest o delle dipendenze si avvia a mano
+  il workflow su `main`: costruisce senza pubblicare e lascia la cache di
+  flatpak-builder ai tag che vengono dopo.
 
 I permessi, e perché:
 

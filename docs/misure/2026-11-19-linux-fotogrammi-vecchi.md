@@ -43,8 +43,14 @@ TextureMapper.
 
 ## La misura
 
-- 19 novembre 2026, misura di un agente sul PC fisso del maintainer
-  (Debian 13), sotto Xvfb;
+- 19 novembre 2026, misura di un agente sul PC fisso del maintainer, sotto
+  Xvfb;
+- macchina: Intel Core i5-13600KF, 20 thread, 31 GiB, NVIDIA RTX 4070;
+  Debian 13; la finestra di prova sta sullo schermo virtuale di Xvfb, non su
+  quelli veri;
+- la 2.54.3 è costruita dal manifest del Flatpak con
+  `webkitgtk-2.54.3.tar.xz` (sha256 `2779c1b4…7d0862`); la pagina di prova
+  non usa codice di Fub, quindi nessun commit di Fub conta per la misura;
 - una WebView GTK3 che legge tre pixel della finestra a ogni fotogramma, su
   una pagina di prova che ripete un suggerimento in dissolvenza e un velo da
   dialogo; Fub non c'entra.
