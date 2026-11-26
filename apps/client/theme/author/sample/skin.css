@@ -9098,7 +9098,7 @@ button.cm-fub-page-icon:focus-visible {
    Queste regole sono delle tabelle Markdown, non delle tabelle che un
    componente disegna dentro la pagina: la Base incorporata in una nota sta
    dentro `.markdown-rendered`, e la sua tabella ha la sua pelle
-   (`skin/editors.css`, `.base-table`). Per questo ogni selettore lascia
+   (`skin/base-views.css`, `.base-table`). Per questo ogni selettore lascia
    fuori ciò che sta in una `.base-surface`, dentro un `:where()` che non
    alza la specificità. */
 .markdown-rendered table:not(:where(.base-surface *)) {
@@ -11265,7 +11265,10 @@ button.cm-fub-page-icon:focus-visible {
 
 /* ── skin/editors.css ───────────────────────────────────────────────────── */
 
-/* Le superfici dei formati: canvas, base, foglio di calcolo. */
+/* Le superfici dei formati: canvas, base, foglio di calcolo. Questo pezzo
+   tiene ciò che sta sotto a tutte; ogni formato ha il suo pezzo dopo
+   (`grid`, `canvas`, `canvas-cards`, `base-bar`, `base-views`, `rich`,
+   `transclusion`). */
 
 /* Prima di loro l'editor di testo, che sta sotto a tutte: il margine, il
    cursore, la selezione, la sintassi, i pannelli che CodeMirror apre sopra il
@@ -11812,6 +11815,10 @@ button.cm-fub-page-icon:focus-visible {
 .file-only-problem {
   color: var(--danger);
 }
+
+/* ── skin/grid.css ──────────────────────────────────────────────────────── */
+
+/* La pelle del foglio di calcolo: la griglia, la barra, le finestre e gli oggetti del foglio. */
 
 /* ── Il foglio di calcolo ────────────────────────────────────────────────── */
 
@@ -12607,6 +12614,10 @@ button.cm-fub-page-icon:focus-visible {
 .grid-dialog-border-cell {
   font-size: var(--text-sm);
 }
+
+/* ── skin/canvas.css ────────────────────────────────────────────────────── */
+
+/* La pelle della lavagna: la superficie, gli strumenti, le barre e i pannelli. */
 
 /* ── Il canvas ───────────────────────────────────────────────────────────── */
 
@@ -13537,6 +13548,11 @@ input.canvas-toolbar-item {
   color: var(--muted);
   text-align: center;
 }
+
+/* ── skin/canvas-cards.css ──────────────────────────────────────────────── */
+
+/* La pelle della lavagna: i colori, le schede, i fili e i segni sopra le schede. */
+
 /* I colori delle schede e dei fili (T47, D-13 c). La lavagna scrive sul nodo
    la chiave del colore (`data-canvas-color`) e, per un colore libero
    («Altro…»), il suo valore in `--canvas-color`: un dato del file, non un
@@ -14785,6 +14801,10 @@ input.canvas-toolbar-item {
   outline-offset: calc(var(--focus-ring-width) * -2);
 }
 
+/* ── skin/base-bar.css ──────────────────────────────────────────────────── */
+
+/* La pelle della Base: la superficie, la barra delle viste e i suoi popover. */
+
 /* ── La base ─────────────────────────────────────────────────────────────── */
 
 /* Le viste di una base — tabella, schede, elenco, bacheca, mappa — sono la
@@ -15342,6 +15362,11 @@ input.canvas-toolbar-item {
   background: var(--accent-wash);
   color: var(--accent-soft);
 }
+
+/* ── skin/base-views.css ────────────────────────────────────────────────── */
+
+/* La pelle della Base: le viste (tabella, schede, bacheca, calendario, linea del tempo, mappa). */
+
 /* La tabella arriva ai bordi della scatola, senza margine. */
 .base-body:has(> .base-table-viewport) {
   padding: 0;
@@ -16205,6 +16230,10 @@ input.canvas-toolbar-item {
   padding-top: var(--space-4);
   border-top: 1px solid var(--border);
 }
+
+/* ── skin/rich.css ──────────────────────────────────────────────────────── */
+
+/* La pelle dei documenti di videoscrittura, e dei segni di Fub sulla carta delle note (scadenze, promemoria, compiti, pagina del giorno). */
 
 /* ── I documenti di videoscrittura ───────────────────────────────────────── */
 
@@ -17259,6 +17288,10 @@ input.canvas-toolbar-item {
   background: var(--doc-tint-orange);
   color: var(--doc-color-orange);
 }
+
+/* ── skin/transclusion.css ──────────────────────────────────────────────── */
+
+/* La pelle della trasclusione viva e del blocco sincronizzato. */
 
 /* ── La trasclusione viva ────────────────────────────────────────────────── */
 

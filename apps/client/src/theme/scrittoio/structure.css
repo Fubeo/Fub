@@ -3032,7 +3032,7 @@ body:has(#context-menu:not([hidden])) > .toast-stack {
    colonna di testo che scorre, con la toolbar del riquadro sopra. Qui stanno
    ciò che ProseMirror chiede al foglio (gli spazi come sono, la selezione di
    un oggetto) e la geometria dei blocchi: rientri degli elenchi, tabelle,
-   oggetti in linea. Colori e tipografia sono della pelle (`skin/editors.css`). */
+   oggetti in linea. Colori e tipografia sono della pelle (`skin/rich.css`). */
 .rich-surface {
   display: flex;
   flex-direction: column;

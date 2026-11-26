@@ -8,6 +8,10 @@
  * compare in tutti e due i moduli e una volta sola nell'unione.
  */
 import { ORDER } from "./skin/order";
+import { BASE_BAR } from "./anatomia/base-bar";
+import { BASE_VIEWS } from "./anatomia/base-views";
+import { CANVAS } from "./anatomia/canvas";
+import { CANVAS_CARDS } from "./anatomia/canvas-cards";
 import { CENTRES } from "./anatomia/centres";
 import { CONTROLS } from "./anatomia/controls";
 import { DIAGRAMS } from "./anatomia/diagrams";
@@ -19,6 +23,7 @@ import { EDITORS } from "./anatomia/editors";
 import { FOUNDATION } from "./anatomia/foundation";
 import { FRAME } from "./anatomia/frame";
 import { GRAPH } from "./anatomia/graph";
+import { GRID } from "./anatomia/grid";
 import { KIT } from "./anatomia/kit";
 import { LAUNCHER } from "./anatomia/launcher";
 import { EXPORT } from "./anatomia/export";
@@ -28,11 +33,13 @@ import { MATH } from "./anatomia/math";
 import { MENUS } from "./anatomia/menus";
 import { MOTION } from "./anatomia/motion";
 import { NODES } from "./anatomia/nodes";
+import { RICH } from "./anatomia/rich";
 import { SEARCH } from "./anatomia/search";
 import { SETTINGS } from "./anatomia/settings";
 import { SHEETS } from "./anatomia/sheets";
 import { TABELLA } from "./anatomia/tabella";
 import { TREE } from "./anatomia/tree";
+import { TRANSCLUSION } from "./anatomia/transclusion";
 import { WELCOME } from "./anatomia/welcome";
 import type { Layer, PartAnatomy, ShellComponent } from "./anatomia/types";
 import type { ContentGate } from "../../ui/sanitize-css";
@@ -53,6 +60,13 @@ const DECLARED: readonly PartAnatomy[] = [
   TABELLA,
   MATH,
   EDITORS,
+  GRID,
+  CANVAS,
+  CANVAS_CARDS,
+  BASE_BAR,
+  BASE_VIEWS,
+  RICH,
+  TRANSCLUSION,
   LIVE_CARDS,
   DRAW,
   MEDIA,

@@ -1,0 +1,797 @@
+/* La pelle del foglio di calcolo: la griglia, la barra, le finestre e gli oggetti del foglio. */
+
+/* ── Il foglio di calcolo ────────────────────────────────────────────────── */
+
+/* Una griglia è un dato: carattere dell'interfaccia, cifre in colonna, fili
+   sottili. Le intestazioni stanno un tono sotto la carta; la cella attiva ha
+   l'anello d'accento, la selezione il suo velo. Le celle sono contenuto con
+   l'aspetto del file: la loro carta, i fili e il testo li disegna
+   `structure.css`, e qui restano la cornice e i segni, presi dalla riga. */
+.grid-surface {
+  color: var(--doc-fg);
+  font-family: var(--font-ui);
+  font-size: var(--text-base);
+}
+.grid-formula-bar {
+  border-bottom: 1px solid var(--border);
+}
+.grid-cell-name {
+  border-right: 1px solid var(--border);
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--weight-bold);
+}
+/* La formula sta al centro della sua barra, con un margine dal nome. È una
+   riga sola: evidenziarla come «riga attiva» la tingerebbe sempre tutta. */
+.grid-formula-editor .cm-editor .cm-content {
+  padding: var(--space-4) var(--space-4);
+}
+.grid-formula-editor .cm-editor .cm-content .cm-activeLine {
+  background-color: transparent;
+}
+/* Nemmeno la cella aperta tinge la riga attiva: è la cella, non un
+   documento, e di notte la banda chiara sulla carta del file si vedrebbe. */
+.grid-cell-editor .cm-editor .cm-content .cm-activeLine {
+  background-color: transparent;
+}
+.grid-viewport {
+  outline: none;
+}
+/* Niente anello attorno al riquadro: il fuoco è il bordo della cella attiva,
+   che la griglia indica con `aria-activedescendant`. Senza una cella attiva
+   da mostrare (ogni asse nascosto) l'anello torna. */
+.grid-viewport:focus-visible:not([aria-activedescendant]) {
+  box-shadow: inset 0 0 0 var(--focus-ring-width) var(--focus-ring);
+}
+.grid-header,
+.grid-corner {
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+.grid-header,
+.grid-corner {
+  background: var(--sheet-2);
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--weight-bold);
+}
+/* La carta sotto le intestazioni, dove la loro riga non è ancora disegnata:
+   la striscia delle intestazioni di colonna in cima alla testa e
+   nell'angolo, e quella delle intestazioni delle righe nella colonna ferma,
+   coi fili delle righe. */
+.grid-paper-top,
+.grid-paper-corner {
+  background: linear-gradient(var(--sheet-2) 0 var(--grid-head-h, 0px), var(--doc-bg) 0);
+}
+.grid-paper-left-head {
+  border-right: 1px solid var(--border);
+  background:
+    repeating-linear-gradient(to bottom, transparent 0 calc(var(--grid-row, 28px) - 1px), var(--border) 0 var(--grid-row, 28px)),
+    var(--sheet-2);
+}
+/* Le intestazioni della selezione prendono l'accento, come nei fogli di
+   calcolo: il testo qui, il velo e il filo verso le celle nelle fasce che
+   scivolano con la selezione (`grid-mark-band-col`, `-row`). */
+.grid-header.selected {
+  color: var(--accent);
+}
+/* Dove ci sono colonne o righe nascoste, una tacca doppia sull'intestazione
+   che le segue. */
+.grid-column-header.after-hidden {
+  border-left: 3px double var(--muted);
+}
+.grid-row-header.after-hidden {
+  border-top: 3px double var(--muted);
+}
+/* Il filo del blocco è quello di Excel. */
+.grid-mark-freeze {
+  background: var(--muted);
+}
+/* Il segno di una nota nell'angolo, come in Excel: rosso per le note,
+   d'accento per i commenti in thread. */
+.grid-comment-mark {
+  border-color: transparent var(--danger) transparent transparent;
+}
+.grid-comment-mark.threaded {
+  border-color: transparent var(--accent) transparent transparent;
+}
+/* Un thread risolto si spegne, come in Excel. */
+.grid-comment-mark.threaded.resolved {
+  border-color: transparent var(--muted) transparent transparent;
+}
+.grid-comment-card {
+  gap: var(--space-4);
+}
+.grid-comment-head {
+  gap: var(--space-3);
+}
+.grid-comment-kind {
+  color: var(--text);
+  font-weight: var(--weight-bold);
+}
+.grid-comment-where,
+.grid-comment-resolved {
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+.grid-comment-thread {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  scrollbar-width: thin;
+}
+.grid-comment-post {
+  gap: var(--space-1);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+}
+.grid-comment-post + .grid-comment-post {
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border);
+}
+.grid-comment-author {
+  color: var(--text);
+  font-weight: var(--weight-medium);
+}
+.grid-comment-text {
+  color: var(--text);
+}
+.grid-comment-card.threaded .grid-comment-post + .grid-comment-post {
+  padding-left: var(--space-4);
+}
+.grid-comment-reply {
+  gap: var(--space-2);
+}
+.grid-comment-field {
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--bg-input);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-sm);
+}
+.grid-comment-field:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.grid-comment-actions {
+  gap: var(--space-2);
+}
+.grid-comment-action {
+  font-size: var(--text-sm);
+}
+.grid-comment-error {
+  color: var(--danger);
+  font-size: var(--text-sm);
+}
+/* Un oggetto selezionato ha il filo d'accento e le maniglie tonde, come in
+   Excel; uno che Fub non mostra resta un riquadro tratteggiato col perché. */
+.grid-object.selected {
+  outline: 1px solid var(--accent);
+}
+.grid-object-handle {
+  border: 1px solid var(--accent);
+  border-radius: 50%;
+  background: var(--bg-elev);
+}
+.grid-object-missing {
+  border: 1px dashed var(--border);
+  background: var(--sheet-2);
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+.grid-object-text-editor {
+  border: 2px solid var(--accent);
+  background: var(--bg-elev);
+  color: var(--doc-fg);
+}
+/* I segni della selezione prendono `--grid-mark` (in `structure.css`).
+   Il rettangolo: quattro lati di 2 px, uno sul filo e uno dentro; la cella
+   attiva ha un anello sottile e il resto un velo. Il velo sta sopra le
+   celle, quindi si vede anche su una cella col colore suo. */
+.grid-mark-edge,
+.grid-mark-ring,
+.grid-mark-handle {
+  background: var(--grid-mark, var(--accent));
+}
+.grid-mark-veil {
+  background: color-mix(in srgb, var(--grid-mark, var(--accent)) 14%, transparent);
+}
+/* Il quadratino all'angolo della selezione: il bordo è la carta. */
+.grid-mark-handle {
+  box-shadow: 0 0 0 1px var(--doc-bg, #ffffff);
+}
+/* Le maniglie del tocco lungo: un tondo pieno col bordo della carta. */
+.grid-mark-touch {
+  border-radius: 50%;
+  background: var(--grid-mark, var(--accent));
+  box-shadow: 0 0 0 2px var(--doc-bg, #ffffff), var(--shadow-2);
+}
+/* Le intestazioni della selezione: il velo e il filo d'accento del tema,
+   perché le intestazioni sono cornice e non carta. */
+.grid-mark-band-col {
+  background: var(--accent-veil);
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+.grid-mark-band-row {
+  background: var(--accent-veil);
+  box-shadow: inset -2px 0 0 var(--accent);
+}
+/* Ciò che si è copiato: un tratteggio largo; tagliato: uno fitto. Le
+   formiche di un riempimento o di un taglio incollato hanno il periodo di un
+   loro passo (8 px), e il battito di una copia è un velo che svanisce. */
+.grid-mark-copy[data-dir="h"] {
+  background: repeating-linear-gradient(90deg, var(--grid-mark, var(--accent)) 0 6px, transparent 6px 10px);
+}
+.grid-mark-copy[data-dir="v"] {
+  background: repeating-linear-gradient(180deg, var(--grid-mark, var(--accent)) 0 6px, transparent 6px 10px);
+}
+.grid-mark-cut[data-dir="h"] {
+  background: repeating-linear-gradient(90deg, var(--grid-mark, var(--accent)) 0 3px, transparent 3px 6px);
+}
+.grid-mark-cut[data-dir="v"] {
+  background: repeating-linear-gradient(180deg, var(--grid-mark, var(--accent)) 0 3px, transparent 3px 6px);
+}
+.grid-mark-ants[data-dir="h"] > .grid-ants {
+  background: repeating-linear-gradient(90deg, var(--grid-mark, var(--accent)) 0 4px, transparent 4px 8px);
+}
+.grid-mark-ants[data-dir="v"] > .grid-ants {
+  background: repeating-linear-gradient(180deg, var(--grid-mark, var(--accent)) 0 4px, transparent 4px 8px);
+}
+.grid-mark-flash {
+  background: color-mix(in srgb, var(--grid-mark, var(--accent)) 30%, transparent);
+}
+@media (forced-colors: active) {
+  .grid-mark-edge,
+  .grid-mark-ring,
+  .grid-mark-handle,
+  .grid-mark-touch {
+    border: 1px solid Highlight;
+  }
+  .grid-mark-veil,
+  .grid-mark-band-col,
+  .grid-mark-band-row,
+  .grid-mark-flash {
+    background: transparent;
+  }
+  /* I colori forzati tolgono i tratteggi dipinti: resta un bordo
+     tratteggiato. */
+  .grid-mark-copy,
+  .grid-mark-cut,
+  .grid-ants {
+    border: 1px dashed Highlight;
+  }
+}
+/* Il contorno della selezione nella scheda di un foglio (`card.ts`). */
+.grid-selection {
+  border: 2px solid var(--accent);
+}
+/* Dove andrà la selezione tirata per il bordo. */
+.grid-move-preview {
+  border: 2px solid var(--muted);
+}
+/* I riferimenti della formula aperta: ogni intervallo è contornato del
+   colore che il riferimento ha nel testo. */
+.grid-formula-ref-1 {
+  border: 2px solid var(--doc-author-1);
+}
+.grid-formula-ref-2 {
+  border: 2px solid var(--doc-author-2);
+}
+.grid-formula-ref-3 {
+  border: 2px solid var(--doc-author-3);
+}
+.grid-formula-ref-4 {
+  border: 2px solid var(--doc-author-4);
+}
+.grid-formula-ref-5 {
+  border: 2px solid var(--doc-author-5);
+}
+.grid-formula-ref-6 {
+  border: 2px solid var(--doc-author-6);
+}
+.grid-cell-editor .cm-formula-ref-1,
+.grid-formula-editor .cm-formula-ref-1 {
+  color: var(--doc-author-1);
+}
+.grid-cell-editor .cm-formula-ref-2,
+.grid-formula-editor .cm-formula-ref-2 {
+  color: var(--doc-author-2);
+}
+.grid-cell-editor .cm-formula-ref-3,
+.grid-formula-editor .cm-formula-ref-3 {
+  color: var(--doc-author-3);
+}
+.grid-cell-editor .cm-formula-ref-4,
+.grid-formula-editor .cm-formula-ref-4 {
+  color: var(--doc-author-4);
+}
+.grid-cell-editor .cm-formula-ref-5,
+.grid-formula-editor .cm-formula-ref-5 {
+  color: var(--doc-author-5);
+}
+.grid-cell-editor .cm-formula-ref-6,
+.grid-formula-editor .cm-formula-ref-6 {
+  color: var(--doc-author-6);
+}
+/* La guida di una misura tirata, e la misura accanto. La guida sta sulla
+   carta del file come i segni: ha il loro colore (`--grid-mark`), che resta
+   leggibile anche nelle luci scure, dove l'accento è chiaro. */
+.grid-resize-guide {
+  background: var(--grid-mark);
+}
+.grid-resize-label {
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-2);
+  color: var(--text);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+/* La cornice della cella aperta: 2 px del colore dei segni, sul filo della
+   cella e un pixel dentro, e l'ombra che la solleva. La carta e l'inchiostro
+   sono quelli della cella (`structure.css`), in ogni luce. */
+.grid-cell-editor-frame {
+  border: 2px solid var(--grid-mark, var(--accent));
+  box-shadow: var(--shadow-2);
+}
+@media (forced-colors: active) {
+  .grid-cell-editor-frame {
+    border-color: Highlight;
+  }
+}
+/* I segni della griglia sulla carta del file prendono l'accento della carta
+   (la regola è in `structure.css`, che ridichiara i ruoli); qui la cella in
+   modifica e il testo di un oggetto hanno il fondo della carta, sotto
+   l'inchiostro della carta, non quello dei pannelli (il quadratino del
+   riempimento ha il bordo della carta da sé, `.grid-mark-handle`). La cella
+   aperta nel livello dei segni prende poi la carta della sua cella
+   (`--file-fill`, in `structure.css`), che pesa di più e ricade sullo stesso
+   `--doc-bg`. */
+.look-file .grid-cell-editor,
+.look-file .grid-object-text-editor {
+  background: var(--doc-bg);
+}
+/* Una cella di una cartella di Excel che legge una cella cambiata mostra
+   ancora il valore del file, che Fub non ricalcola: lo dice un filo a puntini
+   sotto, che resta anche sul colore della cella. Una cella cambiata qui e
+   anche nel file ha un contorno tratteggiato, dentro i suoi fili. */
+.grid-row .stale {
+  text-decoration: underline dotted var(--muted);
+  text-underline-offset: 3px;
+}
+.grid-row .conflict {
+  outline: 2px dashed var(--danger);
+  outline-offset: -3px;
+}
+/* L'avviso della cartella sta sopra la barra, come per i documenti di
+   videoscrittura: ciò che Fub non mostra, i valori non ricalcolati, i
+   conflitti e l'ultimo gesto rifiutato. */
+.grid-notice {
+  padding: var(--space-3) var(--space-9);
+  background: var(--info-wash);
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  font-size: var(--text-sm);
+}
+/* La bozza la cui cella è cambiata sotto: la domanda e i due pulsanti. */
+.grid-draft-notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-9);
+  background: var(--warning-wash);
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  font-size: var(--text-sm);
+}
+.grid-draft-notice > p {
+  flex: 1 1 auto;
+  margin: 0;
+}
+/* Le schede dei fogli stanno sotto la griglia, come nei fogli di calcolo. */
+.grid-sheets {
+  border-top: 1px solid var(--border);
+  background: var(--sheet-2);
+  padding: 0 var(--space-4);
+}
+/* La barra del documento veste la barra a schede del kit (`.kit-ribbon-*`,
+   in `skin/kit.css`). Qui restano le parti che il kit non ha: i pulsanti della
+   galleria dei fogli, i glifi del formato, la mini-barra del menu e le
+   etichette dei campi. */
+.grid-ribbon-gallery-item {
+  border: none;
+  border-radius: var(--radius-chip);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+.grid-ribbon-gallery-item:hover {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+.grid-ribbon-gallery-item:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: -2px;
+}
+.grid-ribbon-bold,
+.rich-ribbon-bold { font-weight: var(--weight-bold); }
+.grid-ribbon-italic,
+.rich-ribbon-italic { font-style: italic; }
+/* La mini-barra del menu: i controlli della scheda Home in una fila. */
+.grid-ribbon-mini,
+.rich-ribbon-mini {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+.grid-ribbon-underline,
+.rich-ribbon-underline { text-decoration: underline; }
+.grid-ribbon-strike,
+.rich-ribbon-strike { text-decoration: line-through; }
+.grid-ribbon-field-label,
+.rich-ribbon-field-label {
+  margin-inline-end: var(--space-2);
+  color: var(--muted);
+}
+.grid-ribbon-popup-group {
+  padding: var(--space-3);
+}
+.grid-ribbon-gallery {
+  gap: var(--space-2);
+  padding: var(--space-3);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+}
+.grid-ribbon-gallery-grid {
+  gap: var(--space-1);
+}
+.grid-ribbon-gallery-item {
+  box-shadow: inset 0 0 0 1px transparent;
+}
+.grid-ribbon-gallery-item[aria-pressed="true"] {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+/* L'anteprima di uno stile è un pezzo di foglio: carta bianca come nella
+   cartella, anche col buio, perché i colori sono quelli del file. */
+.grid-ribbon-table-preview {
+  border: 1px solid var(--border);
+  background: #ffffff;
+}
+.grid-ribbon-cell-sample {
+  padding: var(--space-2) var(--space-2);
+  border: 1px solid var(--border);
+  background: #ffffff;
+  color: #000000;
+  font-size: var(--text-xs);
+}
+
+/* La barra dei fogli: la forma e la pelle sono quelle di ogni barra a
+   schede (`skin/kit.css`, «Barra a schede»). Qui restano le parti solo sue:
+   ciò che copre il vassoio quando si ritira, la tavolozza, «Comandi». */
+/* Chi copre il vassoio che si ritira ha il fondo del foglio: attraverso la
+   formula e la griglia non si vede mai la barra. */
+.grid-formula-bar,
+.grid-viewport {
+  background: var(--sheet);
+}
+/* Gli avvisi tengono il loro velo, ma sopra il fondo del foglio: anche loro
+   coprono il vassoio. */
+.grid-notice {
+  background: linear-gradient(var(--info-wash), var(--info-wash)), var(--sheet);
+}
+.grid-draft-notice {
+  background: linear-gradient(var(--warning-wash), var(--warning-wash)), var(--sheet);
+}
+/* La tavolozza dei colori parla come un menu: titoli piccoli in grigio,
+   campioni stondati. */
+.grid-ribbon-palette {
+  gap: var(--space-3);
+  padding: var(--space-4);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+}
+.grid-ribbon-palette-empty {
+  padding: var(--space-3) var(--space-4);
+  border: none;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+.grid-ribbon-palette-empty:hover {
+  background: var(--overlay-hover);
+}
+.grid-ribbon-palette-empty:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: -2px;
+}
+.grid-ribbon-palette-title {
+  margin: var(--space-2) 0 0;
+  padding: 0 var(--space-2);
+  color: var(--muted);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-regular);
+}
+.grid-ribbon-palette-grid {
+  gap: var(--space-2);
+}
+.grid-ribbon-swatch {
+  border: none;
+  border-radius: var(--radius-xs);
+  box-shadow: inset 0 0 0 1px var(--border);
+  cursor: pointer;
+}
+.grid-ribbon-swatch-base {
+  margin-bottom: var(--space-2);
+}
+.grid-ribbon-swatch:hover,
+.grid-ribbon-swatch:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 1px;
+}
+/* «Comandi» apre la fila: un gettone pieno accanto al pozzetto delle sezioni,
+   alto quanto lui e col suo stesso velo, la porta di tutti i comandi. Aperto
+   prende il velo d'accento, come la voce di un menu che ha aperto il suo
+   sottomenu. */
+.grid-ribbon-quick .grid-ribbon-button {
+  padding: 0 var(--space-4) 0 var(--space-3);
+  border-radius: var(--radius-control);
+  background: var(--overlay-hover);
+  color: var(--text);
+  font-weight: var(--weight-medium);
+}
+.grid-ribbon-quick .grid-ribbon-button:hover:not([aria-disabled="true"]) {
+  background: var(--overlay-active);
+}
+.grid-ribbon-quick .grid-ribbon-button[aria-expanded="true"],
+.grid-ribbon-quick .grid-ribbon-button[aria-expanded="true"]:hover {
+  background: var(--accent-wash);
+  color: var(--accent);
+}
+/* Sotto i 560 px «Comandi» resta col suo disegno e la freccina: il nome
+   sta nel suggerimento e nel nome accessibile. */
+@container sheet (max-width: 560px) {
+  .grid-ribbon-quick .grid-ribbon-button {
+    padding: 0 var(--space-2);
+  }
+  .grid-ribbon-quick .grid-ribbon-label {
+    display: none;
+  }
+}
+
+
+/* Le finestre del foglio: i campi stretti come nelle finestre di Excel, le
+   sezioni con un filo, gli elenchi su un fondo loro. */
+.grid-dialog,
+.grid-dialog-form,
+.grid-dialog-fields {
+  gap: var(--space-4);
+}
+.grid-dialog-section {
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-5) var(--space-5);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+}
+.grid-dialog-legend {
+  padding: 0 var(--space-2);
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-bold);
+}
+.grid-dialog-choices {
+  gap: var(--space-2);
+}
+.grid-dialog-field {
+  column-gap: var(--space-5);
+  row-gap: var(--space-3);
+}
+.grid-dialog-label {
+  color: var(--text);
+  font-size: var(--text-sm);
+}
+.grid-dialog-check,
+.grid-dialog-choice {
+  gap: var(--space-3);
+  min-height: 24px;
+}
+.grid-dialog-check input,
+.grid-dialog-choice input {
+  margin: 0;
+  accent-color: var(--accent);
+}
+.grid-dialog-check:has(> input:disabled),
+.grid-dialog-choice:has(> input:disabled) {
+  opacity: 0.5;
+}
+.grid-dialog-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+.grid-dialog-error {
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-control);
+  background: var(--danger-wash);
+  /* Sul velo del pericolo il testo pieno, come gli altri avvisi della serie:
+     il rosso sul suo velo scuro non arriva a 4.5:1. */
+  color: var(--text);
+  font-size: var(--text-sm);
+}
+.grid-dialog-toolbar {
+  gap: var(--space-3);
+}
+.grid-preview-stage {
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--bg-input);
+}
+.grid-preview-page {
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-1);
+}
+.grid-dialog-preview .grid-dialog-toolbar {
+  align-items: center;
+}
+.grid-dialog-results {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--bg-input);
+}
+/* Il risultato dei comandi che leggono: numeri allineati a destra, testata
+   attenuata, riferimenti come collegamenti. */
+.grid-result-table {
+  color: var(--text);
+  font-size: var(--text-base);
+  font-variant-numeric: tabular-nums;
+}
+.grid-result-table th,
+.grid-result-table td {
+  padding: var(--space-2) var(--space-4);
+  border-bottom: 1px solid var(--border);
+  text-align: start;
+  vertical-align: top;
+}
+.grid-result-table thead th {
+  background: var(--bg-elev);
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+}
+.grid-result-key {
+  color: var(--muted);
+  font-weight: var(--weight-regular);
+}
+.grid-result-table .grid-result-number {
+  text-align: end;
+  white-space: nowrap;
+}
+.grid-result-ref {
+  border: none;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.grid-result-ref:hover {
+  color: var(--accent-soft);
+}
+.grid-dialog-names-head,
+.grid-dialog-names-row {
+  column-gap: var(--space-4);
+}
+.grid-dialog-names-head {
+  padding: 0 var(--space-4);
+  color: var(--muted);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-bold);
+}
+.grid-dialog-signature {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+}
+.grid-dialog-color-button {
+  gap: var(--space-3);
+  min-height: var(--control-h);
+  padding: 0 var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--bg-input);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+.grid-dialog-color-button:hover,
+.grid-dialog-color-button[aria-expanded="true"] {
+  border-color: var(--border-strong);
+}
+.grid-dialog-color-chip {
+  border: 1px solid var(--border-strong);
+  border-radius: 2px;
+}
+.grid-dialog-color-chip--auto {
+  border-style: dashed;
+}
+.grid-dialog-palette {
+  gap: var(--space-2);
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--bg-elev);
+  font-size: var(--text-sm);
+}
+.grid-dialog-palette-title {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-bold);
+}
+.grid-dialog-palette-grid {
+  gap: 2px;
+}
+.grid-dialog-palette-auto {
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid transparent;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+.grid-dialog-palette-auto:hover,
+.grid-dialog-palette-auto[aria-pressed="true"] {
+  background: var(--bg-hover);
+}
+.grid-dialog-swatch {
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  cursor: pointer;
+}
+.grid-dialog-swatch[aria-pressed="true"] {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.grid-dialog-swatch:hover,
+.grid-dialog-swatch:focus-visible,
+.grid-dialog-palette-auto:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 1px;
+}
+/* L'esempio e le anteprime sono un pezzo di foglio: carta bianca come nella
+   cartella, anche col buio, perché i colori sono quelli del file. */
+.grid-dialog-sample-text,
+.grid-dialog-preview-text,
+.grid-dialog-border-preview {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  background: #ffffff;
+  color: #000000;
+}
+.grid-dialog-sample-text,
+.grid-dialog-preview-text {
+  padding: var(--space-3) var(--space-4);
+}
+.grid-dialog-border-preview {
+  padding: var(--space-6);
+}
+.grid-dialog-border-cell {
+  font-size: var(--text-sm);
+}
+

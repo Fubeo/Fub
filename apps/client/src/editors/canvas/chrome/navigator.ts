@@ -12,7 +12,7 @@
 // mappa resta ferma (lo stesso inquadramento, le schede dipinte una volta in
 // un livello a parte) e si rifà solo il riquadro.
 //
-// I colori li dice la pelle (`skin/editors.css`): le variabili di
+// I colori li dice la pelle (`skin/canvas.css`): le variabili di
 // `.canvas-navigator`, lette una volta per disegno, e per una scheda colorata
 // `--canvas-color` della sua chiave, letto da un campione nascosto che porta
 // la stessa `data-canvas-color` delle schede. Un colore libero è un dato del

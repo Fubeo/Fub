@@ -254,7 +254,7 @@ i nomi e le regole della tela stanno in
   copiata lo porta con sé. Un colore inventato è un rifiuto `invalid`, come
   prima. Una lavagna riaperta da un file che quel colore non ce l'ha più non
   lo riscrive, e un annulla che lo riporta è rifiutato.
-- **Come si disegna.** Lo dice la pelle (`skin/editors.css`): la tela mette
+- **Come si disegna.** Lo dice la pelle (`skin/canvas-cards.css`): la tela mette
   sulla scheda e sul gruppo dell'arco `data-canvas-color` (`1`…`6`, il nome
   di uno dei nove, `custom`) e, per un colore libero, il valore del file in
   `--canvas-color`. Un colore che Fub non conosce non mette né l'una né
@@ -301,7 +301,7 @@ Le regole stanno in `crates/fub-canvas-core/src/text.rs` e, uguali, in
   che la scheda mostra già non scrive niente.
 - **Come si disegna.** La tela mette sulla scheda `data-text-size` e
   `data-text-align` quando non sono di serie; la misura e l'allineamento li
-  dà la pelle (`skin/editors.css`), sul testo letto e su quello che si
+  dà la pelle (`skin/canvas-cards.css`), sul testo letto e su quello che si
   scrive.
 
 ### Nella riga delle opzioni

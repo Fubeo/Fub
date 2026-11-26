@@ -8,7 +8,7 @@
 // porta una Base si allarga lui, non la Base dentro.
 import { describe, expect, it } from "vitest";
 import document from "./skin/document.css?raw";
-import editors from "./skin/editors.css?raw";
+import { EDITORS_SKIN as editors } from "./editors-skin";
 import structure from "./structure.css?raw";
 
 const ESCLUSA = ":not(:where(.base-surface *))";

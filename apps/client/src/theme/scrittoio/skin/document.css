@@ -2665,7 +2665,7 @@ button.cm-fub-page-icon:focus-visible {
    Queste regole sono delle tabelle Markdown, non delle tabelle che un
    componente disegna dentro la pagina: la Base incorporata in una nota sta
    dentro `.markdown-rendered`, e la sua tabella ha la sua pelle
-   (`skin/editors.css`, `.base-table`). Per questo ogni selettore lascia
+   (`skin/base-views.css`, `.base-table`). Per questo ogni selettore lascia
    fuori ciò che sta in una `.base-surface`, dentro un `:where()` che non
    alza la specificità. */
 .markdown-rendered table:not(:where(.base-surface *)) {

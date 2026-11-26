@@ -1,0 +1,33 @@
+/** L'anatomia del pezzo `skin/grid.css`. Il foglio di calcolo: la griglia, la barra, le finestre, gli oggetti. */
+import { REST, S, SELECTABLE, type PartAnatomy } from "./types";
+
+export const GRID: PartAnatomy = {
+  part: "grid",
+  layer: "cornice",
+  components: [
+    // L'editor di testo che sta sotto a tutte le superfici: sono classi di
+    // CodeMirror, e la pelle le veste tutte — il tema dell'editor
+    // (`editors/text/theme.ts`) non porta colori (issue #242).
+    { name: "text-editor", layer: "contenuto", layers: { "cm-activeLine": "segno" }, states: [S("rest"), S("focused"), S("selected")], hooks: ["cm-editor", "cm-content", "cm-activeLine"] },
+    // Le celle sono contenuto con l'aspetto del file: la pelle ne veste i segni
+    // dalla riga (`.grid-row .selected`), non dalla cella. Le intestazioni e la
+    // vista sono cornice, l'editor della cella è un segno.
+    { name: "grid-surface", gate: { scope: ["grid-viewport"] }, unstyled: ["grid-cell", "no-gridlines", "grid-paper", "grid-paper-left-cells", "grid-rule-column"], layers: { "grid-cell": "contenuto", "no-gridlines": "contenuto", "grid-paper": "contenuto", "grid-paper-left-cells": "contenuto", "grid-rule-column": "contenuto", "grid-cell-editor": "segno", "grid-cell-editor-frame": "segno", "grid-comment-mark": "segno", "grid-move-preview": "segno", "grid-formula-ref-1": "segno", "grid-formula-ref-2": "segno", "grid-formula-ref-3": "segno", "grid-formula-ref-4": "segno", "grid-formula-ref-5": "segno", "grid-formula-ref-6": "segno", "cm-formula-ref-1": "segno", "cm-formula-ref-2": "segno", "cm-formula-ref-3": "segno", "cm-formula-ref-4": "segno", "cm-formula-ref-5": "segno", "cm-formula-ref-6": "segno", "grid-selection": "segno", "grid-mark-edge": "segno", "grid-mark-ring": "segno", "grid-mark-veil": "segno", "grid-mark-band-col": "segno", "grid-mark-band-row": "segno", "grid-mark-handle": "segno", "grid-mark-touch": "segno", "grid-mark-freeze": "segno", "grid-mark-copy": "segno", "grid-mark-cut": "segno", "grid-mark-ants": "segno", "grid-ants": "segno", "grid-mark-flash": "segno", "grid-resize-guide": "segno", "grid-resize-label": "segno", "after-hidden": "segno", "selected": "segno", "stale": "segno", "conflict": "segno" }, states: SELECTABLE, hooks: ["grid-surface", "grid-formula-bar", "grid-cell-name", "grid-formula-editor", "grid-viewport", "grid-row", "grid-cell", "grid-header", "grid-column-header", "grid-row-header", "grid-corner", "grid-paper", "grid-paper-top", "grid-paper-corner", "grid-paper-left-head", "grid-paper-left-cells", "grid-rule-column", "grid-cell-editor", "grid-cell-editor-frame", "grid-notice", "grid-draft-notice", "grid-sheets", "grid-comment-mark", "grid-comment-card", "grid-comment-head", "grid-comment-kind", "grid-comment-where", "grid-comment-resolved", "grid-comment-thread", "grid-comment-post", "grid-comment-author", "grid-comment-text", "grid-comment-reply", "grid-comment-field", "grid-comment-actions", "grid-comment-action", "grid-comment-error", "resolved", "grid-move-preview", "grid-formula-ref-1", "grid-formula-ref-2", "grid-formula-ref-3", "grid-formula-ref-4", "grid-formula-ref-5", "grid-formula-ref-6", "cm-formula-ref-1", "cm-formula-ref-2", "cm-formula-ref-3", "cm-formula-ref-4", "cm-formula-ref-5", "cm-formula-ref-6", "grid-selection", "grid-mark-edge", "grid-mark-ring", "grid-mark-veil", "grid-mark-band-col", "grid-mark-band-row", "grid-mark-handle", "grid-mark-touch", "grid-mark-freeze", "grid-mark-copy", "grid-mark-cut", "grid-mark-ants", "grid-ants", "grid-mark-flash", "grid-resize-guide", "grid-resize-label", "after-hidden", "selected", "stale", "conflict", "threaded", "no-gridlines"] },
+    // Gli oggetti di un foglio (grafici, immagini, forme) hanno i colori del
+    // file in linea: il gate dell'aspetto non li copre ancora.
+    { name: "grid-objects", layers: { "grid-object": "contenuto", "grid-object-handle": "segno", "grid-object-missing": "segno", "grid-object-text-editor": "segno" }, states: SELECTABLE, hooks: ["grid-object", "grid-object-handle", "grid-object-missing", "grid-object-text-editor"] },
+    // La barra multifunzione del foglio, e ciò che apre nei riquadri. La sua
+    // forma e la sua pelle sono quelle del kit (`kit-ribbon`, in `kit.ts`):
+    // qui restano le parti solo sue, i segni, la mini-barra e «Comandi».
+    { name: "grid-ribbon", states: [S("rest"), S("hover"), S("pressed"), S("focused"), S("disabled")], hooks: ["grid-ribbon-mini", "grid-ribbon-quick", "grid-ribbon-button", "grid-ribbon-bold", "grid-ribbon-italic", "grid-ribbon-underline", "grid-ribbon-strike", "grid-ribbon-field-label", "grid-ribbon-label"] },
+    { name: "grid-ribbon-popover", states: [S("rest"), S("hover"), S("focused"), S("selected")], hooks: ["grid-ribbon-popup-group", "grid-ribbon-palette", "grid-ribbon-palette-empty", "grid-ribbon-palette-title", "grid-ribbon-palette-grid", "grid-ribbon-swatch", "grid-ribbon-swatch-base", "grid-ribbon-gallery", "grid-ribbon-gallery-grid", "grid-ribbon-gallery-item", "grid-ribbon-table-preview", "grid-ribbon-cell-sample"] },
+    // Le finestre che la barra apre (Formato celle, Ordina, Gestione nomi…).
+    { name: "grid-dialog", states: [S("rest"), S("hover"), S("focused"), S("selected"), S("disabled")], hooks: ["grid-dialog", "grid-dialog-border-cell", "grid-dialog-border-preview", "grid-dialog-check", "grid-dialog-choice", "grid-dialog-choices", "grid-dialog-color-button", "grid-dialog-color-chip", "grid-dialog-color-chip--auto", "grid-dialog-error", "grid-dialog-field", "grid-dialog-fields", "grid-dialog-form", "grid-dialog-label", "grid-dialog-legend", "grid-dialog-names-head", "grid-dialog-names-row", "grid-dialog-note", "grid-dialog-preview", "grid-preview-stage", "grid-preview-page", "grid-dialog-palette", "grid-dialog-palette-auto", "grid-dialog-palette-grid", "grid-dialog-palette-title", "grid-dialog-preview-text", "grid-dialog-results", "grid-result-key", "grid-result-number", "grid-result-ref", "grid-result-table", "grid-dialog-sample-text", "grid-dialog-section", "grid-dialog-signature", "grid-dialog-swatch", "grid-dialog-toolbar"] },
+    // La barra multifunzione del documento. La sua forma e la sua pelle sono
+    // quelle del kit (`kit-ribbon`, in `kit.ts`), come per la barra del
+    // foglio: qui restano le parti solo sue, l'accesso rapido, i segni del
+    // formato, i campi e la galleria degli stili.
+    { name: "rich-ribbon", states: [S("rest"), S("hover"), S("pressed"), S("focused"), S("disabled")], hooks: ["rich-ribbon-bold", "rich-ribbon-field-label", "rich-ribbon-italic", "rich-ribbon-mini", "rich-ribbon-strike", "rich-ribbon-underline"] },
+    { name: "content-look", layer: "contenuto", states: REST, hooks: ["look-file"] },
+  ],
+};

@@ -20,7 +20,7 @@ import { minifySkin } from "./skin-minify.mjs";
  * Il peso, in byte minimizzati, verso cui la build divide la pelle: tanti
  * gruppi quanti ne servono perché la media stia sotto. Un taglio cade al
  * confine fra due pezzi, quindi un gruppo può superarlo di mezzo pezzo (il più
- * grosso, `editors.css`, minimizzato pesa circa 100 KB): resta comunque ben
+ * grosso, `document.css`, minimizzato pesa circa 75 KB): resta comunque ben
  * sotto il budget per chunk di `vite.config.ts`.
  */
 export const SKIN_GROUP_TARGET = 300_000;

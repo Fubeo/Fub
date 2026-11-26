@@ -6,7 +6,7 @@
 // Con «Il dito scrive» (T64) un dito scrive e due dita spostano.
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { t } from "../../i18n/strings";
-import editorsSkin from "../../theme/scrittoio/skin/editors.css?raw";
+import { EDITORS_SKIN } from "../../theme/scrittoio/editors-skin";
 import structure from "../../theme/scrittoio/structure.css?raw";
 import { parseInkBrush, penOf } from "../../ink/brush";
 import { quantizeInk, type InkSample } from "../../ink/sample";
@@ -1611,7 +1611,7 @@ describe("la scheda tiene l'aspetto del passaggio sotto il velo e il tratto (T20
   });
 
   it("ogni regola della pelle che mostra qualcosa al passaggio sulla scheda vale anche con `data-hover-held`", () => {
-    const skin = editorsSkin;
+    const skin = EDITORS_SKIN;
     const rules = [...skin.matchAll(/([^{}]+)\{[^}]*\}/g)].map(([, selectors]) => selectors!.split(",").map((s) => s.replace(/\/\*[\s\S]*?\*\//g, "").trim()));
     // La scheda (`canvas-node`, `canvas-node-file`…), non una sua parte col
     // proprio passaggio (`canvas-node-twins`, T22).

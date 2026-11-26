@@ -1,0 +1,866 @@
+/* La pelle della Base: le viste (tabella, schede, bacheca, calendario, linea del tempo, mappa). */
+
+/* La tabella arriva ai bordi della scatola, senza margine. */
+.base-body:has(> .base-table-viewport) {
+  padding: 0;
+}
+/* La tabella del prototipo (`.btab`): larga quanto la scatola, mai meno di
+   560 px (oltre, la finestra scorre di lato); le colonne prendono la misura
+   del loro contenuto, su una riga sola. */
+.base-table {
+  min-width: 560px;
+  font-size: var(--text-base);
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+}
+.base-table th,
+.base-table td {
+  padding: 0 10px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  white-space: nowrap;
+}
+.base-table td {
+  height: 38px;
+}
+/* Un filo fra le colonne, nell'intestazione, nelle righe e nel piede. */
+/* Senza un fratello anonimo a sinistra di `+` o `~`: il perché è in `theme/fratelli.test.ts`. */
+.base-table tr > th:where(:nth-child(n + 2)),
+.base-table tr > td:where(:nth-child(n + 2)) {
+  border-left: 1px solid var(--border);
+}
+.base-table th {
+  height: 34px;
+  background: var(--sheet);
+  color: var(--muted);
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+}
+/* L'intestazione è il pulsante del menu della colonna: occupa la cella, e al
+   passaggio si accende come una riga. */
+.base-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: calc(100% + 20px);
+  height: 34px;
+  margin: 0 -10px;
+  padding: 0 10px;
+  overflow: hidden;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.base-head:hover,
+.base-head[aria-expanded="true"] {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+.base-head:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: calc(-1 * var(--focus-ring-width));
+}
+/* La figura della specie dei valori, davanti al nome della colonna. */
+.base-head-icon {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  margin-right: var(--space-1);
+  color: var(--muted);
+}
+.base-head-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.base-head-sort {
+  flex: none;
+  color: var(--accent-soft);
+}
+/* Il piede della tabella: quante note e i riepiloghi, piccoli e grigi, in
+   fondo alla finestra mentre si scorre. */
+.base-table tfoot td {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  height: 32px;
+  border-top: 1px solid var(--border);
+  border-bottom: 0;
+  background: var(--sheet);
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.base-foot-count,
+.base-foot-summary {
+  margin-right: var(--space-4);
+}
+.base-foot-summary {
+  display: inline-flex;
+  gap: var(--space-2);
+}
+.base-foot-value {
+  font-variant-numeric: tabular-nums;
+}
+.base-foot-error {
+  color: var(--danger);
+}
+/* Con la ricerca i riepiloghi restano su tutte le note della vista: più
+   tenui, e il suggerimento lo dice. */
+.base-foot-dimmed {
+  opacity: 0.6;
+}
+/* «Nuova nota» in fondo alle righe: grigia, e d'inchiostro al passaggio. */
+.base-add-row > td {
+  height: 38px;
+}
+.base-add-row-button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  height: 100%;
+  color: var(--muted);
+  text-align: left;
+  cursor: pointer;
+}
+.base-add-row-button > svg {
+  width: 14px;
+  height: 14px;
+}
+.base-add-row-button:hover,
+.base-add-row-button:focus-visible {
+  color: var(--text);
+}
+.base-add-row-button:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: calc(-1 * var(--focus-ring-width));
+}
+.base-add-row-button:disabled,
+.base-add-row-button:disabled:hover {
+  color: var(--muted);
+  cursor: default;
+  opacity: 0.6;
+}
+.base-table tbody tr:not(.base-add-row):hover > td {
+  background: color-mix(in srgb, var(--overlay-hover) 70%, transparent);
+}
+/* Il titolo della nota, in grassetto come nel prototipo (`td.t`), e intero:
+   la colonna si allarga per lui. */
+.base-table td > button.base-title {
+  max-width: none;
+  font-weight: var(--weight-bold);
+}
+/* Le celle scelte per la somma nella banda (E24): lo stesso velo della
+   selezione della Tabella. */
+.base-table tbody td[data-picked],
+.base-table tbody tr:hover > td[data-picked] {
+  background: var(--accent-veil);
+}
+/* Il nome della nota apre la nota: inchiostro pieno, e la matita blu al
+   passaggio. Vale per la tabella, le schede e la bacheca. */
+.base-table td > button,
+.base-card > button,
+.base-kanban-card > button {
+  max-width: 100%;
+  margin-left: calc(-1 * var(--space-3));
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-chip);
+  overflow: hidden;
+  color: var(--text);
+  font-weight: var(--weight-medium);
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.base-table td > button:hover,
+.base-table td > button:focus-visible,
+.base-card > button:hover,
+.base-card > button:focus-visible,
+.base-kanban-card > button:hover,
+.base-kanban-card > button:focus-visible {
+  background: var(--accent-wash);
+  color: var(--accent);
+}
+.base-table td > button:active,
+.base-card > button:active,
+.base-kanban-card > button:active {
+  background: var(--accent-wash);
+  color: var(--accent-soft);
+}
+/* Una cella che si scrive sembra una cella, non un campo: il bordo arriva al
+   passaggio e l'anello col fuoco. */
+.base-cell input:where(:not([type="checkbox"])) {
+  height: 26px;
+  margin-left: calc(-1 * var(--space-3));
+  padding: 0 var(--space-3);
+  border-color: transparent;
+  border-radius: var(--radius-chip);
+  background: transparent;
+}
+.base-cell input:where(:not([type="checkbox"])):hover {
+  border-color: var(--border-strong);
+}
+.base-cell input:where(:not([type="checkbox"])):focus-visible {
+  border-color: var(--focus-ring);
+  background: var(--bg-elev);
+}
+/* Una cella in conflitto (la nota è cambiata mentre si scriveva): il bordo
+   rosso resta, anche senza il passaggio, finché la scelta sopra le righe non la
+   chiude (IMP-137). */
+.base-cell input:where(:not([type="checkbox"]))[aria-invalid="true"] {
+  border-color: var(--danger);
+}
+.base-cell-error {
+  color: var(--danger);
+}
+.base-cards {
+  gap: var(--space-5);
+}
+.base-card {
+  padding: var(--space-5) var(--space-6);
+  border-radius: var(--radius-control);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-1);
+}
+/* L'elenco è la stessa scheda senza rilievo: una riga fra due fili. */
+.base-list .base-card {
+  padding: var(--space-4) 0;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.base-field {
+  align-items: center;
+  gap: var(--space-5);
+  min-height: 28px;
+  font-size: var(--text-sm);
+}
+/* Etichetta e valore in due colonne ferme: testo, numero o casella, ogni
+   valore comincia alla stessa ascissa in tutte le righe della scheda. */
+.base-field > span:first-child {
+  flex: 0 0 38%;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.base-field > .base-cell {
+  flex: 1 1 0;
+  min-width: 0;
+  font-variant-numeric: tabular-nums;
+}
+.base-kanban {
+  gap: var(--space-5);
+}
+.base-kanban-column {
+  padding: var(--space-4);
+  border-radius: var(--radius-control);
+  background: var(--sheet-2);
+}
+.base-kanban-column > h3 {
+  margin: 0 0 var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--weight-bold);
+}
+.base-kanban-column > button {
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-chip);
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+.base-kanban-column > button:hover,
+.base-kanban-column > button:focus-visible {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+.base-kanban-column > button:active {
+  background: var(--overlay-active);
+}
+.base-kanban-card {
+  margin-top: var(--space-3);
+  padding: var(--space-3) var(--space-5);
+  border-radius: var(--radius-chip);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-1);
+}
+.base-kanban-card[draggable="true"] {
+  cursor: grab;
+}
+.base-kanban > input {
+  flex: none;
+  width: 12rem;
+}
+/* Il calendario (T17): il mese del prototipo (`.cal`, `.dow`, `.out`, `.d`,
+   `.today`, `.over`, `.ev`), fino ai bordi della scatola. Sopra, la testa
+   col mese, i due passi e «Oggi»; la griglia scorre di lato sotto i 560 px
+   del prototipo, la testa no. */
+.base-body:has(> .base-calendar),
+.base-body:has(> .base-timeline) {
+  padding: 0;
+}
+.base-cal-head,
+.base-tl-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: 40px;
+  padding: 6px 10px 6px 6px;
+  border-bottom: 1px solid var(--border);
+}
+.base-cal-title,
+.base-tl-title {
+  margin: 0;
+  padding: 0 var(--space-2);
+  color: var(--text);
+  font-size: var(--text-base);
+  font-weight: var(--weight-bold);
+  white-space: nowrap;
+}
+.base-cal-nav,
+.base-tl-nav {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  height: 28px;
+  min-width: 28px;
+  padding: 0 var(--space-3);
+  border-radius: 7px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.base-cal-prev > svg,
+.base-tl-prev > svg {
+  transform: scaleX(-1);
+}
+.base-cal-today,
+.base-tl-today {
+  margin-left: var(--space-2);
+}
+.base-cal-nav:hover,
+.base-tl-nav:hover {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+.base-cal-undated,
+.base-tl-undated {
+  margin-left: auto;
+  padding-left: var(--space-4);
+  overflow: hidden;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.base-cal-scroll {
+  overflow-x: auto;
+}
+.base-cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(72px, 1fr));
+  min-width: 560px;
+  line-height: 1.4;
+}
+.base-cal-week {
+  display: contents;
+}
+.base-cal-dow,
+.base-cal-day {
+  min-width: 0;
+  min-height: 76px;
+  padding: 4px 5px;
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  font-size: 11.5px;
+  transition: background-color var(--duration-fast);
+}
+.base-cal-week > :last-child {
+  border-right: 0;
+}
+.base-cal-dow {
+  min-height: 0;
+  padding: 6px;
+  color: var(--muted);
+  font-size: 10.5px;
+  font-weight: var(--weight-bold);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.base-cal-day:focus-visible {
+  outline-offset: -2px;
+}
+.base-cal-day[data-out="true"] {
+  background: color-mix(in srgb, var(--sheet-2) 70%, transparent);
+  color: var(--muted);
+}
+.base-cal-num {
+  display: inline-grid;
+  place-items: center;
+  min-width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.base-cal-day[data-today="true"] .base-cal-num {
+  background: var(--accent);
+  color: var(--accent-contrast);
+  font-weight: var(--weight-bold);
+}
+/* Il giorno della settimana accanto al numero si vede solo al telefono,
+   dove i giorni stanno in colonna senza la riga dei nomi. */
+.base-cal-weekday {
+  display: none;
+}
+.base-cal-day[data-over="true"] {
+  background: var(--accent-veil);
+}
+.base-cal-event,
+.base-cal-more {
+  display: block;
+  width: 100%;
+  margin-top: 3px;
+  padding: 2px 6px;
+  overflow: hidden;
+  border-radius: 5px;
+  font-size: inherit;
+  font-weight: var(--weight-medium);
+  line-height: inherit;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.base-cal-event {
+  background: var(--doc-tint-green);
+  color: var(--doc-color-green);
+  cursor: pointer;
+}
+.base-cal-event[draggable="true"] {
+  cursor: grab;
+}
+.base-cal-event[data-dragging="true"] {
+  /* Il posto lasciato dalla nota presa: un contorno tratteggiato col nome
+     ancora leggibile. Un'opacità lo porterebbe sotto 4,5:1. */
+  outline: 1px dashed var(--doc-color-green);
+  outline-offset: -1px;
+  background: transparent;
+}
+.base-cal-more {
+  color: var(--muted);
+}
+.base-cal-more:hover {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+/* Il piede della vista sta sotto la griglia, col filo dell'ultima settimana
+   a dividerli. */
+.base-calendar ~ .base-summaries:not(:empty) {
+  margin-top: 0;
+  padding: var(--space-4) var(--space-7);
+  border-top: 0;
+}
+/* Il calendario senza la sua proprietà data. */
+.base-cal-empty {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-3);
+  padding: var(--space-7);
+  color: var(--muted);
+}
+.base-cal-empty > p {
+  margin: 0;
+}
+.base-cal-empty > p:first-child {
+  color: var(--text);
+}
+/* La proprietà che regge la vista, nella sua testa: le corsie della
+   bacheca, la data del calendario (IMP-3809, IMP-3810). L'etichetta resta
+   visibile; il menu si accorcia prima di spingere fuori la testa. */
+.base-view-key {
+  display: inline-flex;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  white-space: nowrap;
+}
+.base-view-key-select {
+  min-width: 0;
+  max-width: 14rem;
+  height: 28px;
+  padding: 0 var(--space-3);
+  border: none;
+  border-radius: 7px;
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+  background: var(--sheet);
+  color: var(--text);
+  font: inherit;
+  text-overflow: ellipsis;
+}
+.base-view-key-select:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 1.5px var(--accent);
+}
+.base-view-key-select:disabled {
+  opacity: 0.6;
+}
+.base-cal-head > .base-view-key {
+  margin-left: auto;
+  padding-left: var(--space-4);
+}
+.base-cal-undated + .base-view-key {
+  margin-left: 0;
+}
+.base-kanban-head {
+  display: flex;
+  align-items: center;
+  margin-bottom: var(--space-4);
+}
+.base-kanban-empty {
+  margin: 0;
+  color: var(--muted);
+}
+/* Al telefono il mese è una colonna di giorni: niente riga dei nomi né giorni
+   degli altri mesi, e accanto al numero il nome del giorno. */
+@container sheet (max-width: 560px) {
+  .base-cal-grid {
+    grid-template-columns: minmax(0, 1fr);
+    min-width: 0;
+  }
+  .base-cal-week:first-child,
+  .base-cal-day[data-out="true"] {
+    display: none;
+  }
+  .base-cal-day {
+    min-height: 0;
+    padding: 6px 10px;
+    border-right: 0;
+  }
+  .base-cal-weekday {
+    display: inline;
+    margin-left: var(--space-2);
+    color: var(--muted);
+    font-weight: var(--weight-bold);
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+  .base-cal-undated {
+    display: none;
+  }
+  /* Accanto al mese e ai tre bottoni la scelta della data non ci sta: il
+     menu si stringeva fino a «cons…». Va a capo su una riga sua, con
+     l'etichetta allineata alle frecce e il menu largo quanto il suo nome. */
+  .base-cal-head {
+    flex-wrap: wrap;
+    row-gap: var(--space-2);
+  }
+  .base-cal-head > .base-view-key {
+    flex: 1 0 100%;
+    margin-left: 0;
+    padding-left: var(--space-6);
+  }
+}
+/* La linea del tempo (T34): le righe del prototipo (`.tl`, `.tl-a`, `.tl-s`,
+   `.tl-r`, `.tl-t`, `.tl-b`). La testa è quella del calendario, con la scala
+   (settimane, mesi, anni) e a capo quando non ci sta. Le colonne hanno tutte
+   la stessa larghezza: i fili le dividono in ogni riga, come le quarte del
+   prototipo, e il filo d'accento è oggi. */
+.base-tl-head {
+  flex-wrap: wrap;
+}
+.base-tl-zoom {
+  display: inline-flex;
+  flex: none;
+  gap: 1px;
+  margin-left: var(--space-2);
+}
+.base-tl-zoom-option {
+  display: inline-flex;
+  align-items: center;
+  height: 28px;
+  padding: 0 9px;
+  border-radius: 7px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.base-tl-zoom-option:hover {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+.base-tl-zoom-option[aria-pressed="true"] {
+  background: var(--sheet-2);
+  color: var(--text);
+  font-weight: var(--weight-bold);
+}
+.base-tl-scroll {
+  overflow-x: auto;
+}
+.base-tl {
+  min-width: 600px;
+  padding: 6px 12px 14px;
+  line-height: 1.4;
+}
+.base-tl-axis,
+.base-tl-row {
+  display: grid;
+  grid-template-columns: 140px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+}
+.base-tl-axis {
+  height: 28px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.base-tl-axis-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.base-tl-scale {
+  position: relative;
+  height: 100%;
+}
+.base-tl-tick,
+.base-tl-now {
+  position: absolute;
+  top: 7px;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+.base-tl-now {
+  left: var(--tl-now);
+  color: var(--accent);
+  font-weight: var(--weight-bold);
+}
+.base-tl-row {
+  height: 34px;
+}
+.base-tl-name {
+  overflow: hidden;
+  font-weight: var(--weight-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.base-tl-track {
+  position: relative;
+  height: 100%;
+  overflow: hidden;
+  background: repeating-linear-gradient(90deg, transparent 0 calc(100% / var(--tl-columns) - 1px), var(--border) calc(100% / var(--tl-columns) - 1px) calc(100% / var(--tl-columns)));
+}
+.base-tl-track::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: var(--tl-now);
+  width: 1.5px;
+  background: var(--accent);
+  pointer-events: none;
+}
+.base-tl[data-now-out="true"] .base-tl-track::after {
+  display: none;
+}
+.base-tl-track:focus-visible {
+  outline-offset: -2px;
+}
+.base-tl-bar {
+  position: absolute;
+  top: 7px;
+  left: var(--tl-left);
+  width: var(--tl-width);
+  min-width: 10px;
+  height: 20px;
+  padding: 0 7px;
+  overflow: hidden;
+  border-radius: 6px;
+  background: var(--doc-tint-green);
+  color: var(--doc-color-green);
+  font-size: 11.5px;
+  font-weight: var(--weight-medium);
+  line-height: 20px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+/* Una barra che continua oltre i giorni mostrati ha il lato tagliato dritto. */
+.base-tl-bar[data-clip-start="true"] {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+.base-tl-bar[data-clip-end="true"] {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.base-tl-bar[data-grip="move"],
+.base-tl-point[data-grip="move"] {
+  cursor: grab;
+}
+.base-tl-bar[data-dragging="true"],
+.base-tl-point[data-dragging="true"] {
+  cursor: grabbing;
+  box-shadow: var(--shadow-raise);
+}
+/* I due bordi che si prendono per cambiare una data sola. */
+.base-tl-edge {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  cursor: ew-resize;
+}
+.base-tl-edge[data-grip="low"] {
+  left: 0;
+}
+.base-tl-edge[data-grip="high"] {
+  right: 0;
+}
+/* La fine prima dell'inizio: la barra si vede, tratteggiata nel rosso. */
+.base-tl-bar[data-inverted="true"] {
+  outline: 1px dashed var(--danger);
+  outline-offset: -1px;
+  background: transparent;
+  color: var(--danger);
+}
+/* Una data sola: un punto, con la data accanto (prima, verso la fine della
+   riga). */
+.base-tl-point {
+  position: absolute;
+  top: 7px;
+  left: var(--tl-left);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 20px;
+  color: var(--muted);
+  font-size: 11.5px;
+  white-space: nowrap;
+  transform: translateX(-5px);
+  cursor: pointer;
+}
+.base-tl-point::before {
+  content: "";
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: var(--doc-color-green);
+}
+.base-tl-point[data-flip="true"] {
+  flex-direction: row-reverse;
+  transform: translateX(calc(-100% + 5px));
+}
+/* Una nota tutta prima o tutta dopo i giorni mostrati: la sua data al bordo,
+   che porta lì. */
+.base-tl-off {
+  position: absolute;
+  top: 7px;
+  height: 20px;
+  padding: 0 7px;
+  border-radius: 6px;
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 20px;
+  white-space: nowrap;
+}
+.base-tl-off[data-side="before"] {
+  left: 0;
+}
+.base-tl-off[data-side="after"] {
+  right: 0;
+}
+.base-tl-off:hover {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+.base-tl-none {
+  margin: var(--space-4) 0 0;
+  color: var(--muted);
+}
+.base-timeline ~ .base-summaries:not(:empty) {
+  margin-top: 0;
+  padding: var(--space-4) var(--space-7);
+  border-top: 0;
+}
+.base-timeline ~ button {
+  margin-left: var(--space-7);
+}
+/* La linea del tempo senza la sua proprietà d'inizio. */
+.base-tl-empty {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-3);
+  padding: var(--space-7);
+  color: var(--muted);
+}
+.base-tl-empty > p {
+  margin: 0;
+}
+.base-tl-empty > p:first-child {
+  color: var(--text);
+}
+/* Al telefono il nome sta sopra la sua barra, e la riga della scala non ha
+   la colonna dei nomi. */
+@container sheet (max-width: 560px) {
+  .base-tl {
+    min-width: 0;
+    padding: 6px 10px 14px;
+  }
+  .base-tl-axis {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .base-tl-axis-label,
+  .base-tl-undated {
+    display: none;
+  }
+  .base-tl-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+    height: auto;
+    padding-top: var(--space-2);
+  }
+  .base-tl-track {
+    height: 34px;
+  }
+}
+.base-map-atlas {
+  margin-block: var(--space-4);
+  border-radius: var(--radius-control);
+  background: var(--sheet-2);
+  color: var(--border-strong);
+}
+.base-map-marker {
+  cursor: pointer;
+  fill: var(--accent);
+  stroke: var(--sheet);
+  stroke-width: 2;
+}
+.base-map-marker:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 2px;
+}
+/* Il piede delle schede, dell'elenco, della bacheca e della mappa: le stesse
+   parti del piede della tabella, in fila. */
+.base-summaries {
+  gap: var(--space-2) var(--space-4);
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+/* Un filo divide il piede da ciò che riassume. */
+.base-summaries:not(:empty) {
+  margin-top: var(--space-6);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border);
+}
+

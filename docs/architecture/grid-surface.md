@@ -417,9 +417,9 @@ byte salvati, non la sessione, e il rapporto conta ciò che il PDF non porta.
   `export.rs`, `objects.rs`
 - la pelle: `apps/client/src/theme/scrittoio/structure.css` (il piano, le
   zone, la carta, i livelli dei segni, la cella aperta),
-  `theme/scrittoio/skin/editors.css` (sezione «Il foglio di calcolo»: i
-  colori dei segni, delle formiche e della cella aperta) e gli hook in
-  `theme/scrittoio/anatomia/editors.ts` (voce `grid-surface`)
+  `theme/scrittoio/skin/grid.css` (i colori dei segni, delle formiche e
+  della cella aperta) e gli hook in `theme/scrittoio/anatomia/grid.ts` (voce
+  `grid-surface`)
 - il banco: le scene `grid-*` di `apps/client/bench/scene.mjs` (sulla
   cartella grande `?workbook=large`, gli stati del prototipo delle celle nel
   foglio pieno: l'intervallo, oltre la riga bloccata, la cella aperta e la

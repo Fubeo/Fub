@@ -7,7 +7,7 @@
 // (`THEME_2_OPTIONAL_PAIRS` in `recipe.test.ts`); qui si prova che i segni
 // leggono quei ruoli, dalla pelle e non dall'elemento.
 import { describe, expect, it } from "vitest";
-import editors from "./skin/editors.css?raw";
+import { EDITORS_SKIN as editors } from "./editors-skin";
 import { THEME_2_OPTIONAL_PAIRS } from "./profile";
 
 const MARKS = [
