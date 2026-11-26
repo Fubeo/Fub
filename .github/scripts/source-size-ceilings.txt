@@ -38,7 +38,6 @@
 1600 apps/client/src/panels/explorer.ts
 1686 apps/client/src/panels/settings.ts
 2444 apps/client/src/shells/scrittoio/launcher/launcher.test.ts
-5405 apps/client/src/state/document-controller.ts
 2293 apps/client/src/state/document-session.ts
 1758 apps/client/src/tabella/frame/frame.ts
 1986 apps/client/src/theme/scrittoio/skin/draw.css

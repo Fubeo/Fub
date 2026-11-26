@@ -33,7 +33,7 @@ incorporate in una nota (`apps/client/src/editors/base/renderer.ts`) la carica
 col primo blocco da disegnare.
 
 Un file il cui pezzo è spento si apre «solo come file»: la famiglia
-`file-only` di `apps/client/src/state/document-controller.ts` non viene dal
+`file-only` di `apps/client/src/state/document-controller-surfaces.ts` non viene dal
 registro e mostra nome, dimensione, «Accendi …» e «Apri con un'altra app».
 Quando un componente si spegne con un suo file aperto, il riquadro prima salva
 ciò che la sessione ha in sospeso, poi passa a «solo come file». Se il
@@ -54,6 +54,6 @@ la mappa non ha apre la scheda e basta.
 - `apps/client/src/editors/core/bootstrap.ts`
 - `apps/client/src/editors/core/component-surfaces.ts`
 - `apps/client/src/state/components.ts`
-- `apps/client/src/state/document-controller.ts`
+- `apps/client/src/state/document-controller.ts` e le sue parti `document-controller-*.ts`
 - `apps/client/src/panels/components-page.ts`
 - `apps/client/vite.config.ts`

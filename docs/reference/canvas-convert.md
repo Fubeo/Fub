@@ -6,7 +6,7 @@
 > **Fonti autorevoli:** `apps/client/src/editors/canvas/engine-convert.ts`
 > (`_extractNote`, `_copyNoteText`, `_replaceFile`), `engine-names.ts` (`proposedNoteName`), la
 > porta `CanvasNotesPort` e il suo lato della shell in
-> `apps/client/src/state/document-controller.ts`; le prove in
+> `apps/client/src/state/document-controller-ports.ts`; le prove in
 > `apps/client/src/editors/canvas/engine-convert-crop.test.ts` («convertire (T70)»).
 
 Sono comandi del catalogo della lavagna (`canvas.extract_note`,

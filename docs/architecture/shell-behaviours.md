@@ -159,7 +159,7 @@ Ciò che la shell fa sopra le porte generiche, senza contratti propri:
   ×, l'editor che una divisione sposta), il fuoco torna nel riquadro col
   fuoco: all'elemento di prima se è ancora lì, altrimenti alla superficie
   della scheda attiva, alla linguetta attiva o al riquadro vuoto
-  (`keepFocusInPanes` in `state/document-controller.ts`). Un fuoco andato
+  (`keepFocusInPanes` in `state/document-controller-draw.ts`). Un fuoco andato
   altrove intanto non si tocca. Il divisore fra riquadri mosso con le
   frecce si rifà a ogni passo e il fuoco passa a quello nuovo nello stesso
   posto (`layoutTree`). Il lanciatore, aprendosi, chiude il menu aperto
@@ -179,7 +179,7 @@ Ciò che la shell fa sopra le porte generiche, senza contratti propri:
   attiva: il testo col suo cursore, il foglio di un disegno, la pagina in
   Lettura. Se la superficie non lo prende va sulla linguetta attiva, mai sul
   `body` (`focusShownAfter` e `focusPaneSurface` in
-  `state/document-controller.ts`). Vale anche se il fuoco era sulla
+  `state/document-controller-draw.ts`). Vale anche se il fuoco era sulla
   linguetta o nell'albero; un fuoco andato intanto altrove fuori dai riquadri
   (un dialogo, il lanciatore) non si tocca. Un clic su una linguetta lascia
   invece il fuoco sulla linguetta, da cui le frecce della striscia

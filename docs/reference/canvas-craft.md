@@ -5,7 +5,7 @@
 > **Fonti autorevoli:** `apps/client/src/editors/core/cards/kinds/craft.ts`
 > (`craftCardRenderer`, `CraftCardPort`), `CRAFT_EXTENSIONS` in
 > `apps/client/src/editors/core/cards/contract.ts`, il lato della shell in
-> `apps/client/src/state/document-controller.ts` (`canvasCards.craft`,
+> `apps/client/src/state/document-controller-ports.ts` (`canvasCards.craft`,
 > `openCardWith`); le prove in `kinds/craft.test.ts` e `contract.test.ts`.
 
 Un file `.vectorcraft`, `.figcraft` o `.pcraft` è una scheda di specie

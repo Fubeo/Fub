@@ -2,8 +2,8 @@
 
 > **Domanda:** che cosa succede alla superficie di una scheda di testo o di
 > un foglio quando il riquadro passa a un'altra scheda, e quando si libera?
-> **Fonti autorevoli:** `apps/client/src/state/document-controller.ts`
-> (`ParkedSurface`, `parkSurface`, `unparkSurface`, `parkingWeight`), le
+> **Fonti autorevoli:** `apps/client/src/state/document-controller-surfaces.ts`
+> (`parkSurface`, `unparkSurface`, `parkingWeight`; `ParkedSurface` in `document-controller-state.ts`), le
 > prove «tornare a una scheda già aperta» in `apps/client/src/shell-vault-scrittura.e2e.test.ts`
 > e «tornare a un foglio già aperto» in `apps/client/src/canvas-edit.e2e.test.ts`.
 

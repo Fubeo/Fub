@@ -79,7 +79,7 @@ Lo stesso blocco in più note: nel file è l'embed del blocco col suo id,
   trasclusione viva (`Transclusions`, `LiveTransclusion`), sulla superficie
   ristretta di `editors/core/range-surface.ts`; `markdown/mount.ts` la monta
   sugli embed (`transclude`) e tiene ferma la resa mentre si scrive;
-  `state/document-controller.ts` le dà le sessioni e il conflitto di un
+  `state/document-controller.ts` (con le sue parti `document-controller-*.ts`) le dà le sessioni e il conflitto di un
   riquadro;
 - `apps/client/src/editors/text/profiles/markdown/block-groups.ts`: «Modifica
   qui» nel gruppo «Trasclusione» della barra;

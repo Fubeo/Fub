@@ -233,7 +233,7 @@ foglio, in ogni editor di testo che non sia un campo:
 - `apps/client/src/state/editor-blocks.ts`: la preferenza `editor.blocks`;
   `apps/client/src/panels/document.ts`: la voce del menu «…»;
 - `apps/client/src/editors/core/surface-modes.ts`: `modeById`, anche con gli id di prima (`formerIds`);
-- `apps/client/src/state/document-controller.ts` e `state/mode-menu.ts`: la
+- `apps/client/src/state/document-controller-modes.ts` e `state/mode-menu.ts`: la
   modalità del riquadro, i comandi `shell.mode.*` e il commutatore della banda;
 - `crates/fub-host/src/settings/editor_specs.rs`: `editor.default-mode` e le sue scelte;
   `apps/client/src/panels/settings-model.ts`: le scelte che il pannello mostra;
