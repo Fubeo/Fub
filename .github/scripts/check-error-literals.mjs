@@ -11,8 +11,9 @@
 // È un cricchetto: un crate sopra la soglia fallisce, e anche uno sotto, perché
 // la soglia va abbassata nello stesso cambio che converte. Si contano i
 // sorgenti di produzione: niente `tests/`, `legacy_tests/`, né il modulo
-// `#[cfg(test)]` in coda a un file. Un `#[cfg(test)] mod tests;` che porta i
-// test in un file a parte non taglia niente: la produzione può seguirlo.
+// `#[cfg(test)]` in coda a un file, né il file che un `#[cfg(test)] mod x;`
+// porta a parte (`x.rs` accanto a `lib.rs`/`mod.rs`, o in `padre/x.rs`):
+// quel file è tutto test, come il modulo in coda di cui prende il posto.
 
 import fs from "node:fs";
 import path from "node:path";
@@ -37,15 +38,34 @@ function production(file) {
   return tests >= 0 ? text.slice(0, tests) : text;
 }
 
+/// I file che un `#[cfg(test)] mod x;` dichiara: sono moduli di prova interi.
+function testFiles(files) {
+  const out = new Set();
+  for (const file of files) {
+    const text = fs.readFileSync(file, "utf8");
+    const base = path.basename(file, ".rs");
+    const dir = ["lib", "main", "mod"].includes(base)
+      ? path.dirname(file)
+      : path.join(path.dirname(file), base);
+    for (const m of text.matchAll(/^#\[cfg\(test\)\]\s*\n\s*mod (\w+);/gm)) {
+      out.add(path.join(dir, `${m[1]}.rs`));
+    }
+  }
+  return out;
+}
+
 function count(crate) {
   const src = path.join(root, "crates", crate, "src");
+  const files = fs
+    .readdirSync(src, { recursive: true })
+    .map((name) => path.join(src, String(name)))
+    .filter((file) => file.endsWith(".rs") && fs.statSync(file).isFile());
+  const tests = testFiles(files);
   let found = 0;
-  for (const name of fs.readdirSync(src, { recursive: true })) {
-    const file = path.join(src, String(name));
-    if (!file.endsWith(".rs") || !fs.statSync(file).isFile()) continue;
+  for (const file of files) {
     const relative = path.relative(src, file).split(path.sep);
     if (relative.includes("legacy_tests") || relative.includes("tests")) continue;
-    if (/^tests?\.rs$/.test(relative.at(-1))) continue;
+    if (/^tests?\.rs$/.test(relative.at(-1)) || tests.has(file)) continue;
     found += (production(file).match(LITERAL) ?? []).length;
   }
   return found;

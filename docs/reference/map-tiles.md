@@ -4,8 +4,8 @@
 > la riga di macchina che ammette i siti, il comando `map_tile`, le regole
 > che l'host fa rispettare e gli errori.
 > **Fonti autorevoli:** `crates/fub-host/src/map_tiles.rs`
-> (`Host::map_tile`), `crates/fub-host/src/settings.rs` (`map.tile-hosts`),
-> `crates/fub-app/src/lib.rs` (`map_tile`); lato shell `appMapTiles` in
+> (`Host::map_tile`), `crates/fub-host/src/settings/specs.rs` (`map.tile-hosts`),
+> `crates/fub-app/src/ipc/viewer.rs` (`map_tile`); lato shell `appMapTiles` in
 > `apps/client/src/editors/base/surface.ts` e il campo
 > `apps/client/src/ui/map-tile-hosts-field.ts`; le prove in
 > `crates/fub-host/tests/map_tiles.rs`.

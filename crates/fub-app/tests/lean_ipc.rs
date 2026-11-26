@@ -9,16 +9,16 @@
 //! riga porta **la ragione per cui non poteva essere un comando del registro,
 //! una view o una query**.
 //!
-//! Non è un test di comportamento: è un test sul **sorgente**. Legge
-//! `src/lib.rs` con `include_str!` — che è anche ciò che lo fa ricompilare
-//! quando quel file cambia — e ne estrae due insiemi che ricava per strade
-//! indipendenti:
+//! Non è un test di comportamento: è un test sul **sorgente**. Legge i file di
+//! `src/ipc/` con `include_str!` — che è anche ciò che lo fa ricompilare
+//! quando uno di quei file cambia — e ne estrae due insiemi che ricava per
+//! strade indipendenti:
 //!
 //! 1. **i comandi definiti**, cioè i nomi di funzione che seguono un vero
 //!    `#[tauri::command]`;
 //! 2. **i comandi registrati**, cioè i nomi dentro `tauri::generate_handler!`.
 //!
-//! **Questo test giudica `lib.rs`, e la superficie IPC sta tutta lì** — e la
+//! **Questo test giudica `src/ipc/`, e la superficie IPC sta tutta lì** — e la
 //! seconda metà di quella frase, che prima era una speranza, adesso è un
 //! presidio. La zona cieca misurata dalla
 //! [0106](../../../docs/decisions/0191-ui-dichiarativa-e-renderer.md) era questa:
@@ -31,16 +31,17 @@
 //! seconda superficie o **portare il numero a due**, e la seconda lascia il
 //! difetto in piedi con la prosa aggiornata.
 //!
-//! Adesso il file che il test legge non è più una scelta del test: è
+//! Adesso i file che il test legge non sono più una scelta del test: è
 //! `walk_sources`, che apre la cartella `src/` e la guarda tutta
-//! (`ipc_surface_lives_in_a_single_file`). **La superficie IPC di questo
-//! crate è un file**, e un secondo file che ne dichiari una diventa rosso per
-//! nome, con i comandi che ha dentro elencati. Il conto resta e non è un
-//! doppione: guarda gli stessi file da fuori, con un `grep` che non condivide
-//! niente con questo estrattore — se una forma sfugge a uno dei due, l'altra
-//! metà del difetto la prende comunque. I file di `crates/fub-app/src` in cui
-//! compare un `#[tauri::command]` o un `generate_handler!` sono
-//! **uno** [conta: files-with-ipc-surface].
+//! (`ipc_surface_lives_in_one_folder`). **La superficie IPC di questo crate è
+//! una cartella**, `src/ipc/`, e due cose diventano rosse per nome: un file
+//! fuori dalla cartella che dichiari un comando o un `generate_handler!`, con i
+//! comandi che ha dentro elencati, e un file nella cartella che [`SURFACE`] non
+//! elenca. Fino al 2026-11-26 la superficie era un file solo, `src/lib.rs`, di
+//! oltre quattromila righe: leggerlo per intero costava più di quanto la regola
+//! proteggesse. La regola è rimasta la stessa — da qui si entra da un posto
+//! solo, ed è un elenco chiuso — e il posto è diventato una cartella con un
+//! file per tema; l'elenco dei file è chiuso come quello dei comandi.
 //!
 //! Poi li confronta fra loro e con l'allowlist, **in tutte e due le direzioni**
 //! ogni volta. La direzione che si vede subito è «ne è comparso uno»; quella che
@@ -60,18 +61,76 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-/// Il sorgente che questo test giudica. `include_str!` e non `std::fs`: così il
-/// legame è una dipendenza di compilazione e non un path da tenere aggiornato a
-/// mano — se il file si sposta, non compila.
-const SOURCE: &str = include_str!("../src/lib.rs");
+/// I file che questo test giudica, `(nome dentro src/, contenuto)`.
+/// `include_str!` e non `std::fs`: così il legame è una dipendenza di
+/// compilazione e non un path da tenere aggiornato a mano — se un file si
+/// sposta, non compila. L'elenco è **chiuso**: [`walk_sources`] pretende che i
+/// file camminati dentro [`THE_FOLDER`] siano esattamente questi, byte per byte,
+/// e un file nuovo della cartella che non sta qui è rosso per nome.
+const SURFACE: &[(&str, &str)] = &[
+    ("ipc/artifacts.rs", include_str!("../src/ipc/artifacts.rs")),
+    ("ipc/commands.rs", include_str!("../src/ipc/commands.rs")),
+    (
+        "ipc/components.rs",
+        include_str!("../src/ipc/components.rs"),
+    ),
+    ("ipc/context.rs", include_str!("../src/ipc/context.rs")),
+    ("ipc/craft.rs", include_str!("../src/ipc/craft.rs")),
+    ("ipc/data.rs", include_str!("../src/ipc/data.rs")),
+    (
+        "ipc/diagnostics.rs",
+        include_str!("../src/ipc/diagnostics.rs"),
+    ),
+    ("ipc/documents.rs", include_str!("../src/ipc/documents.rs")),
+    ("ipc/drawing.rs", include_str!("../src/ipc/drawing.rs")),
+    ("ipc/events.rs", include_str!("../src/ipc/events.rs")),
+    ("ipc/grid.rs", include_str!("../src/ipc/grid.rs")),
+    (
+        "ipc/keybindings.rs",
+        include_str!("../src/ipc/keybindings.rs"),
+    ),
+    ("ipc/lanes.rs", include_str!("../src/ipc/lanes.rs")),
+    (
+        "ipc/live_commands.rs",
+        include_str!("../src/ipc/live_commands.rs"),
+    ),
+    (
+        "ipc/mobile_commands.rs",
+        include_str!("../src/ipc/mobile_commands.rs"),
+    ),
+    ("ipc/mod.rs", include_str!("../src/ipc/mod.rs")),
+    ("ipc/opened.rs", include_str!("../src/ipc/opened.rs")),
+    ("ipc/plugins.rs", include_str!("../src/ipc/plugins.rs")),
+    (
+        "ipc/resource_stream.rs",
+        include_str!("../src/ipc/resource_stream.rs"),
+    ),
+    ("ipc/settings.rs", include_str!("../src/ipc/settings.rs")),
+    ("ipc/themes.rs", include_str!("../src/ipc/themes.rs")),
+    ("ipc/vaults.rs", include_str!("../src/ipc/vaults.rs")),
+    ("ipc/viewer.rs", include_str!("../src/ipc/viewer.rs")),
+    ("ipc/views.rs", include_str!("../src/ipc/views.rs")),
+    ("ipc/windows.rs", include_str!("../src/ipc/windows.rs")),
+];
 
-/// Il nome del file che porta la superficie, dentro `src/`.
-const THE_FILE: &str = "lib.rs";
+/// La cartella che porta la superficie, dentro `src/`.
+const THE_FOLDER: &str = "ipc/";
+
+/// Il sorgente della superficie: i file di [`SURFACE`] uno dopo l'altro. Ogni
+/// file finisce con un a capo, quindi una funzione resta chiusa da `\n}\n`
+/// anche quando è l'ultima del suo file.
+fn source() -> String {
+    SURFACE
+        .iter()
+        .map(|(_, text)| *text)
+        .collect::<Vec<_>>()
+        .join("\n")
+}
 
 /// **Tutti** i sorgenti del crate, letti dal disco: `(nome, contenuto)`.
 ///
 /// È l'unico posto di questo file che usa `std::fs` invece di `include_str!`, e
-/// la ragione è precisamente il contrario di quella che vale per [`SOURCE`]:
+/// la ragione è precisamente il contrario di quella che vale per [`SURFACE`]:
 /// `include_str!` lega il test a un file **che qualcuno ha nominato**, e ciò che
 /// serve qui è vedere i file che nessuno ha nominato. Un elenco di
 /// `include_str!` sarebbe l'elenco a mano di cui questa zona cieca è fatta.
@@ -108,25 +167,42 @@ fn walk_sources() -> Vec<(String, String)> {
 
     // **Una suite che si svuota in silenzio è indistinguibile da una suite
     // verde**, e una camminata è il modo più facile di svuotarsi: basta che la
-    // cartella non sia quella. Le due righe qui sotto sono ciò che lo dice —
-    // la seconda pretende che il file camminato sia **lo stesso byte per byte**
-    // di quello che `include_str!` ha inglobato, cioè che questa camminata e il
-    // resto del file stiano guardando lo stesso albero.
-    let lib = out
+    // cartella non sia quella. Le righe qui sotto sono ciò che lo dice: i file
+    // camminati dentro `src/ipc/` devono essere **gli stessi, byte per byte**,
+    // che `include_str!` ha inglobato in [`SURFACE`], cioè questa camminata e il
+    // resto del file stanno guardando lo stesso albero — e un file della
+    // cartella che l'elenco non conosce è superficie che nessun banco legge.
+    let walked: BTreeMap<&str, &str> = out
         .iter()
-        .find(|(name, _)| name == THE_FILE)
-        .unwrap_or_else(|| {
-            panic!(
-                "walking `{}` does not find `{THE_FILE}`: this walk is looking\n\
-                 at the wrong folder, and a guard that looks at the wrong folder\n\
-                 always passes.",
-                root.display()
-            )
-        });
-    assert_eq!(
-        lib.1, SOURCE,
-        "the walked `{THE_FILE}` is not the one `include_str!` captured"
+        .filter(|(name, _)| name.starts_with(THE_FOLDER))
+        .map(|(name, text)| (name.as_str(), text.as_str()))
+        .collect();
+    assert!(
+        !walked.is_empty(),
+        "walking `{}` does not find `{THE_FOLDER}`: this walk is looking\n\
+         at the wrong folder, and a guard that looks at the wrong folder\n\
+         always passes.",
+        root.display()
     );
+    let listed: BTreeMap<&str, &str> = SURFACE.iter().copied().collect();
+    let unlisted: Vec<&str> = walked
+        .keys()
+        .filter(|name| !listed.contains_key(*name))
+        .copied()
+        .collect();
+    assert!(
+        unlisted.is_empty(),
+        "`src/{THE_FOLDER}` has files that `SURFACE` does not list: {unlisted:?}.\n\
+         Every file of the IPC surface is read by the benches of this test: add it\n\
+         to `SURFACE` with its `include_str!`."
+    );
+    for (name, text) in &listed {
+        assert_eq!(
+            walked.get(name),
+            Some(text),
+            "the walked `{name}` is not the one `include_str!` captured"
+        );
+    }
     out
 }
 
@@ -594,7 +670,7 @@ fn allowlist() -> BTreeMap<&'static str, &'static Why> {
 /// modulo.
 ///
 /// È la sola regola che separa il codice dal discorso sul codice in questo file,
-/// e basta perché `src/lib.rs` non contiene nessun commento a blocco — cosa che
+/// e basta perché i file di `src/ipc/` non contengono nessun commento a blocco — cosa che
 /// [`nessun_commento_a_blocco`] verifica, invece di darla per buona. Se un
 /// giorno ne comparisse uno, quel test diventa rosso **prima** che questo si
 /// metta a contare male: è l'ordine giusto dei due, perché un estrattore che
@@ -613,7 +689,7 @@ fn is_prose(line: &str) -> bool {
 /// `bridges_stay_six` e di `files-with-ipc-surface`).
 ///
 /// L'apertura si riconosce **senza il prefisso** `tauri::`, e non è pedanteria:
-/// `ipc_surface_lives_in_a_single_file` cerca `generate_handler!` nudo negli
+/// `ipc_surface_lives_in_one_folder` cerca `generate_handler!` nudo negli
 /// altri file del crate, e cercare qui la forma lunga voleva dire che le due
 /// domande — *uno solo in questo file* e *nessuno negli altri* — leggevano due
 /// stringhe diverse. Un `use tauri::generate_handler;` più un secondo
@@ -653,7 +729,7 @@ fn defined_commands(src: &str) -> BTreeSet<&str> {
             continue;
         }
 
-        let sig = t.strip_prefix("pub ").unwrap_or(t);
+        let sig = without_visibility(t);
         let sig = sig.strip_prefix("async ").unwrap_or(sig);
         let rest = sig.strip_prefix("fn ").unwrap_or_else(|| {
             panic!(
@@ -704,7 +780,7 @@ fn registered_commands(src: &str) -> BTreeSet<&str> {
     assert_eq!(
         lines.len(),
         1,
-        "in `src/lib.rs` the `{OPENING}` blocks are {}, and exactly one is required:\n\
+        "in `src/ipc/` the `{OPENING}` blocks are {}, and exactly one is required:\n\
          it is the surface this test guards.",
         lines.len()
     );
@@ -750,6 +826,14 @@ fn registered_commands(src: &str) -> BTreeSet<&str> {
     panic!("`{OPENING}` never closes: the `]` is missing");
 }
 
+/// La firma senza la visibilità: i comandi della cartella sono `pub(crate)`,
+/// perché `handler` in `ipc/mod.rs` e il resto del crate li raggiungano.
+fn without_visibility(t: &str) -> &str {
+    t.strip_prefix("pub(crate) ")
+        .or_else(|| t.strip_prefix("pub "))
+        .unwrap_or(t)
+}
+
 /// Come si scrive un insieme in un messaggio d'errore: in ordine, sulla stessa
 /// riga, senza le virgolette del `Debug` — sono nomi di funzione, e chi legge li
 /// deve poter cercare.
@@ -772,8 +856,9 @@ fn list(names: &BTreeSet<&str>) -> String {
 /// suoi test non la nomina.
 #[test]
 fn defined_and_registered_are_the_same_set() {
-    let defined = defined_commands(SOURCE);
-    let registered = registered_commands(SOURCE);
+    let source = source();
+    let defined = defined_commands(&source);
+    let registered = registered_commands(&source);
 
     let orphans: BTreeSet<&str> = defined.difference(&registered).copied().collect();
     assert!(
@@ -788,31 +873,34 @@ fn defined_and_registered_are_the_same_set() {
     let ghosts: BTreeSet<&str> = registered.difference(&defined).copied().collect();
     assert!(
         ghosts.is_empty(),
-        "these names are in `generate_handler!` and are not defined in this file:\n  \
+        "these names are in `generate_handler!` and are not defined in `src/ipc/`:\n  \
          {}\n\
          (It should not compile: if you are here, the extractor misread.)",
         list(&ghosts)
     );
 }
 
-/// **La superficie IPC di questo crate è un file, e questo lo prova.**
+/// **La superficie IPC di questo crate è una cartella, e questo lo prova.**
 ///
 /// È la riparazione della zona cieca che la 0106 ha dichiarato leggendo questo
-/// presidio: tutti gli altri banchi di questo file giudicano `lib.rs`, e un
+/// presidio: tutti gli altri banchi di questo file giudicano `src/ipc/`, e un
 /// `#[tauri::command]` scritto in un altro file del crate — montato con un
 /// `.plugin()` che porti il proprio `generate_handler!` — passava di là verde
 /// ed era raggiungibile dal webview.
 ///
 /// La forma non è «leggi anche il secondo file»: quella sarebbe l'elenco a mano
 /// una riga più lunga, e il terzo file resterebbe fuori. È **la cartella**, e
-/// quello che dice è una regola: da qui si entra da un posto solo. Un secondo
-/// file con dei comandi non si dichiara, si toglie — o, se davvero non si può,
-/// si toglie questa regola sapendo di toglierla, che è il costo giusto.
+/// quello che dice è una regola: da qui si entra da un posto solo. Un file
+/// fuori da `src/ipc/` con dei comandi non si dichiara, si sposta nella
+/// cartella — dove l'elenco chiuso di [`SURFACE`] e l'allowlist lo vedono — o
+/// si toglie. Fino al 2026-11-26 il posto era un file, `src/lib.rs`; è
+/// diventato una cartella sapendo di cambiare la regola, perché un file di
+/// quattromila righe costava a chiunque dovesse leggerlo per intero.
 #[test]
-fn ipc_surface_lives_in_a_single_file() {
+fn ipc_surface_lives_in_one_folder() {
     let mut culprits: Vec<String> = Vec::new();
     for (name, text) in walk_sources() {
-        if name == THE_FILE {
+        if name.starts_with(THE_FOLDER) {
             continue;
         }
         let lines: Vec<String> = text
@@ -828,11 +916,11 @@ fn ipc_surface_lives_in_a_single_file() {
     }
     assert!(
         culprits.is_empty(),
-        "in `crates/fub-app/src` there is an IPC surface outside `{THE_FILE}`:\n  {}\n\
-         None of the other benches of this file sees it — they read `{THE_FILE}` —\n\
+        "in `crates/fub-app/src` there is an IPC surface outside `{THE_FOLDER}`:\n  {}\n\
+         None of the other benches of this file sees it — they read `{THE_FOLDER}` —\n\
          and from the webview a command mounted with a `.plugin()` is called anyway,\n\
-         as `plugin:<name>|<command>`. The surface of this crate is **one** file:\n\
-         either that command returns to `{THE_FILE}` and passes through the\n\
+         as `plugin:<name>|<command>`. The surface of this crate is **one** folder:\n\
+         either that command moves to `{THE_FOLDER}` and passes through the\n\
          allowlist, or it is not an IPC command.",
         culprits.join("\n  ")
     );
@@ -841,7 +929,8 @@ fn ipc_surface_lives_in_a_single_file() {
 /// **Il cuore**: la superficie registrata è l'allowlist, nei due versi.
 #[test]
 fn ipc_surface_is_a_closed_list() {
-    let registered = registered_commands(SOURCE);
+    let source = source();
+    let registered = registered_commands(&source);
     let declared: BTreeSet<&str> = allowlist().keys().copied().collect();
 
     let new: BTreeSet<&str> = registered.difference(&declared).copied().collect();
@@ -965,14 +1054,16 @@ fn every_named_capability_exists_in_the_contract() {
 /// l'estrattore non fallirebbe, direbbe un numero.
 #[test]
 fn no_block_comment() {
-    for (n, line) in SOURCE.lines().enumerate() {
-        assert!(
-            !line.contains("/*"),
-            "line {}: `src/lib.rs` has a block comment, and `is_prose` can only skip\n\
-             line comments. Either the comment becomes `//`, or the extractor learns\n\
-             blocks.",
-            n + 1
-        );
+    for (name, text) in SURFACE {
+        for (n, line) in text.lines().enumerate() {
+            assert!(
+                !line.contains("/*"),
+                "{name}:{}: a block comment, and `is_prose` can only skip line\n\
+                 comments. Either the comment becomes `//`, or the extractor learns\n\
+                 blocks.",
+                n + 1
+            );
+        }
     }
 }
 
@@ -1001,13 +1092,21 @@ fn not_a_command() {}\n\
 #[allow(clippy::too_many_arguments)]\n\
 pub fn with_an_attribute_in_between() {}\n\
 \n\
+#[tauri::command]\n\
+pub(crate) async fn reachable_by_the_crate() {}\n\
+\n\
         .invoke_handler(tauri::generate_handler![\n\
             real,\n\
             // i_do_not_exist,\n\
             with_an_attribute_in_between,\n\
+            reachable_by_the_crate,\n\
         ])\n";
 
-    let expected = BTreeSet::from(["real", "with_an_attribute_in_between"]);
+    let expected = BTreeSet::from([
+        "real",
+        "with_an_attribute_in_between",
+        "reachable_by_the_crate",
+    ]);
     assert_eq!(defined_commands(fake), expected);
     assert_eq!(registered_commands(fake), expected);
 }
@@ -1024,7 +1123,7 @@ pub fn with_an_attribute_in_between() {}\n\
 /// all'allowlist: registrati e invocabili dal webview, e dichiarati da nessuno.
 ///
 /// Era anche l'unico punto in cui questo file leggeva la domanda con una
-/// stringa diversa da `ipc_surface_lives_in_a_single_file`, che negli altri
+/// stringa diversa da `ipc_surface_lives_in_one_folder`, che negli altri
 /// file cerca `generate_handler!` nudo. Adesso è la stessa.
 #[test]
 #[should_panic(expected = "are 2, and exactly one is required")]
@@ -1079,7 +1178,7 @@ fn grid_surface_uses_only_named_typed_ports() {
         "grid_bytes_command",
         "close_grid_bytes",
     ];
-    let app = include_str!("../src/lib.rs");
+    let app = source();
     let ipc = include_str!("../../../apps/client/src/host/ipc.ts");
     for command in GRID {
         assert!(
@@ -1130,11 +1229,11 @@ fn ports_that_can_work_run_off_the_main_thread_in_their_lane() {
         ("view_state", "CORSIA_STATO"),
         ("set_view_state", "CORSIA_STATO"),
     ];
-    let app = include_str!("../src/lib.rs");
+    let app = source();
     let body_of = |signature: &str| -> &str {
         let start = app
             .find(signature)
-            .unwrap_or_else(|| panic!("`{signature}` not found in lib.rs"));
+            .unwrap_or_else(|| panic!("`{signature}` not found in src/ipc/"));
         let body = &app[start..];
         &body[..body.find("\n}\n").expect("function body")]
     };
@@ -1207,7 +1306,7 @@ fn disk_and_vault_ports_run_off_the_main_thread_through_their_lane() {
         ("list_themes", "host_read("),
         ("read_theme", "host_read("),
     ];
-    let app = include_str!("../src/lib.rs");
+    let app = source();
     let body_of = |signature: &str| -> Option<&str> {
         let start = app.find(signature)?;
         let body = &app[start..];
@@ -1239,7 +1338,7 @@ fn disk_and_vault_ports_run_off_the_main_thread_through_their_lane() {
         ("resource_port", "domande::CORSIA_RISORSE"),
     ] {
         let body = body_of(&format!("async fn {helper}<"))
-            .unwrap_or_else(|| panic!("`{helper}` not found in lib.rs"));
+            .unwrap_or_else(|| panic!("`{helper}` not found in src/ipc/"));
         assert!(body.contains(lane), "`{helper}` must use the lane `{lane}`");
     }
 }
@@ -1332,7 +1431,8 @@ fn every_synchronous_command_says_why_it_stays_on_the_main_thread() {
     ];
     let allowed: BTreeMap<&str, &str> = SYNCHRONOUS.iter().copied().collect();
     assert_eq!(allowed.len(), SYNCHRONOUS.len(), "a name is listed twice");
-    let found = synchronous_commands(SOURCE);
+    let source = source();
+    let found = synchronous_commands(&source);
     let new: Vec<_> = found
         .iter()
         .filter(|name| !allowed.contains_key(*name))
@@ -1373,7 +1473,7 @@ fn synchronous_commands(src: &str) -> BTreeSet<&str> {
             continue;
         }
         after_attribute = false;
-        let sig = t.strip_prefix("pub ").unwrap_or(t);
+        let sig = without_visibility(t);
         if let Some(rest) = sig.strip_prefix("fn ") {
             let name = rest
                 .split(|c: char| !(c.is_alphanumeric() || c == '_'))
@@ -1397,11 +1497,13 @@ async fn off_main(app: AppHandle) {}
 fn on_main(host: State<Host>) {}
 #[tauri::command]
 pub fn also_on_main() {}
+#[tauri::command]
+pub(crate) fn crate_on_main() {}
 fn not_a_command() {}
 ";
     assert_eq!(
         synchronous_commands(src),
-        BTreeSet::from(["on_main", "also_on_main"])
+        BTreeSet::from(["on_main", "also_on_main", "crate_on_main"])
     );
 }
 
@@ -1415,7 +1517,7 @@ fn drawing_uses_only_named_typed_ports() {
         "drawing_command",
         "close_drawing",
     ];
-    let app = include_str!("../src/lib.rs");
+    let app = source();
     let ipc = include_str!("../../../apps/client/src/host/ipc.ts");
     for command in DRAWING {
         assert!(
@@ -1550,7 +1652,8 @@ fn invoked_by_shell() -> BTreeSet<String> {
 /// [`ipc_surface_is_a_closed_list`].
 #[test]
 fn every_registered_command_has_a_caller_or_says_why_not() {
-    let registered = registered_commands(SOURCE);
+    let source = source();
+    let registered = registered_commands(&source);
     let invoked = invoked_by_shell();
 
     // Il test del test: una camminata che non trova niente renderebbe la prima

@@ -171,7 +171,7 @@ l'archivio nascosto), `thread.ts` (il riquadro della discussione e del primo
 messaggio), `discussions.ts` (i gesti, l'annullamento, gli avvisi),
 `inspector.ts` (il pannello) e `author.ts` (la firma dalle impostazioni);
 `surface.ts` li monta. Le impostazioni `profile.name` e `comments.author` sono
-in `crates/fub-host/src/settings.rs`. Il numero di parole della nota (la banda, il pannello delle statistiche,
+in `crates/fub-host/src/settings/specs.rs`. Il numero di parole della nota (la banda, il pannello delle statistiche,
 `fub-cli wordcount`) lo conta il kernel in `crates/fub-features/src/stats.rs`,
 sul sorgente senza i segni e i messaggi dei commenti; allo stesso modo la riga
 «Selezione» del pannello, sul testo selezionato che la shell gli passa com'è

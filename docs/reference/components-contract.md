@@ -3,7 +3,7 @@
 > **Ambito:** le due porte IPC della pagina «Componenti» (`components_map`,
 > `components_apply`), le loro forme, i rifiuti tipati, l'avviso del
 > rimontaggio e lo scenario che serve l'host finto.
-> **Fonti autorevoli:** `crates/fub-app/src/lib.rs` (`components_map_for`,
+> **Fonti autorevoli:** `crates/fub-app/src/ipc/components.rs` (`components_map_for`,
 > `components_apply_for`), `crates/fub-host/src/componenti.rs`
 > (`Host::components`, `Host::apply_components`),
 > `apps/client/src/host/contract.ts` e

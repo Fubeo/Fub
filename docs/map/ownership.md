@@ -20,15 +20,15 @@
 | l'impronta FNV-1a si calcola in un posto solo | `crates/fub-abi/src/edit.rs` | `crates/fub-abi/tests/one_fingerprint.rs` | [reference/abi-and-wit.md](../reference/abi-and-wit.md) |
 | il bersaglio di un clic non entra nel contesto di sessione | `crates/fub-abi/src/session.rs` | `crates/fub-abi/tests/context_has_four_fields.rs` | [reference/ipc-contract.md](../reference/ipc-contract.md) |
 | `serialize` non riscrive un documento esistente | i provider, `crates/fub-abi/src/format.rs` | `crates/fub-abi/tests/serialize_non_riscrive.rs` | [reference/abi-and-wit.md](../reference/abi-and-wit.md) |
-| la scrittura è atomica rispetto al parse | `crates/fub-kernel/src/workspace.rs` | `crates/fub-kernel/tests/write_atomicity.rs` | [architecture/storage-and-identity.md](../architecture/storage-and-identity.md) |
+| la scrittura è atomica rispetto al parse | `crates/fub-kernel/src/workspace/writes.rs` | `crates/fub-kernel/tests/write_atomicity.rs` | [architecture/storage-and-identity.md](../architecture/storage-and-identity.md) |
 | la storage accede dai soli handle, la radice non si ripete | `crates/fub-kernel/src/storage/` | `crates/fub-kernel/tests/rooted_cas.rs` | [architecture/storage-and-identity.md](../architecture/storage-and-identity.md) |
 | cancellare è spostare nel cestino, mai distruggere | `crates/fub-kernel/src/os_trash.rs` e `crates/fub-abi/src/rules/trash.rs` | `crates/fub-kernel/tests/trash.rs` | [product/vault-recupero-e-versioni.md](../product/vault-recupero-e-versioni.md) |
 | un provider che pania costa la chiamata, non il vault | `crates/fub-kernel/src/safety.rs` | `crates/fub-kernel/tests/the_panic.rs` | [architecture/runtime-events-and-jobs.md](../architecture/runtime-events-and-jobs.md) |
 | i lucchetti dell'host passano da una porta sola, senza callback sotto guardia | `crates/fub-host/src/custody.rs` | `crates/fub-host/src/legacy_tests/` | [architecture/runtime-events-and-jobs.md](../architecture/runtime-events-and-jobs.md) |
-| le capacità si rifiutano da un solo `Guard` per famiglie | `crates/fub-kernel/src/host/guard.rs` | `crates/fub-kernel/tests/effective_capabilities.rs` | [reference/permissions-and-security.md](../reference/permissions-and-security.md) |
+| le capacità si rifiutano da un solo `Guard` per famiglie | `crates/fub-kernel/src/host/guard.rs` e `guard/` | `crates/fub-kernel/tests/effective_capabilities.rs` | [reference/permissions-and-security.md](../reference/permissions-and-security.md) |
 | la tabella di montaggio dei bundle è una, per app, CLI e headless | `crates/fub-host/src/mount.rs` | `crates/fub-host/tests/before_write_bundles.rs` | [architecture/components-and-boundaries.md](../architecture/components-and-boundaries.md) |
-| in quale vault arriva una scrittura è detto, non implicito | `crates/fub-host/src/session.rs` | `crates/fub-host/tests/the_vault_of_a_write.rs` | [architecture/storage-and-identity.md](../architecture/storage-and-identity.md) |
-| la superficie IPC è un elenco chiuso | `crates/fub-app/src/lib.rs` | `crates/fub-app/tests/lean_ipc.rs` | [reference/ipc-contract.md](../reference/ipc-contract.md) |
+| in quale vault arriva una scrittura è detto, non implicito | `crates/fub-host/src/session/documents.rs` | `crates/fub-host/tests/the_vault_of_a_write.rs` | [architecture/storage-and-identity.md](../architecture/storage-and-identity.md) |
+| la superficie IPC è un elenco chiuso | `crates/fub-app/src/ipc/` | `crates/fub-app/tests/lean_ipc.rs` | [reference/ipc-contract.md](../reference/ipc-contract.md) |
 | ogni finestra ha solo i permessi che le spettano | `crates/fub-app/permissions/` | `crates/fub-app/tests/ipc_permissions.rs` | [reference/permissions-and-security.md](../reference/permissions-and-security.md) |
 | nessun modulo della shell importa Tauri fuori dalla cucitura | `apps/client/src/host/ipc.ts` | `apps/client/src/host/no-tauri-outside-host.test.ts` | [architecture/frontend-and-ipc.md](../architecture/frontend-and-ipc.md) |
 | CodeMirror resta nel package del testo | `apps/client/src/editors/text/` | `.github/scripts/check-codemirror-boundary.mjs` | [architecture/editor-surfaces.md](../architecture/editor-surfaces.md) |
@@ -60,7 +60,7 @@
 | la copia di un motore è derivata e verificata | `tools/vendor-craft/vendor.mjs` | `vendor.mjs check`, `verify-upstream` (`motori-provenienza.yml`), `gate` | [architecture/motori.md](../architecture/motori.md) |
 | un dato in `vendor/` è il file dell'URL dichiarato, e ogni cartella di `vendor/` è un motore o un dato | `tools/vendor-craft/dati.mjs`, `tools/vendor-craft/provenienza.mjs` | `provenienza.mjs check`, `elenco`, `verify-upstream` (`motori-provenienza.yml`) | [development/testing-and-quality.md](../development/testing-and-quality.md) |
 | i componenti WASM rispettano tempi e memoria | `crates/fub-wasm-host/src/limits.rs` | `crates/fub-wasm-host/tests/` | [reference/permissions-and-security.md](../reference/permissions-and-security.md) |
-| i plugin installati si accendono e spengono per vault | `crates/fub-host/src/session.rs` | `crates/fub-kernel/tests/deactivation.rs` e `crates/fub-host/tests/draw_feature.rs` | [product/plugins-and-extensions.md](../product/plugins-and-extensions.md) |
+| i plugin installati si accendono e spengono per vault | `crates/fub-host/src/session/settings_access.rs` | `crates/fub-kernel/tests/deactivation.rs` e `crates/fub-host/tests/draw_feature.rs` | [product/plugins-and-extensions.md](../product/plugins-and-extensions.md) |
 | il testo del vault passa dal kernel, mai dal formato sbagliato | `crates/fub-kernel/src/documents.rs` | `crates/fub-kernel/tests/text_fidelity.rs` | [architecture/document-model.md](../architecture/document-model.md) |
 
 ## I cinque proprietari del kernel

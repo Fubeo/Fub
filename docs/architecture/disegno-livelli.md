@@ -2,7 +2,7 @@
 
 > **Domanda:** come un livello di Fub e i comandi sui livelli, sulla selezione
 > per carattere e sul livello corrente passano dal motore vettoriale al file?
-> **Fonti autorevoli:** `crates/fub-disegno/src/differenza.rs`,
+> **Fonti autorevoli:** `crates/fub-disegno/src/differenza.rs` (e `differenza_livelli.rs`),
 > `crates/fub-disegno/src/famiglie/`, `apps/client/src/editors/spatial/completo/`.
 > **Decisioni:** [ADR 0250](../decisions/0250-il-disegno-completo-sul-motore.md),
 > [ADR 0239](../decisions/0239-il-disegno-sul-motore-vettoriale.md).
@@ -40,7 +40,7 @@ col suo perché e il comando rifiuta `Empty`.
 
 Duplica livello (`layer.duplicate`) copia le righe di `ids`: la copia va subito
 sopra l'originale, come livello del file, col nome «… copia» e i suoi oggetti
-(`differenza.rs`, `livello_nuovo`). Anche un livello bloccato si copia: la copia
+(`differenza_livelli.rs`, `livello_nuovo`). Anche un livello bloccato si copia: la copia
 nasce sbloccata, prende gli oggetti e si blocca con un `set` alla fine, perché
 la scena non mette niente in un livello bloccato. Sposta righe (`layer.move`,
 `ids`, `target`, `place` sopra, sotto o dentro, `copy`) e Riordina
@@ -61,7 +61,7 @@ in un nuovo livello (`layer.collectInNew`) prende le righe di `ids` o, senza,
 gli oggetti scelti, e le mette in un livello nuovo accanto alla più alta: alla
 radice se stanno alla radice, altrimenti un sottolivello del loro livello. Il
 nome libero «Livello N» lo dà la mappa (`famiglie/livelli.rs`,
-`nome_della_raccolta`); `differenza.rs` scrive il livello nuovo con un `add` e
+`nome_della_raccolta`); `differenza_livelli.rs` scrive il livello nuovo con un `add` e
 vi sposta gli oggetti di prima con `move`, e rifiuta un livello nuovo che mescola
 oggetti di prima e oggetti nuovi. Crea o rilascia maschera di ritaglio del
 livello (`layer.clippingMask.toggle`) prende la riga `id`, un livello o un

@@ -267,5 +267,5 @@ sempre.
 - `apps/client/src/state/editor-blocks.ts`: la preferenza `editor.blocks`,
   letta all'avvio della finestra e dalla superficie, scritta dal menu «…»
   del riquadro;
-- `crates/fub-host/src/settings.rs`: la modalità dei riquadri nuovi, il
+- `crates/fub-host/src/settings/editor_specs.rs`: la modalità dei riquadri nuovi, il
   cursore morbido e `editor.blocks`.

@@ -10,7 +10,7 @@
 > `crates/fub-app/src/orologio.rs`,
 > `crates/fub-app/src/main.rs`, `crates/fub-app/build.rs`,
 > `crates/fub-app/src/lib.rs` (`run`),
-> `crates/fub-host/src/settings.rs` (`appearance.rendering`),
+> `crates/fub-host/src/settings/specs.rs` (`appearance.rendering`),
 > `apps/client/src/ui/rendering-notice.ts`.
 
 ## Il percorso di disegno all'avvio

@@ -5,7 +5,7 @@
 > il permesso, le porte, la sostituzione di un id già installato.
 > **Fonti autorevoli:** `crates/fub-host/src/theme.rs`,
 > `crates/fub-host/src/theme/`, `crates/fub-host/src/theme_watch.rs`,
-> `crates/fub-app/src/lib.rs`.
+> `crates/fub-app/src/ipc/themes.rs`.
 
 Le regole comuni a ogni tema (motori, manifest, caratteri, icone,
 impostazioni, limiti) sono in

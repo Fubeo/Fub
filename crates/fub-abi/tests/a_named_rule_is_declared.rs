@@ -863,7 +863,7 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
-            "crates/fub-kernel/src/workspace.rs::new_notes_id",
+            "crates/fub-kernel/src/workspace/notes.rs::new_notes_id",
             (
                 Family::AsciiCase,
                 "legge la stessa impostazione di `formats.rs::new_note_extension` e la porta \
@@ -1171,7 +1171,7 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
-            "crates/fub-kernel/src/host/guard.rs::normalized_host",
+            "crates/fub-kernel/src/host/guard/policy.rs::normalized_host",
             (
                 Family::AsciiCase,
                 "un host DNS è ASCII o è punycode, e il limite è già dichiarato sopra la \
@@ -1180,7 +1180,7 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
-            "crates/fub-kernel/src/host/guard.rs::split_url",
+            "crates/fub-kernel/src/host/guard/network.rs::split_url",
             (
                 Family::AsciiCase,
                 "lo schema di un URL è ASCII per la RFC 3986. Sta accanto a `normalized_host` e \

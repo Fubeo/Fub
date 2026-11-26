@@ -18,7 +18,7 @@ La mappa della repository — cartelle, crate, aree e come si provano — è in
 | cambiare una firma che attraversa WASM | `crates/fub-abi/wit/fub/abi.wit` |
 | cambiare workspace, path, storage o indici | `crates/fub-kernel/src/` |
 | cambiare mount, sessioni, job o impostazioni | `crates/fub-host/src/` |
-| aggiungere un comando Tauri o adattare IPC | `crates/fub-app/src/lib.rs` |
+| aggiungere un comando Tauri o adattare IPC | `crates/fub-app/src/ipc/` |
 | cambiare parsing o rendering Markdown | `crates/fub-format-markdown/src/` |
 | cambiare ricerca, grafo o feature ufficiali | `crates/fub-features/src/` |
 | cambiare il runtime dei componenti | `crates/fub-wasm-host/src/` |

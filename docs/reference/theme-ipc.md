@@ -4,7 +4,7 @@
 > i temi, e l'evento del tema collegato: forme, esiti e limiti.
 > **Fonti autorevoli:** `crates/fub-host/src/theme.rs`,
 > `crates/fub-host/src/theme/`, `crates/fub-host/src/theme_watch.rs`,
-> `crates/fub-app/src/lib.rs`, `apps/client/src/host/contract.ts`,
+> `crates/fub-app/src/ipc/themes.rs`, `apps/client/src/host/contract.ts`,
 > `apps/client/src/host/ipc.ts`.
 
 Il resto del confine IPC è nel [contratto IPC](ipc-contract.md).
