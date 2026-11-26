@@ -387,6 +387,29 @@ export async function prepareScene(page, scene, light, base, url) {
   // Ciò che sta per cambiare da sé si aspetta dopo l'ultimo gesto: è il gesto
   // ad armare la pausa della riga dei suggerimenti.
   await waitUntilSettled(page);
+  // Il lavoro a riposo (`ui/warmup.ts`, come in `motion.mjs`): la coda parte due
+  // secondi dopo la consegna e fa un passo dopo ogni pausa senza ingressi, cioè
+  // proprio fra i due scatti di una scena lenta. Il grafo d'esercizio montato
+  // fuori vista fa ridipingere la pagina, e qualche bordo cambia di un'unità:
+  // la scena «non sta ferma» per la storia del riscaldamento, non per sé.
+  // Una pagina senza la shell non fa partire la coda e non aspetta.
+  await page
+    .evaluate(async (limit) => {
+      const { warmups } = await import("/src/ui/warmup.ts");
+      const start = performance.now();
+      while (warmups.pending() && performance.now() - start < limit) {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+    }, 15_000)
+    .catch(() => undefined);
+  // Un disegno che la scena ha cambiato si salva dopo una pausa: su un runner
+  // lento il salvataggio cade fra i due scatti («Da salvare: 1», poi «Tutto
+  // salvato», e il pallino della scheda se ne va). Si aspetta che finisca.
+  if (await page.$(".draw-editor")) {
+    await page
+      .waitForFunction(() => document.querySelector("#status-saving")?.dataset.tone !== "busy", null, { timeout: 10_000 })
+      .catch(() => undefined);
+  }
   // Un foglio costruito e non `addStyleTag`: un `<style>` senza il nonce della
   // pagina la CSP lo rifiuta, come rifiuterebbe quello di un modulo dell'app.
   await page.evaluate((css) => {
