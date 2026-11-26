@@ -340,6 +340,12 @@ scorre, e con una nota aperta e ferma la finestra passa da 35–37 a 1,6
 ridisegni al secondo (solo il cursore). È una scelta del maintainer del
 20-11-2026; Windows e macOS non leggono la variabile.
 
+### I fotogrammi vecchi dopo un'animazione
+
+WebKitGTK 2.54.0 e 2.54.1 rimettono per un fotogramma lo strato di prima alla fine di
+un'animazione (compositore Skia, corretto dalla 2.54.2: [misura](../misure/2026-11-19-linux-fotogrammi-vecchi.md)). Il
+Flatpak usa la 2.54.3 del [suo manifest](../development/versioning-and-releases.md#flatpak), in `/app`, senza la patch NVIDIA di Debian.
+
 ## Gli scorrevoli
 
 WebKitGTK 2.54 non sempre compone lo scorrimento di un contenitore con
