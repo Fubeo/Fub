@@ -1,15 +1,23 @@
 // Il motore della lavagna: il selettore delle sezioni e il lettore di una\n// scheda. Metodi della\n// classe `CanvasEngine`, montati sul suo prototipo da `engine.ts`\n// (`editors/core/mix-methods.ts`).
 
+
 import { t } from "../../i18n/strings";
 import { type Lifetime } from "../../ui/lifetime";
-import { PARTS_KEY, nodeParts, partsFit, writeParts, type PartsExtra } from "./parts";
-import { PARTS_PICKER_MIN_SECTIONS, openPartsPicker, partsSections, type PartsHeading, type PartsPickerHandle } from "./parts-picker";
-import { excerptSourcePath, noteExcerptOf } from "./excerpt";
-import { READER_TAP_SLOP, openReader, type ReaderHandle } from "./reader";
-import { type CanvasNode } from "./model";
+import {
+  type PartsPickerHandle,
+  type PartsPickerPlace,
+  PARTS_PICKER_MIN_SECTIONS,
+  openPartsPicker,
+  partsSections,
+  type PartsHeading,
+} from "./parts-picker";
+import { type ReaderHandle, READER_TAP_SLOP, openReader } from "./reader";
+import type { CanvasNode } from "./model";
 import { type CanvasIntentOp } from "./wasm/core";
 import { isVaultPath } from "./engine-geometry";
 import { setOp, SECTIONS_PROBE, partsChosen } from "./engine-names";
+import { PARTS_KEY, nodeParts, partsFit, writeParts, type PartsExtra } from "./parts";
+import { excerptSourcePath, noteExcerptOf } from "./excerpt";
 import type { CanvasEngine } from "./engine";
 
 export const cardToolsMethods = {
@@ -234,6 +242,21 @@ export const cardToolsMethods = {
       return;
     }
     open.handle.update({ excerpt: partsChosen(node), writable: this._readerWritable(node) });
+  },
+  /** Dove sono la scheda `id` (con la testata sopra, T39) e la lavagna, nella finestra. */
+  _partsPlace(this: CanvasEngine, id: string): PartsPickerPlace {
+    const rect = this._viewport.getBoundingClientRect();
+    const board = { left: rect.left, top: rect.top, width: rect.width, height: rect.height };
+    const node = this._doc?.nodes.find((one) => one.id === id);
+    const zoom = this._camera.zoom;
+    let card = node
+      ? { left: rect.left + this._camera.x + node.x * zoom, top: rect.top + this._camera.y + node.y * zoom, width: node.width * zoom, height: node.height * zoom }
+      : { left: rect.left, top: rect.top, width: 0, height: 0 };
+    const handle = this._stage.querySelector(`.canvas-node[data-node="${CSS.escape(id)}"] > .canvas-node-handle`)?.getBoundingClientRect();
+    if (handle && handle.height > 0 && handle.top < card.top) {
+      card = { ...card, top: handle.top, height: card.top + card.height - handle.top };
+    }
+    return { card, board, narrow: this._root.hasAttribute("data-narrow") };
   },
 };
 export type CardToolsMethods = typeof cardToolsMethods;

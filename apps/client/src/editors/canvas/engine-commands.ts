@@ -1,11 +1,13 @@
 // Il motore della lavagna: i comandi, la banda di stato, disponi e allinea,\n// lo stile del testo, la barra della selezione, i colori, la ricerca dei\n// comandi. Metodi della\n// classe `CanvasEngine`, montati sul suo prototipo da `engine.ts`\n// (`editors/core/mix-methods.ts`).
 
+
 import { t } from "../../i18n/strings";
 import { openLifetime } from "../../ui/lifetime";
 import { cardKindOf } from "../core/cards/contract";
 import {
-  CANVAS_ALIGN,
   CANVAS_LAYOUTS,
+  type CanvasTip,
+  CANVAS_ALIGN,
   CANVAS_COLORS,
   CANVAS_TIPS,
   commandHint,
@@ -16,36 +18,34 @@ import {
   type CanvasCommandBehaviour,
   type CanvasLayout,
   type CanvasNudge,
-  type CanvasTip,
 } from "./chrome/commands";
 import { CANVAS_INK_TOOLS, CANVAS_WRITING_TOOLS } from "./chrome/rail";
-import { readCodeList } from "./code-text";
 import { type CanvasChosenText } from "./chrome/options";
-import { isTextAlign, isTextSize, textStyle, withTextStyle, type TextStyle } from "./text-style";
-import { selectionBarWanted, type CanvasSelectionBar, type SelectionBarShow } from "./chrome/selection-bar";
-import { dropFolderOf, type CanvasStatusPort } from "./chrome/status";
+import { type TextStyle, isTextAlign, isTextSize, textStyle, withTextStyle } from "./text-style";
+import { type CanvasSelectionBar, selectionBarWanted, type SelectionBarShow } from "./chrome/selection-bar";
+import { canvasStatusItems, statusSignature, dropFolderOf, type CanvasStatusPort } from "./chrome/status";
 import { SHARED_RECENT_COMMANDS, openCommandSearch } from "./chrome/command-search";
 import { pickerText as canvasPickerText } from "./pen-menu";
-// I colori delle schede e dei fili (T47).
 import {
   JSON_CANVAS_COLORS,
   NOTE_COLORS,
-  colorLook,
   colorMenuLabel,
+  type CanvasColorChoice,
+  colorLook,
   colorValueOf,
   writeColor,
-  type CanvasColorChoice,
 } from "./colors";
 import { createColorPicker, openPopover } from "../../kit";
-import { cardTarget } from "./sources";
 import { PARTS_PICKER_MIN_SECTIONS } from "./parts-picker";
-import { noteExcerptOf } from "./excerpt";
-import { type CanvasEdge, type CanvasNode } from "./model";
+import type { CanvasNode, CanvasEdge } from "./model";
 import { type CanvasIntentOp } from "./wasm/core";
 import { CANVAS_SNAP, CanvasArrange } from "./engine-options";
 import { CANVAS_ZOOM_STEP } from "./engine-parts";
 import { looseCards, isVaultPath, externalUrl } from "./engine-geometry";
 import { setOp, writingName } from "./engine-names";
+import { readCodeList } from "./code-text";
+import { cardTarget } from "./sources";
+import { noteExcerptOf } from "./excerpt";
 import type { CanvasEngine } from "./engine";
 
 export const commandsMethods = {
@@ -1094,6 +1094,25 @@ export const commandsMethods = {
     void recents.load(documentId).then(() => {
       if (this._commandSearch === search) search.refresh();
     });
+  },
+  /**
+   * Avvisa la banda se una sua voce è cambiata, a fine gesto: dentro un gesto
+   * (un trascinamento, una panoramica, la rotella che gira) non dice niente, e
+   * con la stessa firma di prima non avvisa.
+   */
+  _statusSettle(this: CanvasEngine): void {
+    // La barra della selezione si rilegge anche lei qui: dentro un gesto sulle
+    // schede sparisce. Dentro un gesto della camera (la rotella, il volo) la
+    // segue già `_followSelectionBar`, senza rifarla a ogni passo (#411 C-06).
+    if (!this._gestureActive() || this._cardGestureActive()) this._syncSelectionBar();
+    if (this._destroyed || !this._doc || this._gestureActive()) return;
+    // Il navigatore si rilegge con la banda, a fine gesto e al cambio del documento (T55).
+    this._navigator.settle();
+    this._twinsShown = this._twinsKey();
+    const shown = statusSignature(canvasStatusItems(this._statusPort()));
+    if (shown === this._statusShown) return;
+    this._statusShown = shown;
+    this._options.onStatusChange?.();
   },
 };
 export type CommandsMethods = typeof commandsMethods;

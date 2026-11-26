@@ -6,8 +6,8 @@
 > delle dita; come si vedono le schede da lontano; Cerca nella lavagna; la
 > lavagna da tastiera e col lettore di schermo; «Apri a lato per questo»;
 > lo spazio di lavoro (Completo e Semplice) e l'interfaccia nascosta.
-> **Fonti autorevoli:** `apps/client/src/editors/canvas/engine.ts`
-> (`_jumpCamera`, `_paintGrid`, `_refreshDetail`, `_keydown`), `jumps.ts`, `guides.ts`,
+> **Fonti autorevoli:** `apps/client/src/editors/canvas/engine.ts` e le sue parti
+> (`_jumpCamera` in `engine-camera.ts`, `_paintGrid` in `engine-drag.ts`, `_refreshDetail` in `engine-cards.ts`, `_keydown` in `engine-keys.ts`), `jumps.ts`, `guides.ts`,
 > `chrome/navigator.ts`, `chrome/radial.ts`, `view-state.ts`, `lod.ts`, `find.ts`,
 > `chrome/find-bar.ts`, `chrome/workspace.ts` e `a11y.ts`, con le loro prove;
 > i conti della camera in `apps/client/src/editors/spatial/camera.ts`.
@@ -422,7 +422,7 @@ scrive i nomi sulle schede.
 
 Ciò che una scheda non fa (righe e colonne di un foglio, un documento Word,
 la nota intera) si fa nell'editor del file, aperto accanto allo stesso punto:
-`canvas.open_beside_here` (`_besideHere` in `engine.ts`). Vale per la scheda
+`canvas.open_beside_here` (`_besideHere` in `engine-card-open.ts`). Vale per la scheda
 di file attiva, anche in sola lettura (aprire è guardare); senza, è spento
 col perché. Il punto, e il nome che lo dice:
 

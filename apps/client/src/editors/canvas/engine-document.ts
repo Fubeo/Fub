@@ -1,23 +1,24 @@
 // Il motore della lavagna: il nucleo, la storia, la compilazione e la\n// scrittura del documento. Metodi della\n// classe `CanvasEngine`, montati sul suo prototipo da `engine.ts`\n// (`editors/core/mix-methods.ts`).
 
+
 import { t, type Key } from "../../i18n/strings";
-import { type EditorChangeOrigin } from "../core/text-operation";
+import type { EditorChangeOrigin } from "../core/text-operation";
 import { changeAnnouncement } from "./a11y";
-import { type CanvasOperation, type CanvasPatch } from "./operation";
-import { type CanvasDocument } from "./model";
+import { type CanvasPatch, type CanvasOperation } from "./operation";
+import type { CanvasDocument } from "./model";
 import {
   CanvasCoreError,
+  type CanvasCore,
   changedModel,
   type CanvasCommitted,
   type CanvasCompiled,
-  type CanvasCore,
   type CanvasCoreErrorCode,
   type CanvasIntentOp,
   type CanvasSourceEdit,
 } from "./wasm/core";
-import { MAX_CANVAS_HISTORY } from "./engine-options";
+import { MAX_INTERACTIVE_NODES, MAX_INTERACTIVE_EDGES, MAX_CANVAS_HISTORY } from "./engine-options";
 import { CanvasStep, randomSeed } from "./engine-parts";
-import { copyPatches, lostCore, sourceOperation } from "./engine-names";
+import { lostCore, copyPatches, sourceOperation } from "./engine-names";
 import type { CanvasEngine } from "./engine";
 
 export const documentMethods = {
@@ -334,6 +335,49 @@ export const documentMethods = {
       return null;
     }
     return compiled.created;
+  },
+  /**
+   * Chiede al nucleo se il testo di adesso si riscrive: un'anteprima senza
+   * toppe passa dallo stesso ritocco di ogni commit, e un testo che il
+   * ritocco rifiuta (una chiave doppia, anche annidata in un campo
+   * sconosciuto) risponde `rejected`. Allora la tela resta da guardare: il
+   * campo aperto si chiude come per la sola lettura del pannello, e l'avviso
+   * della barra dice perché. Un nucleo assente o morto non risponde: la
+   * risposta di prima resta finché `_revive` non riapre il testo.
+   */
+  _checkWritable(this: CanvasEngine): void {
+    const core = this._core;
+    if (!core) return;
+    let unwritable: boolean;
+    try {
+      core.preview([]);
+      unwritable = false;
+    } catch (error) {
+      if (lostCore(error)) {
+        this._lose();
+        return;
+      }
+      if (!(error instanceof CanvasCoreError)) throw error;
+      unwritable = error.code === "rejected";
+    }
+    if (unwritable === this._unwritable) return;
+    if (unwritable) {
+      this._unwritable = true;
+      this._closeField(true);
+      this._cancelGestures();
+    } else {
+      this._unwritable = false;
+    }
+    this._root.dataset.readOnly = String(this._readOnly);
+    // Subito, anche con una penna giù e il ridisegno rimandato: lo strato se
+    // ne va (il tratto in corso si annulla) o torna, e la barra dice perché.
+    this._syncInkLayer();
+    this._drawToolbar();
+  },
+
+  _isSceneOversized(this: CanvasEngine): boolean {
+    return !!this._doc && (this._doc.nodes.length > MAX_INTERACTIVE_NODES
+      || this._doc.edges.length > MAX_INTERACTIVE_EDGES);
   },
 };
 export type DocumentMethods = typeof documentMethods;

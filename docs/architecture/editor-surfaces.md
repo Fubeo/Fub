@@ -408,7 +408,7 @@ shell (`apps/client/src/editors/spatial/tools/editor/vault-images.ts`).
 
 ### La lavagna
 
-`CanvasEngine` (`editors/canvas/engine.ts`) disegna il modello che il nucleo
+`CanvasEngine` (`editors/canvas/engine.ts`, coi metodi a pacchetti in `engine-*.ts`) disegna il modello che il nucleo
 della tela (`canvas/wasm/core.ts`) dà a ogni `reset` e `commit`. Un gesto passa
 le sue toppe al nucleo e il testo nuovo è il tratto cambiato. Annulla e ripeti
 rimettono il tratto di prima byte per byte con un `reset` se la versione del

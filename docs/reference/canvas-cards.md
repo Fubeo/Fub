@@ -104,7 +104,7 @@ colonne, riempite per righe per nome del file (`sortedDrop`, «foto 2» prima di
 
 ### Il rilascio e l'incolla
 
-La tela (`_intake` in `engine.ts`) scrive i file trascinati o incollati con
+La tela (`_intake` in `engine-intake.ts`) scrive i file trascinati o incollati con
 una lista di operazioni: un `add_card` per file, col suo `id` (opzione `newId`
 della tela, di serie `newNodeId()`) e `content_size` se si sa; con più file
 `layout {ids, kind: "grid", x, y}`, oltre 12 `group`. Un file solo nasce in

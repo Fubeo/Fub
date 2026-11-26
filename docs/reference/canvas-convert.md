@@ -3,8 +3,8 @@
 > **Ambito:** i tre comandi che cambiano che cosa una scheda di un `.canvas`
 > mostra, senza toglierla: «Estrai in una nota…», «Copia il testo qui»,
 > «Sostituisci il file…».
-> **Fonti autorevoli:** `apps/client/src/editors/canvas/engine.ts`
-> (`_extractNote`, `_copyNoteText`, `_replaceFile`, `proposedNoteName`), la
+> **Fonti autorevoli:** `apps/client/src/editors/canvas/engine-convert.ts`
+> (`_extractNote`, `_copyNoteText`, `_replaceFile`), `engine-names.ts` (`proposedNoteName`), la
 > porta `CanvasNotesPort` e il suo lato della shell in
 > `apps/client/src/state/document-controller.ts`; le prove in
 > `apps/client/src/editors/canvas/engine-convert-crop.test.ts` («convertire (T70)»).
