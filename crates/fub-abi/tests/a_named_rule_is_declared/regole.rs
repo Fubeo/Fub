@@ -1,0 +1,2451 @@
+//! L'allowlist di `a_named_rule_is_declared.rs`: le regole di identità di un
+//! nome che esistono, con la famiglia e la ragione. Sta in un file suo perché
+//! è una tabella sola, che divisa si leggerebbe peggio.
+
+use super::*;
+
+/// Le regole di identità di un nome che esistono, con la famiglia e la ragione.
+///
+/// La chiave è `percorso/del/file.rs::funzione`. Si controlla in **tutte e due
+/// le direzioni**: una funzione che compare nei sorgenti e non è qui è rossa, e
+/// una riga che non corrisponde più a niente è rossa anche lei — un'allowlist
+/// che resta lunga mentre il codice si accorcia smette di essere una fotografia
+/// e diventa un ricordo (è la lezione di `un_lucchetto_solo.rs`).
+///
+/// **La ragione dice perché quella regola diverge dalle altre della sua
+/// famiglia.** Dove è già scritta nel sorgente, è citata invece che riscritta:
+/// una seconda stesura è una seconda regola, e questo banco esiste per contarle.
+pub(super) fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
+    BTreeMap::from([
+        // -- CasoContestuale: la piegatura di riferimento ------------------
+        (
+            "crates/fub-abi/src/rules/path.rs::resolution_key",
+            (
+                Family::ContextualCase,
+                "non diverge: è l'origine. «Unico punto di normalizzazione. Chi confronta due \
+                 nomi di documento … deve passare da qui» (path.rs). Ogni altra riga di questa \
+                 tabella si giudica rispetto a lei.",
+            ),
+        ),
+        (
+            "crates/fub-abi/src/model.rs::canonical_tag",
+            (
+                Family::ContextualCase,
+                "non diverge da `resolution_key` sul terreno — compone con `composed` come lei — \
+                 ma sul dominio: un tag non è un path e non passa dalla risoluzione, quindi la \
+                 regola resta sua e la sua gerarchia la decide `rules/tag.rs`.",
+            ),
+        ),
+        (
+            "crates/fub-abi/src/model.rs::canonical_anchor",
+            (
+                Family::ContextualCase,
+                "come `canonical_tag`, e compone come lei. Diverge da lei per il solo fatto che \
+                 un'ancora non ha gerarchia, e per la regola di validità che le sta accanto \
+                 (`valid_anchor`), che a un nome di tag non si applica.",
+            ),
+        ),
+        (
+            "crates/fub-abi/src/rules/properties.rs::contains",
+            (
+                Family::ContextualCase,
+                "confronta due valori di proprietà, non due nomi di file: piega entrambi i capi \
+                 perché «chi filtra a mano non ricorda come aveva scritto il tag» \
+                 (properties.rs), e la NFC non le serve perché nessuno dei due capi è un path.",
+            ),
+        ),
+        (
+            "crates/fub-features/src/base.rs::contains",
+            (
+                Family::ContextualCase,
+                "è `rules/properties.rs::contains` detta sul valore valutato di una Base \
+                 (`BaseValue`), che non è un `PropertyValue` e non passa da quella funzione: \
+                 piega i due capi allo stesso modo perché `[stato:arrivata]` nella ricerca e \
+                 «stato contiene arrivata» nel filtro di una Base trovino le stesse note.",
+            ),
+        ),
+        (
+            "crates/fub-features/src/tags.rs::matches_case_insensitive",
+            (
+                Family::ContextualCase,
+                "ha due corsie e la lenta è questa: la ragione è scritta per intero sopra la \
+                 funzione, ed è la sola riga del repo che spiega perché la corsia ASCII non è \
+                 sempre lecita — «la corsia veloce vale solo dove è dimostrabilmente la stessa \
+                 risposta». È il criterio di questa tabella.",
+            ),
+        ),
+        (
+            "crates/fub-features/src/tags.rs::build_tags_view",
+            (
+                Family::ContextualCase,
+                "non è una regola di confronto: prepara l'ago **una volta** perché \
+                 `matches_case_insensitive` lo riceve già minuscolo. Diverge perché piega un \
+                 solo capo, e il contratto di quel capo sta nella riga di doc della funzione che \
+                 lo consuma.",
+            ),
+        ),
+        (
+            "crates/fub-features/src/outline.rs::kept_by",
+            (
+                Family::ContextualCase,
+                "filtra i titoli del pannello Struttura col testo che l'utente scrive nel campo: \
+                 cerca una sottostringa in un titolo, non stabilisce l'identità di un nome. \
+                 Piega filtro e titolo perché la grafia del filtro non cambi i titoli che \
+                 restano, come la ricerca nelle celle di un foglio.",
+            ),
+        ),
+        (
+            "crates/fub-abi/src/custom.rs::claims",
+            (
+                Family::ContextualCase,
+                "l'identità qui non è un nome di file ma la **chiave di contesa** fra due regole \
+                 di sintassi sullo stesso formato: l'info string di un fence è scritta \
+                 dall'autore della nota, e `RUST` e `rust` sono la stessa rivendicazione.",
+            ),
+        ),
+        (
+            "crates/fub-kernel/src/syntax.rs::apply",
+            (
+                Family::ContextualCase,
+                "è il lato lettura di `custom.rs::claims` e deve piegare **come lei**, o una \
+                 regola registrata come `Rust` non aggancerebbe mai il fence che ha rivendicato. \
+                 La divergenza qui sarebbe il difetto, non la coincidenza.",
+            ),
+        ),
+        (
+            "crates/fub-kernel/src/syntax.rs::fence_rule",
+            (
+                Family::ContextualCase,
+                "l'altro capo di `apply`: piega ciò che sta nel documento, mentre `apply` piega \
+                 ciò che sta nella regola. Sono due stringhe diverse e una sola risposta, ed è \
+                 per questo che non si possono scrivere in due modi.",
+            ),
+        ),
+        (
+            "crates/fub-kernel/src/registry.rs::checked_extensions",
+            (
+                Family::ContextualCase,
+                "l'identità di un'estensione nel registro è full-Unicode e non ASCII, e diverge \
+                 apposta da `rules/media.rs`: qui l'estensione arriva dal **descrittore di un \
+                 provider**, che è testo di terzi, non dal nome di un file del vault. È la piega \
+                 di `register`.",
+            ),
+        ),
+        (
+            "crates/fub-kernel/src/registry.rs::replace",
+            (
+                Family::ContextualCase,
+                "è la sostituzione intenzionale nella stessa mappa di `register`: riceve lo \
+                 stesso descrittore e deve piegare le estensioni nello stesso modo, o registrare \
+                 e sostituire darebbero identità diverse alla stessa estensione.",
+            ),
+        ),
+        (
+            "crates/fub-kernel/src/registry.rs::provider_arc_for_ext",
+            (
+                Family::ContextualCase,
+                "è lo stesso lookup di `provider_for_ext`, ma rende un `Arc` perché la callback \
+                 possa essere invocata dopo aver rilasciato il workspace. La forma di ownership \
+                 non può cambiare l'identità dell'estensione che sceglie il provider.",
+            ),
+        ),
+        (
+            "crates/fub-kernel/src/registry.rs::descriptor_for_ext",
+            (
+                Family::ContextualCase,
+                "legge il descrittore congelato della stessa registrazione: deve risolvere le \
+                 stesse chiavi di `provider_for_ext` e `provider_arc_for_ext`, o metadati e \
+                 callback potrebbero attribuire la stessa estensione a provider diversi.",
+            ),
+        ),
+        (
+            "crates/fub-kernel/src/registry.rs::capabilities_for_ext",
+            (
+                Family::ContextualCase,
+                "legge le capacità congelate accanto al descrittore: deve risolvere la stessa \
+                 estensione di `descriptor_for_ext`, o il provider selezionato e le forme \
+                 sintattiche dichiarate per quel documento potrebbero divergere.",
+            ),
+        ),
+        (
+            "crates/fub-motori/src/registro.rs::normale",
+            (
+                Family::ContextualCase,
+                "è la chiave delle estensioni nel registro dei motori: piega in minuscolo \
+                 full-Unicode come `checked_extensions`, perché `scalda_per` deve accendere il \
+                 motore del provider che il registro dei formati sceglie per la stessa \
+                 estensione. Toglie in più il punto davanti, perché chi chiama passa anche \
+                 l'estensione scritta come nel nome di un file.",
+            ),
+        ),
+        (
+            "crates/fub-kernel/src/registry.rs::provider_for_ext",
+            (
+                Family::ContextualCase,
+                "la lettura della stessa mappa. Le tre righe di `registry.rs` sono una regola \
+                 sola scritta nei tre punti in cui la chiave si costruisce, ed è il caso in cui \
+                 il conto pretende che restino uguali.",
+            ),
+        ),
+        (
+            "crates/fub-kernel/src/registry.rs::default_extension",
+            (
+                Family::ContextualCase,
+                "non interroga la mappa — «non si guarda `by_ext`, che è una mappa e non ha un \
+                 primo» (registry.rs) — ma deve rendere l'estensione nella stessa forma, perché \
+                 è quella con cui una nota nuova nascerà e verrà poi ricercata.",
+            ),
+        ),
+        (
+            "crates/fub-kernel/src/graph.rs::new",
+            (
+                Family::ContextualCase,
+                "`ProseFormats::new` riceve le chiavi di `registry.rs` (`prose_formats`) e le \
+                 piega come lei: l'insieme dei formati di prosa è una vista della stessa mappa, \
+                 e una piegatura diversa farebbe vincere lo spareggio a un formato che il \
+                 registro non riconosce per quell'estensione.",
+            ),
+        ),
+        (
+            "crates/fub-kernel/src/graph.rs::names",
+            (
+                Family::ContextualCase,
+                "l'altro capo di `ProseFormats::new`: piega l'estensione del path del vault per \
+                 confrontarla con l'insieme. Deve piegare come `documents.rs::extension_of`, \
+                 perché lo spareggio fra omonimi deve scegliere il documento che il registro \
+                 saprebbe parsare come prosa.",
+            ),
+        ),
+        (
+            "crates/fub-kernel/src/documents.rs::extension_of",
+            (
+                Family::ContextualCase,
+                "è la chiave con cui il kernel interroga `registry.rs`, e piega come lei per \
+                 costruzione. Diverge da `media.rs::kind_of`, che sulla stessa estensione è \
+                 ASCII, perché quella risponde a «che specie di file è» e questa a «chi lo sa \
+                 parsare».",
+            ),
+        ),
+        (
+            "crates/fub-kernel/src/same_content.rs::extension_of",
+            (
+                Family::ContextualCase,
+                "è il «tipo» con cui lo stesso contenuto (T101) confronta due nomi del vault fra \
+                 loro: l'estensione grezza, piegata in minuscolo e confrontata uguale, senza \
+                 interrogare il registro. `.md` e `.markdown` sono quindi due tipi, anche se il \
+                 registro li servisse con lo stesso formato: è prudente di proposito, perché \
+                 riusare un file non deve cambiare l'estensione del collegamento che lo nomina. \
+                 Prende l'estensione del solo nome, come `media.rs`, perché un file senza \
+                 estensione in una cartella col punto non diventi un tipo.",
+            ),
+        ),
+        (
+            "crates/fub-abi/src/transfer.rs::extension",
+            (
+                Family::ContextualCase,
+                "l'estensione di un file **in arrivo da fuori**, che sceglie il provider \
+                 d'import: sta dal lato di `registry.rs` e non da quello di `media.rs`, per la \
+                 stessa ragione.",
+            ),
+        ),
+        (
+            "crates/fub-sdk/src/testing/mod.rs::format_of",
+            (
+                Family::ContextualCase,
+                "`MemoryHost` deve rispondere **come il kernel**, o un plugin provato contro di \
+                 lui passerebbe nel banco e fallirebbe nell'app: la sua divergenza sarebbe una \
+                 conformità falsa.",
+            ),
+        ),
+        (
+            "crates/fub-format-markdown/src/parse.rs::convert_block",
+            (
+                Family::ContextualCase,
+                "non piega un nome scritto da qualcuno: piega il `Debug` di un enum di `comrak` \
+                 (`Note`, `Tip`, …) per farne il campo `type` di un callout. La sorgente è \
+                 generata dal compilatore, quindi la piegatura non ha un'altra regola con cui \
+                 divergere.",
+            ),
+        ),
+        (
+            "crates/fub-kernel/src/index/plan.rs::name_of_predicate",
+            (
+                Family::ContextualCase,
+                "come sopra: il `Debug` di `PredicateKind` che diventa il nome di un passo di \
+                 piano. È diagnostica, non identità — nessuno confronta questa stringa con una \
+                 scritta da un utente.",
+            ),
+        ),
+        (
+            "crates/fub-kernel/src/log.rs::compose",
+            (
+                Family::ContextualCase,
+                "il livello di log in maiuscolo dentro una riga di file. È l'unica riga della \
+                 tabella che va **verso l'alto**, e nessuno la riconverte: si legge «con `grep` \
+                 e con l'occhio» (log.rs).",
+            ),
+        ),
+        (
+            "crates/fub-sdk/src/testing/conformance.rs::spans_slice_the_source",
+            (
+                Family::ContextualCase,
+                "non installa una regola: **asserisce** che il `marker` di un'ancora nomini la \
+                 sua ancora, e piega i due capi perché l'id normalizzato e il testo scritto \
+                 possono differire di una maiuscola. Sta nei `src/` perché è la suite che i \
+                 plugin di terzi eseguono.",
+            ),
+        ),
+        (
+            "crates/fub-abi/src/rules/keys.rs::chords",
+            (
+                Family::ContextualCase,
+                "l'identità qui non è un nome ma un **gesto**: `Mod-Shift-G` e `mod-shift-g` \
+                 sono lo stesso tasto premuto, e la NFC non c'entra perché il nome di un tasto \
+                 arriva da `KeyboardEvent.key` e non dalla tastiera di chi scrive una nota. \
+                 Diverge da `resolution_key` perché deve piegare **come la shell**, che è \
+                 `toLowerCase()` di JavaScript, e a tenerle uguali è il mirror delle regole.",
+            ),
+        ),
+        // -- CasoPerCarattere: il caso in cui l'offset è il prodotto --------
+        (
+            "crates/fub-kernel/src/occurrences.rs::prefix_len_there",
+            (
+                Family::PerCharacterCase,
+                "la ragione è scritta sopra la funzione ed è l'asse di questa famiglia: «gli \
+                 offset sono il prodotto di questa funzione: `to_lowercase` può cambiare la \
+                 lunghezza in byte di ciò che tocca … e uno span misurato su un testo diverso da \
+                 quello che l'editor ha aperto porterebbe il cursore altrove». La NFC la fa senza \
+                 rinunciarci, componendo un grappolo canonico per volta (`cluster_end`).",
+            ),
+        ),
+        (
+            "crates/fub-abi/src/model.rs::heading_slug",
+            (
+                Family::PerCharacterCase,
+                "piega carattere per carattere perché sta già iterando i caratteri per tenere \
+                 solo gli alfanumerici: non ha un offset da difendere come `prefix_len_there`, ha \
+                 un filtro. Proprio per quel filtro compone **prima** di iterare: una `Mn` non è \
+                 alfanumerica, e senza `composed` l'accento non divergeva, spariva.",
+            ),
+        ),
+        (
+            "crates/fub-format-rich/src/unproject.rs::initials",
+            (
+                Family::PerCharacterCase,
+                "non confronta niente: costruisce le iniziali di un autore di commento, la \
+                 prima lettera di ogni parola in maiuscolo, come le scrive Word. Lavora per \
+                 carattere perché prende un carattere per parola, e non c'è un nome da \
+                 riconoscere né un path da risolvere.",
+            ),
+        ),
+        // -- CasoAscii: dove è dimostrabilmente la stessa risposta ----------
+        (
+            "crates/fub-kernel/src/locale.rs::language_base",
+            (
+                Family::AsciiCase,
+                "prende la lingua di un tag BCP 47 (`it-IT` → `it`) per sapere se la lingua \
+                 scelta è quella del sistema, e se il primo giorno della settimana del sistema \
+                 vale anche per lei (IMP-4801). I sottotag BCP 47 sono ASCII e non badano al \
+                 maiuscolo per definizione (RFC 5646 §2.1.1): non è il nome di una nota, di un \
+                 tag Fub o di un path.",
+            ),
+        ),
+        (
+            "crates/fub-format-markdown/src/render.rs::html_tag",
+            (
+                Family::AsciiCase,
+                "riconosce un tag HTML in riga del vocabolario chiuso (`<u>`, `<kbd>`, `<br>`) \
+                 senza badare al maiuscolo, come `INLINE_HTML` con la `i` in `render-inline.ts`: \
+                 i nomi dei tag HTML sono ASCII e il browser li piega allo stesso modo. Non è il \
+                 nome di una nota, di un tag Fub o di un path.",
+            ),
+        ),
+        (
+            "crates/fub-format-markdown/src/render.rs::colored_tag",
+            (
+                Family::AsciiCase,
+                "riconosce `<span>` e `<mark>` con una classe di colore del contenuto (K1) senza badare al \
+                 maiuscolo del nome del tag, come `html_tag` qui sopra: i nomi dei tag HTML sono \
+                 ASCII e il browser li piega allo stesso modo. Non è il nome di una nota.",
+            ),
+        ),
+        (
+            "crates/fub-motori/src/modulo.rs::virgolettato",
+            (
+                Family::AsciiCase,
+                "riconosce il segnaposto `\"#rrggbb\"` nelle descrizioni dei parametri dei \
+                 comandi di VectorCraft, scritto a volte in maiuscolo, per dare al campo il \
+                 tipo colore: un segnaposto ASCII del vocabolario chiuso di quelle \
+                 descrizioni, non il nome di una nota, di un tag o di un path.",
+            ),
+        ),
+        (
+            "crates/fub-format-markdown/src/render.rs::render_top_blocks",
+            (
+                Family::AsciiCase,
+                "riconosce l'info string `toc` di un recinto (K4) senza badare al maiuscolo, come la \
+                 lingua di un recinto: un identificatore ASCII del vocabolario chiuso, non un nome \
+                 di nota, di tag o di path.",
+            ),
+        ),
+        (
+            "crates/fub-format-markdown/src/render.rs::strip_ci",
+            (
+                Family::AsciiCase,
+                "toglie un prefisso HTML fisso (`<details`, `<summary>`, i loro `</…>`) senza badare al \
+                 maiuscolo, per il ripiegabile (K2): i nomi dei tag sono ASCII e il browser li piega \
+                 allo stesso modo. Non confronta nomi di Fub.",
+            ),
+        ),
+        (
+            "crates/fub-host/src/craft/editors.rs::opens",
+            (
+                Family::AsciiCase,
+                "dice se un'app Craft apre un'estensione (N7, «Apri con»): un `IMG.JPG` è un \
+                 `jpg` per PhotoCraft. Le estensioni della tabella sono ASCII e il sistema le \
+                 tratta così; non è il nome di una nota, di un tag o di un percorso, che si \
+                 confrontano con le loro regole.",
+            ),
+        ),
+        (
+            "crates/fub-host/src/craft/launch.rs::is_fub_variable",
+            (
+                Family::AsciiCase,
+                "riconosce le variabili d'ambiente di Fub (`FUB_*`) da togliere all'ambiente di \
+                 un'app Craft avviata (N7, l'avvio): su Windows i nomi delle variabili non \
+                 distinguono il maiuscolo e il sistema li piega in ASCII, su unix il confronto \
+                 è esatto. Non è il nome di una nota, di un tag o di un percorso.",
+            ),
+        ),
+        (
+            "crates/fub-format-craft/src/contract.rs::of_extension",
+            (
+                Family::AsciiCase,
+                "dice il soggetto dell'anteprima di un file che non ha un provider Craft (N7, \
+                 il contratto 2): un `IMG_0001.CR3` è una foto RAW come un `.cr3`. Le estensioni \
+                 della tabella sono ASCII e il sistema le tratta così, come `editors.rs::opens`; \
+                 non è il nome di una nota, di un tag o di un percorso, che si confrontano con le \
+                 loro regole.",
+            ),
+        ),
+        (
+            "crates/fub-format-craft/src/office.rs::is_package_extension",
+            (
+                Family::AsciiCase,
+                "dice se un documento è un pacchetto ZIP da cui leggere la miniatura (N7, le \
+                 anteprime dei documenti): un `RELAZIONE.DOCX` è un `.docx`, come per \
+                 `contract.rs::of_extension`, che lo ha già detto un documento. Le estensioni \
+                 della tabella sono ASCII; non è il nome di una nota, di un tag o di un \
+                 percorso.",
+            ),
+        ),
+        (
+            "crates/fub-host/src/link_card.rs::card",
+            (
+                Family::AsciiCase,
+                "legge il `Content-Type` di una risposta HTTP per sapere se è HTML: i tipi MIME sono \
+                 ASCII e senza distinzione di maiuscole per RFC 9110. Non è un nome di Fub.",
+            ),
+        ),
+        (
+            "crates/fub-host/src/link_card.rs::icon_data",
+            (
+                Family::AsciiCase,
+                "legge il tipo MIME di un'icona scaricata per il segnalibro web (K8): ASCII e senza \
+                 distinzione di maiuscole per RFC 9110. Non è un nome di Fub.",
+            ),
+        ),
+        (
+            "crates/fub-host/src/link_card.rs::read",
+            (
+                Family::AsciiCase,
+                "cerca `<head>`, `<title>`, `<meta>` e `<link>` nella pagina di un sito per la scheda \
+                 del segnalibro web (K8): i nomi dei tag HTML sono ASCII e il browser li piega allo \
+                 stesso modo. La copia minuscola ha gli stessi byte, quindi gli offset valgono anche \
+                 sull'originale. Non è un nome di Fub.",
+            ),
+        ),
+        (
+            "crates/fub-host/src/link_card.rs::tag_attrs",
+            (
+                Family::AsciiCase,
+                "legge i nomi degli attributi di un tag HTML (`property`, `content`, `rel`, `href`) \
+                 senza badare al maiuscolo, come il browser: sono ASCII. Non è un nome di Fub.",
+            ),
+        ),
+        (
+            "crates/fub-host/src/map_tiles.rs::tile_host",
+            (
+                Family::AsciiCase,
+                "riconosce lo schema `https://` e abbassa l'host DNS di una tessera della vista \
+                 Mappa: è la domanda di `web_clip.rs::viewer_host`, ma qui l'indirizzo vuole anche \
+                 un percorso e rifiuta query e frammento, perché una tessera non ne ha bisogno.",
+            ),
+        ),
+        (
+            "crates/fub-host/src/map_tiles.rs::allowed_hosts",
+            (
+                Family::AsciiCase,
+                "abbassa i siti di `map.tile-hosts` per confrontarli con l'host della tessera, come \
+                 `web_clip.rs::approved` fa con `viewer.hosts`: i nomi DNS sono ASCII e senza \
+                 maiuscole. È un'altra lista perché scaricare tessere non è aprire pagine.",
+            ),
+        ),
+        (
+            "crates/fub-host/src/map_tiles.rs::sniffed",
+            (
+                Family::AsciiCase,
+                "cerca `<svg`, `<!doctype` e `<!entity` in una tessera vettoriale senza badare al \
+                 maiuscolo, come il parser XML del browser per i nomi dei tag: sono ASCII. Non è \
+                 un nome di Fub.",
+            ),
+        ),
+        (
+            "crates/fub-host/src/map_tiles.rs::declared",
+            (
+                Family::AsciiCase,
+                "legge il `Content-Type` di una tessera scaricata: i tipi MIME sono ASCII e senza \
+                 distinzione di maiuscole per RFC 9110. Non è un nome di Fub.",
+            ),
+        ),
+        (
+            "crates/fub-host/src/engines.rs::extension",
+            (
+                Family::AsciiCase,
+                "piega l'estensione che la shell manda per scaldare un motore (K3) solo dopo averla \
+                 ridotta a lettere e cifre ASCII: su quell'alfabeto la piega ASCII e quella \
+                 full-Unicode del registro (`checked_extensions`) danno gli stessi byte, e la \
+                 sonda passa comunque da `format_of`, che piega di nuovo. Non decide un'identità \
+                 sua: sceglie solo se e quale motore scaldare.",
+            ),
+        ),
+        (
+            "crates/fub-format-rich/src/odt/styles.rs::hex",
+            (
+                Family::AsciiCase,
+                "scrive in minuscolo un colore ODF `#rrggbb` già controllato come sei cifre \
+                 esadecimali: l'alfabeto è ASCII per costruzione, e la piegatura serve solo a \
+                 dare al colore la forma che la proiezione confronta. Non è un nome.",
+            ),
+        ),
+        (
+            "crates/fub-format-rich/src/projection.rs::color_name",
+            (
+                Family::AsciiCase,
+                "scrive un colore RGB del documento come `#rrggbb` minuscolo, la forma della \
+                 proiezione: la stringa viene da `hex()` di WordCraft, solo cifre esadecimali \
+                 ASCII. Normalizza un numero, non confronta nomi.",
+            ),
+        ),
+        (
+            "crates/fub-ink/src/inkml.rs::to_inkml",
+            (
+                Family::AsciiCase,
+                "scrive il colore del pennello InkML `#RRGGBB` in maiuscolo, la forma di Word: \
+                 il colore è già `#rrggbb` di sei cifre esadecimali ASCII. Normalizza un \
+                 numero, non confronta nomi.",
+            ),
+        ),
+        (
+            "crates/fub-ink/src/inkml.rs::hex_color",
+            (
+                Family::AsciiCase,
+                "porta il colore del pennello InkML in minuscolo, la forma di `fub-ink`, in lettura \
+                 e prima di scriverlo, dopo aver controllato sei cifre esadecimali ASCII. \
+                 Normalizza un numero, non confronta nomi.",
+            ),
+        ),
+        (
+            "crates/fub-ink/src/inkml.rs::brush_of",
+            (
+                Family::AsciiCase,
+                "legge i valori `rectangle` di `tip` e `true` di `ignorePressure` del pennello \
+                 InkML senza badare al caso, come li scrivono Word e OneNote: sono parole \
+                 chiuse di un vocabolario ASCII, non nomi di file o di chiavi.",
+            ),
+        ),
+        (
+            "crates/fub-format-rich/src/projection.rs::look",
+            (
+                Family::AsciiCase,
+                "come `color_name`, per il colore di evidenziazione: lo scrive in minuscolo per \
+                 confrontarlo col valore di default della proiezione, e le cifre esadecimali \
+                 sono ASCII per costruzione.",
+            ),
+        ),
+        (
+            "crates/fub-format-rich/src/running.rs::page_field",
+            (
+                Family::AsciiCase,
+                "riconosce i codici di campo di Word `PAGE`, `NUMPAGES` e l'interruttore \
+                 `MERGEFORMAT`: sono parole chiave ASCII del formato, che Word accetta senza \
+                 distinguere le maiuscole. Non tocca nomi scritti dall'utente.",
+            ),
+        ),
+        (
+            "crates/fub-format-rich/src/canonical.rs::value",
+            (
+                Family::AsciiCase,
+                "scrive in maiuscolo un valore di attributo già controllato come sei cifre \
+                 esadecimali, un colore OOXML, per confrontare due documenti a meno della \
+                 forma: l'alfabeto è ASCII per costruzione. Non è un nome.",
+            ),
+        ),
+        (
+            "crates/fub-format-rich/src/inventory.rs::class_of",
+            (
+                Family::AsciiCase,
+                "classifica il tipo di contenuto di una parte del pacchetto: un tipo MIME, che \
+                 è ASCII e insensibile al caso per definizione (RFC 2045). Non tocca nomi \
+                 scritti dall'utente.",
+            ),
+        ),
+        (
+            "crates/fub-format-rich/src/inventory.rs::read",
+            (
+                Family::AsciiCase,
+                "trova due voci dello ZIP con lo stesso nome di parte: i nomi di parte OPC si \
+                 confrontano senza distinguere le maiuscole ASCII (ECMA-376 parte 2), e un \
+                 pacchetto che ne ha due è ambiguo. È la regola del formato, non un nome di \
+                 file del vault.",
+            ),
+        ),
+        (
+            "crates/fub-format-rich/src/inventory.rs::resolve",
+            (
+                Family::AsciiCase,
+                "come `read`: risolve la destinazione di una relazione nel nome di parte con \
+                 cui la si cerca, nella stessa forma minuscola ASCII dei nomi di parte OPC.",
+            ),
+        ),
+        (
+            "crates/fub-format-rich/src/inventory.rs::read_rels",
+            (
+                Family::AsciiCase,
+                "riconosce il valore `External` dell'attributo `TargetMode` di una relazione: \
+                 una parola chiave ASCII del formato, letta senza distinguere le maiuscole come \
+                 fa Word. Non tocca nomi scritti dall'utente.",
+            ),
+        ),
+        (
+            "crates/fub-format-rich/src/graft.rs::internal",
+            (
+                Family::AsciiCase,
+                "nell'innesto, ritrova fra le parti già aggiunte quella a cui punta una \
+                 relazione del codec, confrontando nomi di parte OPC nella loro forma minuscola \
+                 ASCII, come `inventory.rs::read`: è la regola del formato (ECMA-376 parte 2), \
+                 non un nome di file del vault.",
+            ),
+        ),
+        (
+            "crates/fub-format-rich/src/graft.rs::relative",
+            (
+                Family::AsciiCase,
+                "scrive il riferimento relativo fra due nomi di parte OPC, che si confrontano \
+                 segmento per segmento senza distinguere le maiuscole ASCII come vuole il \
+                 formato: la parte comune dei due percorsi non dipende dal caso.",
+            ),
+        ),
+        (
+            "crates/fub-format-rich/src/graft.rs::types_xml",
+            (
+                Family::AsciiCase,
+                "toglie da `[Content_Types].xml` gli `Override` delle parti tolte, che \
+                 l'innesto tiene per nome di parte OPC in minuscolo ASCII come \
+                 `inventory.rs::read`; il `/` iniziale del `PartName` non fa parte del nome.",
+            ),
+        ),
+        (
+            "crates/fub-format-rich/src/graft.rs::graft",
+            (
+                Family::AsciiCase,
+                "riscrive lo ZIP voce per voce e ritrova ciascuna fra le parti sostituite o \
+                 tolte per nome di parte OPC in minuscolo ASCII, la stessa chiave di \
+                 `inventory.rs::read`, così che una voce scritta con un'altra forma non \
+                 sfugga alla sostituzione.",
+            ),
+        ),
+        (
+            "crates/fub-format-rich/src/graft.rs::para_id",
+            (
+                Family::AsciiCase,
+                "tiene unici i `w14:paraId` del documento innestato: sono otto cifre \
+                 esadecimali (ST_LongHexNumber), e `0a1B…` e `0A1b…` sono lo stesso numero; \
+                 l'alfabeto è ASCII per costruzione. Non è un nome.",
+            ),
+        ),
+        (
+            "crates/fub-format-rich/src/graft.rs::para_ids_of",
+            (
+                Family::AsciiCase,
+                "raccoglie i `w14:paraId` di un frammento nella forma maiuscola con cui \
+                 `para_id` li confronta: numeri esadecimali, ASCII per costruzione. Non è \
+                 un nome.",
+            ),
+        ),
+        (
+            "crates/fub-app/src/live.rs::pc_name",
+            (
+                Family::AsciiCase,
+                "toglie dal nome di rete del PC il suffisso `.local` che macOS aggiunge, prima di \
+                 metterlo nel QR della sessione live: i nomi DNS sono insensibili al caso solo \
+                 nell'ASCII (RFC 4343), e `.local` è un'etichetta ASCII. Non confronta nomi fra \
+                 loro: decide solo se togliere un suffisso.",
+            ),
+        ),
+        (
+            "crates/fub-app/src/reveal.rs::runs",
+            (
+                Family::AsciiCase,
+                "decide se aprire un file con l'app di sistema vorrebbe dire eseguirlo, \
+                 confrontando la sua estensione con un elenco di lanciatori (`exe`, `bat`, \
+                 `desktop`, …). Le estensioni dell'elenco sono tutte ASCII, e Windows le \
+                 riconosce senza distinguere le maiuscole: `.EXE` si esegue come `.exe`.",
+            ),
+        ),
+        (
+            "crates/fub-features/src/formats.rs::new_note_extension",
+            (
+                Family::AsciiCase,
+                "porta nella forma delle chiavi del registro l'estensione che l'utente ha scritto \
+                 nell'impostazione `files.new-note-extension`: le chiavi di `by_ext` sono già \
+                 minuscole, e una nota nuova deve nascere con l'estensione nella forma in cui \
+                 verrà poi ricercata. È la stessa regola di `new_notes_id` nel kernel.",
+            ),
+        ),
+        (
+            "crates/fub-features/src/base.rs::is_base_definition",
+            (
+                Family::AsciiCase,
+                "riconosce un file di definizione di una Base (`.base`, anche `.BASE`) per toglierlo \
+                 dalle righe di ogni Base (IMP-1804). L'estensione è un letterale ASCII fisso \
+                 scritto qui, non testo di un provider né un nome di nota: non chiede «chi lo sa \
+                 parsare» come `documents.rs::extension_of`, chiede solo se il file è una Base, e \
+                 piega come `media.rs::kind_of` per la specie di un file.",
+            ),
+        ),
+        (
+            "crates/fub-kernel/src/workspace/notes.rs::new_notes_id",
+            (
+                Family::AsciiCase,
+                "legge la stessa impostazione di `formats.rs::new_note_extension` e la porta \
+                 nella stessa forma: kernel e feature devono dare alla nota nuova la stessa \
+                 estensione, scritta come la scrive `default_extension`.",
+            ),
+        ),
+        (
+            "crates/fub-app/src/print.rs::file_name",
+            (
+                Family::AsciiCase,
+                "non è identità di un nome del vault: riconosce l'estensione `.pdf` anche scritta \
+                 `.PDF`, per non aggiungerne una seconda al file temporaneo che «Stampa…» passa al \
+                 lettore dei PDF. I sistemi scelgono quel lettore dall'estensione senza badare alle \
+                 maiuscole, e l'alfabeto di un'estensione è ASCII.",
+            ),
+        ),
+        (
+            "crates/fub-cli/src/native.rs::parse",
+            (
+                Family::AsciiCase,
+                "non è identità di un nome del vault: riconosce il nome di un browser scritto da \
+                 chi lancia `fub-cli native-install --browser`, fra sei parole ASCII chiuse \
+                 (`chrome`, `firefox`, …). `Chrome` e `chrome` sono lo stesso browser, e una \
+                 piegatura Unicode attribuirebbe equivalenze a un vocabolario che non ne ha.",
+            ),
+        ),
+        (
+            "crates/fub-abi/src/edit.rs::matches_bytes",
+            (
+                Family::AsciiCase,
+                "non è identità di un nome ma compatibilità di migrazione: soltanto la vecchia \
+                 revisione FNV-1a a sedici cifre accetta maiuscole e minuscole equivalenti, perché \
+                 l'alfabeto esadecimale è ASCII. Le revisioni SHA-256 correnti restano canoniche \
+                 e si confrontano esattamente; una piegatura Unicode inventerebbe equivalenze.",
+            ),
+        ),
+        (
+            "crates/fub-format-xlsx/src/input.rs::parse",
+            (
+                Family::AsciiCase,
+                "riconosce l'input `TRUE` e `FALSE` di una cella, le due costanti logiche di \
+                 Excel: il vocabolario è chiuso e ASCII, come quello di `formula.rs`, e una \
+                 piegatura Unicode attribuirebbe equivalenze che il formato non conosce.",
+            ),
+        ),
+        (
+            "crates/fub-format-xlsx/src/parts.rs::name_key",
+            (
+                Family::ContextualCase,
+                "trova la parte che una nota incorpora (`fub.part`) fra i fogli, i nomi definiti e \
+                 le tabelle di una cartella: Excel tiene uguali due nomi che differiscono soltanto \
+                 per le maiuscole, anche fuori dall'ASCII («Città» e «CITTÀ»), e la piegatura \
+                 contestuale è quella che lo segue. Sono nomi dentro un file, non del vault, e la \
+                 risposta sceglie soltanto che cosa mostrare: non scrive niente.",
+            ),
+        ),
+        (
+            "crates/fub-format-xlsx/src/package.rs::normalize",
+            (
+                Family::AsciiCase,
+                "confronta i nomi delle parti di un pacchetto OPC, che la specifica (ECMA-376 \
+                 parte 2, §9.1.1.4) dichiara uguali a meno delle maiuscole ASCII: non sono nomi \
+                 del vault ma nomi dentro uno zip, e il lettore di GridCraft li confronta così.",
+            ),
+        ),
+        (
+            "crates/fub-format-xlsx/src/package.rs::rels",
+            (
+                Family::AsciiCase,
+                "legge `TargetMode=\"External\"` di una relazione OPC: un valore di un \
+                 vocabolario chiuso dello schema, che i produttori scrivono con maiuscole \
+                 diverse e che nessuna piegatura Unicode renderebbe più vero.",
+            ),
+        ),
+        (
+            "crates/fub-format-xlsx/src/package.rs::split_dir",
+            (
+                Family::FolderBoundary,
+                "divide il nome di una parte del pacchetto nella sua cartella e nel suo file, \
+                 per trovarne le relazioni (`_rels/<file>.rels`): il `/` iniziale di un nome \
+                 OPC è la radice del pacchetto, non un path del vault.",
+            ),
+        ),
+        (
+            "crates/fub-format-xlsx/src/inventory.rs::cell_ref",
+            (
+                Family::AsciiCase,
+                "legge le lettere della colonna di un riferimento A1 dentro l'inventario di una cartella: \
+                 un vocabolario ASCII che Excel accetta in maiuscolo e in minuscolo, come \
+                 `formula.rs`.",
+            ),
+        ),
+        (
+            "crates/fub-format-xlsx/src/inventory.rs::digits",
+            (
+                Family::AsciiCase,
+                "sposta le colonne di una formula condivisa per contarla espansa: le lettere di un \
+                 riferimento A1 sono ASCII e Excel le confronta senza maiuscole, come `cell_ref`.",
+            ),
+        ),
+        (
+            "crates/fub-format-xlsx/src/inventory.rs::new",
+            (
+                Family::AsciiCase,
+                "riconosce il nero `000000` di un colore del tema: cifre esadecimali, che lo schema \
+                 di DrawingML scrive in maiuscolo o in minuscolo con lo stesso valore.",
+            ),
+        ),
+        (
+            "crates/fub-format-xlsx/src/inventory.rs::rgb",
+            (
+                Family::AsciiCase,
+                "porta un colore `rgb` di SpreadsheetML in forma canonica: cifre esadecimali, uguali \
+                 a meno delle maiuscole ASCII, come il nero del tema in `new`.",
+            ),
+        ),
+        (
+            "crates/fub-format-xlsx/src/inventory.rs::sheet",
+            (
+                Family::AsciiCase,
+                "conta le unioni e le convalide di un foglio per i loro riferimenti A1, che Excel \
+                 legge senza maiuscole: le lettere di colonna sono ASCII, come in `cell_ref`.",
+            ),
+        ),
+        (
+            "crates/fub-format-xlsx/src/objects.rs::media",
+            (
+                Family::AsciiCase,
+                "porta il tipo di un'immagine della cartella in forma canonica prima di \
+                 confrontarlo con l'elenco chiuso dei tipi che la shell disegna: i tipi MIME sono \
+                 token ASCII e la specifica (RFC 2045, §5.1) li dichiara uguali a meno delle \
+                 maiuscole.",
+            ),
+        ),
+        (
+            "crates/fub-abi/src/rules/media.rs::kind_of",
+            (
+                Family::AsciiCase,
+                "confronta un'estensione contro le estensioni dei provider dichiarati: sono \
+                 token di formato, e un formato con un'estensione non ASCII non esiste. Diverge \
+                 da `registry.rs` apposta, e la differenza è il §25.2.",
+            ),
+        ),
+        (
+            "crates/fub-abi/src/rules/media.rs::mime_for_ext",
+            (
+                Family::AsciiCase,
+                "la tabella dei MIME è ASCII per costruzione: «`FOTO.PNG` arriva dalle \
+                 fotocamere e dai vault che vengono da Windows» (media.rs). Piega l'ingresso e \
+                 non la tabella perché la tabella è già minuscola nel sorgente.",
+            ),
+        ),
+        (
+            "crates/fub-abi/src/rules/health.rs::is_attachment",
+            (
+                Family::AsciiCase,
+                "è la stessa domanda di `kind_of` vista al rovescio (non-documento invece che \
+                 documento) e deve piegare **come lei**, o un `.MD` sarebbe un allegato per una \
+                 delle due e un documento per l'altra.",
+            ),
+        ),
+        (
+            "crates/fub-abi/src/net.rs::header",
+            (
+                Family::AsciiCase,
+                "non è una regola di Fub: è HTTP. I nomi di header sono `token` per la RFC 9110, \
+                 cioè ASCII, e piegarli in full-Unicode aggiungerebbe corrispondenze che il \
+                 protocollo non ha.",
+            ),
+        ),
+        (
+            "crates/fub-abi/src/text.rs::template",
+            (
+                Family::AsciiCase,
+                "confronta un tag di lingua BCP 47, che è ASCII per la sua stessa grammatica: \
+                 `IT` e `it` sono la stessa lingua, e non c'è nessun altro modo di scriverla.",
+            ),
+        ),
+        (
+            "crates/fub-features/src/draw/templates.rs::of",
+            (
+                Family::AsciiCase,
+                "sceglie la lingua dei file di un modello di disegno dalla parte di lingua di un \
+                 tag BCP 47, come `text.rs::template`: è ASCII per la grammatica del tag, ed `EN` \
+                 ed `en` sono la stessa lingua.",
+            ),
+        ),
+        (
+            "crates/fub-features/src/draw/fonts.rs::same_family",
+            (
+                Family::AsciiCase,
+                "confronta i nomi di famiglia di un carattere come i browser, che seguono la \
+                 risoluzione del CSSWG del 2019: maiuscole e minuscole contano soltanto fuori \
+                 dall'ASCII. L'export deve trovare la famiglia che la superficie dell'editor \
+                 trova, e piegare in full-Unicode ne troverebbe di più.",
+            ),
+        ),
+        (
+            "crates/fub-disegno/src/gesti/strumento.rs::tasto",
+            (
+                Family::AsciiCase,
+                "traduce il tasto di un evento della tastiera nella lettera che gli strumenti del \
+                 motore di disegno aspettano (`ToolKey::Letter`, sempre minuscola): sono le \
+                 scorciatoie latine del motore, ASCII per contratto, e `A` con le maiuscole è lo \
+                 stesso tasto di `a`. Non è il nome di una nota, di un tag o di un path.",
+            ),
+        ),
+        (
+            "crates/fub-disegno/src/gesti/strumento.rs::cursore",
+            (
+                Family::AsciiCase,
+                "non confronta niente: scrive in `snake_case` il nome del cursore che il motore \
+                 di disegno chiede (`PenClose` → `pen_close`), un identificatore Rust \
+                 ASCII del vocabolario chiuso del motore. Non c'è un nome di nota, di tag o di \
+                 path da riconoscere.",
+            ),
+        ),
+        (
+            "crates/fub-disegno/src/differenza_testo.rs::peso_e_corsivo",
+            (
+                Family::AsciiCase,
+                "non confronta nomi fra loro: legge il peso e il corsivo dal nome dello stile di \
+                 una faccia che il motore di disegno manda («Bold Italic», «SemiBold»), parole \
+                 inglesi del vocabolario OpenType, ASCII per contratto, dove `Bold` e `bold` sono \
+                 lo stesso peso. Non è il nome di una nota, di un tag, di un path o di una \
+                 famiglia (quella resta a `fonts.rs::same_family`).",
+            ),
+        ),
+        (
+            "crates/fub-disegno/src/famiglie/colore.rs::libreria_di_base",
+            (
+                Family::AsciiCase,
+                "ritrova una libreria di campioni di base del motore di disegno per id, o per \
+                 nome senza badare alle maiuscole, come fa il motore stesso \
+                 (`vendor/vectorcraft/crates/engine/src/cmd/swatchlib.rs`): i nomi sono quelli \
+                 inglesi e ASCII del catalogo chiuso delle librerie del motore («Earth Tones»), \
+                 per controllare gli argomenti di `swatch.library.add` prima del motore. Non è il \
+                 nome di una nota, di un tag, di un path o di un campione dell'utente.",
+            ),
+        ),
+        (
+            "crates/fub-disegno/src/famiglie/livelli.rs::testo_in_carattere",
+            (
+                Family::AsciiCase,
+                "predice quali testi sceglierà `select.font` del motore di disegno, per dire il \
+                 perché in italiano prima di chiamarlo: deve confrontare famiglia e stile come \
+                 fa il motore (`vendor/vectorcraft/crates/engine/src/cmd/fonts.rs`, \
+                 `eq_ignore_ascii_case`), altrimenti Fub rifiuterebbe una scelta che il motore \
+                 farebbe o viceversa. Non è il nome di una nota, di un tag o di un path, e non \
+                 decide se due famiglie installate sono la stessa (quella resta a \
+                 `fonts.rs::same_family`).",
+            ),
+        ),
+        (
+            "crates/fub-disegno/src/famiglie/livelli.rs::opzioni_della_modifica_globale",
+            (
+                Family::AsciiCase,
+                "riconosce la parola chiave `all` del campo `artboards` delle opzioni della \
+                 modifica globale, come fa il motore di disegno \
+                 (`vendor/vectorcraft/crates/engine/src/cmd/globaledit.rs`), per controllare \
+                 l'argomento prima del motore: una parola inglese e ASCII di un vocabolario \
+                 chiuso, non il nome di una nota, di un tag o di un path.",
+            ),
+        ),
+        (
+            "crates/fub-disegno/src/famiglie/colore.rs::argomenti_delle_librerie",
+            (
+                Family::AsciiCase,
+                "riconosce il formato di una libreria senza badare alle maiuscole e togliendo il punto \
+                 iniziale (`.GPL` → `gpl`), come `PaletteFormat::parse` del motore \
+                 (`vendor/vectorcraft/crates/color/src/palette_io.rs`), prima di mandare la richiesta al \
+                 motore: i nomi dei formati sono ASCII e chiusi. Non è il nome di una nota, di un tag, di \
+                 un path o di un campione dell'utente.",
+            ),
+        ),
+        (
+            "crates/fub-disegno/src/catalogo.rs::sostituisci",
+            (
+                Family::PerCharacterCase,
+                "mette le parole di Fub al posto di quelle del motore di disegno nelle etichette \
+                 dell'indice dei comandi (`glossario.tsv`, «traccia» → «tratto»), a parola intera \
+                 e senza badare alle maiuscole. Il prodotto è un testo riscritto alle posizioni \
+                 del testo originale, carattere per carattere, quindi la piegatura senza \
+                 contesto; un testo che piegato cambia lunghezza resta com'è. Non è il nome di \
+                 una nota, di un tag o di un path.",
+            ),
+        ),
+        (
+            "crates/fub-abi/src/rules/path_policy.rs::is_dos_device",
+            (
+                Family::AsciiCase,
+                "i device DOS sono undici nomi ASCII fissati da Windows: «`con`, `CON.md` e \
+                 `Con.txt.md` sono tutti la console» (path_policy.rs). Piegare in full-Unicode \
+                 rifiuterebbe nomi che Windows accetta.",
+            ),
+        ),
+        (
+            "crates/fub-kernel/src/snapshot.rs::validate_portable_component",
+            (
+                Family::AsciiCase,
+                "canonizza soltanto il prefisso ASCII del componente per confrontarlo \
+                 con i device Windows riservati; i suffissi Unicode, come i \
+                 superscritti di COM/LPT, restano espliciti nella tabella dei nomi.",
+            ),
+        ),
+        (
+            "crates/fub-kernel/src/host/guard/policy.rs::normalized_host",
+            (
+                Family::AsciiCase,
+                "un host DNS è ASCII o è punycode, e il limite è già dichiarato sopra la \
+                 funzione: «non fa punycode … è un limite vero e sta scritto invece che \
+                 scoperto». Una piegatura full-Unicode farebbe **credere** di averlo risolto.",
+            ),
+        ),
+        (
+            "crates/fub-kernel/src/host/guard/network.rs::split_url",
+            (
+                Family::AsciiCase,
+                "lo schema di un URL è ASCII per la RFC 3986. Sta accanto a `normalized_host` e \
+                 non dentro: sono due capi dell'URL con due grammatiche diverse, e fonderli \
+                 vorrebbe dire una regola che non è né dell'uno né dell'altro.",
+            ),
+        ),
+        (
+            "crates/fub-host/src/theme.rs::referenced_assets",
+            (
+                Family::AsciiCase,
+                "riconosce `url` nella grammatica CSS, dove il nome della funzione è ASCII e \
+                 può arrivare con qualunque combinazione di maiuscole e minuscole. Non piega \
+                 l'URL dell'asset: mantiene il namespace e il path byte-per-byte, e usa la \
+                 corsia ASCII solo per il token che la RFC CSS rende case-insensitive.",
+            ),
+        ),
+        (
+            "crates/fub-host/src/theme.rs::check_fonts",
+            (
+                Family::AsciiCase,
+                "confronta la famiglia di un carattere con le altre facce dello stesso \
+                 manifest, dopo che `theme_font_fault` ne ha fissato l'alfabeto ASCII. Il \
+                 motore confronta i nomi di `font-family` senza badare a maiuscole e \
+                 minuscole ASCII: `Carta` e `carta` sono la stessa faccia.",
+            ),
+        ),
+        (
+            "crates/fub-abi/src/rules/theme_font.rs::theme_font_fault",
+            (
+                Family::AsciiCase,
+                "confronta la famiglia di un carattere del tema con quelle di serie e con le \
+                 parole chiave del CSS. Il motore confronta i nomi di `font-family` senza \
+                 badare a maiuscole e minuscole ASCII, e la famiglia ammette solo lettere e \
+                 cifre ASCII, `-` e spazi: piegare di più o di meno lascerebbe passare un \
+                 nome che si mescola a un altro. La gemella TS la rispecchia per fixture.",
+            ),
+        ),
+        (
+            "crates/fub-host/src/theme.rs::css_collect_image_set",
+            (
+                Family::AsciiCase,
+                "riconosce `url` nei candidati annidati di `image-set`, dove il nome della \
+                 funzione è ASCII e il CSS ne ammette qualunque combinazione di maiuscole e \
+                 minuscole. È il parser interno della stessa grammatica di `referenced_assets`, \
+                 ma deve restare nominato perché attraversa il confine di una funzione annidata.",
+            ),
+        ),
+        (
+            "crates/fub-features/src/commands.rs::parse_value",
+            (
+                Family::AsciiCase,
+                "piega le parole di un toggle (`true`, `on`, `sì`) prima di confrontarle con un \
+                 elenco letterale. Non è identità di un nome ma di un **valore di \
+                 impostazione**, e l'elenco a cui si confronta è scritto qui accanto: piegare di \
+                 più non aggiungerebbe nessuna risposta.",
+            ),
+        ),
+        (
+            "crates/fub-kernel/src/registry.rs::has_doc_ext",
+            (
+                Family::AsciiCase,
+                "è la domanda di `kind_of` fatta al registro invece che alla tabella dei \
+                 formati, e la sua ragione è già scritta sopra la funzione: «il confronto resta \
+                 disarmato sul caso, com'è in `kind_of` — le chiavi di `by_ext` sono già \
+                 minuscole, ma la risposta dev'essere quella di sempre». Non diverge da \
+                 `media.rs::kind_of`: **deve** coincidere con lei, o un `.MD` sarebbe un \
+                 documento per una delle due e non per l'altra. È il `registry.rs` che la voce \
+                 di `kind_of` nomina.",
+            ),
+        ),
+        (
+            "crates/fub-features/src/queries.rs::free_id",
+            (
+                Family::AsciiCase,
+                "non confronta due nomi: ne **fabbrica** uno. Piega in ASCII perché l'alfabeto \
+                 di ciò che produce è ASCII per costruzione — tiene i soli \
+                 `is_ascii_alphanumeric` e manda tutto il resto a `-` — quindi una piegatura \
+                 full-Unicode agirebbe su caratteri che la riga dopo butta via. È l'unica di \
+                 questa famiglia che genera invece di decidere, e per questo non ha un gemello \
+                 con cui dover coincidere: l'id di una query nasce qui e non arriva da nessun \
+                 altro posto.",
+            ),
+        ),
+        // -- NfcOnly: stessi caratteri, byte diversi ------------------------
+        (
+            "crates/fub-abi/src/rules/composition.rs::composed",
+            (
+                Family::NfcOnly,
+                "non è una regola di identità: è il **terreno** su cui le altre la decidono, e \
+                 l'unica riga della tabella che le altre chiamano invece di riscrivere. Diverge \
+                 da `exact_key` perché non rifila: chi taglia gli spazi decide cosa sia un nome, \
+                 questa decide soltanto come sono scritti i suoi caratteri.",
+            ),
+        ),
+        (
+            "crates/fub-abi/src/rules/path.rs::exact_key",
+            (
+                Family::NfcOnly,
+                "la ragione è scritta sopra la funzione: «`resolution_key` dice **chi è \
+                 candidato**, `exact_key` dice **chi ha ragione fra i candidati**». Divergere \
+                 sul caso è il suo mestiere, non un difetto.",
+            ),
+        ),
+        (
+            "crates/fub-abi/src/rules/path_policy.rs::normalized",
+            (
+                Family::NfcOnly,
+                "normalizza per **segmento** e non sull'intera stringa, perché è la forma su cui \
+                 `check` giudica un nome nuovo: «composte qui, non c'è più un ordine da \
+                 ricordare» (path_policy.rs). Non piega il caso perché un nome nuovo si scrive \
+                 come l'utente lo ha scritto (decisione 0058).",
+            ),
+        ),
+        // -- ConfineDiCartella ---------------------------------------------
+        (
+            "crates/fub-abi/src/rules/folders.rs::normalized",
+            (
+                Family::FolderBoundary,
+                "è **la** regola: gli slash ai due capi sono cortesia e non componenti, e il \
+                 confine è per segmento. Erano tre — i predicati d'indice, la maschera degli \
+                 eventi, la selezione di un'esportazione — con tre trim diversi, al punto che il \
+                 banco di `transfer.rs` asseriva vero (`/x/` contiene `x/a.md`) ciò che \
+                 `within_folder` dava falso. Difetto 0141: adesso `within_folder`, \
+                 `folder_contains` e la selezione d'export sono nomi locali di questa riga, e \
+                 `single_folder.rs` is what turns red if a fourth surface rewrites it.",
+            ),
+        ),
+        (
+            "crates/fub-features/src/commands.rs::vault_archive",
+            (
+                Family::FolderBoundary,
+                "normalizza la cartella d'archivio **scritta dall'utente** in un comando prima \
+                 di comporne i `DocId`: taglia i soli `/` finali perché uno iniziale sarebbe un \
+                 path assoluto, e quello lo rifiuta `valid_doc_id`, non questa riga.",
+            ),
+        ),
+        (
+            "crates/fub-abi/src/rules/path_policy.rs::from_outside",
+            (
+                Family::FolderBoundary,
+                "taglia il `/` **iniziale**, ed è l'unica della famiglia: è la tolleranza del \
+                 **varco**, non della regola — «i separatori Windows diventano `/`, e spazi e \
+                 barre in testa se ne vanno» (path_policy.rs). Non risponde alla domanda del \
+                 contenimento, ma tocca lo stesso confine e la sua divergenza dev'essere \
+                 visibile accanto alle altre. Stava in `workspace::valid_doc_id`, che adesso la \
+                 chiama: i varchi sono più d'uno (il sidecar dell'organizzazione, il doppio \
+                 dell'SDK) e nessuno di loro ha `fub-kernel` fra le mani.",
+            ),
+        ),
+        (
+            "crates/fub-kernel/src/ignore.rs::parse_gitignore",
+            (
+                Family::FolderBoundary,
+                "gli slash ai due capi sono **sintassi** della regola gitignore: quello in testa \
+                 ancora il pattern alla radice e quello in coda lo limita alle cartelle. Dopo aver \
+                 registrato quei due bit, li toglie prima di separare e normalizzare i segmenti; \
+                 usare la regola di contenimento di `folders` perderebbe entrambe le informazioni.",
+            ),
+        ),
+        // -- CasoContestuale: ricerche full-Unicode --------------------------
+        (
+            "crates/fub-features/src/base.rs::derive",
+            (
+                Family::ContextualCase,
+                "piega il filtro di ricerca della vista con `str::to_lowercase`: la query è testo \
+                 libero dell'utente, non un vocabolario chiuso. Diverge da \
+                 `matches_case_insensitive` perché qui l'ago si piega una sola volta per tutte le \
+                 righe, mentre là si piega a ogni confronto.",
+            ),
+        ),
+        (
+            "crates/fub-features/src/base.rs::summary_label",
+            (
+                Family::ContextualCase,
+                "piega con `str::to_lowercase` l'etichetta diagnostica di un riepilogo senza nome \
+                 (`chiave:aggregato`), che il piano e `derive` danno allo stesso modo perché il \
+                 piede della Base trovi il valore. Non confronta due nomi: produce una chiave \
+                 sola, letta per uguaglianza esatta dal client, quindi non è la regola di \
+                 `derive` né quella di `matches_case_insensitive`.",
+            ),
+        ),
+        (
+            "crates/fub-features/src/outline.rs::build_footnotes_view",
+            (
+                Family::ContextualCase,
+                "riconcilia definizioni e riferimenti di footnote piegando le etichette in \
+                 full-Unicode: un'etichetta è testo dell'autore e due grafie dello stesso nome \
+                 devono incontrarsi. Diverge da `canonical_anchor` perché qui l'identità è locale \
+                 al documento e non passa da nessuna chiave di risoluzione.",
+            ),
+        ),
+        (
+            "crates/fub-features/src/properties.rs::global_tree",
+            (
+                Family::ContextualCase,
+                "piega il filtro di stato della vista e lo cerca come sottostringa nelle chiavi e \
+                 nei valori delle proprietà: è la stessa ricerca full-Unicode di `derive`, ma sul \
+                 canale indicizzato invece che sulle righe. Diverge da lei perché l'ago arriva da \
+                 `view_state`, non dal piano, e il contratto di quel capo sta nel chiamante.",
+            ),
+        ),
+        (
+            "crates/fub-features/src/tags.rs::build_tags_tree",
+            (
+                Family::ContextualCase,
+                "gemello di `build_tags_view`: prepara l'ago **una volta** perché \
+                 `matches_case_insensitive` lo riceve già minuscolo. Diverge da lei perché l'albero \
+                 qui ordina per conteggio e mostra il campo di filtro anche a elenco vuoto, ma \
+                 l'identità del confronto resta quella della corsia lenta.",
+            ),
+        ),
+        (
+            "crates/fub-features/src/tasks/query.rs::words",
+            (
+                Family::ContextualCase,
+                "piega le parole di una riga del recinto ```tasks per riconoscere il vocabolario \
+                 del plugin Tasks (`not done`, `due before`, `sort by`), che il plugin legge senza \
+                 badare al caso. Non decide quando due nomi sono lo stesso nome: confronta con un \
+                 vocabolario chiuso, e la piegatura è quella di chi lo ha scritto.",
+            ),
+        ),
+        (
+            "crates/fub-features/src/tasks/query.rs::day_of",
+            (
+                Family::ContextualCase,
+                "riconosce `today`, `tomorrow`, `yesterday` in una riga del recinto ```tasks, \
+                 senza badare al caso come il plugin. Gemella di `words`: un vocabolario chiuso, \
+                 non un'identità di nomi.",
+            ),
+        ),
+        (
+            "crates/fub-features/src/tasks/query.rs::understood",
+            (
+                Family::ContextualCase,
+                "prepara l'ago di `path includes` **una volta**, minuscolo, perché `keeps` lo \
+                 cerca nel percorso piegato allo stesso modo. Diverge da `resolution_key` perché \
+                 non risolve un percorso: è una ricerca di testo dentro il percorso, come la fa \
+                 il plugin Tasks, letterale e senza caso.",
+            ),
+        ),
+        (
+            "crates/fub-features/src/tasks/query.rs::reads",
+            (
+                Family::ContextualCase,
+                "l'altro capo di `understood`: piega il percorso della nota per cercarci l'ago \
+                 di `path includes`, prima di leggerla e per ogni compito. Un contenimento di testo, non un'identità: «lavoro» trova \
+                 `Lavoro/Note.md` e `Archivio lavoro.md`, come nel plugin.",
+            ),
+        ),
+        (
+            "crates/fub-format-base/src/formula.rs::call_known",
+            (
+                Family::ContextualCase,
+                "implementa `lower` e `upper` del linguaggio formule con la piegatura full-Unicode: \
+                 sono funzioni di testo esposte all'utente e devono comportarsi come la shell, non \
+                 come un vocabolario chiuso. Diverge dalle altre perché non decide un'identità ma \
+                 produce una stringa, e la sua regola è la semantica del linguaggio.",
+            ),
+        ),
+        (
+            "crates/fub-format-base/src/formula.rs::title_case",
+            (
+                Family::ContextualCase,
+                "implementa `title` del linguaggio formule: maiuscola a inizio parola e minuscola \
+                 nel resto, con la piegatura full-Unicode di `lower` e `upper`. Come `call_known` \
+                 non decide un'identità ma produce una stringa per l'utente, e l'apostrofo non apre \
+                 una parola nuova perché `L'anno` non diventi `L'Anno`.",
+            ),
+        ),
+        (
+            "crates/fub-format-base/src/model.rs::validate",
+            (
+                Family::ContextualCase,
+                "costruisce l'etichetta diagnostica dei riepiloghi duplicati piegando chiave e \
+                 aggregato: due riepiloghi che differiscono di una maiuscola sarebbero lo stesso \
+                 riepilogo con due nomi. Diverge da `derive` perché qui la piegatura serve a \
+                 rifiutare, non a cercare.",
+            ),
+        ),
+        (
+            "crates/fub-importers/src/enex.rs::end",
+            (
+                Family::ContextualCase,
+                "canonizza l'hash della risorsa Evernote piegando in full-Unicode: l'alfabeto degli \
+                 hash è esadecimale e la piegatura larga non inventa collisioni, si limita a \
+                 tollerare la grafia del file. Diverge da `edit.rs::matches_bytes` perché là la \
+                 tolleranza è la compatibilità dichiarata, qui è igiene d'importazione.",
+            ),
+        ),
+        (
+            "crates/fub-wasm-host/src/catalog.rs::search",
+            (
+                Family::ContextualCase,
+                "cerca per sottostringa su id e nome delle voci del catalogo piegando entrambi i \
+                 capi in full-Unicode: gli id del catalogo sono testo di terzi e la query è testo \
+                 libero. Diverge dalla ricerca del foglio perché restituisce voci paginate dal \
+                 chiamante, non coordinate stabili.",
+            ),
+        ),
+        // -- NfcOnly: chiavi composte senza piegare il caso ------------------
+        (
+            "crates/fub-app/src/mobile.rs::parse_tree_grant_query",
+            (
+                Family::NfcOnly,
+                "compone in NFC le chiavi e i valori percent-decifrati della query `mobile-tree`: \
+                 due grafie dello stesso parametro devono incontrarsi, ma `URI` e `uri` restano \
+                 due chiavi diverse. Diverge da `decode_param` perché qui la canonicalizzazione è \
+                 per coppia chiave-valore del trasporto mobile, non per singolo parametro.",
+            ),
+        ),
+        (
+            "crates/fub-host/src/automation.rs::decode_param",
+            (
+                Family::NfcOnly,
+                "la ragione è scritta sopra la funzione: «canonicalizzazione encoding: \
+                 percent-decode più NFC, la stessa per ogni trasporto». Non piega il caso perché \
+                 un parametro `fub://` è un nome di protocollo, non una parola. Diverge da \
+                 `exact_key` perché non decide fra candidati: prepara il terreno su cui gli altri \
+                 decideranno.",
+            ),
+        ),
+        // -- CasoAscii: schemi e URL (la grammatica è ASCII per RFC) ----------
+        (
+            "crates/fub-host/src/automation.rs::validate_source_url",
+            (
+                Family::AsciiCase,
+                "riconosce il prefisso `http(s)://` della `source_url` piegando in ASCII: lo \
+                 schema è ASCII per la RFC 3986 e una piegatura larga inventerebbe schemi che il \
+                 protocollo non ha. È una sola per ogni trasporto, e la shell mobile la usa anche \
+                 per riconoscere un link condiviso. Diverge da `validate_callback` perché la \
+                 domanda è «da dove viene la cattura», non «dove è lecito richiamare».",
+            ),
+        ),
+        (
+            "crates/fub-cli/src/capture.rs::validate_scheme",
+            (
+                Family::AsciiCase,
+                "abbassa lo schema del payload di cattura prima di confrontarlo col vocabolario \
+                 dei canali: gli schemi URI sono ASCII per grammatica. Diverge da `parse_fub_uri` \
+                 perché qui lo schema arriva da un file non autenticato e il confronto è un cancello \
+                 d'ingresso, non un'analisi.",
+            ),
+        ),
+        (
+            "crates/fub-host/src/automation.rs::validate_callback",
+            (
+                Family::AsciiCase,
+                "abbassa lo schema della callback per rifiutare `javascript:`/`data:`/`vbscript:` e \
+                 confronta host e schemi consentiti in ASCII: è un cancello di sicurezza e la \
+                 piegatura larga allargerebbe il cancello. Diverge da `validate_scheme` perché qui \
+                 la lista dei nemici è scritta nella funzione, non nel formato.",
+            ),
+        ),
+        (
+            "crates/fub-host/src/automation.rs::parse_fub_uri",
+            (
+                Family::AsciiCase,
+                "abbassa l'azione del path `fub://` prima di smistarla: le azioni sono token del \
+                 protocollo, ASCII per definizione. Diverge da `parse` perché là il vocabolario è \
+                 quello dei comandi CLI e qui quello delle azioni URI — due grammatiche, due righe.",
+            ),
+        ),
+        (
+            "crates/fub-host/src/remote/mod.rs::validate_base_url",
+            (
+                Family::AsciiCase,
+                "taglia lo slash finale della base e ne abbassa lo schema in ASCII: la tolleranza \
+                 sul confine non cambia la grammatica dello schema, che resta RFC 3986. Diverge da \
+                 `resolve_base` perché qui la base si giudica (e si rifiuta), là si usa.",
+            ),
+        ),
+        (
+            "crates/fub-importers/src/html.rs::is_http_img",
+            (
+                Family::AsciiCase,
+                "riconosce il prefisso `http(s)://` di un `src` abbassando in ASCII: è la stessa \
+                 domanda di `validate_source_url`, ma su un attributo HTML durante l'importazione. \
+                 Diverge da lei perché qui non si rifiuta niente — si decide solo se scaricare — \
+                 e la risposta sbagliata costa banda, non sicurezza.",
+            ),
+        ),
+        (
+            "crates/fub-importers/src/html.rs::safe_destination",
+            (
+                Family::AsciiCase,
+                "confronta lo schema di un `href` importato con gli schemi attivi (`javascript`, \
+                 `vbscript`, `data`) in ASCII: gli schemi sono ASCII e si travestono di maiuscole. \
+                 Diverge da `is_safe_href` perché qui la lista è di ciò che si toglie, non di ciò \
+                 che passa: un importatore porta i suoi schemi (`evernote://`) e la resa li \
+                 filtra di nuovo; il link tolto resta testo.",
+            ),
+        ),
+        (
+            "crates/fub-services/src/publish/guard.rs::is_safe_href",
+            (
+                Family::AsciiCase,
+                "abbassa lo schema del link pubblicato per confrontarlo con la lista dei permessi: \
+                 gli schemi pericolosi si travestono di maiuscole (`JaVaScRiPt:`) e la corsia ASCII \
+                 basta a smascherarli perché gli schemi sono ASCII. Diverge da `validate_callback` \
+                 perché qui il cancello è in uscita, verso il lettore del sito.",
+            ),
+        ),
+        // -- CasoAscii: host DNS e nomi di header (ASCII per protocollo) ------
+        (
+            "crates/fub-app/src/web_viewer.rs::host_allowed",
+            (
+                Family::AsciiCase,
+                "confronta l'host della URL col allowlist con `eq_ignore_ascii_case`: un host DNS \
+                 è ASCII o punycode, come dichiara `normalized_host`. Diverge da lei perché qui non \
+                 si normalizza niente — si decide se il viewer può aprire — e la porta 443 fa parte \
+                 della regola.",
+            ),
+        ),
+        (
+            "crates/fub-host/src/web_clip.rs::viewer_host",
+            (
+                Family::AsciiCase,
+                "riconosce lo schema `https://` e abbassa l'host DNS della pagina da salvare: è la \
+                 domanda di `web_viewer.rs::host_allowed`, ma qui l'URL arriva come testo da un \
+                 comando del registro, senza il parser di Tauri, e la risposta è l'host da \
+                 confrontare, non un sì.",
+            ),
+        ),
+        (
+            "crates/fub-host/src/web_clip.rs::approved",
+            (
+                Family::AsciiCase,
+                "confronta l'host della pagina con i siti approvati di `viewer.hosts` con \
+                 `eq_ignore_ascii_case`, come `web_viewer.rs::host_allowed`: chi salva la pagina \
+                 deve dire sì agli stessi siti di chi la apre. Diverge da lei solo perché la lista \
+                 qui si rilegge dalla macchina invece di arrivare dalla shell.",
+            ),
+        ),
+        (
+            "crates/fub-host/src/web_clip.rs::is_page",
+            (
+                Family::AsciiCase,
+                "abbassa il `Content-Type` della risposta per riconoscere una pagina HTML o di \
+                 testo: il tipo di media non distingue il caso (RFC 9110). Diverge da \
+                 `net.rs::header`, che trova l'header, perché qui si giudica il suo valore.",
+            ),
+        ),
+        (
+            "crates/fub-host/src/web_clip.rs::page_title",
+            (
+                Family::AsciiCase,
+                "abbassa l'HTML in ASCII per trovare il tag `<title>`: i nomi dei tag HTML sono \
+                 ASCII e non distinguono il caso. Diverge da `html.rs::is_http_img` perché qui si \
+                 cerca un tag, non uno schema, e l'esito è solo il titolo proposto per la nota.",
+            ),
+        ),
+        (
+            "crates/fub-features/src/draw/interop.rs::words",
+            (
+                Family::AsciiCase,
+                "abbassa il nome di una famiglia di caratteri per riconoscere un monospazio \
+                 (`mono`, `code`, `courier`) quando il disegno va in Excalidraw: indovina uno stile \
+                 di destinazione, non decide l'identità di un nome, e sbagliare costa solo l'aspetto \
+                 del testo esportato.",
+            ),
+        ),
+        (
+            "crates/fub-features/src/commands/recurrence.rs::rule_of",
+            (
+                Family::AsciiCase,
+                "abbassa la regola scritta dopo `🔁` per riconoscere parole chiave tutte ASCII \
+                 (`every`, `ogni`, `week`, `mesi`, `when done`): non confronta due nomi, legge una \
+                 piccola grammatica, e una parola che non è ASCII non è comunque una delle sue.",
+            ),
+        ),
+        (
+            "crates/fub-services/src/main.rs::read_request",
+            (
+                Family::AsciiCase,
+                "abbassa i nomi degli header HTTP prima di smistarli: sono `token` per la RFC 9110, \
+                 come dichiara `net.rs::header`. Diverge da lei perché qui gli header si leggono da \
+                 un socket grezzo e il valore di `100-continue` si riconosce abbassato, non per \
+                 tabella.",
+            ),
+        ),
+        (
+            "crates/fub-services/src/main.rs::is_loopback_bind",
+            (
+                Family::AsciiCase,
+                "riconosce `localhost` in `--bind` senza distinguere le maiuscole: un nome DNS è \
+                 ASCII e non distingue le maiuscole. Diverge da `handle_static` perché qui la \
+                 domanda è «l'indirizzo d'ascolto è loopback», decisa all'avvio, non quale sito \
+                 serve una richiesta.",
+            ),
+        ),
+        (
+            "crates/fub-services/src/main.rs::handle_static",
+            (
+                Family::AsciiCase,
+                "confronta l'host richiesto col dominio TLS in ASCII e pulisce gli slash iniziali \
+                 del resto del path: due gesti perché sono due domande — «è il dominio giusto» e \
+                 «dov'è il file». Diverge dalla gemella di `publish/mod.rs` perché qui il cancello \
+                 TLS precede la risoluzione.",
+            ),
+        ),
+        (
+            "crates/fub-services/src/site_isolation.rs::serve_headers",
+            (
+                Family::AsciiCase,
+                "abbassa il nome dell'header prima di decidere se servirlo al sito isolato: la \
+                 grammatica degli header è ASCII e la piegatura larga fingerebbe di coprire nomi \
+                 che il protocollo non ammette. Diverge da `read_request` perché qui gli header si \
+                 filtrano in uscita, non si smistano in ingresso.",
+            ),
+        ),
+        (
+            "crates/fub-services/src/site_isolation.rs::save_mode",
+            (
+                Family::AsciiCase,
+                "abbassa l'origine prima di confrontarla coi modi di salvataggio: l'origine è una \
+                 stringa di protocollo e il vocabolario dei modi è chiuso qui accanto. Diverge da \
+                 `parse` perché là il vocabolario è dei comandi e qui delle modalità — due elenchi, \
+                 due righe.",
+            ),
+        ),
+        // -- CasoAscii: vocabolari chiusi della CLI ---------------------------
+        (
+            "crates/fub-cli/src/capture.rs::build_payload",
+            (
+                Family::AsciiCase,
+                "abbassa il `--mode` della cattura prima di confrontarlo col vocabolario dei modi: \
+                 la grammatica dei flag è ASCII e una piegatura larga attribuirebbe modi che la CLI \
+                 non dichiara. Diverge da `output.rs::parse` perché qui il vocabolario è del canale \
+                 di cattura, là del formato d'uscita.",
+            ),
+        ),
+        (
+            "crates/fub-cli/src/completer.rs::completion_script",
+            (
+                Family::AsciiCase,
+                "abbassa il nome della shell prima di scegliere lo script di completamento: i nomi \
+                 di shell sono token ASCII (`bash`, `zsh`, `fish`). Diverge dagli altri vocabolari \
+                 perché qui la risposta non è un valore ma un intero script generato.",
+            ),
+        ),
+        (
+            "crates/fub-cli/src/local.rs::diagnostics",
+            (
+                Family::AsciiCase,
+                "abbassa il nome del controllo diagnostico prima di smistarlo: i controlli sono un \
+                 elenco chiuso scritto qui accanto. Diverge da `completion_script` perché qui il \
+                 nome sceglie cosa eseguire, là cosa stampare.",
+            ),
+        ),
+        (
+            "crates/fub-cli/src/local.rs::files",
+            (
+                Family::AsciiCase,
+                "abbassa il `--kind` (`doc|asset|unknown`) e taglia gli slash della cartella dello \
+                 scope: il vocabolario è la regola d'identità, lo scope è tolleranza di confine. \
+                 Diverge da `search` perché qui i tipi sono `EntryKind`, là i campi di testo — due \
+                 elenchi chiusi diversi.",
+            ),
+        ),
+        (
+            "crates/fub-cli/src/local.rs::search_expr",
+            (
+                Family::AsciiCase,
+                "abbassa i nomi dei campi (`name|body|tags|heading`) e taglia gli slash della \
+                 cartella del filtro: la stessa per `search` e per `fub_search` del server MCP; come in `files`, il vocabolario decide e il confine tollera. \
+                 Diverge da `build_matching` perché qui i nomi si validano contro `TextField`, là \
+                 si compongono in `FolderScope`.",
+            ),
+        ),
+        (
+            "crates/fub-cli/src/mcp.rs::mime_of",
+            (
+                Family::AsciiCase,
+                "non è identità di un nome del vault: sceglie il `mimeType` che una risorsa MCP \
+                 dichiara dall'estensione, `.MD` come `.md`. È un'etichetta per il client, non \
+                 decide quale nota si legge; l'alfabeto delle estensioni è ASCII e una \
+                 piegatura Unicode inventerebbe equivalenze.",
+            ),
+        ),
+        (
+            "crates/fub-cli/src/local.rs::theme",
+            (
+                Family::AsciiCase,
+                "abbassa il flag `--light` prima di confrontarlo col vocabolario dei temi: i nomi \
+                 di tema sono token ASCII del formato. Diverge dagli altri vocabolari perché qui la \
+                 risposta sceglie una tavolozza, non un comportamento.",
+            ),
+        ),
+        (
+            "crates/fub-cli/src/output.rs::parse",
+            (
+                Family::AsciiCase,
+                "abbassa il formato d'uscita (`text|json|…`) prima di smistarlo: il vocabolario è \
+                 chiuso e ASCII per costruzione. Diverge da `build_payload` perché qui la risposta \
+                 è il canale di stampa di ogni comando, non un modo di cattura.",
+            ),
+        ),
+        (
+            "crates/fub-cli/src/local.rs::parse_property_flag",
+            (
+                Family::AsciiCase,
+                "riconosce il marcatore `exists` dei flag di proprietà con `eq_ignore_ascii_case`: \
+                 è una parola del linguaggio dei flag, non un nome del vault. Diverge da \
+                 `parse_setting_value` perché qui il vocabolario è di un solo marcatore più la \
+                 stringa vuota, là dei booleani.",
+            ),
+        ),
+        (
+            "crates/fub-cli/src/login.rs::parse_setting_value",
+            (
+                Family::AsciiCase,
+                "riconosce `true|on|1` e `false|off|0` con `eq_ignore_ascii_case`: i booleani delle \
+                 impostazioni sono parole ASCII del formato. Diverge da `truthy`/`excluded` perché \
+                 qui il vocabolario è dell'ingresso login, là dell'esportazione del sito.",
+            ),
+        ),
+        (
+            "crates/fub-host/src/automation.rs::parse",
+            (
+                Family::AsciiCase,
+                "abbassa il comando grezzo prima di smistarlo fra le azioni dell'automazione: il \
+                 vocabolario dei comandi è ASCII e chiuso qui accanto. Diverge da `parse_fub_uri` \
+                 perché qui l'input è testo libero dell'utente, là una URI già strutturata.",
+            ),
+        ),
+        (
+            "crates/fub-services/src/site_isolation.rs::parse",
+            (
+                Family::AsciiCase,
+                "abbassa il comando grezzo del canale d'isolamento prima di smistarlo: stesso gesto \
+                 di `automation.rs::parse`, ma il vocabolario è quello dei comandi sito, non \
+                 dell'automazione. Diverge da lui perché due canali con due elenchi non possono \
+                 condividere la riga senza condividere la grammatica.",
+            ),
+        ),
+        (
+            "crates/fub-wasm-host/src/limits.rs::configured",
+            (
+                Family::AsciiCase,
+                "abbassa il valore di `FUB_WASM_BACKEND` prima di scegliere il motore: i nomi dei \
+                 backend sono token ASCII di configurazione. Diverge dagli altri vocabolari perché \
+                 qui l'input arriva dall'ambiente del processo, non da un flag o da un file.",
+            ),
+        ),
+        // -- CasoAscii: consensi `y|yes` (stessa parola, due canali) -----------
+        (
+            "crates/fub-cli/src/capture.rs::confirm_capture",
+            (
+                Family::AsciiCase,
+                "riconosce `y|yes` con `eq_ignore_ascii_case` prima di applicare una cattura non \
+                 autenticata: il consenso è una parola del rituale CLI, non un nome. Diverge da \
+                 `confirm_write` perché qui il rischio è importare da fuori, là sovrascrivere \
+                 dentro — due paure, due righe.",
+            ),
+        ),
+        (
+            "crates/fub-cli/src/local.rs::confirm_write",
+            (
+                Family::AsciiCase,
+                "gemella della precedente sul canale delle scritture locali: stessa parola `y|yes`, \
+                 stessa corsia, ma il consenso qui copre una scrittura nel vault e non \
+                 un'importazione. Diverge da lei perché il testo del riassunto mostrato è diverso e \
+                 la soglia di pericolo sta da un'altra parte.",
+            ),
+        ),
+        // -- CasoAscii: HTML (tag e attributi sono ASCII per spec) -------------
+        (
+            "crates/fub-importers/src/html.rs::html_to_markdown",
+            (
+                Family::AsciiCase,
+                "abbassa i nomi dei tag durante la conversione a Markdown: i tag HTML sono ASCII \
+                 per specifica e una piegatura larga inventerebbe elementi che il formato non ha. \
+                 Diverge da `tag_name` perché qui il nome si usa per smistare la conversione, là \
+                 per estrarlo dal sorgente.",
+            ),
+        ),
+        (
+            "crates/fub-importers/src/html.rs::parse_attrs",
+            (
+                Family::AsciiCase,
+                "abbassa i nomi degli attributi durante l'analisi del tag: come i tag, sono ASCII \
+                 per specifica. Diverge da `html_to_markdown` perché qui il nome sceglie il valore \
+                 da tenere, là l'elemento da emettere.",
+            ),
+        ),
+        (
+            "crates/fub-importers/src/html.rs::tag_name",
+            (
+                Family::AsciiCase,
+                "toglie `<` e `/` iniziali e abbassa il nome del tag in ASCII: il confine tollera \
+                 la punteggiatura del sorgente, la regola è il vocabolario degli elementi. Diverge \
+                 da `parse_attrs` perché qui si estrae il nome, là lo si confronta.",
+            ),
+        ),
+        (
+            "crates/fub-services/src/site_isolation.rs::html_has_script",
+            (
+                Family::AsciiCase,
+                "abbassa i tag del documento pubblicato per riconoscere `<script>`: i tag sono \
+                 ASCII e l'attaccante li traveste di maiuscole. Diverge da `html_to_markdown` \
+                 perché qui la regola è un cancello di sicurezza in uscita, non una conversione.",
+            ),
+        ),
+        (
+            "crates/fub-services/src/site_isolation.rs::html5_doctype",
+            (
+                Family::AsciiCase,
+                "riconosce `<!doctype html>` in qualunque grafia: parola chiave e nome sono ASCII \
+                 e HTML non distingue le maiuscole. Diverge da `html_has_script` perché qui si \
+                 lascia passare l'unica dichiarazione `<!` innocua, là si giudicano i tag.",
+            ),
+        ),
+        (
+            "crates/fub-services/src/site_isolation.rs::commit_has_custom_js",
+            (
+                Family::AsciiCase,
+                "abbassa il path per riconoscere i suffissi `.js`, `.mjs` e `.cjs`: le estensioni dei file serviti \
+                 sono ASCII e la domanda è «porta codice eseguibile». Diverge da `html_has_script` \
+                 perché qui il segnale è nel nome del file, là nel suo contenuto.",
+            ),
+        ),
+        (
+            "crates/fub-host/src/publish/site.rs::verified_asset",
+            (
+                Family::AsciiCase,
+                "abbassa il CSS per rifiutare `@import`, `url(`, `expression(` e `behavior:`: i \
+                 vettori d'iniezione sono token ASCII e la piegatura larga allargherebbe il \
+                 cancello. Diverge da `validate_public_asset` perché qui si ispeziona il contenuto, \
+                 là il nome.",
+            ),
+        ),
+        (
+            "crates/fub-services/src/publish/site.rs::validate_public_asset",
+            (
+                Family::AsciiCase,
+                "gemella della precedente sul canale dei servizi: stesso abbassamento, stesso \
+                 elenco di vettori, ma il rifiuto qui è un errore di pubblicazione e non un veto di \
+                 verifica. Diverge da lei perché due canali con due errori non condividono la riga.",
+            ),
+        ),
+        // -- CasoAscii: nomi booleani dell'esportazione sito -------------------
+        (
+            "crates/fub-host/src/publish/site.rs::truthy",
+            (
+                Family::AsciiCase,
+                "riconosce `true|yes|1` nei valori di configurazione del sito abbassando in ASCII: \
+                 il vocabolario dei booleani è chiuso e ASCII. Diverge da `excluded` perché qui la \
+                 risposta accende una funzione, là ne spegne una — due default opposti.",
+            ),
+        ),
+        (
+            "crates/fub-host/src/publish/site.rs::excluded",
+            (
+                Family::AsciiCase,
+                "gemella rovesciata della precedente: riconosce `false|no|0` e tratta tutto il resto \
+                 come escluso. Diverge da lei perché il default è negato — un valore illeggibile \
+                 qui esclude, là non accende — e i default opposti non stanno nella stessa riga.",
+            ),
+        ),
+        // -- CasoAscii: segmenti di path e categorie (liste chiuse) ------------
+        (
+            "crates/fub-host/src/publish/site.rs::is_private_path",
+            (
+                Family::AsciiCase,
+                "abbassa ogni segmento per riconoscere `private|privato|secrets|.fub`: la lista dei \
+                 nomi riservati è chiusa e ASCII. Diverge da `check_publish_path` perché qui la \
+                 domanda è «si può mostrare», là «si può pubblicare» — due cancelli sullo stesso \
+                 segmento.",
+            ),
+        ),
+        (
+            "crates/fub-services/src/publish/manifest.rs::check_publish_path",
+            (
+                Family::AsciiCase,
+                "abbassa ogni segmento contro la lista dei nomi vietati in pubblicazione: stessa \
+                 lista chiusa di `is_private_path`, ma il rifiuto qui è un errore di manifesto. \
+                 Diverge da lei perché il canale è la pubblicazione, non la lettura.",
+            ),
+        ),
+        (
+            "crates/fub-host/src/remote/bundle.rs::check_external_overlap",
+            (
+                Family::AsciiCase,
+                "abbassa ogni segmento contro la lista delle cartelle esterne (`.stfolder`, \
+                 `.dropbox`, …): sono nomi di prodotto, ASCII per nascita. Diverge dalle altre \
+                 liste perché qui la risposta non è un rifiuto ma un rilevamento di sovrapposizione.",
+            ),
+        ),
+        (
+            "crates/fub-host/src/remote/sync.rs::is_syncable_path",
+            (
+                Family::AsciiCase,
+                "abbassa il path per riconoscere le categorie escluse dalla sincronizzazione \
+                 (`cache|drafts|device|secrets|…`): la tassonomia delle cartelle di sistema è ASCII \
+                 e chiusa. Diverge da `is_syncable_doc` perché qui la domanda è sul path grezzo, là \
+                 sul documento con le sue esclusioni utente.",
+            ),
+        ),
+        (
+            "crates/fub-services/src/sync/mod.rs::is_syncable_doc",
+            (
+                Family::AsciiCase,
+                "abbassa l'id del documento per le stesse categorie di `is_syncable_path`, ma sul \
+                 canale dei servizi e con le esclusioni utente accanto. Diverge da lei perché due \
+                 canali con due insiemi di eccezioni non condividono la riga.",
+            ),
+        ),
+        (
+            "crates/fub-services/src/sync/mod.rs::category_of",
+            (
+                Family::AsciiCase,
+                "abbassa l'id per classificarlo (`attachments|config-shared|notes`): le categorie \
+                 sono ASCII e chiuse. Diverge da `doc_kind_for` perché qui la categoria serve alla \
+                 selezione di sincronizzazione, là al tipo di documento — due letture dello stesso \
+                 id.",
+            ),
+        ),
+        (
+            "crates/fub-services/src/sync/causality.rs::doc_kind_for",
+            (
+                Family::AsciiCase,
+                "abbassa l'id per distinguere note e allegati nella causalità: la tassonomia è la \
+                 stessa di `category_of`, ma la domanda è l'ordinamento degli eventi, non la \
+                 selezione. Diverge da lei perché un errore qui riordina la storia, là salta un \
+                 file.",
+            ),
+        ),
+        (
+            "crates/fub-services/src/sync/mod.rs::ext_of",
+            (
+                Family::AsciiCase,
+                "abbassa l'estensione dell'id per confrontarla con le liste di selezione: le \
+                 estensioni confrontate sono token ASCII. Diverge da `is_selected` perché qui si \
+                 estrae il suffisso, là lo si confronta — due metà della stessa domanda.",
+            ),
+        ),
+        (
+            "crates/fub-services/src/sync/mod.rs::is_selected",
+            (
+                Family::AsciiCase,
+                "abbassa id, prefissi ed estensioni per decidere se il documento è selezionato: la \
+                 selezione è case-insensitive per contratto del filtro utente. Diverge da `ext_of` \
+                 perché qui la regola è la decisione finale, là un passaggio intermedio.",
+            ),
+        ),
+        (
+            "crates/fub-services/src/sync/mod.rs::parse_user_exclude",
+            (
+                Family::AsciiCase,
+                "abbassa le voci d'esclusione dell'utente (`ext:` o prefissi): il linguaggio delle \
+                 esclusioni è ASCII e la piegatura larga inventerebbe prefissi che l'utente non ha \
+                 scritto. Diverge da `is_user_excluded` perché qui la regola si analizza, là si \
+                 applica.",
+            ),
+        ),
+        (
+            "crates/fub-host/src/remote/mod.rs::is_user_excluded",
+            (
+                Family::AsciiCase,
+                "abbassa id e regole per le stesse esclusioni utente di `parse_user_exclude`, ma sul \
+                 canale remoto e con le categorie device-only gestite altrove. Diverge da lei perché \
+                 qui la regola si applica a ogni documento remoto, là si analizza una volta sola.",
+            ),
+        ),
+        (
+            "crates/fub-kernel/src/index/core.rs::predicate",
+            (
+                Family::AsciiCase,
+                "confronta il suffisso dell'id con l'estensione del filtro con \
+                 `eq_ignore_ascii_case`: le estensioni dei file sono token ASCII. Diverge da \
+                 `kind_of` perché qui l'estensione arriva da un predicato d'indice arbitrario, là \
+                 dalla tabella dei formati.",
+            ),
+        ),
+        (
+            "crates/fub-format-canvas/src/parse.rs::is_media_path",
+            (
+                Family::AsciiCase,
+                "abbassa il path per riconoscere le estensioni multimediali (`.png`, `.mp4`, …): \
+                 sono token di formato, ASCII per definizione. Diverge da \
+                 `documents.rs::extension_of` perché qui la lista è dei media e la piegatura è \
+                 stretta — là la chiave è del registro dei formati e la piegatura è larga.",
+            ),
+        ),
+        (
+            "crates/fub-canvas-core/src/parts.rs::of",
+            (
+                Family::AsciiCase,
+                "abbassa l'estensione del file di una scheda per dire se un estratto \
+                 `fub:parts` le va bene (`.pdf`, `.md`, `.png`, …): sono token di formato, ASCII \
+                 per definizione. Diverge da `parse.rs::is_media_path` perché il nucleo della \
+                 lavagna non vede `fub-format-canvas`, e la lista è quella di `cardKindOf` \
+                 nella shell, che i vettori di `canvas-parts/` tengono uguale.",
+            ),
+        ),
+        // -- CasoAscii: importatori (estensioni e nomi di formato) -------------
+        (
+            "crates/fub-importers/src/archive.rs::route_entry",
+            (
+                Family::AsciiCase,
+                "abbassa il nome dell'entry per smistarla fra i formati d'importazione: le \
+                 estensioni riconosciute sono ASCII. Diverge da `import_entry` perché qui la regola \
+                 sceglie la strada, là la percorre.",
+            ),
+        ),
+        (
+            "crates/fub-importers/src/archive.rs::import_entry",
+            (
+                Family::AsciiCase,
+                "abbassa l'estensione per scegliere l'importatore dell'entry: stesso vocabolario di \
+                 `route_entry`, ma il confronto qui avviene dentro l'archivio già aperto. Diverge \
+                 da lei perché il contesto — archivio contro file singolo — cambia cosa significa \
+                 sbagliare.",
+            ),
+        ),
+        (
+            "crates/fub-importers/src/archive.rs::import",
+            (
+                Family::AsciiCase,
+                "abbassa il nome per riconoscere il formato dell'archivio da importare: il \
+                 vocabolario dei formati è chiuso e ASCII. Diverge dalle due precedenti perché qui \
+                 la domanda è sul contenitore, là sul contenuto.",
+            ),
+        ),
+        (
+            "crates/fub-importers/src/notion_export.rs::has_extension",
+            (
+                Family::AsciiCase,
+                "confronta l'estensione di una voce di un export di Notion (`md`, `markdown`, \
+                 `csv`) per riconoscere pagine e database: token di formato, ASCII per \
+                 definizione. Diverge da `route_entry` perché qui la risposta decide come si \
+                 legge l'export intero (quali voci si uniscono), là la strada di una voce sola; \
+                 gli id e i titoli dell'export si confrontano come sono scritti.",
+            ),
+        ),
+        (
+            "crates/fub-importers/src/common.rs::sanitize_component",
+            (
+                Family::AsciiCase,
+                "abbassa il componente per confrontarlo coi nomi riservati durante la pulizia: i \
+                 nomi Windows riservati sono ASCII. Diverge da `is_dos_device` perché qui la regola \
+                 pulisce un nome d'importazione, là giudica un nome nuovo del vault.",
+            ),
+        ),
+        (
+            "crates/fub-features/src/properties.rs::encoded_key",
+            (
+                Family::AsciiCase,
+                "abbassa la chiave per riconoscere `null|true|false|~` prima di citarla in YAML: \
+                 sono parole riservate del formato, ASCII per specifica. Diverge da \
+                 `sanitize_component` perché qui la regola decide la citazione, non la pulizia.",
+            ),
+        ),
+        (
+            "crates/fub-features/src/note_types.rs::frontmatter_line",
+            (
+                Family::AsciiCase,
+                "abbassa la chiave per riconoscere `null|true|false|~` prima di citarla in YAML, \
+                 come `properties.rs::encoded_key`: parole riservate del formato, ASCII per \
+                 specifica. Diverge da lei perché scrive una riga nuova di una nota che nasce da \
+                 un tipo, nel modulo condiviso che i modelli usano senza le proprietà.",
+            ),
+        ),
+        (
+            "crates/fub-features/src/note_types.rs::property_kind",
+            (
+                Family::AsciiCase,
+                "abbassa la parola con cui un tipo di nota dice il tipo di una proprietà \
+                 (`Numero`, `casella`, `date_time`) per confrontarla con un elenco fisso di \
+                 parole ASCII. Non confronta due nomi: riconosce una parola chiave, e una parola \
+                 con altri caratteri non è nessuna di quelle.",
+            ),
+        ),
+        // -- CasoAscii: il nome più vicino di un'operazione o di un campo -------
+        (
+            "crates/fub-canvas-core/src/spec.rs::distance",
+            (
+                Family::AsciiCase,
+                "abbassa il nome che il modello ha scritto per dire quale nome gli somiglia \
+                 (`Add-Card` è vicino a `add_card`, `dX` a `dx`): i nomi delle operazioni e dei \
+                 campi sono ASCII. Non decide se un nome esiste: `validate` riconosce un nome solo \
+                 se è esatto, come serde, e la distanza serve al suggerimento e alla correzione. \
+                 Diverge da `kind_of_path` perché qui la piegatura non dice la specie di niente.",
+            ),
+        ),
+        // -- CasoAscii: la specie di una scheda della lavagna -------------------
+        (
+            "crates/fub-canvas-core/src/layout.rs::kind_of_path",
+            (
+                Family::AsciiCase,
+                "abbassa l'estensione di un file per dire la specie della sua scheda sulla lavagna \
+                 (`Foto.PNG` è un'immagine come `foto.png`), in minuscolo come `cardKindOf` della \
+                 GUI: la specie deve coincidere con la sua. Non riusa `mime_for_ext` di \
+                 `rules/media.rs`: `fub-canvas-core` dipende solo da serde, serde_json e thiserror \
+                 (`dependency_invariant`), e non può chiamare fub-abi. Diverge da `route_entry` e \
+                 `import_entry` perché l'estensione qui non sceglie un importatore: decide la misura \
+                 e la specie di una scheda, e non identifica né un nome né un path.",
+            ),
+        ),
+        (
+            "crates/fub-canvas-core/src/ink.rs::scales",
+            (
+                Family::AsciiCase,
+                "abbassa l'estensione del file di una scheda per dire se il suo inchiostro scala \
+                 (`SCAN.PNG` scala come `scan.png`), in minuscolo come `extOf` di \
+                 `media-types.ts`, che la resa usa in `inkFitMode`: il modo deve coincidere col \
+                 suo, provato coi vettori di `canvas-ink-fit/`. Diverge da `kind_of_path` perché \
+                 la resa non taglia il nome al primo `#` (`foto#1.png` scala) e la specie della \
+                 scheda sì; non identifica né un nome né un path, decide solo dove si leggono i \
+                 punti.",
+            ),
+        ),
+        (
+            "crates/fub-canvas-core/src/ops/color.rs::parse_hex",
+            (
+                Family::AsciiCase,
+                "abbassa le cifre di un `#rrggbb` per scriverlo in minuscolo come nel file \
+                 (`#FF8800` diventa `#ff8800`). Le cifre sono già controllate con \
+                 `is_ascii_hexdigit`, quindi sono ASCII per costruzione: la corsia ASCII dà la \
+                 stessa risposta della contestuale. Non decide se il colore esiste: lo decide \
+                 `parse`, con la tavola dei nomi e questo controllo; un nome non è un esadecimale \
+                 e non passa di qui.",
+            ),
+        ),
+        // -- CasoAscii: miscellanea (canali con la loro ragione) ---------------
+        (
+            "crates/fub-app/src/mobile.rs::classify",
+            (
+                Family::AsciiCase,
+                "abbassa l'URL grezza per riconoscere i prefissi `fub://` e `http(s)://`: gli schemi \
+                 sono ASCII per RFC 3986. Diverge da `validate_source_url` perché qui la piegatura \
+                 smista fra canali (tree, ricerca, http), là valida un solo canale.",
+            ),
+        ),
+        (
+            "crates/fub-app/src/mobile.rs::validate_tree_grant",
+            (
+                Family::AsciiCase,
+                "abbassa l'URI del grant per riconoscere `content://` con `/tree/` (Android) o \
+                 `file://` (iOS): gli schemi delle piattaforme sono ASCII. Diverge da `classify` \
+                 perché qui la regola è un'autorizzazione di accesso all'albero, non uno smistamento.",
+            ),
+        ),
+        (
+            "crates/fub-host/src/remote/mod.rs::request_path_is_clean",
+            (
+                Family::AsciiCase,
+                "abbassa il path per rifiutare quelli che contengono `password=`, per i due client \
+                 dei servizi (host e bundle sync): il nome del parametro è ASCII e il \
+                 travestimento di maiuscole non deve passare. Diverge da \
+                 `is_safe_href` perché qui la perdita è una credenziale nel log di sincronizzazione, \
+                 là un link pericoloso pubblicato.",
+            ),
+        ),
+        (
+            "crates/fub-cli/src/output.rs::redact_key",
+            (
+                Family::AsciiCase,
+                "confronta i byte della chiave coi nomi segreti con `eq_ignore_ascii_case`: i nomi \
+                 dei segreti (`token`, `password`, …) sono ASCII e il confronto è a byte perché \
+                 avviene sul flusso d'uscita. Diverge da `redact_json_value` perché qui la regola \
+                 lavora sul testo grezzo, là sul valore già analizzato.",
+            ),
+        ),
+        (
+            "crates/fub-cli/src/output.rs::redact_json_value",
+            (
+                Family::AsciiCase,
+                "abbassa il nome della chiave JSON per decidere se oscurarne il valore: stesso \
+                 elenco di segreti di `redact_key`, ma sul documento analizzato. Diverge da lei \
+                 perché due rappresentazioni diverse dello stesso segreto non condividono la riga.",
+            ),
+        ),
+        (
+            "crates/fub-host/src/publish/site.rs::doc_path",
+            (
+                Family::AsciiCase,
+                "taglia gli slash e abbassa il gambo in ASCII per farne uno slug URL: gli slug \
+                 pubblicati sono ASCII per costruzione. Diverge da `folders::normalized` perché qui \
+                 la regola fabbrica un nome pubblico, non normalizza un nome del vault.",
+            ),
+        ),
+        // -- CasoAscii: la scena SVG (grammatiche XML, URL e CSS) -------------
+        (
+            "crates/fub-scene/src/lib.rs::read_then",
+            (
+                Family::AsciiCase,
+                "confronta la codifica della dichiarazione XML con `utf-8`: per XML 1.0 \
+                 (§4.3.3) il nome di una codifica è ASCII e si legge senza badare al caso. Non è \
+                 il nome di un file del vault ma una parola del prologo, e decide se un altro \
+                 lettore vedrebbe altri caratteri: il documento si apre in sola lettura.",
+            ),
+        ),
+        (
+            "crates/fub-scene/src/xml.rs::pi",
+            (
+                Family::AsciiCase,
+                "rifiuta un'istruzione di elaborazione col bersaglio `xml` in qualunque caso: XML \
+                 1.0 (§2.6) riserva lettera per lettera `(('X'|'x') ('M'|'m') ('L'|'l'))`, ed è la \
+                 grammatica a dire che la piegatura è ASCII. Diverge da `read` perché qui decide \
+                 se il documento è ben formato, non come si apre.",
+            ),
+        ),
+        (
+            "crates/fub-scene/src/values.rs::scheme",
+            (
+                Family::AsciiCase,
+                "abbassa lo schema di un `href` dopo aver verificato che sia ASCII: per la RFC \
+                 3986 gli schemi sono ASCII e senza caso, e il parser di URL del browser li \
+                 abbassa così. Diverge da `validate_source_url` perché qui lo schema non valida \
+                 un canale: classifica un riferimento di un SVG (vault, `data:`, rete, \
+                 `javascript:`) come lo leggerà la webview.",
+            ),
+        ),
+        (
+            "crates/fub-scene/src/values.rs::data_uri",
+            (
+                Family::AsciiCase,
+                "abbassa il tipo MIME di un `data:` e riconosce `;base64` in qualunque caso: tipi \
+                 e parametri sono token ASCII senza caso (RFC 2045 e RFC 2397). Diverge da \
+                 `scheme` perché legge l'interno dell'URL con un'altra grammatica, e da lì decide \
+                 se un'immagine incorporata è un raster e quanto pesa decodificata.",
+            ),
+        ),
+        (
+            "crates/fub-scene/src/classify.rs::has_url",
+            (
+                Family::AsciiCase,
+                "cerca `url(` in ogni caso dentro un valore di attributo: i nomi di funzione CSS \
+                 sono ASCII e senza caso, e `URL(#a)` riferisce come `url(#a)`. Non stabilisce \
+                 un'identità ma una paura: un riferimento rende estraneo l'elemento, e la rete \
+                 sbaglia apposta dal lato largo, su ogni finestra di quattro byte.",
+            ),
+        ),
+        (
+            "crates/fub-scene/src/values.rs::scan_url",
+            (
+                Family::AsciiCase,
+                "legge `url(#id)` con `url` in qualunque caso: i nomi di funzione CSS sono ASCII \
+                 e senza caso. Diverge da `has_url` perché qui il riferimento non è una paura \
+                 ma un'identità: ne esce l'id della risorsa, che decide se l'elemento resta \
+                 modificabile, e per S014 se il documento ha quell'id.",
+            ),
+        ),
+        (
+            "crates/fub-scene/src/geometry.rs::parse_path",
+            (
+                Family::AsciiCase,
+                "porta in maiuscolo la lettera di un comando di `d` dopo averne letto il caso: \
+                 nella grammatica dei path SVG la minuscola è il comando relativo e la maiuscola \
+                 l'assoluto, e le lettere sono ASCII. Diverge da ogni altra riga perché qui il \
+                 caso porta un significato, che si legge prima di piegarlo.",
+            ),
+        ),
+        (
+            "crates/fub-scene/src/analysis.rs::is_active_attr",
+            (
+                Family::AsciiCase,
+                "riconosce i gestori di evento `on*` senza badare al caso, per l'avviso S005: \
+                 in XML `ONCLICK` non è `onclick`, ma lo stesso SVG incollato in una pagina HTML \
+                 passa dal tokenizer, che abbassa in ASCII i nomi di attributo. L'avviso sbaglia \
+                 dal lato largo apposta, perché il file non resta sempre dove è nato.",
+            ),
+        ),
+        (
+            "crates/fub-scene/src/export/clean.rs::hidden",
+            (
+                Family::AsciiCase,
+                "riconosce la proprietà `display` dentro un attributo `style` senza badare al \
+                 caso: i nomi di proprietà CSS sono ASCII e senza caso, e un browser non disegna \
+                 un elemento con `DISPLAY: none`. È un'identità, non una paura: decide che \
+                 l'elemento nascosto lascia l'SVG pulito. Il valore `none` invece si confronta \
+                 com'è scritto, e un valore in un altro caso lascia l'elemento dov'è.",
+            ),
+        ),
+        (
+            "crates/fub-scene/src/export/clean.rs::hiding_is_final",
+            (
+                Family::AsciiCase,
+                "cerca `display` in qualunque caso nel testo di un foglio di stile. Come \
+                 `classify.rs::has_url` non stabilisce un'identità ma una paura: un foglio che \
+                 nomina `display` potrebbe mostrare ciò che un attributo nasconde, e allora \
+                 nessun elemento nascosto lascia l'SVG pulito. Diverge da `hidden` perché sbaglia \
+                 dal lato largo apposta, anche su un selettore o su un commento.",
+            ),
+        ),
+        (
+            "crates/fub-scene/src/export/clean.rs::path_data",
+            (
+                Family::AsciiCase,
+                "porta in maiuscolo la lettera di un comando di `d` per sapere quanti numeri \
+                 vuole e quali sono coordinate, dopo averne letto il caso, che dice se il comando \
+                 è relativo. Diverge da `geometry.rs::parse_path` perché non legge il tracciato \
+                 per disegnarlo: lo riscrive con le stesse lettere e gli stessi separatori, e il \
+                 caso decide da dove si arrotonda una coordinata.",
+            ),
+        ),
+        (
+            "crates/fub-scene/src/annotation.rs::digest",
+            (
+                Family::AsciiCase,
+                "porta in minuscolo le cifre esadecimali di `fub:digest` dopo aver verificato che \
+                 siano 64 e ASCII, con il prefisso `sha256:` lasciato esatto: una cifra \
+                 esadecimale non ha caso, e due impronte uguali devono essere la stessa stringa \
+                 per chi le confronta con il PDF. Diverge da `data_uri` perché qui non classifica \
+                 un riferimento: dà l'identità di un valore che il lettore non verifica.",
+            ),
+        ),
+        // -- CasoAscii: le annotazioni dei PDF ---------------------------------
+        (
+            "crates/fub-format-svg/src/serialize.rs::annotated_of",
+            (
+                Family::AsciiCase,
+                "riconosce `.fubann` e `.pdf` in fondo al nome di un documento senza badare al \
+                 caso ASCII, come il vault confronta le estensioni (`rules::media`): \
+                 `Bando.PDF.FubAnn` annota `Bando.PDF`. Diverge da `kind_of` perché qui non dà la \
+                 specie di un file ma ne deduce un altro, il PDF che un documento nuovo nomina in \
+                 `fub:annotates` e che l'export cerca quando `fub:annotates` manca, e il resto del \
+                 nome resta com'è.",
+            ),
+        ),
+        // -- Il PDF delle note (ADR 0247) --------------------------------------
+        (
+            "crates/fub-features/src/pdf_export/lavoro.rs::destinazione",
+            (
+                Family::AsciiCase,
+                "riconosce `.pdf` in fondo alla destinazione del PDF di una nota senza badare al \
+                 caso ASCII, come `print.rs::file_name`: `Bando.PDF` è già un PDF e non ne \
+                 riceve un secondo. Non decide l'identità del nome, che resta a \
+                 `path_policy::check` subito dopo.",
+            ),
+        ),
+        (
+            "crates/fub-features/src/pdf_export/command.rs::esporta",
+            (
+                Family::AsciiCase,
+                "riconosce `.md` in fondo alla nota che `pdf.export_note` deve esportare senza \
+                 badare al caso ASCII, come `destinazione` fa con `.pdf`: `Nota.MD` è una nota \
+                 Markdown, la sola che la vista sa impaginare. Non decide l'identità del nome: \
+                 la nota la risolve l'host (`document_revision`) prima di questo controllo.",
+            ),
+        ),
+        (
+            "crates/fub-features/src/pdf_export/lavoro.rs::carattere",
+            (
+                Family::FolderBoundary,
+                "toglie lo `/` iniziale dall'indirizzo di un carattere (`/fonts/<nome>`, come \
+                 l'app lo serve) per riconoscere i caratteri di Fub nel binario: è un indirizzo \
+                 della webview, non un path del vault, e ogni altro nome passa intero a \
+                 `path_policy::from_outside`.",
+            ),
+        ),
+        (
+            "crates/fub-features/src/pdf_export/writer.rs::indirizzo_ammesso",
+            (
+                Family::AsciiCase,
+                "abbassa lo schema di un link prima di scriverlo nel PDF e lo confronta con \
+                 `http`, `https` e `mailto`: gli schemi URI sono ASCII per la RFC 3986, e il \
+                 confronto è un cancello che tiene fuori `javascript:` e `file:`. Diverge da \
+                 `validate_callback` perché la lista è di ciò che si lascia passare in un file \
+                 che altri apriranno, non di dove richiamare.",
+            ),
+        ),
+        // -- ConfineDiCartella: comporre cartella e nome ----------------------
+        (
+            "crates/fub-cli/src/capture.rs::uri",
+            (
+                Family::FolderBoundary,
+                "compone `{cartella}/{prefisso}` per `fub://unique` tagliando gli slash della \
+                 cartella digitata nell'URI: la tolleranza è sul confine digitato, non \
+                 sull'identità della nota, che decide `note.unique`. Diverge da \
+                 `folders::normalized` perché qui la regola fabbrica il nome chiesto a un \
+                 comando, non normalizza un nome del vault. La cattura e `fub://new` non \
+                 compongono più: passano la cartella all'host.",
+            ),
+        ),
+        // -- ConfineDiCartella: scope di cartella nei filtri ------------------
+        (
+            "crates/fub-cli/src/local.rs::build_matching",
+            (
+                Family::FolderBoundary,
+                "taglia gli slash della cartella prima di comporre `FolderScope`: la radice si \
+                 scrive `` e non `/`, e il flag `recursive` decide i discendenti. Diverge da \
+                 `matches_filter` perché qui lo scope si costruisce per interrogarne l'indice, là \
+                 si confronta contro un path — preparare e decidere non stanno nella stessa riga.",
+            ),
+        ),
+        (
+            "crates/fub-features/src/base.rs::matches_filter",
+            (
+                Family::FolderBoundary,
+                "taglia gli slash della cartella del filtro `InFolder` prima di confrontarla col \
+                 genitore del path: il confronto è per uguaglianza di stringhe e gli slash di \
+                 cortesia non devono cambiare la risposta. Diverge da `build_matching` perché qui \
+                 la regola decide riga per riga, là una volta per query.",
+            ),
+        ),
+        (
+            "crates/fub-features/src/template.rs::valid_folder",
+            (
+                Family::FolderBoundary,
+                "normalizza la cartella del comando e la valida con una sonda (`{cartella}/_`): \
+                 taglia da entrambi i capi perché qui non c'è un rifiuto accanto a coprirne uno. \
+                 Diverge da `vault_archive` perché là il `/` iniziale è un assoluto da rifiutare \
+                 altrove, qui è cortesia da tollerare qui.",
+            ),
+        ),
+        (
+            "crates/fub-features/src/note_types.rs::folder_path",
+            (
+                Family::FolderBoundary,
+                "è la regola di `template.rs::valid_folder` (stessi tagli, stessa sonda \
+                 `{cartella}/_`) per la cartella dei tipi e per il campo `folder` di un tipo. \
+                 Diverge da lei perché `note_types` è un modulo condiviso fra i modelli e le \
+                 proprietà e non può chiamare una feature; e perché qui una cartella che non va \
+                 non è un rifiuto: spegne i tipi o dice che il tipo non si legge.",
+            ),
+        ),
+        (
+            "crates/fub-app/src/resources.rs::viewer_save",
+            (
+                Family::FolderBoundary,
+                "rifiuta i path assoluti e taglia gli slash finali della cartella degli allegati: \
+                 come `vault_archive`, taglia da un solo capo perché dall'altro c'è un rifiuto. \
+                 Diverge da lei perché qui la cartella è quella del salvataggio dal viewer e il \
+                 nome si sanifica accanto (`sanitize_file_name`), mentre là si compongono `DocId`.",
+            ),
+        ),
+        // -- ConfineDiCartella: ambito dell'accoppiamento ---------------------
+        (
+            "crates/fub-host/src/automation.rs::pair_allows",
+            (
+                Family::FolderBoundary,
+                "taglia gli slash di entrambe le cartelle — richiesta e accoppiata — prima di \
+                 confrontarle: due tolleranze che devono coincidere, o l'accoppiamento negherebbe \
+                 ciò che ha promesso per un `/` di cortesia. Diverge da `request_folder_of` perché \
+                 qui si confrontano due cartelle, là se ne estrae una sola.",
+            ),
+        ),
+        (
+            "crates/fub-host/src/automation.rs::request_folder_of",
+            (
+                Family::FolderBoundary,
+                "estrae la cartella richiesta dal payload — `folder`, o il genitore di `note` via \
+                 `folders::parent`, o radice — tagliando gli slash perché il confronto con l'ambito \
+                 è per uguaglianza. Diverge da `pair_allows` perché qui la regola produce il termine \
+                 di confronto, là lo usa: produrre e usare non stanno nella stessa riga.",
+            ),
+        ),
+        // -- ConfineDiCartella: slash finale delle basi remote ----------------
+        (
+            "crates/fub-host/src/remote/mod.rs::resolve_base",
+            (
+                Family::FolderBoundary,
+                "taglia lo slash finale della base configurata prima di comporvi i path: la base è \
+                 un prefisso e non una cartella del vault. Diverge da `validate_base_url` perché \
+                 qui la base si usa per comporre, là si giudica per rifiutare — e da \
+                 `check_endpoint_binding` perché qui il confronto è fra base e path, là fra due \
+                 basi.",
+            ),
+        ),
+        (
+            "crates/fub-host/src/remote/mod.rs::check_endpoint_binding",
+            (
+                Family::FolderBoundary,
+                "taglia lo slash finale di base corrente e base vincolata prima di confrontarle: \
+                 due tolleranze simmetriche, o il vincolo scatterebbe per un `/` di cortesia. Diverge \
+                 da `resolve_base` perché qui la domanda è «è la base promessa», là «dov'è il file» \
+                 — vincolare e risolvere non stanno nella stessa riga.",
+            ),
+        ),
+        // -- ConfineDiCartella: slash iniziale dei path richiesti -------------
+        (
+            "crates/fub-services/src/publish/mod.rs::handle_static",
+            (
+                Family::FolderBoundary,
+                "toglie gli slash iniziali del resto del path prima di risolvere il file statico: \
+                 il resto arriva da un URL e non da un `DocId`, e la radice si serve come \
+                 `index.html`. Diverge da `read_static` perché qui la risoluzione è del canale \
+                 servizi con la sua gestione d'errore, là del canale sito.",
+            ),
+        ),
+        (
+            "crates/fub-services/src/publish/site.rs::read_static",
+            (
+                Family::FolderBoundary,
+                "toglie gli slash iniziali del path richiesto prima di cercare il file pubblicato: \
+                 stessa tolleranza di `handle_static`, ma dentro il canale sito. Diverge da \
+                 `resolve_redirect` perché qui il file si serve, là si insegue un redirect — \
+                 servire e reindirizzare non stanno nella stessa riga.",
+            ),
+        ),
+        (
+            "crates/fub-services/src/publish/site.rs::resolve_redirect",
+            (
+                Family::FolderBoundary,
+                "toglie gli slash iniziali del path richiesto prima di cercarlo nella tabella dei \
+                 redirect: la tabella ha chiavi senza slash iniziale e la cortesia dell'URL non deve \
+                 mancare la corrispondenza. Diverge da `read_static` perché qui la risposta è un \
+                 «altrove», non un file.",
+            ),
+        ),
+
+    ])
+}

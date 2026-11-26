@@ -1,17 +1,21 @@
 // Inactive blocks share their HTML renderer with Reading. Active blocks keep
 // source coordinates, native selections and the existing inline decorations.
-import { StateEffect, type EditorState, type Extension, type Range, type Text, type Transaction } from "@codemirror/state";
 import {
-  CharCategory,
+  StateEffect,
+  type EditorState,
+  type Extension,
+  type Range,
+  type Text,
+  type Transaction,
+} from "@codemirror/state";
+import {
   EditorSelection,
   Facet,
-  findClusterBreak,
   Prec,
   RangeSet,
   RangeValue,
   type SelectionRange,
   StateField,
-  type TransactionSpec,
 } from "@codemirror/state";
 import {
   Decoration,
@@ -20,30 +24,22 @@ import {
   keymap,
   ViewPlugin,
   type ViewUpdate,
-  WidgetType,
 } from "@codemirror/view";
 import { ensureSyntaxTree, syntaxTree, syntaxTreeAvailable } from "@codemirror/language";
 import type { SyntaxNode, Tree } from "@lezer/common";
-// La lettura binaria di una casella è una regola del contratto, non del
-// disegno: `[/]`, `[-]`, `[>]` sono stati che esistono e non sono "fatto".
 import { taskChecked } from "../../../../rules/mirrored";
-import { dispatchTaskToggles } from "./task-toggle";
 import { hidesPageBreak } from "../../../../rules/page-break";
-import { resolvedLanguage, t } from "../../../../i18n/strings";
 import { dueLook, liveProjection, liveTaskEnd, localDay, projectedDue } from "./task-due";
-import { alarmFigure, projectedReminder, reminderLabel, reminderLong, reminderNotificationsOn, reminderPassed, reminderTimeOf } from "./task-reminder";
-import { isAllowedLink } from "../../../../ui/sanitize";
+import { projectedReminder } from "./task-reminder";
 import { openLifetime } from "../../../../ui/lifetime";
-import { figureMask, PAGE_FIGURES, readPageMark } from "../../../../ui/page-mark";
+import { figureMask, PAGE_FIGURES } from "../../../../ui/page-mark";
 import type { SyntaxForm } from "../../../../host/contract";
 import {
   inlineDelimiters,
-  parseWikilinkInner,
   scanTags,
   textSpans,
   listItem,
   wikilink,
-  type FoundWikilink,
 } from "../../../../rules/syntax";
 import {
   blockOrigin,
@@ -57,8 +53,7 @@ import {
   renderMarkdownStatePrefix,
   renderPatch,
 } from "./render";
-import { decodeDestination, normalizeLabel, routeHref } from "./link-syntax";
-import { followPath, followWikilink, linkModifier, textLinkGesture, type PeekLink } from "./link-gesture";
+import { decodeDestination, normalizeLabel } from "./link-syntax";
 import { FOOTNOTE_DEFINITION } from "./grammar";
 import { commentCopy } from "./comments/copy";
 import { commentDecorations, commentEditing } from "./comments/mask";
@@ -67,9 +62,7 @@ import { emptyPairsExtension } from "./empty-pair";
 import { edgeSpaces } from "./edge-space";
 import { keepMarks } from "./keep-marks";
 import { signsOnFirstLetter } from "./format-toggle";
-import type { MarkdownBlock, MarkdownDocument, MarkdownLinkDefinition, MountMarkdown } from "./render-types";
-import { mountMarkdown } from "./mount";
-import { mountMathBlocks } from "./math";
+import type { MarkdownBlock, MarkdownDocument, MarkdownLinkDefinition } from "./render-types";
 import { isVaultPath } from "./media";
 import {
   containerMath,
@@ -92,28 +85,39 @@ import {
   type NativeInline,
 } from "./render-inline";
 import { mediaKindOfId } from "../../../media/media-types";
-import { TableWidget, tableGrids, tableOfBlock, type TableGridCallbacks, type TableSheetHost } from "./table-widget";
+import { TableWidget, tableGrids, tableOfBlock } from "./table-widget";
 import { propertiesExtension } from "./properties";
 import { liveReveal, type RevealPolicy } from "../../live-reveal";
-import { withLineBreaks } from "../../line-breaks";
 import { pendingGuide } from "./pending";
 import { liveHints } from "./hints";
-import { choosingBlocks, DiagramLiveWidget, diagramBlockKeys, diagramSourceLines, fenceBody } from "./diagram-live";
-import { dayPage, type DayPageSource } from "./day-page";
-import { typePage, type TypePageSource } from "./type-page";
-import { calloutGestures, CalloutTypeWidget } from "./callout";
+import {
+  choosingBlocks,
+  DiagramLiveWidget,
+  diagramBlockKeys,
+  diagramSourceLines,
+  fenceBody,
+} from "./diagram-live";
+import { dayPage } from "./day-page";
+import { typePage } from "./type-page";
+import { calloutGestures } from "./callout";
 import { detailsLive } from "./details-live";
-import { blockGesture } from "./block-gesture";
 import { calloutHead } from "./callout-head";
 import { hangingIndent } from "./hanging";
-import { blockTex, blockTexRange, MathBlockEditWidget, MathBlockLiveWidget, mathPopovers, mathTouchable, typingMathBlock, type LiveFormula } from "./math-live";
+import {
+  blockTex,
+  blockTexRange,
+  MathBlockEditWidget,
+  MathBlockLiveWidget,
+  mathPopovers,
+  mathTouchable,
+  typingMathBlock,
+} from "./math-live";
 import { imageGestures } from "./image-live";
 import { CodeHeaderWidget, codeBlocks, codeWrapChanged, codeWraps } from "./code-block";
 import { blockPrefixes } from "./block-prefix";
 import { linkDialogOpener } from "./link-dialog";
-import { liveStrings } from "./strings";
 import { topChanges } from "./top-changes";
-import { Coverage, grownSpan, RowSweep, SpanIndex } from "./live-spans";
+import { RowSweep, SpanIndex } from "./live-spans";
 import {
   bareUrl,
   bareWikilink,
@@ -122,335 +126,63 @@ import {
   LinkCardWidget,
   noteCardGestures,
   NoteCardWidget,
-  type LinkCardSource,
 } from "./link-card";
-import { markPresence } from "../../../core/presence";
-import { holdsLiveCard, liveCardEmbed, LiveCardWidget, type LiveCardEmbed, type LiveCards } from "./live-cards";
-import { cellShownAsValue, cellValueRef, CellValueWidget, onlyCellValues, type CellValues } from "./cell-value";
+import { holdsLiveCard, liveCardEmbed, LiveCardWidget, type LiveCardEmbed } from "./live-cards";
+import { cellShownAsValue, cellValueRef, onlyCellValues } from "./cell-value";
+import {
+  ATTR_FOOTNOTE,
+  type CardTarget,
+  INLINE_MARKS,
+  INLINE_SYNTAX,
+  type LiveDeco,
+  type LiveDecoKind,
+  type LivePreviewCallbacks,
+  NOTE_HOLD_DELAY_MS,
+  type Reveal,
+  footnoteLabelsField,
+  footnoteLabelsOf,
+  lineReveal,
+  namesSomething,
+  pageIconsChanged,
+  revealOf,
+  touchesFootnoteLine,
+} from "./livepreview-model";
+import {
+  HEADING_LINES,
+  codeHeaderLine,
+  columnIndex,
+  fenceCloseLine,
+  firstFootnoteReference,
+  formulaIn,
+  handleClick,
+  inDecoration,
+} from "./livepreview-widgets";
+import {
+  LINE_KINDS,
+  hiddenDeletion,
+  hiddenGroupDeletion,
+  keepPunctuation,
+  wholePills,
+} from "./livepreview-pills";
+import {
+  MarkdownWidget,
+  interactiveTarget,
+  realignMounted,
+  sourcePositionAtPoint,
+} from "./livepreview-mapped";
+import { theme } from "./livepreview-theme";
 
-/// I varchi verso il resto dell'app: il modulo non importa `api.ts` né tocca
-/// lo stato — chi monta l'editor inietta cosa succede al click.
-export interface LivePreviewCallbacks {
-  /// `Mod-click` su un wikilink: riceve il **punto**, non solo la pagina.
-  ///
-  /// `page` vuota è `[[#Sezione]]`, cioè un link interno alla nota. `heading` e
-  /// `block` sono il punto che il link nomina, quando lo nomina: arrivavano
-  /// fin qui e venivano buttati, quindi `[[Nota#Sezione]]` cliccato
-  /// nell'editor apriva la nota in cima mentre lo stesso link cliccato in
-  /// Lettura arrivava alla sezione — due risposte per lo stesso link, che è la
-  /// §4.4 nella sua forma più piccola.
-  openWikilink(page: string, heading: string | null, block: string | null): void;
-  /// Alt col clic, o Alt-Invio, su un link a un documento del vault: la
-  /// sbirciata (E11, T20). Senza, quei gesti aprono il documento.
-  peekLink?(link: PeekLink): void;
-  /// Che cosa fa il clic che apre un link (`editor.link-click`): `apri`, di
-  /// serie, o `sbircia`. Senza, apre.
-  linkClick?(): "apri" | "sbircia";
-  /// Click semplice su un tag: riceve il nome senza `#` (es. "area/lavoro").
-  searchTag(tag: string): void;
-  /// `Alt-Invio` su un link relativo: il percorso, ancora codificato come
-  /// path del vault, da risolvere rispetto al documento aperto.
-  openPath?(path: string): void;
-  mountRendered?: MountMarkdown;
-  /// La griglia delle tabelle che ha il fuoco: chi monta l'editor la usa per
-  /// la barra di formattazione. Assente, le griglie funzionano lo stesso.
-  readonly tableGrid?: TableGridCallbacks;
-  /// «Trasforma in foglio» (T52): la nota e chi scrive il foglio. Assente, la
-  /// voce non c'è.
-  readonly tableSheet?: TableSheetHost;
-  /// Il menu «/» c'è e si apre: il segnaposto della riga vuota lo nomina.
-  slashEnabled?(): boolean;
-  /// L'icona (`icon:`) della pagina che un wikilink nomina, mostrata prima del
-  /// suo testo (K9). Quando le icone cambiano, chi monta l'editor manda
-  /// [`pageIconsChanged`].
-  pageIcon?(page: string): string | null;
-  /// Il wikilink nomina una persona (K5, `state/people.ts`): si mostra come
-  /// una pastiglia. Quando la cartella cambia arriva [`pageIconsChanged`].
-  isPerson?(page: string): boolean;
-  /// Le schede dei collegamenti (K8, `state/link-cards.ts`): senza, un URL da
-  /// solo resta un link. Quando cambiano arriva [`linkCardsChanged`]. Con
-  /// `note`, anche un wikilink da solo in un paragrafo è una scheda (E11).
-  readonly linkCard?: LinkCardSource;
-  /// Le schede vive (E19, T41, `./live-cards`): un paragrafo che è soltanto
-  /// l'embed di un file (un PDF, un foglio, un file Craft) si mostra con
-  /// l'ospite delle schede. Senza, l'embed resta la resa di sempre.
-  readonly liveCards?: LiveCards;
-  /// I valori di cella nel testo (E23, T53, `./cell-value`): un embed di una
-  /// cella sola di un foglio in mezzo al testo si legge come il suo valore.
-  /// Senza, l'embed resta la resa di sempre.
-  readonly cellValues?: CellValues;
-  /// La giornaliera aperta, per la pagina del giorno dopo l'ultima riga
-  /// (E17, `./day-page`). Assente, o `null`, la pagina non c'è.
-  readonly dayPage?: DayPageSource;
-  /// La nota del tipo aperta, per la pagina del tipo dopo l'ultima riga (E5,
-  /// `./type-page`). Assente, o `null`, la pagina non c'è.
-  readonly typePage?: TypePageSource;
-}
-
-/// Il paragrafo che è soltanto un collegamento, e quindi una scheda: un
-/// indirizzo web (K8) o un wikilink (E11).
-/// Quanto aspettano le schede tenute a ricontarsi dopo che i candidati sono
-/// cambiati: una volta per pausa, non a ogni battuta.
-const NOTE_HOLD_DELAY_MS = 250;
-
-type CardTarget =
-  | { readonly kind: "web"; readonly url: string }
-  | { readonly kind: "note"; readonly page: string; readonly heading: string | null; readonly block: string | null; readonly alias: string | null };
-
-/// Le icone delle pagine sono cambiate: i wikilink si ridecorano.
-export const pageIconsChanged = StateEffect.define<null>();
-
-/// Cosa fare di un intervallo. I `kind` sono il vocabolario condiviso tra la
-/// funzione pura (che li produce, ed è ciò che i test verificano) e il plugin
-/// (che li traduce in `Decoration`).
-export type LiveDecoKind =
-  // marcatore nascosto: replace vuoto, atomico per il cursore
-  | "hide"
-  // widget: linea resa al posto di `---`, checkbox reale al posto di `[ ]`
-  | "hr"
-  | "checkbox"
-  // widget: formula in riga resa, `data` è il TeX
-  | "math"
-  // widget: immagine del vault in mezzo al testo, `data` è l'HTML della Lettura
-  | "image"
-  // widget: il valore di una cella di un foglio in mezzo al testo (T53),
-  // `data` è il bersaglio dell'embed come sta scritto (`Conti.xlsx#Budget!C7`)
-  | "cell-value"
-  // widget: la pastiglia di un collegamento col cursore dentro, con `mai`, al
-  // posto di `](url)` o di `]]`; `data` è la destinazione
-  | "link-pill"
-  // mark di stile sul testo (classi cm-fub-*)
-  | "h1"
-  | "h2"
-  | "h3"
-  | "h4"
-  | "h5"
-  | "h6"
-  | "strong"
-  | "em"
-  | "strike"
-  | "code"
-  | "link"
-  | "wikilink"
-  | "highlight"
-  // il testo di un commento CriticMarkup (`comments/mask.ts`): `data` "on"
-  // col cursore dentro
-  | "comment-range"
-  | "tag"
-  | "done"
-  // la scadenza `📅 AAAA-MM-GG` di un compito: una pastiglia, rossa quando è
-  // passata (`data` "overdue"), arancio quando è vicina (`data` "near"),
-  // segnata quando la data non si legge (`data` "bad"), grigia altrimenti
-  | "task-due"
-  // il promemoria `⏰ AAAA-MM-GG HH:MM` di un compito (T36): fuori dal
-  // cursore una pastiglia blu con l'ora, al posto del testo; col cursore
-  // dentro il testo stesso, segnato. `data` è lo stato («open», «done»,
-  // «bad») e l'ora del muro
-  | "task-reminder"
-  | "task-reminder-source"
-  | "quote-mark"
-  | "sup"
-  | "sub"
-  // la definizione di una nota: l'etichetta che resta, e il ↩ al posto di
-  // `]:` che porta al primo rimando (`data` è l'etichetta)
-  | "footnote-label"
-  | "footnote-back"
-  // pezzo sostituito e punteggiatura che lo segue, che non vanno a capo divisi
-  | "nobreak"
-  // un segno che si vede ancora, rivelato con `elemento` o `riga`: più chiaro
-  // della sintassi della Sorgente (`--doc-syntax-near`)
-  | "near"
-  // il segno di una voce d'elenco puntato fuori dalla riga attiva: un pallino
-  // largo quanto il segno, o niente davanti a una casella (`data` "task")
-  | "list-bullet"
-  // decorazioni di riga (from == to == inizio riga)
-  | "quote-line"
-  // le righe di un callout toccato (`data` è il tipo), la sua pastiglia al
-  // posto di `[!tipo]±` (`data` è il tipo e il segno) e il titolo
-  | "callout-line"
-  | "callout-type"
-  | "callout-title"
-  // `[!column]` in un `[!columns]` toccato (K3): l'etichetta della colonna
-  // (`data` è il suo numero)
-  | "column-label"
-  | "codeblock-line"
-  // la riga d'apertura di un recinto di codice: la testata con la lingua,
-  // «A capo» e «Copia» (`data` è l'info string); e la riga di chiusura, che
-  // non si vede
-  | "code-header"
-  | "fence-close"
-  // la sorgente rivelata di una formula con `elemento`: `data` è il TeX, che
-  // l'anteprima sopra la riga legge
-  | "math-source"
-  // il contenuto di una coppia di tag HTML ammessi: `data` è il nome del tag,
-  // che la decorazione usa come elemento
-  | "html";
-
-export interface LiveDeco {
-  from: number;
-  to: number;
-  kind: LiveDecoKind;
-  /// Payload per i kind che ne hanno uno: il bersaglio di un wikilink come sta
-  /// scritto (`Nota#Sezione^blocco`), il nome di un tag, "x"/" " per lo stato
-  /// di una checkbox.
-  data?: string;
-  /// Un'immagine selezionata: la selezione copre esattamente i suoi byte.
-  selected?: true;
-}
-
-/// Le righe "attive" (numeri 1-based): ogni riga toccata da una selezione.
-/// Con la politica `riga` su queste righe la sorgente resta visibile; con le
-/// altre vi si rivelano soltanto commenti e righe orizzontali.
-export function activeLinesOf(
-  state: EditorState,
-  ranges: readonly { from: number; to: number }[] = state.selection.ranges,
-): Set<number> {
-  const active = new Set<number>();
-  for (const r of ranges) {
-    const from = state.doc.lineAt(r.from).number;
-    const line = state.doc.lineAt(r.to);
-    const to = r.to > r.from && r.to === line.from ? line.number - 1 : line.number;
-    for (let n = from; n <= to; n++) active.add(n);
-  }
-  return active;
-}
-
-/// Che cosa della sintassi si vede, per una politica e le selezioni di uno
-/// stato. Ogni ramo di `computeDecorations` chiede del proprio elemento: è qui,
-/// e soltanto qui, che le tre politiche differiscono.
-export interface Reveal {
-  readonly policy: RevealPolicy;
-  /// La riga logica `n` ha un cursore. Così si rivelano in ogni politica le
-  /// righe orizzontali e i commenti, come prima che ci fosse una politica.
-  row(n: number): boolean;
-  /// I segni di un elemento in riga da `from` a `to`; `at` è il segno, e con
-  /// `riga` conta la sua riga.
-  marks(from: number, to: number, at: number): boolean;
-  /// Il prefisso di un blocco, da `from` all'inizio del testo `to`: con
-  /// `elemento` si rivela col cursore nel prefisso, non a inizio testo.
-  prefix(from: number, to: number): boolean;
-  /// Un elemento che la Live non sa ancora scrivere senza la sua sorgente: con
-  /// `mai` ed `elemento` torna sorgente col cursore dentro.
-  source(from: number, to: number, at: number): boolean;
-  /// Un cursore tocca l'elemento: con `mai` è quando un collegamento mostra
-  /// la sua pastiglia.
-  near(from: number, to: number): boolean;
-  /// Un capo di una selezione sta dentro `from..to`, non su un suo bordo: in
-  /// ogni politica un widget non vi va, perché il browser non tiene un
-  /// cursore dentro un widget e lo rimetterebbe dopo, mentre si scrive.
-  inside(from: number, to: number): boolean;
-}
-
-/// La rivelazione di uno stato. `ranges` sono le selezioni che contano: quelle
-/// dello stato, o quelle tenute ferme durante una composizione.
-export function revealOf(
-  state: EditorState,
-  policy: RevealPolicy,
-  ranges: readonly { from: number; to: number }[] = state.selection.ranges,
-): Reveal {
-  let lines: Set<number> | null = null;
-  const row = (n: number) => (lines ??= activeLinesOf(state, ranges)).has(n);
-  const rowOf = (at: number) => row(state.doc.lineAt(at).number);
-  const touches = (from: number, to: number) => ranges.some((r) => r.from <= to && r.to >= from);
-  const inPrefix = (from: number, to: number) => ranges.some((r) => r.from < to && (r.to > from || r.from === from));
-  const inside = (from: number, to: number) => ranges.some((r) => (r.from > from && r.from < to) || (r.to > from && r.to < to));
-  if (policy === "riga") {
-    return {
-      policy, row, marks: (_f, _t, at) => rowOf(at), prefix: (from) => rowOf(from), source: (_f, _t, at) => rowOf(at), near: touches, inside,
-    };
-  }
-  if (policy === "elemento") {
-    return { policy, row, marks: touches, prefix: inPrefix, source: touches, near: touches, inside };
-  }
-  return { policy, row, marks: () => false, prefix: () => false, source: touches, near: touches, inside };
-}
-
-/// La politica `riga` sulle righe date: la forma dei test, e di chi chiama
-/// `computeDecorations` con le righe attive.
-function lineReveal(state: EditorState, lines: ReadonlySet<number>): Reveal {
-  const rowOf = (at: number) => lines.has(state.doc.lineAt(at).number);
-  return {
-    policy: "riga",
-    row: (n) => lines.has(n),
-    marks: (_f, _t, at) => rowOf(at),
-    prefix: (from) => rowOf(from),
-    source: (_f, _t, at) => rowOf(at),
-    near: (from) => rowOf(from),
-    // Senza le selezioni non c'è un capo da tenere fuori dai widget; con
-    // `riga` la sorgente della riga del cursore si vede comunque.
-    inside: () => false,
-  };
-}
-
-// Il nome dell'attributo con cui il payload viaggia nel DOM, scritto **una**
-// volta: chi lo posa e chi lo rilegge stanno a trecento righe di distanza, e
-// finché erano due letterali (`attributes:` di qua, `dataset.` di là) un refuso
-// non compilava male — semplicemente non trovava niente, e il click non faceva
-// nulla. `dataset` non serve più, e non è un dettaglio: la sua forma camelCase
-// è una **terza** grafia dello stesso nome.
-const ATTR_WIKILINK = "data-fub-target";
-const ATTR_TAG = "data-fub-tag";
-const ATTR_HREF = "data-fub-href";
-const ATTR_FOOTNOTE = "data-fub-footnote";
-
-/// I nodi in riga che l'albero decora o sottrae al livello regex, e i
-/// marcatori che si nascondono col loro nodo.
-const INLINE_SYNTAX = new Set([
-  "StrongEmphasis", "Emphasis", "Strikethrough", "Superscript", "Subscript", "InlineCode", "URL", "HTMLTag", "Comment",
-  "Image", "Link",
-]);
-const INLINE_MARKS = new Set(["EmphasisMark", "StrikethroughMark", "SuperscriptMark", "SubscriptMark"]);
-
-/// Senza pagina e senza punto (`[[]]`, `[[ ]]`) un wikilink non nomina niente
-/// (cfr. `names_host` nel contratto): niente hide, niente mark, niente click.
-/// `[[#Sezione]]` nomina questa nota e resta.
-function namesSomething(w: FoundWikilink): boolean {
-  return w.page.trim() !== "" || (w.heading ?? "") !== "" || (w.block ?? "").trim() !== "";
-}
-
-/// Le etichette delle note definite nel documento (`[^etichetta]:` in testa a
-/// una riga), normalizzate come le legge la Lettura.
-export function footnoteLabels(doc: EditorState["doc"]): ReadonlySet<string> {
-  const labels = new Set<string>();
-  for (let n = 1; n <= doc.lines; n++) {
-    const found = FOOTNOTE_DEFINITION.exec(doc.line(n).text);
-    if (found) labels.add(normalizeLabel(found[1]!));
-  }
-  return labels;
-}
-
-/// Se una modifica tocca una riga con `[^`, prima o dopo: soltanto lì una
-/// definizione di nota può nascere, sparire o cambiare etichetta.
-function touchesFootnoteLine(transaction: Transaction): boolean {
-  const { startState, state, changes } = transaction;
-  let touches = false;
-  const lines = (doc: EditorState["doc"], from: number, to: number): boolean =>
-    doc.sliceString(doc.lineAt(from).from, doc.lineAt(to).to).includes("[^");
-  changes.iterChangedRanges((fromA, toA, fromB, toB) => {
-    if (!touches) touches = lines(startState.doc, fromA, toA) || lines(state.doc, fromB, toB);
-  });
-  return touches;
-}
-
-/// Le etichette delle note, rilette soltanto quando una modifica tocca una
-/// riga che può definirne una: una battuta nella prosa non scorre il file.
-export const footnoteLabelsField = StateField.define<{ doc: EditorState["doc"]; labels: ReadonlySet<string> | null }>({
-  create: (state) => ({ doc: state.doc, labels: null }),
-  update(value, transaction) {
-    if (!transaction.docChanged) return value;
-    if (value.labels !== null && !touchesFootnoteLine(transaction)) return { doc: transaction.state.doc, labels: value.labels };
-    return { doc: transaction.state.doc, labels: null };
-  },
-});
-
-/// Le etichette delle note di uno stato: dal campo quando c'è (e le ha già
-/// lette per questo documento), altrimenti scorrendo il testo.
-function footnoteLabelsOf(state: EditorState): ReadonlySet<string> {
-  const cached = state.field(footnoteLabelsField, false);
-  if (!cached || cached.doc !== state.doc) return footnoteLabels(state.doc);
-  if (cached.labels === null) (cached as { labels: ReadonlySet<string> | null }).labels = footnoteLabels(state.doc);
-  return cached.labels!;
-}
+export {
+  activeLinesOf,
+  footnoteLabels,
+  footnoteLabelsField,
+  pageIconsChanged,
+  revealOf,
+} from "./livepreview-model";
+export type { LiveDeco, LiveDecoKind, LivePreviewCallbacks, Reveal } from "./livepreview-model";
+export { hiddenDeletion, hiddenGroupDeletion, wholePill, wholePills } from "./livepreview-pills";
+export { firstFootnoteReference, pillLabel, reminderTitle } from "./livepreview-widgets";
+export { sourcePositionAtPoint, sourcePositionInMapped } from "./livepreview-mapped";
 
 /// La funzione pura al centro del modulo: dallo stato (albero Lezer + testo)
 /// e dalle righe attive produce la lista ordinata degli intervalli da
@@ -1204,1205 +936,8 @@ export function computeDecorations(
   return out;
 }
 
-/// Le decorazioni che una pastiglia può attraversare: quelle di riga, e il
-/// barrato della voce fatta, che finisce col fine riga (dove la pastiglia, se
-/// continua, va comunque a capo).
-const LINE_KINDS: ReadonlySet<LiveDecoKind> = new Set(["quote-line", "codeblock-line", "callout-line", "done"]);
-
-/// La pastiglia della scadenza, allargata finché non taglia più niente.
-///
-/// Un segno che ne attraversa il bordo — il codice in cui sta la data, il
-/// wikilink che la porta, i suoi segni nascosti, un evidenziato — spezzerebbe
-/// la pastiglia in due toppe: CodeMirror chiude e riapre il segno che finisce
-/// prima. Così la pastiglia prende per intero l'elemento che tocca, come in
-/// Lettura (`markTaskDues`): sta dentro un elemento che la contiene o
-/// contiene quelli che tocca, mai a cavallo.
-///
-/// E un elemento di cui la pastiglia copre tutto ciò che si vede (il codice
-/// `` `📅 2026-11-16` `` fuori dalla riga del cursore) sta dentro di lei, coi
-/// suoi segni nascosti: intorno, il suo fondo farebbe una toppa sulla toppa.
-export function wholePill(pill: LiveDeco, others: readonly LiveDeco[]): LiveDeco {
-  let { from, to } = pill;
-  const marks = others.filter((d) => d !== pill && !LINE_KINDS.has(d.kind) && d.from < d.to);
-  const hides = marks.filter((d) => d.kind === "hide");
-  // I tratti nascosti uniti: un tratto è nascosto se uno solo lo copre.
-  const hidden = new Coverage(hides);
-  const grow = () => ({ from, to } = grownSpan(from, to, marks));
-  grow();
-  const covered = marks.some((other) => other.kind !== "hide" && other.from <= from && to <= other.to
-    && hidden.covers(other.from, from) && hidden.covers(to, other.to));
-  if (covered) {
-    for (let moved = true; moved; ) {
-      moved = false;
-      for (const hide of hides) {
-        if (hide.to === from) { from = hide.from; moved = true; }
-        if (hide.from === to) { to = hide.to; moved = true; }
-      }
-    }
-    grow();
-  }
-  return { ...pill, from, to };
-}
-
-/// Le pastiglie intere (`wholePill`), guardando per ognuna soltanto i segni
-/// del suo compito: un segno in riga non esce dal paragrafo, e il paragrafo
-/// di un compito comincia alla riga della casella. I segni si ordinano una
-/// volta, e ogni pastiglia ne legge solo il tratto suo: nella battuta da 4 ms
-/// non si scorre tutto il viewport per ogni compito.
-export function wholePills(
-  pills: readonly { pill: LiveDeco; from: number; to: number }[],
-  decos: readonly LiveDeco[],
-): LiveDeco[] {
-  if (pills.length === 0) return [];
-  const sorted = decos.filter((d) => d.from < d.to && !LINE_KINDS.has(d.kind)).sort((a, b) => a.from - b.from);
-  return pills.map(({ pill, from, to }) => {
-    let low = 0;
-    let high = sorted.length;
-    while (low < high) {
-      const middle = (low + high) >> 1;
-      if (sorted[middle]!.from < from) low = middle + 1;
-      else high = middle;
-    }
-    const near: LiveDeco[] = [];
-    for (let at = low; at < sorted.length && sorted[at]!.from <= to; at++) near.push(sorted[at]!);
-    return wholePill(pill, near);
-  });
-}
-
-const REPLACED: ReadonlySet<LiveDecoKind> = new Set(["hide", "math", "image", "cell-value", "link-pill", "footnote-back"]);
-
-/// La punteggiatura che non comincia una riga.
-const TRAILING_PUNCTUATION = /^[,.;:!?)\]»”’]+/;
-
-/// Un pezzo sostituito (un segno nascosto, una formula, un'immagine, una
-/// pastiglia) seguito da punteggiatura non va a capo da solo: la lettera prima
-/// del pezzo, il pezzo e la punteggiatura stanno sotto un `cm-fub-nobreak`.
-function keepPunctuation(doc: EditorState["doc"], out: LiveDeco[]): void {
-  const glued: LiveDeco[] = [];
-  // Letti una volta: i pezzi sostituiti, e dove finisce uno stile. Una
-  // lettera `letter = d.from - 1` sta sotto uno stile che finisce entro
-  // `d.from` soltanto se lo stile finisce proprio lì e non è vuoto.
-  let replaced: SpanIndex | null = null;
-  let styleEnds: Set<number> | null = null;
-  for (const d of out) {
-    if (!REPLACED.has(d.kind)) continue;
-    if (d.from === d.to) continue;
-    const line = doc.lineAt(d.from);
-    if (d.to > line.to) continue;
-    const after = TRAILING_PUNCTUATION.exec(doc.sliceString(d.to, Math.min(line.to, d.to + 8)));
-    if (!after) continue;
-    // La lettera prima, se c'è, nessun altro pezzo la sostituisce e nessuno
-    // stile finisce su di lei: uno stile tagliato in due mostra il suo fondo
-    // e il suo margine due volte («ricordar e»).
-    const letter = d.from - 1;
-    replaced ??= new SpanIndex(out.filter((o) => REPLACED.has(o.kind)));
-    styleEnds ??= new Set(out.filter((o) => !REPLACED.has(o.kind) && o.kind !== "nobreak" && o.from < o.to).map((o) => o.to));
-    const free = letter >= line.from && !/\s/.test(doc.sliceString(letter, d.from))
-      && !replaced.covers(letter)
-      && !styleEnds.has(d.from);
-    const before = free ? letter : d.from;
-    glued.push({ from: before, to: d.to + after[0].length, kind: "nobreak" });
-  }
-  out.push(...glued);
-}
-
-/// Gli elementi in riga che hanno un segno d'apertura e uno di chiusura come
-/// figli, e il nome di quei segni.
-const MARKED_ELEMENTS: Readonly<Record<string, string>> = {
-  StrongEmphasis: "EmphasisMark",
-  Emphasis: "EmphasisMark",
-  Strikethrough: "StrikethroughMark",
-  Superscript: "SuperscriptMark",
-  Subscript: "SubscriptMark",
-  InlineCode: "CodeMark",
-};
-
-/// L'elemento coi segni il cui contenuto è esattamente `from`–`to`: è quello
-/// che una cancellazione lascerebbe vuoto.
-function elementOfContent(state: EditorState, from: number, to: number): { from: number; to: number } | null {
-  for (let node: SyntaxNode | null = syntaxTree(state).resolveInner(from, 1); node; node = node.parent) {
-    const mark = MARKED_ELEMENTS[node.name];
-    if (!mark) continue;
-    const marks = node.getChildren(mark);
-    if (marks.length >= 2 && marks[0]!.to === from && marks[marks.length - 1]!.from === to) return node;
-    if (node.from < from && to < node.to) return null;
-  }
-  return null;
-}
-
-/// La cancellazione di un carattere con la politica `mai`, accanto ai segni
-/// nascosti (`hidden`): il cursore salta i segni e cancella la lettera dopo
-/// di loro, e una lettera che è tutto il contenuto del suo elemento porta via
-/// anche i segni. `null` quando non c'è niente di questo, e vale il tasto di
-/// sempre: una selezione, un segno a inizio o fine riga (il prefisso di un
-/// blocco), una lettera qualunque.
-export function hiddenDeletion(
-  state: EditorState,
-  hidden: RangeSet<Decoration>,
-  forward: boolean,
-): TransactionSpec | null {
-  if (state.selection.ranges.some((range) => !range.empty)) return null;
-  let special = false;
-  let blocked = false;
-  const result = state.changeByRange((range) => {
-    let pos = range.head;
-    let skipped = false;
-    for (;;) {
-      let next = -1;
-      hidden.between(pos, pos, (from, to) => {
-        if (!forward && to === pos && from < pos) next = from;
-        if (forward && from === pos && to > pos) next = to;
-      });
-      if (next < 0) break;
-      pos = next;
-      skipped = true;
-    }
-    const line = state.doc.lineAt(pos);
-    if ((!forward && pos === line.from) || (forward && pos === line.to)) {
-      if (skipped) blocked = true;
-      return { range };
-    }
-    const column = pos - line.from;
-    const from = forward ? pos : line.from + findClusterBreak(line.text, column, false);
-    const to = forward ? line.from + findClusterBreak(line.text, column, true) : pos;
-    let element = elementOfContent(state, from, to);
-    // `***x***`: l'elemento vuoto è tutto il contenuto di quello che lo
-    // contiene, e se ne vanno anche i segni di fuori.
-    for (let outer = element; outer; outer = elementOfContent(state, outer.from, outer.to)) element = outer;
-    if (element) {
-      special = true;
-      return { changes: { from: element.from, to: element.to }, range: EditorSelection.cursor(element.from) };
-    }
-    if (skipped) special = true;
-    return { changes: { from, to }, range: EditorSelection.cursor(from) };
-  });
-  if (!special || blocked) return null;
-  return { ...result, scrollIntoView: true, userEvent: forward ? "delete.forward" : "delete.backward" };
-}
-
-/// La cancellazione di una parola (Mod-Backspace, Mod-Canc) con la politica
-/// `mai`, accanto ai segni nascosti (`hidden`): il cursore salta i segni e
-/// cancella la parola che si vede dopo di loro, come `deleteGroupBackward` e
-/// `deleteGroupForward` di CodeMirror, senza entrare nel segno che viene dopo.
-/// Senza questo la parola si fermava al segno: un segno nascosto è atomico, e
-/// un segno di commento non si cancella da solo (`comments/mask.ts`), quindi
-/// il gesto non faceva niente. `null` se nessun cursore sta accanto a un
-/// segno, o c'è una selezione: vale il tasto di sempre.
-export function hiddenGroupDeletion(
-  state: EditorState,
-  hidden: RangeSet<Decoration>,
-  forward: boolean,
-): TransactionSpec | null {
-  if (state.selection.ranges.some((range) => !range.empty)) return null;
-  const hiddenEdge = (pos: number): boolean => {
-    let found = false;
-    hidden.between(pos, pos, (from, to) => {
-      if ((!forward && to === pos && from < pos) || (forward && from === pos && to > pos)) found = true;
-    });
-    return found;
-  };
-  let special = false;
-  const result = state.changeByRange((range) => {
-    let start = range.head;
-    let skipped = false;
-    for (;;) {
-      let next = -1;
-      hidden.between(start, start, (from, to) => {
-        if (!forward && to === start && from < start) next = from;
-        if (forward && from === start && to > start) next = to;
-      });
-      if (next < 0) break;
-      start = next;
-      skipped = true;
-    }
-    if (skipped) special = true;
-    const line = state.doc.lineAt(start);
-    const categorize = state.charCategorizer(start);
-    let pos = start;
-    for (let category: CharCategory | null = null; ;) {
-      if (pos === (forward ? line.to : line.from)) {
-        if (pos === start && !skipped && line.number !== (forward ? state.doc.lines : 1)) pos += forward ? 1 : -1;
-        break;
-      }
-      if (pos !== start && hiddenEdge(pos)) break;
-      const next = findClusterBreak(line.text, pos - line.from, forward) + line.from;
-      const char = line.text.slice(Math.min(pos, next) - line.from, Math.max(pos, next) - line.from);
-      const nextCategory = categorize(char);
-      if (category !== null && nextCategory !== category) break;
-      if (char !== " " || pos !== start) category = nextCategory;
-      pos = next;
-    }
-    if (pos === start) return { range };
-    const from = Math.min(pos, start);
-    const to = Math.max(pos, start);
-    // La parola che è tutto il contenuto del suo elemento porta via anche i
-    // segni, come l'ultima lettera: nel file non resta un `****`.
-    let element = skipped ? elementOfContent(state, from, to) : null;
-    for (let outer = element; outer; outer = elementOfContent(state, outer.from, outer.to)) element = outer;
-    if (element) return { changes: { from: element.from, to: element.to }, range: EditorSelection.cursor(element.from) };
-    return { changes: { from, to }, range: EditorSelection.cursor(from) };
-  });
-  if (!special) return null;
-  return { ...result, scrollIntoView: true, userEvent: forward ? "delete.forward" : "delete.backward" };
-}
-
-// ---------------------------------------------------------------------------
-// Da qui in giù: widget, gesti DOM, tema e lifecycle del plugin CM6.
-
-const mathTeardowns = new WeakMap<HTMLElement, () => void>();
-
-/// Una formula in riga resa al posto del suo `$…$` fuori dalla riga attiva.
-/// Il motore è quello della Lettura (`mountMathBlocks`), caricato solo quando
-/// una formula c'è; lo smontaggio del widget chiude anche il suo caricamento.
-const ATTR_TEX = "data-fub-tex";
-
-/// Il contenuto di un tag ammesso porta l'elemento vero; quelli che la Live
-/// disegna già con una sua classe la portano anche.
-const HTML_CLASSES: Readonly<Record<string, string>> = {
-  mark: "cm-fub-highlight", sup: "cm-fub-sup", sub: "cm-fub-sub", code: "cm-fub-code", del: "cm-fub-strike",
-  strong: "cm-fub-strong", em: "cm-fub-em",
-};
-const htmlMarks = new Map<string, Decoration>();
-/// `data` è il nome del tag, seguito dalle classi dei colori se ne ha (K1).
-function htmlMark(data: string): Decoration {
-  let mark = htmlMarks.get(data);
-  if (!mark) {
-    const [name = "span", ...colors] = data.split(" ");
-    mark = Decoration.mark({ tagName: name, class: ["cm-fub-html", HTML_CLASSES[name] ?? "", ...colors].filter(Boolean).join(" ") });
-    htmlMarks.set(data, mark);
-  }
-  return mark;
-}
-
-/// La formula in riga della vista in `pos`, resa o rivelata: `side` 1 vuole
-/// quella che comincia lì, -1 quella che finisce lì, 0 quella che lo contiene.
-function formulaIn(set: DecorationSet | undefined, pos: number, side: -1 | 0 | 1): LiveFormula | null {
-  let found: LiveFormula | null = null;
-  set?.between(pos, pos, (from, to, decoration) => {
-    const widget = decoration.spec.widget;
-    const tex = widget instanceof InlineMathWidget ? widget.tex
-      : decoration.spec.class === "cm-fub-math-source" ? String(decoration.spec.attributes?.[ATTR_TEX] ?? "") : null;
-    if (tex === null) return;
-    if (side === 1 ? from !== pos : side === -1 ? to !== pos : pos < from || pos > to) return;
-    found = { from, to, tex };
-    return false;
-  });
-  return found;
-}
-
-/// Il numero della colonna di `node`, se è un `[!column]` dentro un
-/// `[!columns]` di primo livello; altrimenti `null`.
-function columnIndex(node: SyntaxNode, doc: Text): number | null {
-  const parent = node.parent;
-  if (parent?.name !== "Blockquote" || parent.parent?.name !== "Document") return null;
-  if (calloutHead(doc.lineAt(parent.from).text)?.type !== "columns") return null;
-  if (calloutHead(doc.lineAt(node.from).text)?.type !== "column") return null;
-  let index = 1;
-  for (let other = node.prevSibling; other; other = other.prevSibling) if (other.name === "Blockquote") index++;
-  return index;
-}
-
-/// L'etichetta di una colonna toccata, al posto di `[!column]`.
-class ColumnLabelWidget extends WidgetType {
-  constructor(readonly index: number) { super(); }
-  eq(other: ColumnLabelWidget): boolean { return other.index === this.index; }
-  toDOM(): HTMLElement {
-    const label = document.createElement("span");
-    label.className = "cm-fub-column-label";
-    label.textContent = liveStrings.t("live.columns.column", { index: String(this.index) });
-    return label;
-  }
-}
-
-class InlineMathWidget extends WidgetType {
-  constructor(readonly tex: string) { super(); }
-  eq(other: InlineMathWidget) {
-    return other.tex === this.tex;
-  }
-  toDOM() {
-    const wrapper = document.createElement("span");
-    wrapper.className = "cm-fub-math";
-    const formula = document.createElement("span");
-    formula.className = "math-inline";
-    formula.dataset.tex = this.tex;
-    formula.textContent = this.tex;
-    wrapper.appendChild(formula);
-    mathTeardowns.set(wrapper, mountMathBlocks(wrapper));
-    return wrapper;
-  }
-  destroy(dom: HTMLElement) {
-    mathTeardowns.get(dom)?.();
-    mathTeardowns.delete(dom);
-  }
-  ignoreEvent() {
-    return false;
-  }
-}
-
-const imageMounts = new WeakMap<HTMLElement, () => void>();
-
-/// Un'immagine del vault in mezzo al testo, fuori dalla riga attiva. L'HTML è
-/// quello della Lettura e lo monta la stessa resa (`mountRendered`):
-/// sanificato, idratato con un lease del kernel, chiuso con lo smontaggio del
-/// widget. Un clic la seleziona (`image-live.ts`): contorno e maniglia della
-/// larghezza; Mod-clic apre l'immagine a tutta finestra.
-class InlineImageWidget extends WidgetType {
-  constructor(
-    readonly html: string,
-    readonly length: number,
-    readonly selected: boolean,
-    readonly callbacks: LivePreviewCallbacks,
-  ) { super(); }
-  eq(other: InlineImageWidget) {
-    return other.html === this.html && other.length === this.length && other.selected === this.selected;
-  }
-  /// Selezionarla non la rimonta: cambia la classe, l'immagine resta caricata.
-  updateDOM(dom: HTMLElement, _view: EditorView, from: this) {
-    if (from.html !== this.html) return false;
-    dom.dataset.fubImage = String(this.length);
-    dom.classList.toggle("cm-fub-image-selected", this.selected);
-    return true;
-  }
-  toDOM(view: EditorView) {
-    const root = document.createElement("span");
-    root.className = this.selected ? "cm-fub-image cm-fub-image-selected" : "cm-fub-image";
-    root.dataset.fubImage = String(this.length);
-    const unmount = this.callbacks.mountRendered
-      ? this.callbacks.mountRendered(root, this.html, {})
-      : mountMarkdown(root, this.html, {
-        openWikilink: (page, heading, block) => this.callbacks.openWikilink(page, heading ?? null, block ?? null),
-        searchTag: this.callbacks.searchTag,
-      });
-    // I byte arrivano dopo il widget: la riga cambia altezza quando l'immagine
-    // si carica, e CodeMirror deve rimisurarla.
-    const measure = () => view.requestMeasure();
-    root.addEventListener("load", measure, true);
-    root.addEventListener("markdown-resize", measure);
-    const handle = document.createElement("span");
-    handle.className = "cm-fub-image-handle";
-    markPresence(handle, "request");
-    handle.setAttribute("aria-hidden", "true");
-    handle.title = liveStrings.t("live.image.handle");
-    root.append(handle);
-    imageMounts.set(root, () => {
-      root.removeEventListener("load", measure, true);
-      root.removeEventListener("markdown-resize", measure);
-      unmount();
-    });
-    return root;
-  }
-  destroy(root: HTMLElement) {
-    imageMounts.get(root)?.();
-    imageMounts.delete(root);
-  }
-  ignoreEvent(event: Event) {
-    return event instanceof MouseEvent && interactiveTarget(event.target instanceof Element ? event.target : null, event);
-  }
-}
-
-/// La linea resa al posto di `---`/`***` fuori dalla riga attiva.
-/// Ciò che la pastiglia di un collegamento dice: il dominio di un indirizzo,
-/// «nota › titolo» di un wikilink, il percorso di un file.
-export function pillLabel(destination: string): string {
-  if (destination.startsWith("[[") && destination.endsWith("]]")) {
-    const target = parseWikilinkInner(destination.slice(2, -2));
-    return [target.page, target.heading ?? (target.block ? `^${target.block}` : null)].filter(Boolean).join(" › ");
-  }
-  if (/^mailto:/i.test(destination)) return destination.slice(7);
-  if (/^[a-z][a-z0-9+.-]*:/i.test(destination)) {
-    try {
-      const url = new URL(destination);
-      return url.hostname ? url.hostname.replace(/^www\./, "") : destination;
-    } catch {
-      return destination;
-    }
-  }
-  const path = decodeDestination(destination);
-  try {
-    return decodeURIComponent(path);
-  } catch {
-    return path;
-  }
-}
-
-class LinkPillWidget extends WidgetType {
-  constructor(readonly destination: string) { super(); }
-  eq(other: LinkPillWidget) { return other.destination === this.destination; }
-  toDOM() {
-    const el = document.createElement("span");
-    el.className = "cm-fub-link-pill";
-    el.textContent = pillLabel(this.destination);
-    el.title = liveStrings.t("live.link.pill", { target: this.destination });
-    return el;
-  }
-  ignoreEvent() { return false; }
-}
-
-/// Il ↩ di una definizione di nota: porta al primo rimando, come in Lettura.
-class FootnoteBackWidget extends WidgetType {
-  constructor(readonly label: string) { super(); }
-  eq(other: FootnoteBackWidget) { return other.label === this.label; }
-  toDOM() {
-    const el = document.createElement("span");
-    el.className = "cm-fub-footnote-back";
-    el.textContent = "↩";
-    el.title = liveStrings.t("live.footnote.back");
-    el.setAttribute(ATTR_FOOTNOTE, this.label);
-    return el;
-  }
-  ignoreEvent() { return false; }
-}
-
-/// La fine del primo rimando a una nota (`[^etichetta]` che non sia la sua
-/// definizione), o `null` se nessun testo la chiama.
-export function firstFootnoteReference(doc: EditorState["doc"], label: string): number | null {
-  const wanted = normalizeLabel(label);
-  for (let n = 1; n <= doc.lines; n++) {
-    const line = doc.line(n);
-    if (!line.text.includes("[^")) continue;
-    const definition = FOOTNOTE_DEFINITION.exec(line.text);
-    for (const found of line.text.matchAll(/\[\^([^\] \t\r\n]+)\]/g)) {
-      if (definition && found.index === 0) continue;
-      if (normalizeLabel(found[1]!) === wanted) return line.from + found.index! + found[0].length;
-    }
-  }
-  return null;
-}
-
-class RulerWidget extends WidgetType {
-  eq() {
-    return true; // tutti i righelli sono uguali: il DOM si riusa sempre
-  }
-  toDOM() {
-    const el = document.createElement("span");
-    el.className = "cm-fub-hr";
-    return el;
-  }
-}
-
-/// La checkbox reale al posto di `[ ]`/`[x]`. Il click lo gestisce il plugin
-/// (posAtDOM → modifica del testo sottostante), non il widget: la sorgente di
-/// verità resta il documento.
-class CheckboxWidget extends WidgetType {
-  constructor(readonly checked: boolean) {
-    super();
-  }
-  eq(other: CheckboxWidget) {
-    return other.checked === this.checked;
-  }
-  toDOM() {
-    const box = document.createElement("input");
-    box.type = "checkbox";
-    box.checked = this.checked;
-    box.className = "cm-fub-checkbox";
-    box.tabIndex = -1; // il focus resta all'editor
-    const labelKey = this.checked ? "editor.task.completed" : "editor.task.pending";
-    box.dataset.i18nLabel = labelKey;
-    box.setAttribute("aria-label", t(labelKey));
-    return box;
-  }
-  ignoreEvent() {
-    return false; // lascia arrivare il mousedown agli handler del plugin
-  }
-}
-
-// Decorazioni riusate (una per kind): l'identità stabile permette a CM di
-// confrontare e riusare il DOM tra un ricalcolo e l'altro.
-const hidden = Decoration.replace({});
-const ruler = Decoration.replace({ widget: new RulerWidget() });
-const boxEmpty = Decoration.replace({ widget: new CheckboxWidget(false) });
-const checkedBox = Decoration.replace({ widget: new CheckboxWidget(true) });
-const codeLine = Decoration.line({ class: "cm-fub-codeblock" });
-const codeHeaderLine = Decoration.line({ class: "cm-fub-code-header-line" });
-const fenceCloseLine = Decoration.line({ class: "cm-fub-fence-close-line" });
-const HEADING_LINES: Partial<Record<LiveDecoKind, Decoration>> = Object.fromEntries(
-  (["h1", "h2", "h3", "h4", "h5", "h6"] as const).map(
-    (kind) => [kind, Decoration.line({ class: `cm-fub-heading-line cm-fub-${kind}-line` })],
-  ),
-);
-const quoteLine = Decoration.line({ class: "cm-fub-quote" });
-const calloutTitle = Decoration.mark({ class: "cm-fub-callout-title" });
-const calloutLines = new Map<string, Decoration>();
-function calloutLine(type: string): Decoration {
-  let line = calloutLines.get(type);
-  if (!line) {
-    line = Decoration.line({ class: "cm-fub-callout-line", attributes: { "data-callout": type } });
-    calloutLines.set(type, line);
-  }
-  return line;
-}
-const bulletMark = Decoration.mark({ class: "cm-fub-bullet" });
-const commentRange = Decoration.mark({ class: "cm-fub-comment-range" });
-const commentRangeOn = Decoration.mark({ class: "cm-fub-comment-range cm-fub-comment-range-on" });
-const dueMark = Decoration.mark({ class: "cm-fub-due" });
-const dueNearMark = Decoration.mark({ class: "cm-fub-due cm-fub-due-near" });
-const dueOverdueMark = Decoration.mark({ class: "cm-fub-due cm-fub-due-overdue" });
-
-/// La pastiglia del promemoria (T36): la sveglia e l'ora, col giorno se non
-/// è oggi. Il clic apre la scelta del giorno e dell'ora (`reminder-picker.ts`,
-/// dal gestore del `mousedown`); il passaggio dice quando suona, se è passato,
-/// se il compito è fatto e se le notifiche sono spente, letto al momento.
-class ReminderWidget extends WidgetType {
-  constructor(readonly data: string) { super(); }
-  eq(other: ReminderWidget) { return other.data === this.data; }
-  toDOM() {
-    const [look, ...rest] = this.data.split(" ");
-    const written = rest.join(" ");
-    const when = reminderTimeOf(written);
-    const el = document.createElement("span");
-    el.className = look === "done" ? "cm-fub-reminder cm-fub-reminder-done" : "cm-fub-reminder";
-    el.dataset.reminder = written;
-    const text = document.createElement("span");
-    text.textContent = when ? reminderLabel(when, new Date(), resolvedLanguage()) : written;
-    el.append(alarmFigure(), text);
-    const describe = () => {
-      el.title = reminderTitle(look === "done", when);
-    };
-    describe();
-    el.addEventListener("pointerenter", describe);
-    return el;
-  }
-  ignoreEvent() { return false; }
-}
-
-/// Ciò che il passaggio dice di un promemoria: quando suona (o che è
-/// passato, o che il compito è fatto) e, con le notifiche spente, che resta
-/// nella nota senza suonare.
-export function reminderTitle(done: boolean, when: { date: string; time: string } | null, now = new Date()): string {
-  if (!when) return liveStrings.t("reminder.unreadable");
-  const long = reminderLong(when, resolvedLanguage());
-  const head = done
-    ? liveStrings.t("reminder.title.done", { when: long })
-    : reminderPassed(when, now)
-      ? liveStrings.t("reminder.title.passed", { when: long })
-      : liveStrings.t("reminder.title", { when: long });
-  return done || reminderNotificationsOn() ? head : `${head} ${liveStrings.t("reminder.title.off")}`;
-}
-const taskMark = Decoration.mark({ class: "cm-fub-bullet cm-fub-bullet-task" });
-const marksMap: Partial<Record<LiveDecoKind, Decoration>> = Object.fromEntries(
-  (["h1", "h2", "h3", "h4", "h5", "h6", "strong", "em", "strike", "sup", "sub", "code", "link", "highlight", "done", "quote-mark", "near", "nobreak", "footnote-label"] as const).map(
-    (kind) => [kind, Decoration.mark({ class: `cm-fub-${kind}` })],
-  ),
-);
-
-function inDecoration(d: LiveDeco, callbacks: LivePreviewCallbacks): Decoration {
-  switch (d.kind) {
-    case "hide":
-      return hidden;
-    case "hr":
-      return ruler;
-    case "checkbox":
-      return d.data === "x" ? checkedBox : boxEmpty;
-    case "math":
-      return Decoration.replace({ widget: new InlineMathWidget(d.data ?? "") });
-    case "image":
-      return Decoration.replace({ widget: new InlineImageWidget(d.data ?? "", d.to - d.from, d.selected === true, callbacks) });
-    case "cell-value": {
-      const target = parseWikilinkInner(d.data ?? "");
-      const ref = cellValueRef(target.page, target.heading);
-      // Senza la porta `computeDecorations` non lo produce; un riferimento
-      // che non si rilegge resta nascosto come il resto dell'embed.
-      return ref && callbacks.cellValues ? Decoration.replace({ widget: new CellValueWidget(ref, callbacks.cellValues) }) : hidden;
-    }
-    case "link-pill":
-      return Decoration.replace({ widget: new LinkPillWidget(d.data ?? "") });
-    case "footnote-back":
-      return Decoration.replace({ widget: new FootnoteBackWidget(d.data ?? "") });
-    case "codeblock-line":
-      return codeLine;
-    case "code-header":
-      return Decoration.replace({ widget: new CodeHeaderWidget(d.data ?? "", true) });
-    case "fence-close":
-      return hidden;
-    case "html":
-      return htmlMark(d.data ?? "span");
-    case "math-source":
-      return Decoration.mark({ class: "cm-fub-math-source", attributes: { [ATTR_TEX]: d.data ?? "" } });
-    case "list-bullet":
-      return d.data === "task" ? taskMark : bulletMark;
-    case "quote-line":
-      return quoteLine;
-    case "callout-line":
-      return calloutLine(d.data ?? "");
-    case "callout-type": {
-      const data = d.data ?? "";
-      const fold = data.endsWith("+") || data.endsWith("-") ? data.slice(-1) as "+" | "-" : null;
-      return Decoration.replace({ widget: new CalloutTypeWidget(fold ? data.slice(0, -1) : data, fold) });
-    }
-    case "callout-title":
-      return calloutTitle;
-    case "column-label":
-      return Decoration.replace({ widget: new ColumnLabelWidget(Number(d.data ?? "1")) });
-    // Il payload viaggia nel DOM come data-attribute: il gestore del click
-    // lo rilegge da lì, senza mappe posizione→dato da tenere sincronizzate.
-    case "link":
-      return Decoration.mark({
-        class: "cm-fub-link",
-        attributes: { [ATTR_HREF]: d.data ?? "" },
-      });
-    case "highlight":
-      return d.data
-        ? Decoration.mark({ class: `cm-fub-${d.data}` })
-        : marksMap[d.kind]!;
-    case "comment-range":
-      return d.data === "on" ? commentRangeOn : commentRange;
-    case "wikilink": {
-      // Il bersaglio anche nel contratto che la resa dà alla shell
-      // (`data-wikilink-*`, come in Lettura): chi guarda il link sotto il
-      // puntatore, come l'anteprima al passaggio, non conosce la grammatica
-      // di questo profilo.
-      const target = parseWikilinkInner(d.data ?? "");
-      // Un'emoji si scrive col `::before`; una figura del set ha la sua
-      // maschera (`data-page-figure`); un `fub:` sconosciuto non si mostra.
-      const mark = readPageMark(target.page ? callbacks.pageIcon?.(target.page) ?? null : null);
-      const person = target.page !== "" && callbacks.isPerson?.(target.page) === true;
-      return Decoration.mark({
-        class: person ? "cm-fub-wikilink cm-fub-person" : "cm-fub-wikilink",
-        attributes: {
-          [ATTR_WIKILINK]: d.data ?? "",
-          "data-wikilink-page": target.page,
-          ...(mark?.kind === "text" ? { "data-page-icon": mark.text } : {}),
-          ...(mark?.kind === "figure" ? { "data-page-figure": mark.name } : {}),
-          ...(target.heading ? { "data-wikilink-heading": target.heading } : {}),
-          ...(target.block ? { "data-wikilink-block": target.block } : {}),
-        },
-      });
-    }
-    case "task-reminder":
-      return Decoration.replace({ widget: new ReminderWidget(d.data ?? "") });
-    case "task-reminder-source": {
-      const [look, ...rest] = (d.data ?? "").split(" ");
-      const when = reminderTimeOf(rest.join(" "));
-      const variant = look === "bad" ? " cm-fub-reminder-bad" : look === "done" ? " cm-fub-reminder-done" : "";
-      return Decoration.mark({ class: `cm-fub-reminder-text${variant}`, attributes: { title: reminderTitle(look === "done", when) } });
-    }
-    case "task-due":
-      if (d.data === "near") return dueNearMark;
-      if (d.data === "overdue") return dueOverdueMark;
-      // Il titolo dice perché, nella lingua dell'interfaccia di adesso.
-      if (d.data === "bad") {
-        return Decoration.mark({ class: "cm-fub-due cm-fub-due-bad", attributes: { title: liveStrings.t("tasks.due.unreadable") } });
-      }
-      return dueMark;
-    case "tag":
-      return Decoration.mark({
-        class: "cm-fub-tag",
-        attributes: { [ATTR_TAG]: d.data ?? "" },
-      });
-    default:
-      return marksMap[d.kind]!;
-  }
-}
-
-function handleClick(e: MouseEvent, view: EditorView, cb: LivePreviewCallbacks): boolean {
-  if (e.button !== 0) return false;
-  const target = e.target instanceof HTMLElement ? e.target : null;
-  if (!target) return false;
-
-  // Checkbox: si modifica il testo, non il widget — la decorazione nuova
-  // arriva da sola col docChanged.
-  if (target instanceof HTMLInputElement && target.classList.contains("cm-fub-checkbox")) {
-    // Il mousedown conserva la selezione; il click è l'unico gesto che
-    // modifica il testo. Annullare anche il click in sola lettura impedisce
-    // al controllo HTML di mostrare uno stato diverso dalla sorgente.
-    if (e.type === "mousedown" || view.state.readOnly) {
-      e.preventDefault();
-      return true;
-    }
-    const pos = view.posAtDOM(target);
-    const threeChars = view.state.doc.sliceString(pos, pos + 3);
-    if (/^\[[^\]\n]\]$/.test(threeChars)) {
-      const checked = !taskChecked(threeChars[1]);
-      const line = view.state.doc.lineAt(pos);
-      // La spunta passa dalla ricorrenza (`task-toggle.ts`): un compito `🔁`
-      // spuntato fa nascere il successivo nella stessa transazione.
-      dispatchTaskToggles(view, [{ symbol: pos + 1, insert: checked ? "x" : " " }], (mapPos) => ({
-        annotations: blockGesture.of({ kind: "check", lead: { from: mapPos(line.from), to: mapPos(line.to) }, say: liveStrings.t(checked ? "blocks.checked" : "blocks.unchecked") }),
-        // Come ogni battuta di contenuto: senza, la modifica cade fuori dalla
-        // history nativa dell'editor.
-        userEvent: "input",
-      }));
-      e.preventDefault();
-      return true;
-    }
-    return false;
-  }
-
-  if (e.type === "click") return false;
-
-  // Il clic che apre un link nel testo (Ctrl, Cmd sul Mac) e Alt col clic:
-  // la regola di `open-link.ts`, la stessa della Lettura e delle schede.
-  const gesture = textLinkGesture(e);
-  const wikilink = target.closest<HTMLElement>(".cm-fub-wikilink");
-  if (wikilink && gesture) {
-    // L'attributo porta il bersaglio come sta scritto nella sorgente: qui lo
-    // si ripassa dalla stessa grammatica di prima, invece di ri-serializzarlo.
-    const labelledBy = parseWikilinkInner(wikilink.getAttribute(ATTR_WIKILINK) ?? "");
-    void followWikilink(cb, labelledBy.page, labelledBy.heading, labelledBy.block, gesture);
-    e.preventDefault();
-    return true;
-  }
-
-  const link = target.closest<HTMLElement>(".cm-fub-link");
-  if (link && gesture) {
-    const href = link.getAttribute(ATTR_HREF);
-    // Naviga solo ciò che il sanitizzatore lascia passare (stessa policy di
-    // Lettura): `javascript:…`, `data:…` e i protocol-relative restano fermi.
-    if (!href || !isAllowedLink(href)) return false;
-    const route = routeHref(href);
-    if (route.kind === "path") {
-      if (!cb.openPath || route.path === "") return false;
-      void followPath(cb, route.path, gesture);
-      e.preventDefault();
-      return true;
-    }
-    if (gesture === "peek") return false;
-    window.open(href, "_blank", "noopener,noreferrer");
-    e.preventDefault();
-    return true;
-  }
-
-  const tag = target.closest<HTMLElement>(".cm-fub-tag");
-  if (tag && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) {
-    const pos = view.posAtDOM(tag);
-    if (activeLinesOf(view.state).has(view.state.doc.lineAt(pos).number)) return false;
-    cb.searchTag(tag.getAttribute(ATTR_TAG) ?? "");
-    e.preventDefault();
-    return true;
-  }
-  return false;
-}
-
-// Il tema del modulo: solo classi cm-fub-*, dentro l'estensione, e solo la
-// forma. I colori sono della pelle (`theme/scrittoio/skin/document.css` ed
-// `editors.css`), con gli stessi ruoli della Lettura: una copia qui vorrebbe
-// dire che passare da Live a Lettura cambia i colori della stessa nota, e che
-// un tema non può vestire la Live (issue #242).
-const theme = EditorView.baseTheme({
-  ".cm-markdown-gap": { height: "0", lineHeight: "0", fontSize: "0", padding: "0" },
-  // La stessa scala della Lettura (`preview.css`): relativa al corpo, e
-  // sempre in discesa, in misura e in peso. Le misure che leggono la scala
-  // del tema (`--text-3xl`, `--text-2xl`, `--tracking-caps`,
-  // `--leading-tight`) sono della pelle (`document.css`).
-  ".cm-fub-h1": { fontWeight: "700", letterSpacing: "-0.01em" },
-  ".cm-fub-h2": { fontWeight: "700", letterSpacing: "-0.005em" },
-  ".cm-fub-h3": { fontSize: "1.22em", fontWeight: "650" },
-  ".cm-fub-h4": { fontSize: "1.08em", fontWeight: "650" },
-  ".cm-fub-h5": { fontSize: "0.85em", fontWeight: "700", textTransform: "uppercase" },
-  ".cm-fub-h6": { fontSize: "0.85em", fontWeight: "500", textTransform: "uppercase" },
-  ".cm-fub-heading-line": { paddingTop: "0.9em", paddingBottom: "0.2em" },
-  ".cm-fub-h1-line": { paddingTop: "1.2em", paddingBottom: "0.3em", marginBottom: "0.4em" },
-  ".cm-fub-h2-line": { paddingTop: "1.1em" },
-  ".cm-line:first-child.cm-fub-heading-line": { paddingTop: "0" },
-  ".cm-fub-h1 > span, .cm-fub-h2 > span, .cm-fub-h3 > span, .cm-fub-h4 > span, .cm-fub-h5 > span, .cm-fub-h6 > span": {
-    color: "inherit",
-  },
-  ".cm-fub-strong": { fontWeight: "700" },
-  ".cm-fub-em": { fontStyle: "italic" },
-  ".cm-fub-strike": { textDecoration: "line-through" },
-  ".cm-fub-sup": { verticalAlign: "super", fontSize: "0.75em", lineHeight: "0" },
-  ".cm-fub-sub": { verticalAlign: "sub", fontSize: "0.75em", lineHeight: "0" },
-  ".cm-fub-nobreak": { whiteSpace: "nowrap" },
-  // I colori della nota e del segno rivelato sono della pelle (`document.css`).
-  ".cm-fub-footnote-label": { fontWeight: "600" },
-  ".cm-fub-footnote-back": { marginInline: "0.25em 0.5em", cursor: "pointer" },
-  // Il segno resta nel testo, trasparente: il pallino gli sta sopra, largo
-  // quanto lui.
-  ".cm-fub-bullet, .cm-fub-bullet *": { color: "transparent" },
-  ".cm-fub-bullet": { position: "relative" },
-  ".cm-fub-bullet::before": {
-    content: '"•"',
-    position: "absolute",
-    left: "50%",
-    transform: "translateX(-50%)",
-  },
-  ".cm-fub-bullet-task::before": { content: "none" },
-  // Il carattere del codice è della pelle (`document.css`).
-  ".cm-fub-code": {
-    borderRadius: "3px",
-    padding: "0 0.15em",
-  },
-  ".cm-fub-quote": { paddingLeft: "0.6em" },
-  ".cm-fub-quote-mark": { color: "rgba(135, 135, 135, 0.8)" },
-  // La pastiglia di un collegamento: piccola, dopo il testo, non è testo.
-  ".cm-fub-link-pill": {
-    display: "inline-block",
-    marginLeft: "0.3em",
-    padding: "0 0.45em",
-    borderRadius: "999px",
-    fontSize: "0.75em",
-    lineHeight: "1.5",
-    verticalAlign: "0.1em",
-    // Colore e fondo sono della pelle (`document.css`).
-    cursor: "pointer",
-    userSelect: "none",
-    whiteSpace: "nowrap",
-  },
-  ".cm-fub-hr": {
-    display: "inline-block",
-    width: "100%",
-    verticalAlign: "middle",
-  },
-  ".cm-fub-link, .cm-fub-wikilink": {
-    cursor: "pointer",
-    textDecoration: "underline",
-    textUnderlineOffset: "2px",
-  },
-  // L'icona della pagina nominata, fuori dal testo: il cursore non la vede.
-  ".cm-fub-wikilink[data-page-icon]::before": {
-    content: "attr(data-page-icon)",
-    marginInlineEnd: "0.2em",
-    display: "inline-block",
-    textDecoration: "none",
-  },
-  ".cm-fub-tag": {
-    borderRadius: "1em",
-    padding: "0 0.45em",
-    fontSize: "0.95em",
-    cursor: "pointer",
-  },
-  ".cm-fub-done": { textDecoration: "line-through", opacity: "0.55" },
-  ".cm-fub-checkbox": {
-    cursor: "pointer",
-    verticalAlign: "middle",
-    margin: "0 0.4em 0 0",
-  },
-  // Un'immagine in mezzo al testo sta nella riga, con un tetto: una foto
-  // grande si guarda in Lettura o a tutta finestra. Senza dimensioni scritte
-  // (`alt|120`) i due tetti conservano le proporzioni.
-  ".cm-fub-image": { position: "relative", display: "inline-block", maxWidth: "100%", verticalAlign: "bottom" },
-  // La maniglia della larghezza, sul bordo destro dell'immagine selezionata;
-  // i colori sono della pelle (`document.css`).
-  ".cm-fub-image-handle": {
-    display: "none",
-    position: "absolute",
-    right: "-5px",
-    top: "50%",
-    width: "10px",
-    height: "28px",
-    marginTop: "-14px",
-    boxSizing: "border-box",
-    cursor: "ew-resize",
-    touchAction: "none",
-  },
-  ".cm-fub-image.cm-fub-image-selected .cm-fub-image-handle": { display: "block" },
-  ".cm-fub-image-size": { position: "absolute", top: "4px", right: "4px", pointerEvents: "none" },
-  ".cm-fub-image figure": { margin: "0" },
-  // Da sola nel paragrafo l'immagine ha più spazio: è il contenuto, non una
-  // parola del testo.
-  ".cm-fub-image figure img": { maxHeight: "32em" },
-  ".cm-fub-image figcaption": { textAlign: "center" },
-  ".cm-fub-image img": {
-    display: "block",
-    maxWidth: "100%",
-    maxHeight: "16em",
-    height: "auto",
-    objectFit: "contain",
-  },
-  ".cm-fub-image .embed": { display: "inline-block", margin: "0", padding: "0", border: "0", background: "none" },
-});
-
-/// L'estensione live preview, pronta da montare in `editor.ts` accanto a
-/// `markdown()`. I callback sono iniettati dalla shell: qui non si sa cosa
-/// significhi "aprire una nota".
-const mountedBlocks = new WeakMap<HTMLElement, {
-  from: number; source: string; dependencies: string; readOnly: boolean; dispose: () => void;
-}>();
-
-/// Sposta di `delta` le coordinate sorgente scritte nel DOM di un blocco reso.
-/// Una trasclusione e un componente di un provider hanno coordinate loro.
-function shiftMounted(root: HTMLElement, delta: number): void {
-  for (const element of root.querySelectorAll<HTMLElement>("[data-md-from], [data-md-to], [data-md-task]")) {
-    if (element.parentElement?.closest(".embed-loaded") || element.closest("[data-ui-slot]")) continue;
-    for (const key of ["mdFrom", "mdTo", "mdTask"] as const) {
-      const value = element.dataset[key];
-      if (value !== undefined) element.dataset[key] = String(Number(value) + delta);
-    }
-  }
-}
-
-/// Riporta le coordinate di un blocco reso al punto in cui il widget sta ora.
-///
-/// Un widget spostato da una modifica sopra di lui resta lo stesso per
-/// CodeMirror (`eq` non guarda la posizione) e il suo DOM non si rifà: le
-/// coordinate scritte dentro si leggono al gesto (click, casella, diagramma),
-/// e qui tornano vere subito dopo l'aggiornamento della vista.
-function realignMounted(view: EditorView, root: HTMLElement): void {
-  const mounted = mountedBlocks.get(root);
-  if (!mounted) return;
-  let start: number;
-  try {
-    start = view.posAtDOM(root);
-  } catch {
-    return;
-  }
-  const from = start + Number(root.dataset.mdOffset ?? 0);
-  const delta = from - mounted.from;
-  if (!delta) return;
-  shiftMounted(root, delta);
-  mounted.from = from;
-  root.dataset.sourceFrom = String(from);
-}
-
-function interactiveTarget(target: Element | null, event: MouseEvent): boolean {
-  if (!target) return false;
-  // L'editor di una trasclusione viva (`transclusion.ts`) ha cursore e
-  // selezione suoi: la nota che ospita non sposta il suo. Il testo di un
-  // blocco sincronizzato (T30) apre quell'editor al clic.
-  if (target.closest("button, input, select, textarea, summary, [data-ui-slot], [data-transclusion-editing], [data-transclusion-direct] > .transclusion-body, .tag[data-tag]")) return true;
-  // Mod-clic segue un link e apre un'immagine del vault a tutta finestra: il
-  // gesto lo gestisce la resa (`mount.ts`), l'editor non sposta il cursore.
-  // Alt col clic su un wikilink è la sbirciata (T20): niente cursore in più.
-  if (event.altKey && !event.ctrlKey && !event.metaKey && target.closest("a[data-wikilink-page], a.internal-path")) return true;
-  return !!target.closest("a, img[data-vault-id]") && linkModifier(event);
-}
-/// La riga sorgente del blocco sotto il punto, senza leggere l'editor.
-///
-/// Il widget scrive `data-md-lines`: il numero di righe sorgente del blocco.
-/// Il gestore del click riceve solo il DOM, e il testo del `.cm-content` è
-/// sorgente più resa intercalata — non affettabile per offset. Con il numero
-/// di righe sorgente e l'indice della riga resa, la riga cliccata è nota
-/// senza leggere il documento.
-function sourceLineCount(mapped: HTMLElement): number | null {
-  const raw = mapped.dataset.mdLines;
-  if (raw === undefined) return null;
-  const count = Number(raw);
-  return Number.isSafeInteger(count) && count > 0 ? count : null;
-}
-
-///
-/// Il testo reso non ha le stesse righe della sorgente: un codeblock di 4
-/// righe è un solo `<pre>`, un elenco collassa i marcatori, l'highlight
-/// spezza i nodi di testo. Contare i caratteri resi (`prefix.toString()` su
-/// tutto il blocco) sbaglia riga — e spesso blocco. La mappa invece scende
-/// per coordinate: il figlio con `data-md-*` sotto il punto vince, e dentro
-/// di lui la colonna si misura dal suo inizio, non dall'inizio del blocco.
-/// Ogni passo riusa le coordinate che il renderer ha già scritto.
-function caretAtPoint(document: Document, x: number, y: number): { node: Node; offset: number } | null {
-  const caretDocument = document as Document & {
-    caretPositionFromPoint?: (x: number, y: number) => { offsetNode: Node; offset: number } | null;
-    caretRangeFromPoint?: (x: number, y: number) => globalThis.Range | null;
-  };
-  const caret = caretDocument.caretPositionFromPoint?.(x, y);
-  const range = caret ? null : caretDocument.caretRangeFromPoint?.(x, y);
-  const node = caret?.offsetNode ?? range?.startContainer ?? null;
-  if (!node) return null;
-  return { node, offset: caret?.offset ?? range?.startOffset ?? 0 };
-}
-
-/// Il discendente mappato sotto il punto.
-///
-/// `elementFromPoint` vede il DOM reso per quello che è — span di highlight,
-/// voci di elenco, celle — e il `closest` risale al primo antenato con
-/// coordinate sorgente. Il `caretPositionFromPoint` resta per la colonna
-/// dentro l'elemento trovato.
-function mappedUnderPoint(root: HTMLElement, x: number, y: number): HTMLElement | null {
-  const document = root.ownerDocument;
-  const element = typeof document.elementFromPoint === "function" ? document.elementFromPoint(x, y) : null;
-  const mapped = element instanceof Element ? element.closest<HTMLElement>("[data-md-from][data-md-to]") : null;
-  if (mapped && root.contains(mapped) && !mapped.closest(".embed-loaded, [data-ui-slot]")) return mapped;
-  return null;
-}
-
-/// La colonna dentro l'elemento mappato, dal caret del browser.
-///
-/// Il prefisso si misura solo dentro il mappato sotto il punto — mai su
-/// tutto il blocco — così le righe sopra non spostano la colonna. Fuori
-/// dall'elemento (caret su un marcatore collassato) vale zero.
-function columnInMapped(mapped: HTMLElement, caret: { node: Node; offset: number }): number {
-  if (!mapped.contains(caret.node)) return 0;
-  const prefix = mapped.ownerDocument.createRange();
-  prefix.selectNodeContents(mapped);
-  try {
-    prefix.setEnd(caret.node, caret.offset);
-  } catch {
-    return 0;
-  }
-  return prefix.toString().length;
-}
-
-/// La posizione dentro un mappato noto, con caret noto.
-///
-/// Separata da `sourcePositionAtPoint` per poterla provare senza geometria
-/// del browser: il chiamante passa il mappato sotto il punto e il caret.
-export function sourcePositionInMapped(root: HTMLElement, mapped: HTMLElement, caret: { node: Node; offset: number } | null, y: number): number {
-  const fallback = Number(root.dataset.sourceFrom ?? 0);
-  const from = Number(mapped.dataset.mdFrom), to = Number(mapped.dataset.mdTo);
-  if (!Number.isSafeInteger(from) || !Number.isSafeInteger(to) || to < from) return fallback;
-  if (mapped.tagName === "PRE") {
-    // Il `<pre>` è un solo mappato per N righe: la riga resa sotto il punto
-    // si conta sul rettangolo, poi si cammina il documento vero riga per
-    // riga — la vista CodeMirror è raggiungibile dal DOM.
-    const widget = mapped.closest<HTMLElement>(".cm-markdown-block");
-    const blockFrom = widget ? Number(widget.dataset.sourceFrom ?? NaN) : NaN;
-    const lines = widget ? sourceLineCount(widget) : null;
-    if (!Number.isSafeInteger(blockFrom) || lines === null) return from;
-    const rows = Math.max(1, (mapped.textContent ?? "").split("\n").length);
-    const row = renderedRowIndex(mapped, y, rows);
-    return sourceLineAt(widget, blockFrom, row + 1);
-  }
-  if (!caret) return from;
-  return Math.min(to, from + columnInMapped(mapped, caret));
-}
-
-/// L'offset di inizio della riga `row` del blocco, letto dalla vista.
-///
-/// Il widget conosce `sourceFrom` (inizio blocco) e `data-md-lines` (righe
-/// sorgente): la vista dà la riga iniziale, poi si avanza di `row` righe.
-function sourceLineAt(widget: HTMLElement | null, blockFrom: number, row: number): number {
-  if (!widget) return blockFrom;
-  const content = widget.closest(".cm-content");
-  const view = content instanceof HTMLElement ? EditorView.findFromDOM(content) : null;
-  if (!view) return blockFrom;
-  try {
-    const start = view.state.doc.lineAt(blockFrom).number;
-    const target = Math.min(view.state.doc.lines, start + row);
-    return view.state.doc.line(target).from;
-  } catch {
-    return blockFrom;
-  }
-}
-
-/// La posizione del click in coordinate sorgente.
-export function sourcePositionAtPoint(root: HTMLElement, x: number, y: number): number {
-  const fallback = Number(root.dataset.sourceFrom ?? 0);
-  const mapped = mappedUnderPoint(root, x, y);
-  if (!mapped) return fallback;
-  return sourcePositionInMapped(root, mapped, caretAtPoint(root.ownerDocument, x, y), y);
-}
-
-/// L'indice della riga resa sotto il punto, per un mappato multiriga.
-///
-/// Il `<pre>` non ha figli per riga: il rettangolo si divide in parti uguali
-/// sul numero di righe del testo. Le righe rese e sorgente coincidono una a
-/// una — il renderer non tocca il contenuto del codice.
-function renderedRowIndex(mapped: HTMLElement, y: number, count = Math.max(1, (mapped.textContent ?? "").split("\n").length)): number {
-  const rect = mapped.getBoundingClientRect();
-  const rows = Math.max(1, count);
-  const row = Math.floor(((y - rect.top) / Math.max(1, rect.height)) * rows);
-  return Math.min(rows - 1, Math.max(0, row));
-}
-
-class MarkdownWidget extends WidgetType {
-  /// Quanto il blocco comincia dopo l'inizio della riga su cui il widget sta.
-  readonly offset: number;
-  constructor(
-    readonly block: MarkdownBlock,
-    rangeFrom: number,
-    readonly dependencies: string,
-    readonly readOnly: boolean,
-    readonly callbacks: LivePreviewCallbacks,
-    /// Le ancore del documento di adesso, lette al gesto: non fanno parte del
-    /// widget, che resta lo stesso quando un titolo altrove cambia posto.
-    readonly anchorsOf: (state: EditorState) => ReadonlyMap<string, number>,
-  ) {
-    super();
-    this.offset = block.from - rangeFrom;
-  }
-  get estimatedHeight(): number {
-    return Math.max(1, Math.ceil(this.block.source.length / 70)) * 28 + 8;
-  }
-  /// La posizione non conta: un blocco spostato da una modifica sopra di lui
-  /// tiene il suo DOM, e `realignMounted` ne corregge le coordinate.
-  eq(other: MarkdownWidget): boolean {
-    return this.block.source === other.block.source && this.dependencies === other.dependencies
-      && this.readOnly === other.readOnly && this.offset === other.offset;
-  }
-  toDOM(view: EditorView): HTMLElement {
-    const root = document.createElement("div");
-    root.className = "cm-markdown-block markdown-rendered";
-    root.contentEditable = "false";
-    root.dataset.sourceFrom = String(this.block.from);
-    root.dataset.mdOffset = String(this.offset);
-    // Il click geometrico nel `<pre>` conta le righe sorgente: il widget le
-    // scrive qui, così il gestore non deve leggere l'editor.
-    root.dataset.mdLines = String(this.block.source.split("\n").length);
-    // Il ritmo verticale della pelle distingue i titoli che aprono una
-    // sezione: il kind con livello viaggia sul widget, così nessun
-    // selettore `:has` deve risalire dal figlio al contenitore.
-    if (this.block.kind === "heading") root.dataset.mdKind = "heading";
-    else if (/^heading-[1-6]$/.test(this.block.kind)) root.dataset.mdKind = this.block.kind;
-    const actions = {
-      navigateFragment: (id: string) => {
-        let decoded = id;
-        try { decoded = decodeURIComponent(id); } catch { return false; }
-        const position = this.anchorsOf(view.state).get(decoded);
-        if (position === undefined) return false;
-        view.dispatch({ selection: { anchor: position }, effects: EditorView.scrollIntoView(position) });
-        view.focus();
-        return true;
-      },
-      toggleTask: this.readOnly ? undefined : (position: number) => {
-        if (view.state.readOnly || position < 1 || position + 1 >= view.state.doc.length) return;
-        const marker = view.state.doc.sliceString(position - 1, position + 2);
-        if (!/^\[[^\]\r\n]\]$/.test(marker)) return;
-        dispatchTaskToggles(view, [{ symbol: position, insert: taskChecked(marker[1]!) ? " " : "x" }], { userEvent: "input" });
-      },
-      openSource: (position: number) => {
-        const anchor = Math.max(0, Math.min(view.state.doc.length, position));
-        view.dispatch({ selection: { anchor }, effects: EditorView.scrollIntoView(anchor), userEvent: "select.pointer" });
-        view.focus();
-      },
-      editFence: this.readOnly ? undefined : (position: number, body: string, edit: { from: number; to: number; insert: string }) => {
-        const doc = view.state.doc;
-        if (view.state.readOnly || position < 0 || position > doc.length) return;
-        // Il corpo comincia alla riga dopo quella che apre il recinto, e deve
-        // essere ancora il testo che la resa ha letto: un recinto dentro una
-        // citazione o un elenco ha prefissi per riga, e lì non si scrive.
-        const opener = doc.lineAt(position);
-        if (opener.number >= doc.lines) return;
-        const start = opener.to + 1;
-        if (edit.from < 0 || edit.to < edit.from || edit.to > body.length
-          || doc.sliceString(start, start + body.length) !== body) return;
-        // `body` e la modifica vanno a capo con "\n": nella nota entrano con i suoi a capo.
-        view.dispatch({ changes: { from: start + edit.from, to: start + edit.to, insert: withLineBreaks(view.state, edit.insert) }, userEvent: "input" });
-      },
-    };
-    const unmount = this.callbacks.mountRendered
-      ? this.callbacks.mountRendered(root, this.block.html, actions)
-      : mountMarkdown(root, this.block.html, {
-        ...actions,
-        openWikilink: (page, heading, block) => this.callbacks.openWikilink(page, heading ?? null, block ?? null),
-        searchTag: this.callbacks.searchTag,
-      });
-    const measure = () => view.requestMeasure();
-    root.addEventListener("markdown-resize", measure);
-    let observer: ResizeObserver | null = null;
-    if (typeof ResizeObserver !== "undefined") observer = new ResizeObserver(measure);
-    observer?.observe(root);
-    mountedBlocks.set(root, {
-      from: this.block.from, source: this.block.source, dependencies: this.dependencies, readOnly: this.readOnly,
-      dispose: () => {
-        observer?.disconnect();
-        root.removeEventListener("markdown-resize", measure);
-        unmount();
-      },
-    });
-    return root;
-  }
-  updateDOM(root: HTMLElement): boolean {
-    const mounted = mountedBlocks.get(root);
-    if (!mounted || mounted.source !== this.block.source || mounted.dependencies !== this.dependencies
-      || mounted.readOnly !== this.readOnly) return false;
-    const delta = this.block.from - mounted.from;
-    if (delta) {
-      shiftMounted(root, delta);
-      mounted.from = this.block.from;
-      root.dataset.sourceFrom = String(this.block.from);
-    }
-    root.dataset.mdOffset = String(this.offset);
-    return true;
-  }
-  destroy(root: HTMLElement): void {
-    mountedBlocks.get(root)?.dispose();
-    mountedBlocks.delete(root);
-  }
-  ignoreEvent(event: Event): boolean {
-    return event.type !== "mousedown" || interactiveTarget(event.target instanceof Element ? event.target : null, event as MouseEvent);
-  }
-}
-
 const GAP = Decoration.line({ class: "cm-markdown-gap" });
+
 /// La prima riga dopo un blocco reso quando il cursore sta su una delle sue
 /// righe vuote: la riga del cursore si vede, e lo stacco sotto il blocco (il
 /// suo padding, `cm-markdown-block` e `tb-frame` nella pelle) le cede il
@@ -2469,6 +1004,7 @@ interface LiveBlocksValue {
   readonly visited: number;
   readonly gaps: DecorationSet;
 }
+
 const liveBlocksField = Facet.define<StateField<LiveBlocksValue>, StateField<LiveBlocksValue> | undefined>({
   combine: (fields) => fields[0],
 });

@@ -15,7 +15,7 @@
 //!
 //! Non decide chi *compone* un id dentro una cartella né chi *rifiuta* una
 //! cartella scritta male: sono altre due domande, dichiarate accanto alle loro
-//! righe in `crates/fub-abi/tests/a_named_rule_is_declared.rs`.
+//! righe in `crates/fub-abi/tests/a_named_rule_is_declared/regole.rs`.
 
 /// La cartella nella forma su cui si confronta: senza gli slash di cortesia.
 ///

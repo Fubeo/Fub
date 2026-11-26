@@ -41,29 +41,16 @@
 // la forma dei record; questo file non ne è un secondo, e infatti le risposte
 // che compone sono tipizzate dal contratto e non da sé.
 import { fakeNoteTypes } from "./fake-note-types";
-import { childName, parentOf } from "../rules/organizer";
 import type {
-  BundleInfo,
   ComponentAction,
-  ComponentsApplied,
-  ComponentsMap,
   InstalledPluginInfo,
   CommandSpec,
   ParamSpec,
   DraftInfo,
   DocumentSource,
   DocumentWindowEvent,
-  DrawingCommandInfo,
-  DrawingCommandRequest,
-  DrawingGesture,
-  DrawingOpen,
-  DrawingOutcome,
   DocumentWindowRequest,
   GridBytesSession,
-  GridBytesWindow,
-  GridCommandOutcome,
-  GridCommit,
-  GridSurfaceSpec,
   IndexQuery,
   IndexResult,
   KernelEvent,
@@ -79,10 +66,7 @@ import type {
   QueryPredicate,
   SettingEntry,
   SettingValue,
-  SyntaxForm,
   TextEdit,
-  DiskCause,
-  ThemeBlock,
   ThemeFolderCheck,
   ThemeFolderInstall,
   ThemeFolderLight,
@@ -96,25 +80,12 @@ import type {
   VaultEntry,
   VaultFolder,
   VaultInfo,
-  ViewSpec,
-  KnownVault,
-  LiveAddress,
   LiveEvent,
-  LiveLeaveReason,
   LivePairing,
-  LivePendingCommit,
   LiveStarted,
-  LiveStats,
   LiveStatus,
   LiveWriterStatus,
 } from "./contract";
-import type {
-  ExternalEditor,
-  OpenedWith,
-  PrintArtifactOutcome,
-  RevealOutcome,
-  SaveArtifactOutcome,
-} from "./ipc";
 import { mediaKindOfMime, mimeOrOctet } from "../editors/media/media-types";
 import { tryApplyOperation } from "../editors/core/text-operation";
 import {
@@ -122,632 +93,81 @@ import {
   CRAFT_PHOTO_COMMAND,
   CRAFT_PREVIEW_COMMAND,
   CRAFT_PREVIEW_VERSION,
-  type CraftMissing,
   type CraftPhotoSidecar,
   type CraftPreview,
-  type CraftPreviewImage,
   type CraftPreviewInfo,
   type CraftPreviewSize,
-  type CraftPreviewSubject,
-  type CraftRenderConsent,
 } from "./craft";
-import COMPONENTS_SCENARIO from "../__fixtures__/components-scenario.json";
+import {
+  CHUNK_MAX,
+  COMPONENT_SCENARIO,
+  CRAFT_FAKE_APPS,
+  type Call,
+  type ComponentChoice,
+  DEFAULT_EXCLUDED_FOLDERS,
+  type Document,
+  type DrawingFakeCopy,
+  type FakeHost,
+  LIVE_COUNTER,
+  LIVE_FINGERPRINT,
+  LIVE_PAIRING_MS,
+  LIVE_PORT,
+  LIVE_RESUME_MS,
+  type Lease,
+  type LiveSession,
+  type Options,
+  RICH_FAKE_FORMATS,
+  SAME_CONTENT_MAX_BYTES,
+  SAME_CONTENT_MAX_CANDIDATES,
+  SCENARIO_ROOT,
+  type Trashed,
+  XLSX_FAKE_EXTENSIONS,
+  canonical,
+  craftExtensionOf,
+  sameContentExtension,
+  withSerdeDefaults,
+} from "./fake-options";
+import { DEVELOPER_MODE_KEY, TRASH_VIEW, type ThemeFolderFake, folderDigest } from "./fake-themes";
+import {
+  copyOrganization,
+  moveFolder,
+  moveNote,
+  renameRewrites,
+  resolveAgainst,
+  resumableLeave,
+  wikiPageDoc,
+} from "./fake-vault";
+import { DRAWING_TEMPLATES, blankDrawing, strumentoFinto, titled } from "./fake-drawing";
 
-/// Le risposte dell'host vero per la pagina «Componenti», registrate da
-/// `crates/fub-app/tests/ts_mirror_app.rs` (`UPDATE_MIRROR=1`) su un vault
-/// temporaneo con il profilo «Studio» applicato. Il finto **non ha un
-/// risolutore**: serve questi stati e queste scelte, e una scelta che qui non
-/// c'è la rifiuta lanciando.
-///
-/// `mappe` sono gli stati del vault (ciò che `components_map` risponde);
-/// `partenze` dà un nome agli stati da cui il finto può partire (`studio`,
-/// `solo-note`, `tutto`), e `profilo` è quello di serie. Ogni voce di `scelte`
-/// parte da uno stato (`prima`), porta l'azione come la scrive serde, coi
-/// default, la risposta di `components_apply`, lo stato in cui arriva (`dopo`)
-/// e gli `eventi` che l'host ha mandato alla shell dopo aver risposto, nel loro
-/// ordine, con la radice `/vault`. `senza_vault` sono gli errori dei due
-/// comandi a vault chiuso.
-export interface ComponentScenario {
-  profilo: string;
-  partenze: Record<string, number>;
-  mappe: ComponentsMap[];
-  scelte: ComponentChoice[];
-  senza_vault: { components_map: PluginError; components_apply: PluginError };
-}
-
-/// Una scelta registrata dello scenario dei componenti.
-export interface ComponentChoice {
-  prima: number;
-  azione: ComponentAction;
-  apply: boolean;
-  risposta: ComponentsApplied;
-  dopo: number;
-  eventi: KernelEvent[];
-}
-
-/// La radice del vault con cui lo scenario registra gli eventi.
-const SCENARIO_ROOT = "/vault";
-
-/// Lo scenario di serie: il JSON allarga le unioni del contratto a `string`.
-export const COMPONENT_SCENARIO = COMPONENTS_SCENARIO as unknown as ComponentScenario;
-
-/// L'azione come la scrive serde: con i campi che hanno un default. È la sola
-/// regola che il finto sa dei componenti, ed è quella di `#[serde(default)]`.
-function withSerdeDefaults(azione: ComponentAction): ComponentAction {
-  switch (azione.azione) {
-    case "accendi":
-      return { azione: "accendi", id: azione.id };
-    case "spegni":
-      return { azione: "spegni", id: azione.id, anche_questi: azione.anche_questi ?? false, orfani: azione.orfani ?? "chiedi" };
-    case "rispondi":
-      return { azione: "rispondi", orfani: azione.orfani, ids: azione.ids ?? [] };
-    case "profilo":
-      return { azione: "profilo", nome: azione.nome };
-  }
-}
-
-/// Un JSON con le chiavi in ordine: due azioni uguali si scrivono uguali.
-function canonical(value: unknown): string {
-  return JSON.stringify(value, (_key, inner: unknown) =>
-    inner !== null && typeof inner === "object" && !Array.isArray(inner)
-      ? Object.fromEntries(Object.entries(inner as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b)))
-      : inner,
-  );
-}
-
-/// Una chiamata arrivata alla porta: quale, e con cosa.
-///
-/// Il registro delle chiamate è metà del valore di questo file. «La nota si è
-/// aperta» si vede anche guardando lo schermo; «si è aperta chiedendola con una
-/// finestra da uno» no, e sono le due cose che il §14.4 ha deciso.
-export interface Call {
-  gate: string;
-  args: unknown[];
-}
-
-/// Un documento del vault finto: il testo e la revisione che lo nomina.
-/// `bytes` c'è soltanto per i file binari (`Options.resources`): per gli altri
-/// i byte sono l'UTF-8 del testo, come sul disco.
-interface Document {
-  text: string;
-  revision: string;
-  bytes?: Uint8Array;
-  mime?: string;
-}
-
-/// Un file binario del vault finto: i byte e, se serve, il MIME che l'host
-/// dichiarerebbe (altrimenti lo si deduce dal nome, come fa il kernel).
-export interface FakeResource {
-  bytes: Uint8Array;
-  mime?: string;
-}
-
-/// Un lease aperto dal finto: il documento com'era all'apertura e, pigro,
-/// l'URL `blob:` che `assetUrl` consegna e `resourceClose` revoca.
-interface Lease {
-  id: string;
-  bytes: Uint8Array;
-  mime: string;
-  url: string | null;
-}
-
-/// Il tetto di una fetta di `resourceReadChunk`, come quello del kernel.
-const CHUNK_MAX = 64 * 1024;
-/// I limiti della domanda «lo stesso contenuto» (`fub_kernel::same_content`,
-/// A-17): al più tante voci della stessa misura e tanti byte letti; oltre, «non
-/// so», e il deposito si scrive.
-const SAME_CONTENT_MAX_CANDIDATES = 64;
-const SAME_CONTENT_MAX_BYTES = 512 * 1024 * 1024;
-
-/// Le cartelle escluse di serie, come `DEFAULT_EXCLUDED` di
-/// `crates/fub-kernel/src/ignore.rs`.
-const DEFAULT_EXCLUDED_FOLDERS = [".obsidian", ".git", "node_modules", "target", "lost+found", "System Volume Information", "$RECYCLE.BIN"];
-
-/// Il tipo di un nome per lo stesso contenuto, come `extension_of` del kernel:
-/// l'estensione dell'ultimo segmento, in minuscolo, o `null` per un nome che
-/// non ne ha (`LICENSE`) o che è solo estensione (`.gitignore`, `nota.`).
-function sameContentExtension(id: string): string | null {
-  const name = id.slice(id.lastIndexOf("/") + 1);
-  const cut = name.lastIndexOf(".");
-  if (cut <= 0 || cut === name.length - 1) return null;
-  return name.slice(cut + 1).toLowerCase();
-}
-/// I formati di `fub-format-rich` con la feature `rich` dell'host.
-const RICH_FAKE_FORMATS: ReadonlySet<string> = new Set(["docx", "odt", "rtf", "doc"]);
-/// Le estensioni delle cartelle di `fub-format-xlsx`, con la feature `xlsx`
-/// dell'host: la shell ne riceve la proiezione, e non le scrive.
-const XLSX_FAKE_EXTENSIONS = ["xlsx", "xlsm", "xltx", "xltm"] as const;
-
-/// Una voce del cestino finto.
-interface Trashed {
-  original: string;
-  text: string;
-}
-
-/// Una superficie della versione 2: si apre sui byte di un documento del
-/// vault, e le finestre portano valore, blocco e conflitto di ogni cella.
-export interface GridBytesFake {
-  surface: GridSurfaceSpec;
-  session: GridBytesSession;
-  /// Le finestre per revisione: dopo un commit il finto dà quelle della sua
-  /// revisione, se le ha, e altrimenti quelle della sessione.
-  windows: GridBytesWindow[];
-  commits?: GridCommit[];
-  /// Gli esiti dei comandi, in ordine: senza, il finto rifiuta ogni comando
-  /// come un provider che modifica soltanto con le patch.
-  outcomes?: GridCommandOutcome[];
-}
-
-/// Il motore del disegno del finto (K5). Senza, come l'host senza il motore,
-/// ogni porta del disegno rifiuta con `unserved`; dato, il motore c'è: il
-/// finto tiene la copia di ogni istanza aperta (testo LF e revisione), la fa
-/// seguire ai `drawingSync` controllando che ogni differenza si applichi, e
-/// passa gesti e comandi alle risposte del banco. Le chiamate restano nel
-/// registro (`atGate("drawingGesture")`, …).
-export interface DrawingFake {
-  /// Ciò che `openDrawing` risponde; senza, un'istanza nuova alla revisione
-  /// 0 senza parti che restano come sono.
-  open?: (doc: string, text: string) => DrawingOpen;
-  /// L'esito di un gesto. Senza, un gesto con uno strumento del motore
-  /// risponde con lo strumento finto (`strumentoFinto`) e uno con gli
-  /// strumenti di K5 lancia: il finto non sa disegnare.
-  gesto?: (gesture: DrawingGesture, copia: DrawingFakeCopy) => DrawingOutcome;
-  /// I comandi della selezione; senza, nessuno.
-  comandi?: (selection: string[], copia: DrawingFakeCopy) => DrawingCommandInfo[];
-  /// L'esito di un comando. Senza, un comando lancia.
-  comando?: (request: DrawingCommandRequest, copia: DrawingFakeCopy) => DrawingOutcome;
-  /// Il motore spento a metà sessione, letto a ogni chiamata: finché dice
-  /// `true` ogni porta del disegno rifiuta con `unserved` e le istanze aperte
-  /// se ne vanno, come l'host col motore spento nel vault (T29); riacceso,
-  /// un'apertura dà un'istanza nuova.
-  spento?: () => boolean;
-}
-
-/// La copia di un disegno aperto nel motore finto, com'è adesso.
-export interface DrawingFakeCopy {
-  readonly instance: string;
-  readonly doc: string;
-  readonly text: string;
-  readonly revision: string;
-}
-
-export interface Options {
-  /// I file del vault: path → testo. Le cartelle si deducono dai path, come
-  /// sul disco.
-  file?: Record<string, string>;
-  root?: string | null;
-  /// Il vault che l'app trova all'avvio (`initialVault`): di serie `root`.
-  /// Con `null` l'avvio finisce sul benvenuto, mentre `root` resta il vault
-  /// che i comandi servono quando lo si apre (un vault nuovo appena creato).
-  initialVault?: string | null;
-  /// Gli avvisi di sessione, consegnati uno per tiraggio come fa l'host;
-  /// finiti, il tiraggio risponde `null`.
-  sessionNotice?: KernelNotice | readonly KernelNotice[] | null;
-  /// La versione che `appVersion` dichiara; di serie `0.1.0`.
-  appVersion?: string;
-  view?: ViewSpec[];
-  commands?: CommandSpec[];
-  settings?: SettingEntry[];
-  /// L'organizzazione del vault alla prima apertura: icone, appuntate, ordine e
-  /// spazi. Di serie vuota, come un vault appena creato. Il finto la tiene come
-  /// il kernel: una rinomina (di Fub, da un'altra app o di una cartella) la porta
-  /// con sé, e un'appuntata messa resta messa.
-  organization?: Organization;
-  syntaxForms?: SyntaxForm[];
-  /// Bundle nativi/ufficiali che l'host conosce.
-  bundles?: BundleInfo[];
-  /// Temi installati che il backend ha validato come caricabili.
-  themes?: ThemeInfo[];
-  /// Fascio per luce, indicizzato come `${id}:${light}`.
-  themePayloads?: Record<string, ThemePayload>;
-  /// Le cartelle che «Installa da cartella…» può scegliere, per path: il tema
-  /// che la cartella contiene, il rifiuto tipizzato con cui l'host vero la
-  /// rifiuterebbe (manifest assente, link simbolico, stato del catalogo), o il
-  /// `PluginError` del disco. L'impronta è dei fasci: cambiarli fra il
-  /// controllo e l'installazione è la cartella cambiata.
-  themeFolders?: Record<string, ThemeFolderFake | ThemeFolderRefusal | PluginError>;
-  /// La finestra nativa di scelta della cartella: il path scelto, `null` se la
-  /// persona la chiude. Senza, la finestra si chiude sempre.
-  pickThemeFolder?: () => string | null;
-  /// La cartella del tema collegato all'avvio (la chiave
-  /// `developer.theme-folder`), un path di `themeFolders`. Una cartella che
-  /// `themeFolders` non ha è sparita (`missing`).
-  linkedThemeFolder?: string | null;
-  /// L'osservatore della cartella collegata non parte (il sistema non ne ha
-  /// più): `watched` resta falso, e i salvataggi non arrivano.
-  themeWatchFails?: boolean;
-  /// Temi installati revocati dal catalogo: non stanno in `themes` (l'host non
-  /// li elenca), e «Installa da cartella…» con lo stesso id è `revoked`.
-  revokedThemes?: string[];
-  /// Ciò che nella cartella dei temi blocca un id (`blocked`): il file della
-  /// versione che non si legge, un collegamento, una forma che non è una
-  /// cartella. Lo dice la sonda, prima di leggere la cartella scelta.
-  blockedThemes?: Record<string, ThemeBlock>;
-  /// Inventario installato della macchina, compresi elementi spenti o senza
-  /// consenso: il fake non li ricava dai bundle runtime.
-  installedPlugins?: InstalledPluginInfo[];
-  installablePlugins?: Record<string, InstalledPluginInfo>;
-  gridBytes?: GridBytesFake;
-  /// Il motore del disegno; senza, le porte del disegno rifiutano con
-  /// `unserved` (vedi `DrawingFake`).
-  drawing?: DrawingFake;
-  /// Provider finti per le query custom, indicizzati dal namespace.
-  customQueries?: Record<string, (query: unknown) => unknown>;
-  /// I vault che la macchina ricorda (i recenti). `forgetVault` li toglie.
-  knownVaults?: KnownVault[];
-  /// I file binari del vault: path → byte. Compaiono nell'albero come gli
-  /// altri, e le porte risorsa li servono davvero, a fette.
-  resources?: Record<string, FakeResource>;
-  /// La feature `draw` del kernel: accesa, un `.svg` ha il formato `svg` e si
-  /// apre come disegno, un `.fubann` ha il formato `fubann` e si apre come
-  /// annotazioni, ci sono `drawing.create` e `pdf.annotate`, ed `export.run`
-  /// accetta i target `draw.*`. Spenta come nel kernel di default: un `.svg`
-  /// resta un file senza formato, testo con l'anteprima accanto.
-  draw?: boolean;
-  /** Explicit OS save simulation. Unconfigured fake cannot create files. */
-  saveArtifact?: (suggestedName: string, mediaType: string, bytes: readonly number[]) => Promise<SaveArtifactOutcome>;
-  /// Chi serve le tessere della vista Mappa da un sito che la riga
-  /// `map.tile-hosts` ammette. Il finto rifiuta da solo, come l'host, i siti
-  /// che la riga non ha; senza questa porta un sito ammesso risponde `io`.
-  mapTile?: (url: string, kind: "raster" | "vector") => Promise<ArrayBuffer>;
-  printArtifact?: (suggestedName: string, mediaType: string, bytes: readonly number[]) => Promise<PrintArtifactOutcome>;
-  /// Il sistema che riceve una voce del vault. Senza, la porta non è servita.
-  revealInSystem?: (path: string, open: boolean) => Promise<RevealOutcome>;
-  /// Le app Craft della macchina per «Apri con» (`doc` è `null` quando la
-  /// shell le chiede tutte). Senza, la porta non è servita, come quella di
-  /// un'app vecchia che non ha il comando.
-  externalEditors?: (doc: string | null) => Promise<ExternalEditor[]>;
-  /// L'app Craft che riceve una voce del vault. Senza, la porta non è servita.
-  openWith?: (path: string, editor: string, page: number | null) => Promise<OpenedWith>;
-  /// L'anteprima fatta dalla CLI dopo un gesto. Senza, la porta non è
-  /// servita. Servita o no, ogni chiamata resta in `atGate("craftRender")`:
-  /// è da lì che i test della shell provano che una via senza gesto non la
-  /// chiama mai.
-  craftRender?: (doc: string, size: CraftPreviewSize) => Promise<CraftPreview>;
-  /// La rete della macchina per la sessione live. Senza, le porte `live*` non
-  /// sono servite; con zero indirizzi è un PC fuori da una rete locale, che
-  /// l'app rifiuta con `unserved`.
-  live?: LiveNetwork;
-  /// La pagina «Componenti»: di serie [`COMPONENT_SCENARIO`], le risposte
-  /// registrate dall'host vero. Con `root: null` i due comandi rispondono
-  /// l'errore che l'host dà a vault chiuso.
-  components?: ComponentScenario;
-  /// Lo stato da cui parte la pagina «Componenti»: un nome di
-  /// `components.partenze` (`solo-note`, `tutto`). Di serie
-  /// `components.profilo`, cioè «Studio». Un nome che lo scenario non ha
-  /// lancia.
-  componentsStart?: string;
-  /// I file delle app Craft (N7). Con, un `.vectorcraft`, un `.pcraft`, un
-  /// `.figcraft` e un `.xmp` hanno il formato `craft-*` a byte, come con
-  /// `fub-format-craft` montato, e il bundle `fub.craft` risponde a
-  /// `craft.preview`. Senza, restano file senza formato.
-  craft?: FakeCraft;
-}
-
-/// Il bundle `fub.craft` del finto. I byte dei file stanno in `resources`.
-export interface FakeCraft {
-  /// Il componente «File delle app Craft»: spento, i formati restano e
-  /// `craft.preview` e `craft.photo` non ci sono (`unknown_command`), né
-  /// fra i comandi elencati. Di serie acceso.
-  component?: boolean;
-  /// Ciò che il bundle sa di ogni documento. Un file Craft che qui non c'è
-  /// risponde senza immagine, col peso dei suoi byte. Per `craft.photo`,
-  /// `info.xmp` di un XMP è ciò che l'XMP dice (`null`: rotto); senza, un
-  /// XMP che c'è non dice niente.
-  docs?: Record<string, FakeCraftDoc>;
-}
-
-/// Ciò che il bundle finto sa di un documento Craft.
-export interface FakeCraftDoc {
-  /// Ciò che si sa del file; ciò che manca si ricava dall'estensione e dai
-  /// byte.
-  info?: Partial<CraftPreviewInfo>;
-  /// L'immagine che il file porta (`origin: file`), per tutte e due le misure.
-  image?: CraftPreviewImage | null;
-  /// Perché l'immagine manca, quando manca; di serie `absent`. Con
-  /// `over_limit`, `limit_bytes` è il limite che la risposta dice.
-  missing?: CraftMissing;
-  limit_bytes?: number;
-  /// `null`: Fub ha letto solo dei pezzi del file, e la risposta non ha
-  /// revisione. Di serie quella del documento.
-  revision?: null;
-  /// L'app installata che può fare l'anteprima che manca, col consenso (di
-  /// serie `ask`). `craft.preview` non avvia mai niente: l'anteprima fatta
-  /// dall'app la porta un `job_done` di `craft.render`, che manda il banco.
-  render?: { app: string; consent?: CraftRenderConsent };
-}
-
-/// L'app di un file Craft dall'estensione, come i formati di `fub-format-craft`.
-const CRAFT_FAKE_APPS: Readonly<Record<string, { app: CraftPreviewSubject; editor: string }>> = {
-  vectorcraft: { app: "vectorcraft", editor: "VectorCraft" },
-  pcraft: { app: "photocraft", editor: "PhotoCraft" },
-  figcraft: { app: "figcraft", editor: "FigCraft" },
-  xmp: { app: "xmp", editor: "LightCraft" },
-};
-
-function craftExtensionOf(id: string): string | null {
-  const point = id.lastIndexOf(".");
-  if (point < 0 || point < id.lastIndexOf("/")) return null;
-  const extension = id.slice(point + 1);
-  return extension in CRAFT_FAKE_APPS ? extension : null;
-}
-
-/// Gli indirizzi privati delle interfacce attive, quello della rotta
-/// predefinita per primo, e il nome che il tablet mostra.
-export interface LiveNetwork {
-  addresses: LiveAddress[];
-  hostName?: string | null;
-}
-
-/// L'host finto e le maniglie per guidarlo.
-export interface FakeHost {
-  /// Ciò che si passa a `vi.mock("./host/ipc")`.
-  module: typeof import("./ipc");
-  /// I file, come stanno adesso: è ciò su cui si asserisce dopo un gesto.
-  files(): Record<string, string>;
-  /// Il cestino, dal più recente.
-  trash(): { id: string; original: string }[];
-  /// Le chiamate arrivate alla porta, in ordine.
-  calls: Call[];
-  /// Le chiamate a **quella** porta, in ordine.
-  atGate(gate: string): Call[];
-  /// Le chiavi di apertura che tengono un documento di videoscrittura in
-  /// questo vault (`openDocument`, `writeDocument` con `open`), finché
-  /// `documentClosed` non le chiude.
-  openKeys(vault?: string | null): number;
-  /// Rinomina un file **senza che la shell l'abbia chiesto**: è il `mv` da
-  /// terminale, l'altra applicazione, il sync. Il file si muove e l'evento
-  /// arriva, che è l'ordine in cui le due cose succedono davvero.
-  renameFromOutside(from: string, to: string): void;
-  /// Cancella una nota **senza che la shell l'abbia chiesto** (`rm` da
-  /// terminale, il sync): il file sparisce e l'evento arriva.
-  removeFromOutside(id: string): void;
-  /// Riscrive un file **senza che la shell l'abbia chiesto**: l'altra
-  /// applicazione, il sync, un merge. I byte cambiano e l'evento arriva dal
-  /// watcher, come succede davvero.
-  writeFromOutside(id: string, text: string): void;
-  /// Tiene in volo ciò che una porta risponde, finché non si chiama ciò che
-  /// torna.
-  ///
-  /// È il modo di **costruire** una corsa invece di aspettarla: un tempo non è
-  /// un segnale, e due `setTimeout` che si sperano nell'ordine giusto sono un
-  /// banco che passa verde su una macchina scarica. Con questo l'ordine di
-  /// arrivo lo scrive il banco — è la stessa forma della finta scrittura di
-  /// `state/saving.test.ts`, portata sul confine invece che sul modulo.
-  throttle(gate: string): () => void;
-  /// Fa rispondere **no** a una porta, finché non si chiama ciò che torna.
-  ///
-  /// L'altra faccia di [`throttle`](FakeHost.throttle): quella tiene in volo,
-  /// questa rifiuta. Serve ai banchi che provano cosa succede **dopo** un
-  /// guasto — un disco pieno, un permesso negato — che è il solo momento in cui
-  /// si vede se una precondizione ignorata fa danno.
-  ///
-  /// Ciò che la porta avrebbe fatto **non lo fa**: una scrittura guasta non
-  /// lascia i byte, o un banco che chiede «il disco rifiuta» leggerebbe il file
-  /// nuovo e crederebbe di aver provato il contrario.
-  ///
-  /// Un `PluginError` al posto della frase rifiuta con l'errore tipizzato,
-  /// come il backend vero: un permesso negato, un conflitto.
-  fault(gate: string, reason?: string | PluginError): () => void;
-  /// Fa rispondere a `componentsApply` l'errore tipato `error`, finché non si
-  /// chiama ciò che torna: è l'host che non riesce a scrivere la scelta. Lo
-  /// stato non cambia e nessun evento arriva.
-  componentsFail(error: PluginError): () => void;
-  /// Applica una scelta dei componenti **senza che la shell l'abbia chiesto**:
-  /// la CLI, MCP, un'altra finestra. Lo stato cambia e gli eventi registrati
-  /// arrivano subito, nel loro ordine, senza passare da `componentsApply`. Una
-  /// scelta che lo scenario non ha da questo stato lancia.
-  componentsFromOutside(azione: ComponentAction, apply?: boolean): ComponentsApplied;
-
-  /// Chiede di chiudere la finestra, e **aspetta** ciò che la shell fa prima.
-  ///
-  /// Alza se nessuno si è iscritto: una chiusura consegnata a nessuno non
-  /// fallisce da sé, ed è esattamente il difetto che questo simula (0208).
-  close(): Promise<void>;
-
-  /// Simula la chiusura nativa di una finestra documento ancora aperta.
-  requestDocumentWindowClose(label: string): void;
-  /// Simula una finestra documento che muore da sola (un crash, il sistema
-  /// che la chiude): sparisce senza passare da `closeDocumentWindow`.
-  destroyDocumentWindow(label: string): void;
-  /// Manda un evento del kernel a chi si è iscritto, come farebbe il ponte.
-  ///
-  /// Restituisce `false` se **nessuno** era iscritto: è il caso che interessa
-  /// di più, perché è ciò che succede quando un ascoltatore si monta dopo il
-  /// router — e un evento consegnato a nessuno non fallisce da sé.
-  ///
-  /// `vault` è il vault di cui è il fatto, come lo mette il ponte vero
-  /// (`KernelNotice.vault`); senza, il notice non ne nomina nessuno.
-  emit(event: KernelEvent, vault?: string): boolean;
-  /// La cartella del tema collegato è cambiata (`fub://theme-changed`): manda
-  /// a chi ascolta lo stato di adesso, coi file salvati. Chi prova modifica
-  /// prima `themeFolders` (un fascio nuovo, un rifiuto, la cartella tolta).
-  /// `false` se nessuna cartella è collegata o nessuno ascolta.
-  themeFolderChanged(changed?: string[]): boolean;
-  /// Manda alla shell un gruppo di eventi di una sessione live, come farebbe
-  /// l'host quando lo scrittore entra, scrive o esce.
-  ///
-  /// Lo stato della sessione li segue come nell'host vero: lo scrittore che
-  /// entra consuma il QR, un `commit` resta in `liveStatus` finché la shell non
-  /// risponde. Una sequenza che l'host non produrrebbe **lancia**: un commit
-  /// senza scrittore, un `ended` con lo scrittore ancora collegato, un evento
-  /// dopo la fine. Un banco che la scrivesse proverebbe una shell per una rete
-  /// che non esiste.
-  liveEmit(session: string, events: LiveEvent[]): void;
-  /// La copia di un disegno aperto nel motore finto, o `undefined` se
-  /// l'istanza non c'è (mai aperta, o chiusa).
-  drawingCopy(instance: string): DrawingFakeCopy | undefined;
-}
-
-/// Una sessione live del finto: ciò che l'host vero tiene, senza la rete.
-interface LiveSession {
-  document: string;
-  /// `ip:porta`, e il nome del PC che il QR porta.
-  addr: string;
-  hostName: string | null;
-  onEvents: (events: LiveEvent[]) => void;
-  ended: boolean;
-  seq: bigint;
-  pairing: LivePairing | null;
-  writer: LiveBinding | null;
-  /// In ordine di scrittore e di contatore, come nell'host.
-  pending: LivePendingCommit[];
-  stats: Record<keyof LiveStats, bigint>;
-}
-
-/// Lo scrittore abbinato, collegato o in attesa della ripresa.
-interface LiveBinding extends Omit<LiveWriterStatus, "lastC"> {
-  /// L'ultimo commit trattato già detto: non torna indietro.
-  lastC: bigint;
-  maxReceived: bigint;
-}
-
-/// La grafia unica di un contatore: un `u64` in decimale, senza zeri davanti.
-const LIVE_COUNTER = /^(0|[1-9][0-9]{0,19})$/;
-/// Quanto vale un QR nuovo e quanto aspetta la ripresa, in millisecondi. Nel
-/// finto il tempo non passa: la scadenza la manda il banco con un evento.
-const LIVE_PAIRING_MS = 5 * 60 * 1000;
-const LIVE_RESUME_MS = 2 * 60 * 1000;
-
-/// La porta e l'impronta del certificato di ogni sessione del finto.
-const LIVE_PORT = 52143;
-const LIVE_FINGERPRINT = "fake-fingerprint-of-the-session-certificate";
-
-/// Lo scrittore uscito per questi motivi può riprendere, se la sessione vive.
-function resumableLeave(reason: LiveLeaveReason): boolean {
-  return reason === "lost" || reason === "heartbeat" || reason === "congested" || reason === "tooMuchTraffic";
-}
-
-/// Un path di link letto dalla cartella di `from`, come `resolve_against` in
-/// `fub-abi`: il frammento cade, il percent-encoding si decodifica, `/` parte
-/// dalla radice del vault e un `..` oltre la radice non nomina niente.
-function resolveAgainst(from: string, raw: string): string | null {
-  const bare = raw.split("#")[0]!.trim();
-  let path: string;
-  try {
-    path = decodeURIComponent(bare);
-  } catch {
-    path = bare;
-  }
-  if (!path) return null;
-  const segments = path.startsWith("/") ? [] : from.split("/").slice(0, -1).filter(Boolean);
-  for (const segment of path.replace(/^\//, "").split("/")) {
-    if (segment === "" || segment === ".") continue;
-    if (segment === "..") {
-      if (segments.pop() === undefined) return null;
-    } else {
-      segments.push(segment);
-    }
-  }
-  return segments.length ? segments.join("/") : null;
-}
-
-/// Il documento che la pagina di un wikilink nomina, fra `ids`: una nota per
-/// nome, poi un file per nome (`![[foto.png]]`). È la risoluzione del finto,
-/// più povera di quella del kernel: niente omonimi in ordine, niente path
-/// relativi.
-function wikiPageDoc(ids: Iterable<string>, page: string): string | undefined {
-  const all = [...ids];
-  const expected = `${page}.md`;
-  return all.find((id) => id === expected || id.endsWith(`/${expected}`))
-    ?? all.find((id) => id === page || id.endsWith(`/${page}`));
-}
-
-/// Un wikilink (anche incorporato, `![[…]]`): la pagina, poi il frammento e
-/// l'alias, che la rinomina lascia com'erano.
-const WIKILINK = /(!?\[\[)([^\]|#\n]*)([^\]\n]*)\]\]/g;
-
-/// L'organizzazione del vault come la tiene il kernel (`organization.rs`): una
-/// copia, perché il client non deve condividere con il finto i suoi oggetti.
-function copyOrganization(org: Organization): Organization {
-  return {
-    icons: { ...org.icons },
-    pinned: [...org.pinned],
-    order: Object.fromEntries(Object.entries(org.order).map(([folder, names]) => [folder, [...names]])),
-    spaces: [...org.spaces],
-  };
-}
-
-/// Le liste dell'organizzazione sono insiemi ordinati: un id non ci sta due
-/// volte, e chi c'era già non si sposta (come `senza_doppioni` del kernel).
-function withoutDuplicates(org: Organization): void {
-  const once = (ids: string[]) => [...new Set(ids)];
-  org.pinned = once(org.pinned);
-  org.spaces = once(org.spaces);
-  for (const folder of Object.keys(org.order)) org.order[folder] = once(org.order[folder]!);
-}
-
-/// Il posto di un path nell'ordine scelto a mano della sua cartella: lo stesso
-/// posto se la cartella resta, altrimenti esce da lì.
-function moveInOrder(org: Organization, from: string, to: string): void {
-  const names = org.order[parentOf(from)];
-  const at = names?.indexOf(childName(from)) ?? -1;
-  if (!names || at === -1) return;
-  if (parentOf(from) === parentOf(to)) names[at] = childName(to);
-  else names.splice(at, 1);
-}
-
-/// Un documento cambia path (`from` → `to`): l'icona segue se il path d'arrivo è
-/// libero, il pin e il posto nell'ordine seguono. Come `migrate` del kernel.
-function moveNote(org: Organization, from: string, to: string): void {
-  const icon = org.icons[from];
-  if (icon !== undefined && (org.icons[to] === undefined || from === to)) {
-    delete org.icons[from];
-    org.icons[to] = icon;
-  }
-  org.pinned = org.pinned.map((id) => (id === from ? to : id));
-  moveInOrder(org, from, to);
-  withoutDuplicates(org);
-}
-
-/// Una cartella cambia path, con ciò che sta sotto: come `migrate_folder` del
-/// kernel. Su una collisione vince ciò che la destinazione aveva già.
-function moveFolder(org: Organization, from: string, to: string): void {
-  const rebase = (path: string): string | null =>
-    path === from ? to : path.startsWith(`${from}/`) ? `${to}${path.slice(from.length)}` : null;
-  for (const [key, icon] of Object.entries(org.icons)) {
-    const moved = rebase(key);
-    if (moved !== null && org.icons[moved] === undefined) {
-      delete org.icons[key];
-      org.icons[moved] = icon;
-    }
-  }
-  for (const [key, names] of Object.entries(org.order)) {
-    const moved = rebase(key);
-    if (moved !== null && org.order[moved] === undefined) {
-      delete org.order[key];
-      org.order[moved] = names;
-    }
-  }
-  org.pinned = org.pinned.map((path) => rebase(path) ?? path);
-  org.spaces = org.spaces.map((path) => rebase(path) ?? path);
-  moveInOrder(org, from, to);
-  withoutDuplicates(org);
-}
-
-/// I testi riscritti da una rinomina di `from` in `to`, per documento: i soli
-/// wikilink che nominavano `from` cambiano pagina, nella forma in cui erano
-/// scritti (per nome o per path, con l'estensione se c'era), col frammento e
-/// l'alias intatti. È la parte di `link_retarget_edits` che il banco usa; i
-/// link Markdown `[testo](path)` il finto non li riscrive.
-function renameRewrites(texts: ReadonlyMap<string, string>, from: string, to: string): Map<string, string> {
-  const dot = from.lastIndexOf(".");
-  const ext = dot > from.lastIndexOf("/") ? from.slice(dot) : "";
-  const stem = (id: string): string => (ext && id.endsWith(ext) ? id.slice(0, -ext.length) : id);
-  const rewritten = new Map<string, string>();
-  for (const [id, text] of texts) {
-    const next = text.replace(WIKILINK, (whole, open: string, page: string, rest: string) => {
-      const name = page.trim();
-      if (name === "" || wikiPageDoc(texts.keys(), name) !== from) return whole;
-      const withExt = ext !== "" && name.toLowerCase().endsWith(ext.toLowerCase());
-      const byPath = name.includes("/");
-      const target = byPath ? stem(to) : stem(to).slice(stem(to).lastIndexOf("/") + 1);
-      return `${open}${target}${withExt ? ext : ""}${rest}]]`;
-    });
-    if (next !== text) rewritten.set(id, next);
-  }
-  return rewritten;
-}
+export { COMPONENT_SCENARIO } from "./fake-options";
+export type {
+  Call,
+  ComponentChoice,
+  ComponentScenario,
+  DrawingFake,
+  DrawingFakeCopy,
+  FakeCraft,
+  FakeCraftDoc,
+  FakeHost,
+  FakeResource,
+  GridBytesFake,
+  LiveNetwork,
+  Options,
+} from "./fake-options";
+export { drawingCreateSpec, strumentoFinto } from "./fake-drawing";
+export {
+  TRASH_VIEW,
+  developerModeSetting,
+  extendingTheme,
+  fakeWoff2,
+  folderTheme,
+  fontTheme,
+  iconSetBytes,
+  iconTheme,
+  rejectedTheme,
+  testViewSpec,
+} from "./fake-themes";
+export type { ThemeFolderFake } from "./fake-themes";
 
 /// L'host finto, pronto a rispondere.
 export function createFakeHost(options: Options = {}): FakeHost {
@@ -3024,341 +2444,5 @@ export function createFakeHost(options: Options = {}): FakeHost {
       liveEmit(session, live, events);
     },
     drawingCopy: (instance) => drawingCopies.get(instance),
-  };
-}
-
-/// I modelli di «Nuovo disegno» in italiano, per id: gli stessi file che il
-/// comando vero distribuisce.
-const DRAWING_TEMPLATES: Record<string, string> = Object.fromEntries(
-  Object.entries(
-    import.meta.glob<string>("../../../../crates/fub-features/templates/*.it.svg", { query: "?raw", import: "default", eager: true }),
-  ).map(([path, text]) => [path.split("/").pop()!.replace(/\.it\.svg$/, ""), text]),
-);
-
-/// Lo strumento del motore finto: in anteprima rende un `marquee` dal primo
-/// all'ultimo puntatore della richiesta e un `anchor` sull'ultimo, con lo
-/// strumento occupato; alla fine non cambia niente (`empty`). Serve ai banchi
-/// che guardano i segni e lo stato senza il motore vero.
-export function strumentoFinto(gesture: DrawingGesture, copia: DrawingFakeCopy): DrawingOutcome {
-  const vuoto: DrawingOutcome = {
-    revision: copia.revision,
-    preview: null,
-    ops: null,
-    selection: gesture.selection,
-    losses: [],
-    refused: null,
-    frame: null,
-    state: null,
-    reading: null,
-  };
-  const state = (busy: boolean) => ({
-    busy,
-    transforming: false,
-    wants_text: false,
-    composing: false,
-    cursor: busy ? "crosshair" : "arrow",
-    options: null,
-  });
-  if (gesture.phase !== "preview") return { ...vuoto, refused: gesture.phase === "commit" ? "empty" : null, state: state(false) };
-  const primo = gesture.events[0];
-  const ultimo = gesture.events[gesture.events.length - 1];
-  if (primo === undefined || ultimo === undefined) return { ...vuoto, preview: { shape: null, matrix: null, marquee: null, overlays: [] }, state: state(true) };
-  const [x0, x1] = primo.x <= ultimo.x ? [primo.x, ultimo.x] : [ultimo.x, primo.x];
-  const [y0, y1] = primo.y <= ultimo.y ? [primo.y, ultimo.y] : [ultimo.y, primo.y];
-  return {
-    ...vuoto,
-    preview: {
-      shape: null,
-      matrix: null,
-      marquee: null,
-      overlays: [
-        { kind: "marquee", rect: [x0, y0, x1 - x0, y1 - y0] },
-        { kind: "anchor", at: [ultimo.x, ultimo.y], role: "selection", filled: true, size: 7 },
-      ],
-    },
-    state: state(true),
-  };
-}
-
-/// La spec di `drawing.create` come la dichiara la feature `draw`, in
-/// italiano: le prove della galleria e delle sue porte la danno all'host.
-export function drawingCreateSpec(): CommandSpec {
-  const choices: [string, string][] = [
-    ["blank", "Vuoto"],
-    ["a4-portrait", "A4 verticale"],
-    ["a4-landscape", "A4 orizzontale"],
-    ["slide", "Diapositiva 16:9"],
-    ["diagram", "Diagramma di flusso"],
-    ["lesson", "Lavagna per la lezione"],
-    ["storyboard", "Storyboard"],
-    ["concept-map", "Mappa concettuale"],
-  ];
-  return {
-    id: "drawing.create",
-    title: "Nuovo disegno",
-    description: "Crea un disegno, vuoto o da un modello, e lo apre.",
-    keybinding: null,
-    params: [
-      { name: "name", title: "Nome", description: "", kind: { kind: "text" }, required: false },
-      { name: "folder", title: "Cartella", description: "", kind: { kind: "text" }, required: false },
-      {
-        name: "template",
-        title: "Modello",
-        description: "",
-        kind: { kind: "choice", value: choices.map(([value, title]) => ({ value, title })) },
-        required: false,
-      },
-      { name: "from", title: "Dal vault", description: "", kind: { kind: "document" }, required: false },
-    ],
-    scope: { writes: true, reach: "document", reversible: true },
-    surfaces: [],
-  };
-}
-
-/// Il documento nuovo del provider dei disegni: radice, titolo, carta e
-/// «Livello 1». Il nome della radice sta in una costante, come per le
-/// annotazioni.
-function blankDrawing(): string {
-  const root = "svg";
-  return [
-    `<${root} xmlns="http://www.w3.org/2000/svg" xmlns:fub="https://fubeo.github.io/ns/scene/1" fub:version="1" viewBox="0 0 1600 1000" width="1600" height="1000">`,
-    "  <title></title>",
-    '  <rect id="fub-paper" fub:role="paper" x="0" y="0" width="1600" height="1000" fill="#ffffff"/>',
-    '  <g id="livello-1" fub:layer="Livello 1">',
-    "  </g>",
-    `</${root}>`,
-    "",
-  ].join("\n");
-}
-
-/// La sorgente col titolo della radice cambiato in `title`: il testo del
-/// `<title>` che apre la radice, o un `<title>` nuovo in testa alla radice.
-/// Il titolo di una forma più in basso resta suo.
-function titled(source: string, title: string): string {
-  const text = title.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-  const root = new RegExp(`(<${"svg"}\\b[^>]*>)(\\s*<title>[\\s\\S]*?</title>)?`);
-  return source.replace(root, (_, head: string, old: string | undefined) => (old === undefined ? `${head}\n  <title>${text}</title>` : `${head}${old.replace(/<title>[\s\S]*<\/title>/, () => `<title>${text}</title>`)}`));
-}
-
-/// La chiave della modalità sviluppatore (`fub_host::settings::DEVELOPER_MODE`).
-const DEVELOPER_MODE_KEY = "developer.mode";
-
-/// Una cartella di tema per `themeFolders`: ciò che `extendingTheme` e i suoi
-/// fratelli restituiscono, più l'errore di una sostituzione fallita a metà.
-export interface ThemeFolderFake {
-  info: ThemeInfo;
-  payloads: Record<string, ThemePayload>;
-  /// La sostituzione si ferma con questo errore, e il vecchio resta.
-  replaceError?: PluginError;
-  /// Il perché tipizzato di `replaceError` (`failed.cause`); di default
-  /// `other`.
-  replaceCause?: DiskCause;
-  /// Le porte dell'installazione rifiutano i byte controllati (`refused`).
-  installRefusal?: ThemeFolderRefusal;
-  /// Con `replaceError`: il vecchio non torna (`replace_failed`).
-  replaceLost?: boolean;
-}
-
-/// L'impronta finta di una cartella: cambia quando cambiano i suoi fasci.
-function folderDigest(folder: ThemeFolderFake): string {
-  const text = JSON.stringify(folder.payloads);
-  let hash = 2166136261;
-  for (let index = 0; index < text.length; index += 1) {
-    hash ^= text.charCodeAt(index);
-    hash = Math.imul(hash, 16777619) >>> 0;
-  }
-  return `fake-${hash.toString(16)}`;
-}
-
-/// La riga di `developer.mode` come la dichiara il core: interruttore della
-/// macchina, spento di default, nel gruppo «Sviluppo».
-export function developerModeSetting(on: boolean): SettingEntry {
-  return {
-    spec: {
-      key: DEVELOPER_MODE_KEY,
-      label: "Modalità sviluppatore",
-      description:
-        "Per chi scrive un tema: in «Temi installati» compaiono «Installa da cartella…», che lo controlla e lo installa dalla sua cartella, «Collega una cartella…», che lo rimonta a ogni salvataggio, e «Tutti i componenti», che mostra ogni componente in ogni stato.",
-      group: "Sviluppo",
-      scope: "machine",
-      kind: { kind: "toggle", default: false },
-      program_writable: false,
-    },
-    value: on,
-    source: on ? "machine" : "default",
-  };
-}
-
-/// Una cartella di tema che il loader accetta: parte dalla serie senza fogli
-/// suoi (le due luci prendono quelli di serie) e la pelle ritocca un pezzo.
-export function folderTheme(id = "acme.carta", name = "Carta", version = "1.0.0"): ThemeFolderFake {
-  const manifest: ThemeInfo["manifest"] = { ...extendingTheme(id).info.manifest, name, version };
-  const skin = ".shell-tooltip { white-space: nowrap; }\n";
-  return {
-    info: { manifest, trust: "community" },
-    payloads: {
-      [`${id}:light`]: { manifest, light: "light", sheet: null, skin, assets: {} },
-      [`${id}:dark`]: { manifest, light: "dark", sheet: null, skin, assets: {} },
-    },
-  };
-}
-
-/// Un tema che il loader della shell rifiuta: passa le porte dell'host (il
-/// finto non le ha), ma la pelle usa un hook che l'anatomia non dichiara e un
-/// `@font-face`, e il manifest parla `theme-1`. La diagnosi ha una riga per
-/// motivo.
-export function rejectedTheme(id = "acme.rotto", version = "1.0.0"): ThemeFolderFake {
-  const base = extendingTheme(id);
-  const manifest: ThemeInfo["manifest"] = { ...base.info.manifest, name: "Rotto", version, engine: "theme-1" };
-  const skin = ".rotto-titolo { color: red; }\n@font-face { font-family: Rotto; }\n";
-  return {
-    info: { manifest, trust: "community" },
-    payloads: {
-      [`${id}:light`]: { manifest, light: "light", sheet: null, skin, assets: {} },
-      [`${id}:dark`]: { manifest, light: "dark", sheet: null, skin, assets: {} },
-    },
-  };
-}
-
-/// Un tema installato che parte dalla serie (`extends`), pronto per le opzioni
-/// `themes` e `themePayloads` del finto: porta il foglio chiaro e una pelle, e
-/// la luce scura arriva con `sheet: null`, come la consegna l'host vero.
-export function extendingTheme(id = "acme.carta"): {
-  info: ThemeInfo;
-  payloads: Record<string, ThemePayload>;
-} {
-  const manifest: ThemeInfo["manifest"] = {
-    id,
-    name: "Carta",
-    version: "1.0.0",
-    engine: "theme-2",
-    lights: ["light", "dark"],
-    asset_namespace: `theme://${id}/`,
-    motion: ["opacity", "transform"],
-    extends: "fub.serie",
-  };
-  const skin = ".carta { color: inherit; }";
-  return {
-    info: { manifest, trust: "community" },
-    payloads: {
-      [`${id}:light`]: { manifest, light: "light", sheet: ":root { --carta: #fbf7ee; }", skin, assets: {} },
-      [`${id}:dark`]: { manifest, light: "dark", sheet: null, skin, assets: {} },
-    },
-  };
-}
-
-/// I byte di un WOFF2 finto: la firma `wOF2` e qualche byte dopo. Il finto non
-/// disegna caratteri: conta che la forma arrivi come la consegna l'host vero.
-export function fakeWoff2(size = 12): number[] {
-  return [0x77, 0x4f, 0x46, 0x32, ...Array.from({ length: Math.max(0, size - 4) }, (_, i) => i & 0xff)];
-}
-
-/// Un tema che parte dalla serie e porta due caratteri (`fonts`): il manifest
-/// li dichiara, il fascio porta i file fra gli asset anche se nessun CSS li
-/// nomina, e la pelle usa la famiglia per nome. Come per `extendingTheme`, la
-/// luce scura arriva con `sheet: null`.
-export function fontTheme(id = "acme.caratteri"): {
-  info: ThemeInfo;
-  payloads: Record<string, ThemePayload>;
-} {
-  const manifest: ThemeInfo["manifest"] = {
-    id,
-    name: "Caratteri",
-    version: "1.0.0",
-    engine: "theme-2",
-    lights: ["light", "dark"],
-    asset_namespace: `theme://${id}/`,
-    motion: ["opacity", "transform"],
-    extends: "fub.serie",
-    fonts: [
-      { family: "Carta Serif", file: "fonts/carta.woff2", weight: 400, style: "normal" },
-      { family: "Carta Serif", file: "fonts/carta-italic.woff2", weight: 400, style: "italic" },
-    ],
-  };
-  const skin = '.shell-tooltip { font-family: "Carta Serif", var(--font-ui); }';
-  const assets = {
-    [`theme://${id}/fonts/carta.woff2`]: fakeWoff2(12),
-    [`theme://${id}/fonts/carta-italic.woff2`]: fakeWoff2(9),
-  };
-  return {
-    info: { manifest, trust: "community" },
-    payloads: {
-      [`${id}:light`]: { manifest, light: "light", sheet: null, skin, assets },
-      [`${id}:dark`]: { manifest, light: "dark", sheet: null, skin, assets },
-    },
-  };
-}
-
-/// I byte UTF-8 di un set di icone del tema, come li consegna l'host vero fra
-/// gli asset del fascio.
-export function iconSetBytes(set: Readonly<Record<string, readonly string[]>>): number[] {
-  return [...new TextEncoder().encode(JSON.stringify(set))];
-}
-
-/// Un tema che parte dalla serie e ridisegna qualche icona (`icons`): il
-/// manifest nomina il set, il fascio lo porta fra gli asset anche se nessun
-/// CSS lo nomina. Ridisegna una icona di serie (`search`), un alias
-/// (`folder`, che vale per `vault`) e un nome che oggi nessuno disegna.
-export function iconTheme(id = "acme.icone"): {
-  info: ThemeInfo;
-  payloads: Record<string, ThemePayload>;
-  set: Record<string, string[]>;
-} {
-  const manifest: ThemeInfo["manifest"] = {
-    id,
-    name: "Icone",
-    version: "1.0.0",
-    engine: "theme-2",
-    lights: ["light", "dark"],
-    asset_namespace: `theme://${id}/`,
-    motion: ["opacity", "transform"],
-    extends: "fub.serie",
-    icons: "icons.json",
-  };
-  const set = {
-    search: ["M4 4h16v16H4z", "M8 12h8"],
-    folder: ["M3 6h18v12H3z"],
-    "modulo-spento": ["M12 3v18"],
-  };
-  const skin = ".shell-tooltip { white-space: nowrap; }\n";
-  const assets = { [`theme://${id}/icons.json`]: iconSetBytes(set) };
-  return {
-    info: { manifest, trust: "community" },
-    payloads: {
-      [`${id}:light`]: { manifest, light: "light", sheet: null, skin, assets },
-      [`${id}:dark`]: { manifest, light: "dark", sheet: null, skin, assets },
-    },
-    set,
-  };
-}
-
-/// L'id della view cestino del finto: la stessa che `fub-features` registra,
-/// perché ciò che si prova è che la shell la monti senza saperne nulla.
-export const TRASH_VIEW = "fub.trash";
-
-/// Una `ViewSpec` minima: quel che serve perché la shell la monti.
-///
-/// La maschera dichiara i tre eventi che cambiano il vault, ed è la stessa che
-/// dichiarerebbe una view vera: senza, la view si disegnerebbe una volta sola e
-/// un e2e non distinguerebbe «la shell onora `refresh`» da «la shell ridisegna
-/// tutto sempre».
-export function testViewSpec(id: string, surface: ViewSpec["surface"]): ViewSpec {
-  return {
-    id,
-    title: id,
-    surface,
-    refresh: {
-      kinds: ["document_changed", "document_removed", "document_renamed"],
-      topics: [],
-      subjects: [],
-      changes: [],
-    },
-    follows: [],
-    params: [],
-    icon: null,
-    order: 0,
-    open_by_default: true,
-    preferred_size: null,
-    closable: false,
   };
 }
