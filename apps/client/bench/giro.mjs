@@ -22,7 +22,7 @@
 // - `controlla` guarda il risultato nel DOM o nel finto host, e lancia se non
 //   è quello giusto: non basta che non ci siano errori;
 // - `telefono: true` lo fa girare anche con `--telefono`, dove la pagina è
-//   quella del telefono (`mobile.html`) alla misura `PHONE` di `scene.mjs`.
+//   quella del telefono (`mobile.html`) alla misura `PHONE` di `scene/misure.mjs`.
 //
 // `giro` porta ciò che un compito non trova nella pagina: `base`, `telefono`,
 // `luce`, `apri(query)` (carica la pagina del giro con una query del finto
@@ -49,7 +49,7 @@ import { pathToFileURL } from "node:url";
 import { openStage, openPage, OUTPUT } from "./stage.mjs";
 import { GRUPPI } from "./giro/elenco.mjs";
 
-/// Il telefono in piedi: la misura `PHONE` di `scene.mjs`, quella delle scene
+/// Il telefono in piedi: la misura `PHONE` di `scene/misure.mjs`, quella delle scene
 /// di `mobile.html`.
 export const PHONE = { width: 390, height: 844 };
 
