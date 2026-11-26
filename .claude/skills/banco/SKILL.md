@@ -55,9 +55,11 @@ Probes:
 - Write screenshots to a scratch directory, never into the repo. Open the PNGs
   and look at them: both lights, a narrow width (for example 700×800), scrolled
   states, empty and error states, and focus.
-- If a state needs data the fixture lacks, extend `bench/fake-ipc.ts`
-  temporarily, then restore it byte for byte (`git diff --quiet
-  bench/fake-ipc.ts`). Don't wrap the fixture in a second Vite config: that
+- If a state needs data the fixture lacks, extend `bench/fake-ipc.ts` or the
+  piece that holds that area (`bench/fake-ipc-{casi,griglia,documenti,disegno,impostazioni,scenografia}.ts`:
+  each one runs at load in the old order and imports only the pieces before
+  it) temporarily, then restore it byte for byte (`git diff --quiet
+  bench/`). Don't wrap the fixture in a second Vite config: that
   broke startup with a `metadata` error.
 
 Pitfalls:
