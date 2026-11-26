@@ -353,7 +353,7 @@ lavagna](ink-on-canvas.md).
 | con l'albero dei riquadri la gomma prende ciò che prenderebbe la scansione | `tools/box-tree.test.ts`, `tools/hit.test.ts` |
 | la gomma non riprova ciò che ha già segnato | `ink/tools/sweep.test.ts`, `tools/hit.test.ts` |
 | un ridisegno per evento | `ink/dom/pointer-adapter.test.ts` |
-| un puntatore fermo resta fermo nella scena se la vista si muove | `ink/dom/pointer-adapter.test.ts`, `tools/editor.test.ts` |
+| un puntatore fermo resta fermo nella scena se la vista si muove | `ink/dom/pointer-adapter.test.ts`, `tools/editor*.test.ts` |
 
 Il percorso caldo ha due banchi:
 
