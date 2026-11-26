@@ -166,6 +166,23 @@ describe("i due cataloghi", () => {
     expect(EN["surface.unavailable"]).toBe("No surface available");
   });
 
+  it("una chiave sta in una sola parte del catalogo italiano", () => {
+    // `IT` monta le parti con lo spread: una chiave in due parti varrebbe
+    // quella della seconda, in silenzio.
+    const parts = import.meta.glob<Record<string, Record<string, string>>>("./catalog-it-*.ts", { eager: true });
+    expect(Object.keys(parts).length, "le parti del catalogo").toBeGreaterThan(1);
+    const seen = new Map<string, string>();
+    const twice: string[] = [];
+    for (const [file, module] of Object.entries(parts)) {
+      for (const part of Object.values(module)) {
+        for (const key of Object.keys(part)) {
+          if (seen.has(key)) twice.push(`${key}: ${seen.get(key)} e ${file}`);
+          seen.set(key, file);
+        }
+      }
+    }
+    expect(twice).toEqual([]);
+  });
 });
 
 describe("la scala di ripiego, che è quella del contratto", () => {

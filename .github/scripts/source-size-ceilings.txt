@@ -33,8 +33,6 @@
 2632 apps/client/src/editors/text/profiles/markdown/surface.ts
 2448 apps/client/src/host/fake.ts
 2461 apps/client/src/host/mirror.test.ts
-4740 apps/client/src/i18n/catalog-en.ts
-4906 apps/client/src/i18n/catalog.ts
 1898 apps/client/src/kit/ribbon/ribbon.ts
 1647 apps/client/src/panels/document.test.ts
 1934 apps/client/src/panels/document.ts
