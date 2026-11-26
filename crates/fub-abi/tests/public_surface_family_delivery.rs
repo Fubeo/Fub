@@ -67,7 +67,7 @@ fn every_public_surface_family_has_shell_fallback_mirror_native_and_wasm() {
             ),
             (
                 "mirror",
-                "apps/client/src/host/contract.ts",
+                "apps/client/src/host/contract-grid.ts",
                 "export interface GridSurfaceSpec",
             ),
             (

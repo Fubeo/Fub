@@ -16,56 +16,308 @@
 // cioè le due cose che non si derivano da niente: perché quel tipo esiste, e
 // che la shell lo usi. I casi no: quelli sono un derivato, e chi ne aggiunge
 // uno in Rust rende rosso il file generato senza doversene ricordare.
+//
+// I tipi stanno in un file per tema (`contract-ui.ts`, `contract-commands.ts`,
+// `contract-live.ts`, `contract-grid.ts`, `contract-drawing.ts`,
+// `contract-query.ts`, `contract-settings.ts`); questo modulo li ri-esporta
+// tutti, e la shell continua a importare da qui.
 
-import type {
+import type { ThemeEngine, ThemeFontStyle, ThemeLight, ThemeMotion } from "./enums.generated";
+import type { SettingKind } from "./contract-settings";
+
+export type {
+  ActionRef,
+  Actor,
   Align,
   Axis,
+  DocChanges,
+  EventMask,
+  FieldValue,
+  Gate,
+  Intent,
+  KernelEvent,
+  KernelNotice,
+  KeyValueEntry,
+  Origin,
+  Severity,
+  Subject,
+  TableColumn,
+  UiAction,
+  UiDrag,
+  UiKind,
+  UiNode,
+  UiOption,
+  UiValue,
+  ViewInstance,
+  ViewSpec,
+  ViewSurface,
+  ViewUpdate,
+} from "./contract-ui";
+export { MAIN_PANE } from "./contract-commands";
+export type {
+  AnchoredSelection,
+  AnchoredSelections,
+  Choice,
+  CommandEffect,
+  CommandOutcome,
+  CommandPlan,
   CommandReach,
-  ComponentKind,
+  CommandScope,
+  CommandSpec,
   CommandSurface,
   ContextKind,
-  DocChange,
-  DrawingLossKind,
-  DrawingOverlayRole,
-  DrawingPhase,
-  DrawingPointerKind,
-  DrawingRefusal,
-  EntryKind,
-  Excerpts,
-  Gate,
+  DocumentSource,
+  DocumentText,
+  DocumentWindowEvent,
+  DocumentWindowRequest,
+  EditRequest,
+  Failure,
+  FloatingSelection,
+  FloatingSelections,
+  HourCycle,
+  InvokeMode,
+  Locale,
+  PaneMode,
+  ParamKind,
+  ParamSpec,
+  Partial,
+  PlannedEdit,
+  ResourceDescriptor,
+  ResourceKind,
+  ResourceWriteOptions,
+  ResourceWriteReceipt,
+  SelectionSet,
+  TextEdit,
+  Undo,
+  UndoStep,
+  ViewContext,
+  Weekday,
+} from "./contract-commands";
+export type {
+  LiveAddress,
+  LiveCaps,
+  LiveClock,
+  LiveCounter,
+  LiveDevice,
+  LiveEndReason,
+  LiveEvent,
+  LiveLeaveReason,
+  LiveNackReason,
+  LiveOp,
+  LivePairing,
+  LivePendingCommit,
+  LiveReleaseReason,
+  LiveSessionInfo,
+  LiveShellMessage,
+  LiveStart,
+  LiveStarted,
+  LiveStats,
+  LiveStatus,
+  LiveStopReport,
+  LiveView,
+  LiveWriterStatus,
+} from "./contract-live";
+export {
+  GRID_BYTES_PROTOCOL_VERSION,
+  GRID_FAMILY,
+  GRID_MEDIA_TYPES,
+  GRID_STACKED_ROTATION,
+  GRID_THEME_COLORS,
+  MAX_GRID_KNOWN_MEDIA,
+  MAX_GRID_MEDIA_BYTES,
+  MAX_GRID_MEDIA_KEY_BYTES,
+  MAX_GRID_OBJECT_SVG_BYTES,
+  MAX_GRID_SHAPE_TEXT_BYTES,
+  MAX_GRID_WINDOW_OBJECTS,
+} from "./contract-grid";
+export type {
+  GridApplyRequest,
+  GridBook,
+  GridBorder,
   GridBorderStyle,
+  GridBorders,
+  GridBytesCell,
+  GridBytesSession,
+  GridBytesWindow,
   GridCalculation,
+  GridCellKey,
+  GridCellPatch,
+  GridCellStyle,
+  GridColumn,
+  GridCommand,
+  GridCommandOutcome,
+  GridCommandRequest,
+  GridCommandState,
+  GridComment,
+  GridCommentReply,
+  GridCommit,
+  GridDataBar,
+  GridDialog,
   GridHorizontalAlign,
+  GridIcon,
+  GridInvalidation,
+  GridLink,
+  GridMedia,
+  GridMerge,
+  GridNotice,
+  GridObject,
   GridObjectKind,
   GridObjectMissing,
+  GridRow,
   GridScript,
+  GridSelection,
+  GridShape,
   GridShapeAlign,
   GridShapeAnchor,
   GridShapeKind,
+  GridSheet,
+  GridSheetView,
+  GridSourceEdit,
+  GridSurfaceSpec,
+  GridTable,
   GridUnderline,
+  GridValue,
   GridVerticalAlign,
   GridViewMode,
-  HourCycle,
-  IndexingState,
-  Intent,
+  GridWindowRequest,
+} from "./contract-grid";
+export {
+  DRAWING_COMMAND_FAMILY_PREPARE,
+  DRAWING_COMMAND_FILL_COLOR,
+  DRAWING_COMMAND_STROKE_COLOR,
+  DRAWING_COMMAND_TOOL_OPTION,
+  DRAWING_COMMAND_TOOL_STATE,
+  DRAWING_COMMAND_WIDTH,
+  DRAWING_FAMILIES,
+  MAX_DRAWING_COLOR_BYTES,
+  MAX_DRAWING_INPUTS,
+  MAX_DRAWING_LOSSES,
+  MAX_DRAWING_OPS,
+  MAX_DRAWING_OPS_BYTES,
+  MAX_DRAWING_TEXT_BYTES,
+  MAX_DRAWING_TOOL_ID_BYTES,
+  MAX_GESTURE_EVENTS,
+} from "./contract-drawing";
+export type {
+  DrawingAnchor,
+  DrawingChange,
+  DrawingCommandInfo,
+  DrawingCommandRequest,
+  DrawingDisabledReason,
+  DrawingEdit,
+  DrawingFrame,
+  DrawingGesture,
+  DrawingInput,
+  DrawingKeyMods,
+  DrawingLoss,
+  DrawingLossKind,
+  DrawingOpen,
+  DrawingOutcome,
+  DrawingOverlay,
+  DrawingOverlayRole,
+  DrawingPhase,
+  DrawingPoint,
+  DrawingPointer,
+  DrawingPointerKind,
+  DrawingPreview,
+  DrawingRefusal,
+  DrawingSnap,
+  DrawingStyle,
+  DrawingSync,
+  DrawingSynced,
+  DrawingTool,
+  DrawingToolState,
+  EmbedContent,
+  RenderedDocument,
+  RenderedPart,
+  Span,
+  WriteBase,
+} from "./contract-drawing";
+export {
+  EVERY_DOCUMENT,
+  nameQuery,
+  textInDocument,
+  textQuery,
+  theseDocuments,
+} from "./contract-query";
+export type {
+  DocPosition,
+  DocumentMatch,
+  DraftInfo,
+  DueBound,
+  EntryKind,
+  Excerpts,
+  FolderScope,
+  Heading,
+  HealthIssue,
+  IndexQuery,
+  IndexResult,
   LinkDirection,
-  PaneMode,
-  SettingScope,
-  SettingSource,
-  Severity,
-  SourceKind,
+  LinkTarget,
+  NeighborRef,
+  Page,
+  Paged,
+  PropertyCount,
+  PropertyFilter,
+  PropertySelect,
+  QueryClause,
+  QueryExpr,
+  QueryLiteral,
+  QueryPredicate,
+  ResolvedRef,
+  SyntaxForm,
+  SyntaxTrigger,
   TaskStatus,
   TextField,
   TextMode,
+  TextQuery,
   TextScope,
   TextTolerance,
-  ThemeEngine,
-  ThemeFontStyle,
-  ThemeLight,
-  ThemeMotion,
-  ViewSurface,
-  Weekday,
-} from "./enums.generated";
+  VaultEntry,
+  VaultFolder,
+} from "./contract-query";
+export { COMMANDS } from "./contract-settings";
+export type {
+  BundleInfo,
+  CatalogEntry,
+  CatalogProvenance,
+  ComponentAction,
+  ComponentEffect,
+  ComponentGroup,
+  ComponentKind,
+  ComponentMissing,
+  ComponentOrphans,
+  ComponentOutcome,
+  ComponentProfile,
+  ComponentRefusal,
+  ComponentRow,
+  ComponentState,
+  ComponentWhy,
+  ComponentWrite,
+  ComponentsApplied,
+  ComponentsMap,
+  ExportArtifact,
+  ExportContent,
+  ExportReport,
+  IndexingState,
+  InstalledPluginInfo,
+  JobProgress,
+  JobStatus,
+  KnownVault,
+  Organization,
+  SettingEntry,
+  SettingKind,
+  SettingScope,
+  SettingSource,
+  SettingSpec,
+  SettingValue,
+  TagCount,
+  TransferNote,
+  TrashEntry,
+  VaultStatus,
+  ViewerAction,
+  ViewerEvent,
+} from "./contract-settings";
 
 // Manifest congelato della pelle: non passa dal WIT, ma resta parte del confine.
 export const THEME_ENGINE = "theme-1" as const;
@@ -464,2722 +716,3 @@ export interface PluginError {
   kind: PluginErrorKind;
   message: string;
 }
-
-// --- UI dichiarativa (rispecchia fub_abi::ui) -----------------------------
-
-// L'azione attaccata a un nodo: l'id e il payload che il PROVIDER si porta
-// dietro. Il payload torna a lui intatto: la shell non lo legge e non lo
-// riscrive (§2.7).
-export interface ActionRef {
-  action: string;
-  payload: unknown;
-}
-
-export type { Intent, Align, Axis } from "./enums.generated";
-
-// Il valore di un campo di input. Tag ADIACENTE (`type`/`value`), come
-// ParamKind: una variante che porta una sequenza non sta col tag interno.
-export type UiValue =
-  | { type: "text"; value: string }
-  | { type: "number"; value: number }
-  | { type: "bool"; value: boolean }
-  | { type: "choices"; value: string[] };
-
-// Lo stato di un campo, come la shell lo consegna al provider.
-export interface FieldValue {
-  field: string;
-  value: UiValue;
-}
-
-export interface UiOption {
-  value: string;
-  label: string;
-}
-
-export interface KeyValueEntry {
-  label: string;
-  value: string;
-}
-
-export interface TableColumn {
-  title: string;
-  align: Align;
-}
-
-// La specie di un nodo. La CHIAVE viaggia accanto (vedi `UiNode`), non dentro:
-// è identità del nodo, non un dato della sua specie.
-export type UiKind =
-  | { node: "stack"; dir: Axis; gap: number; children: UiNode[] }
-  | { node: "text"; content: string }
-  | { node: "heading"; level: number; content: string }
-  | { node: "list"; items: UiNode[] }
-  | {
-      node: "list_item";
-      title: string;
-      subtitle: string | null;
-      action: ActionRef | null;
-      selected: boolean;
-    }
-  | { node: "button"; label: string; intent: Intent; action: ActionRef }
-  | { node: "html"; html: string }
-  | { node: "web_view"; url: string; height: number }
-  | { node: "section"; title: string; collapsed: boolean; children: UiNode[] }
-  | { node: "table"; columns: TableColumn[]; rows: UiNode[] }
-  | { node: "row"; cells: UiNode[]; action: ActionRef | null }
-  | { node: "tree"; roots: UiNode[] }
-  | {
-      node: "tree_item";
-      label: string;
-      expanded: boolean;
-      action: ActionRef | null;
-      selected: boolean;
-      children: UiNode[];
-    }
-  | { node: "tabs"; active: number; tabs: UiNode[] }
-  | { node: "tab"; label: string; action: ActionRef | null; children: UiNode[] }
-  | { node: "badge"; label: string; intent: Intent }
-  | { node: "icon"; name: string }
-  | { node: "progress"; value: number | null; label: string | null }
-  | { node: "separator" }
-  | { node: "empty_state"; title: string; detail: string | null; action: ActionRef | null }
-  | { node: "key_value"; entries: KeyValueEntry[] }
-  | {
-      node: "text_input";
-      field: string;
-      label: string | null;
-      value: string;
-      placeholder: string | null;
-      action: ActionRef | null;
-    }
-  | {
-      node: "text_area";
-      field: string;
-      label: string | null;
-      value: string;
-      rows: number;
-      action: ActionRef | null;
-    }
-  | {
-      node: "number";
-      field: string;
-      label: string | null;
-      value: number | null;
-      min: number | null;
-      max: number | null;
-      step: number | null;
-      action: ActionRef | null;
-    }
-  | { node: "checkbox"; field: string; label: string; value: boolean; action: ActionRef | null }
-  | {
-      node: "select";
-      field: string;
-      label: string | null;
-      value: string[];
-      options: UiOption[];
-      multiple: boolean;
-      action: ActionRef | null;
-    }
-  | {
-      node: "radio";
-      field: string;
-      label: string | null;
-      value: string | null;
-      options: UiOption[];
-      action: ActionRef | null;
-    }
-  | {
-      node: "slider";
-      field: string;
-      label: string | null;
-      value: number;
-      min: number;
-      max: number;
-      step: number;
-      action: ActionRef | null;
-    }
-  | {
-      node: "date_picker";
-      field: string;
-      label: string | null;
-      value: string | null;
-      action: ActionRef | null;
-    }
-  | { node: "form"; children: UiNode[]; submit_label: string; submit: ActionRef }
-  | { node: "custom"; ns: string; payload: unknown; fallback: UiNode[] }
-  | { node: "pending"; label: string | null }
-  | { node: "failed"; message: string; retry: ActionRef | null };
-
-// Un nodo: la sua chiave e la sua specie. `key` è l'identità del nodo fra due
-// ridisegni — è ciò su cui il riconciliatore lavora (§2.8) —, è assente quando
-// il provider non la dichiara, e la sua unicità vale FRA I FRATELLI.
-export type UiNode = UiKind & { key?: string; drag?: UiDrag };
-
-// Che cosa si trascina da un nodo (decisione 0157: il nodo nomina la cosa, la
-// shell decide come si offre e dove si lascia). Assente: il nodo non si trascina.
-export type UiDrag = { kind: "document"; doc: string };
-
-// L'azione che la shell manda al provider: le due metà con i due proprietari
-// (§2.7). `payload` è quello che il provider aveva attaccato al nodo e gli torna
-// intatto; `fields` è ciò che l'utente ha compilato, e lo costruisce la shell.
-// La costruisce lei, quindi vale la ragione del contesto di sessione: un campo
-// dimenticato di qua è un rifiuto di serde a runtime, non un errore di
-// compilazione.
-export interface UiAction {
-  action: string;
-  payload: unknown;
-  fields: FieldValue[];
-}
-
-// Aggiornamento restituito da un ViewProvider dopo un'azione
-// (rispecchia fub_abi::ui::ViewUpdate). Il frontend lo interpreta: `replace`
-// ridisegna la view, `navigate` apre un documento, `none` non fa nulla.
-export type ViewUpdate =
-  | { kind: "replace"; root: UiNode }
-  | { kind: "none" }
-  | { kind: "navigate"; doc_id: string }
-  | { kind: "reveal"; doc_id: string; span: Span }
-  | { kind: "run_search"; query: string }
-  // Varco di estensione: un intento che questa shell non prevede. La shell
-  // che non riconosce `ns` NON FA NULLA (degrado garbato, da contratto).
-  | { kind: "custom"; ns: string; payload: unknown }
-  // Rimpiazza il solo nodo con questa chiave. Una chiave che non c'è più non è
-  // un errore: è una view cambiata sotto, che si ridisegnerà intera.
-  | { kind: "patch"; key: string; node: UiNode };
-
-// Evento del kernel (rispecchia fub_abi::event::Event).
-export type KernelEvent =
-  // Esce anche dopo un **rimontaggio** (spegnere o riaccendere la lavagna dalla
-  // pagina «Componenti», dalla CLI o da MCP): dopo il `vault_closed` dello
-  // stesso `root`, il vault è di nuovo aperto, con i formati di adesso, e la
-  // shell rilegge ciò che ne dipende (`components_map` compresa).
-  | { type: "vault_opened"; root: string }
-  // `changes` dice COSA è cambiato (§22.2, decisione 0069). Assente/null =
-  // NON LO SO — l'evento non viene dalla coda di una scrittura del kernel — e
-  // passa qualunque filtro; presente e con `aspects` vuoto è un fatto, ed è
-  // *niente è cambiato*.
-  | { type: "document_changed"; id: string; changes?: DocChanges | null }
-  | { type: "document_removed"; id: string }
-  | { type: "document_renamed"; from: string; to: string }
-  // NB: dentro un lotto questo NON arriva — arriva `batch_ended`. Chi reagisce
-  // a `index_updated` deve reagire anche a quello, o dopo una rinomina con
-  // backlink non si ridisegna più (fub_abi::event, decisione 0011).
-  | { type: "index_updated" }
-  // Esito di un job in background (HostApi::spawn_job). `id` è un u64
-  // identità: attraversa l'IPC come stringa (vedi VersionRef.hash).
-  | { type: "job_done"; id: string; job: string; result: unknown }
-  // Coda eventi troncata: lo stato derivato dagli eventi va riconciliato.
-  | { type: "overflow"; dropped: number }
-  | { type: "custom"; topic: string; payload: unknown }
-  // Un lotto si è chiuso (decisione 0011): N scritture che sono UNA cosa sola, e
-  // `changed` sono le note toccate. È ciò che permette alla shell di ridisegnare
-  // una volta invece di una per nota — una rinomina con 200 backlink faceva 200
-  // giri di `list_documents` più il ridisegno di ogni view iscritta.
-  // `batch` è un u64 identità: attraversa l'IPC come stringa.
-  | { type: "batch_ended"; batch: string; changed: string[] }
-  // Una view è invecchiata per un motivo che il vault non conosce: un job
-  // finito, una risposta dalla rete, un calcolo completato (§2.5). `instance`
-  // assente = tutte le istanze di quella view.
-  | { type: "view_invalidated"; view: string; instance: string | null }
-  // Il vault STA PER chiudersi: l'ultimo giro in cui è ancora quello di prima
-  // (decisione 0029). Il gemello di `vault_opened`, e per la shell è il momento
-  // in cui smettere di disegnarlo — non il momento di chiedergli qualcosa.
-  | { type: "vault_closed"; root: string }
-  // Un lavoro lungo è stato ACCETTATO (§10.3): il gemello d'apertura di
-  // `job_done`, ed è il momento in cui il centro attività fa comparire la riga.
-  // «Accettato» e non «partito»: quando parta davvero lo sa solo chi possiede i
-  // thread, e la differenza non cambia niente per chi guarda né per chi ferma.
-  | { type: "job_started"; id: string; job: string }
-  // A che punto è un lavoro lungo (§10.3). Il canale più fitto del contratto: il
-  // ponte ne tiene l'ultimo per job dentro una raffica, e ciò che si perde si
-  // riscopre con la query `jobs`.
-  | { type: "job_progress"; id: string; progress: JobProgress }
-  // Un'impostazione è cambiata (§11.1). NON porta il valore nuovo: chi reagisce
-  // lo rilegge, e una copia dentro l'evento invecchierebbe — due scritture
-  // ravvicinate consegnate in ordine inverso lascerebbero chi ascolta convinto
-  // di un valore che non è più quello.
-  | { type: "setting_changed"; key: string; scope: SettingScope }
-  // Un file che NON è un documento è cambiato, sparito o è stato rinominato
-  // (§14.1). Sono tre eventi in più e non tre casi in più di
-  // `document_changed`, e la ragione è retroattiva: chi ascolta
-  // `document_changed` è codice scritto quando un documento era l'unica cosa
-  // che il vault contenesse, e consegnargli un PNG lo farebbe leggere un
-  // modello che non esiste. `kind` non è mai `document` — per quello ci sono
-  // già i tre eventi di prima.
-  | { type: "entry_changed"; id: string; kind: EntryKind }
-  | { type: "entry_removed"; id: string; kind: EntryKind }
-  | { type: "entry_renamed"; from: string; to: string; kind: EntryKind }
-  // QUALCOSA È ANDATO STORTO (§20.2, decisione 0052). La variante che la 0013
-  // aveva previsto — «ciò che si limita a informare è un evento» — e rimandato
-  // per mancanza di clienti; il cliente da questa parte è il centro notifiche,
-  // che aveva già la porta (`notify`) e venti chiamanti al posto di una
-  // sorgente.
-  //
-  // `subject` è il documento di cui si parla, `null` per ciò che riguarda il
-  // vault intero (un flush fallito, il watcher che smette). CHI ha causato il
-  // guasto non sta qui: lo dice `origin.actor`. DA QUALE PORTA è entrato lo
-  // dice `gate` (§17.3, decisione 0161): la porta del panico da cui il kernel
-  // stava chiamando codice di un provider, `null` per i guasti che da una
-  // porta non passano. In fondo al record come ogni campo nuovo.
-  | {
-      type: "trouble";
-      severity: Severity;
-      subject: string | null;
-      error: PluginError;
-      gate: Gate | null;
-    }
-  // UNA SVEGLIA DICHIARATA NEL MANIFEST È SCADUTA (§22.1, decisione 0069).
-  // `owner` è il componente che l'ha dichiarata, `timer` il nome che le ha
-  // dato: chi si sveglia riconosce i propri come chi ha lanciato un job
-  // riconosce il proprio `job_done`.
-  | { type: "timer_fired"; owner: string; timer: string };
-
-// COSA è cambiato in un documento (rispecchia fub_abi::event::DocChanges,
-// §22.2). Gli ASPETTI sono l'insieme chiuso su cui una maschera filtra; i NOMI
-// — quali chiavi di frontmatter, quali tag — si leggono e non si filtrano,
-// perché il diff che li produce è già in mano a chi emette l'evento: chi si
-// sveglia non rilegge il documento per scoprire se lo riguardava.
-export interface DocChanges {
-  aspects: DocChange[];
-  properties: string[];
-  tags_added: string[];
-  tags_removed: string[];
-}
-
-// Quanto pesa ciò che è andato storto (rispecchia fub_abi::event::Severity).
-// Due gradini, come i due toni del centro notifiche, e il criterio del taglio è
-// la CLASSE DEL DATO perso (decisione 0048): un derivato si ricostruisce
-// riaprendo il vault ed è un avviso; ciò che era autorevole non torna ed è un
-// guasto.
-export type { Severity } from "./enums.generated";
-
-// DA QUALE PORTA è entrato un guasto (rispecchia fub_abi::gate::Gate, §17.3):
-// l'elenco chiuso dei punti in cui il kernel entra nel codice di un provider.
-// Lo nomina `trouble.gate` — sapere da che parte guardare quando un componente
-// di terzi esplode è metà della diagnosi, e prima della 0161 non attraversava
-// il confine.
-export type { Gate } from "./enums.generated";
-
-// DOVE: il soggetto di un abbonamento (rispecchia fub_abi::event::Subject,
-// §10.1). Una cartella è un PREFISSO di path finché il §14.3 non ne fa un
-// cittadino del kernel; la stringa vuota è la radice.
-export type Subject =
-  | { kind: "document"; id: string }
-  | { kind: "folder"; path: string };
-
-// A COSA si è abbonati (rispecchia fub_abi::event::EventMask, §10.1): le
-// specie, i prefissi di topic dei custom, il soggetto, e COSA è cambiato
-// (§22.2). I quattro sono in AND, e ognuno vuoto vuol dire *non filtro*.
-//
-// Applicarla non è affare di questo file: la regola è **una sola** e sta in
-// `rules/mirrored.ts` (`maskWants`), gemella di
-// `fub_abi::rules::events::mask_wants` e legata a lei dalla fixture generata.
-export interface EventMask {
-  kinds: KernelEvent["type"][];
-  topics: string[];
-  subjects: Subject[];
-  changes: DocChange[];
-}
-
-// Chi ha CHIESTO l'operazione da cui un evento nasce (rispecchia
-// fub_abi::event::Actor). Non chi l'ha eseguita: un comando invocato da
-// un'automazione porta l'origine dell'automazione.
-export type Actor =
-  | { kind: "user" }
-  | { kind: "watcher" }
-  | { kind: "kernel" }
-  | { kind: "plugin"; id: string };
-
-// Da dove viene un evento (fub_abi::event::Origin). `batch` è `null` fuori da
-// un lotto.
-export interface Origin {
-  actor: Actor;
-  batch: string | null;
-}
-
-// Ciò che il ponte Tauri consegna davvero: l'evento E la sua origine
-// (fub_abi::event::Notice, decisione 0012), più il vault di cui è il fatto
-// (fub_host::ShellNotice, #216). `vault` è la radice canonica, la stessa di
-// `VaultInfo.root`; manca per un fatto della macchina (una chiave di
-// configurazione, un avviso tirato con `session_notice`).
-export interface KernelNotice {
-  event: KernelEvent;
-  origin: Origin;
-  vault?: string;
-}
-
-// La dichiarazione di una view offerta da un provider (rispecchia
-// fub_abi::traits::ViewSpec). `placement` dice DOVE montarla; `refresh` e
-// `follows` dicono QUANDO ridisegnarla: gli eventi del kernel al cui arrivo
-// serve un nuovo `render_view`, e le parti del contesto di sessione al cui
-// cambio la view invecchia. Chi non dichiara `follows` non si ridisegna per il
-// contesto — è ciò che tiene fuori il pannello tag da ogni movimento del
-// cursore.
-// Dove una view si ancora. Dieci superfici, e non è un modello di layout: dice
-// a cosa ci si attacca, non come lo spazio è diviso (§2.2).
-export type { ViewSurface } from "./enums.generated";
-
-export interface ViewSpec {
-  id: string;
-  title: string;
-  surface: ViewSurface;
-  refresh: EventMask;
-  follows: ContextKind[];
-  // Gli argomenti con cui si apre un'istanza: gli stessi ParamSpec dei comandi.
-  // Vuoto = una sola istanza, quella che la shell monta da sé.
-  params: ParamSpec[];
-  icon: string | null;
-  order: number;
-  open_by_default: boolean;
-  preferred_size: number | null;
-  closable: boolean;
-}
-
-// Un esemplare vivo di una view: quale view, quale esemplare, con quali
-// parametri (§2.3). Lo costruisce la shell, che è chi apre.
-export interface ViewInstance {
-  view: string;
-  instance: string;
-  params: unknown;
-}
-
-// --- comandi (rispecchia fub_abi::command) --------------------------------
-//
-// Il registro: la shell non cabla nessun comando — legge le spec, chiede i
-// parametri che dichiarano e decide dal raggio dichiarato se mostrare prima il
-// piano. È lo stesso elenco che leggerebbero una CLI o un chiamante
-// programmatico: qui la palette è solo il primo dei suoi clienti.
-
-// Una scelta di un parametro `choice`: il valore che viaggia, l'etichetta che
-// si legge.
-export interface Choice {
-  value: string;
-  title: string;
-}
-
-// La specie di un argomento. Tag ADIACENTE (`kind`/`value`), come
-// PropertyValue: una variante che porta una sequenza non è serializzabile col
-// tag interno.
-export type ParamKind =
-  | { kind: "text" }
-  | { kind: "number" }
-  | { kind: "bool" }
-  | { kind: "document" }
-  | { kind: "documents" }
-  | { kind: "choice"; value: Choice[] }
-  // Più numeri: la forma con cui si chiede un'operazione su *queste* posizioni
-  // (§23.4). In fondo come la sua variante Rust: l'ordine dei casi è il
-  // discriminante dell'ABI.
-  | { kind: "numbers" };
-
-export interface ParamSpec {
-  name: string;
-  title: string;
-  description: string;
-  kind: ParamKind;
-  required: boolean;
-}
-
-// Fin dove arriva un comando, in ordine di raggio crescente.
-export type { CommandReach } from "./enums.generated";
-
-// Il raggio dichiarato. `writes` lo fa rispettare il kernel (chi si dichiara di
-// sola lettura riceve un host che rifiuta le scritture); gli altri due sono
-// dichiarazioni su cui CHI INVOCA decide se chiedere conferma.
-export interface CommandScope {
-  writes: boolean;
-  reach: CommandReach;
-  reversible: boolean;
-}
-
-// Dove un comando si offre oltre alla palette: lo dichiara il comando, e la
-// shell non tiene un elenco suo né indovina dai nomi dei parametri.
-export type { CommandSurface } from "./enums.generated";
-
-export interface CommandSpec {
-  id: string;
-  title: string;
-  // Cosa fa, in prosa: inutile alla palette (c'è il titolo), indispensabile a
-  // un chiamante che non ha letto il codice.
-  description: string;
-  keybinding: string | null;
-  params: ParamSpec[];
-  scope: CommandScope;
-  surfaces: CommandSurface[];
-}
-
-// Come si invoca: eseguire, o chiedere cosa succederebbe.
-export type { InvokeMode } from "./enums.generated";
-
-// La modifica chirurgica (rispecchia fub_abi::edit): `base` è la revisione
-// OPACA del sorgente su cui gli span sono stati calcolati — si confronta, non
-// si interpreta.
-export interface TextEdit {
-  span: Span;
-  text: string;
-}
-
-export interface EditRequest {
-  base: string;
-  edits: TextEdit[];
-}
-
-export interface PlannedEdit {
-  doc: string;
-  edit: EditRequest;
-}
-
-// Cosa succederebbe: `docs` è la verità completa (ci sta anche ciò che un
-// EditRequest non esprime), `edits` il dettaglio mostrabile come diff.
-export interface CommandPlan {
-  summary: string;
-  docs: string[];
-  edits: PlannedEdit[];
-}
-
-// Ciò che la shell deve fare dopo un comando. `plan` arriva col contenuto del
-// piano appiattito accanto al tag, come ogni variant-record del confine.
-export type CommandEffect =
-  | { kind: "done" }
-  | { kind: "navigate"; doc: string }
-  | { kind: "reveal"; doc: string; span: Span }
-  | { kind: "run_search"; query: string }
-  | ({ kind: "plan" } & CommandPlan)
-  // Varco di estensione: la shell che non riconosce `ns` NON FA NULLA.
-  | { kind: "custom"; ns: string; payload: unknown }
-  // Apri un'istanza di una view, con questi parametri (§2.3).
-  | { kind: "open_view"; view: string; params: unknown };
-
-export interface CommandOutcome {
-  // Testo semplice, mai markup: si inserisce come testo (regola di confine).
-  notify: string | null;
-  effect: CommandEffect;
-  // Come si torna indietro, se si può (§13.3). Assente = non annullabile, ed è
-  // il default onesto.
-  //
-  // Questa shell **non lo esegue** e non deve: la pila la tiene il kernel, e
-  // ciò che si vede da qui è che l'operazione appena fatta era annullabile —
-  // quel tanto che basta per accendere una voce di menu. Chi annulla invoca
-  // `vault.undo`, che è un comando come gli altri.
-  undo: Undo | null;
-  // Di N cose, quante e quali non sono riuscite (§23.14). Assente = non è
-  // mancato niente, e NON «non lo so»: chi lo costruisce passa da una porta che
-  // risponde `None` quando l'elenco dei guasti è vuoto, perché un esito che si
-  // dichiara a metà senza esserlo insegna a cliccare via gli avvisi.
-  //
-  // Il `notify` lo dice già a parole. Questo campo esiste perché ciò che una
-  // frase italiana non sa fare è **essere azionabile**: da qui si ricava quale
-  // nota riaprire, e la specie del guasto dice se ha senso riprovare.
-  partial: Partial | null;
-}
-
-// Di N cose, quante e quali non sono riuscite (rispecchia fub_abi::command::Partial).
-//
-// LA QUARTA PARTE NON HA UN CAMPO: `attempted - done - failures.length` sono le
-// cose su cui non è successo niente e nessuno ha detto perché, e ci si arriva in
-// due modi che un nome solo farebbe mentire — c'era *niente da fare* (una nota
-// già in archivio) oppure non sono state *provate* (l'annullamento si è fermato
-// al passo caduto). Chi mostra un esito le somma; chi deve distinguerle guarda
-// da quale operazione il conto è arrivato.
-export interface Partial {
-  attempted: number;
-  done: number;
-  failures: Failure[];
-}
-
-// Una delle cose che non sono riuscite, e perché.
-export interface Failure {
-  // Il documento su cui non è successo, se ce n'era uno. `null` quando il
-  // soggetto non è un documento — una chiave di impostazione, un passo di
-  // annullamento che è un comando — e non quando non si sa: il soggetto sta
-  // comunque dentro `error`. Questo campo esiste perché **qui** ci si possa
-  // attaccare un legame, e un legame vuole un id, non una frase che lo nomina.
-  subject: string | null;
-  // Un `PluginError` intero e non una stringa: la specie del guasto è metà
-  // dell'informazione, e un `conflict` si riprova mentre un `permission_denied`
-  // no.
-  error: PluginError;
-}
-
-// Come si torna indietro da un'operazione (rispecchia fub_abi::command::Undo).
-//
-// LE DUE PILE NON SI FONDONO, e da questo lato del confine è la cosa da
-// ricordare: `Mod-z` nell'editor annulla il **testo del buffer** e non passa di
-// qui; `vault.undo` annulla l'**operazione** e non tocca il buffer. A decidere
-// quale risponde è il fuoco, non la cronologia — dare a entrambe lo stesso
-// accordo vorrebbe dire che Ctrl-Z fa due cose a seconda di chi vince la corsa.
-export interface Undo {
-  // Cosa si disferebbe, già risolto nella lingua di chi guarda: è la frase da
-  // mettere accanto ad «Annulla», non quella dell'esito.
-  label: string;
-  steps: UndoStep[];
-}
-
-export type UndoStep =
-  | { kind: "edit"; value: PlannedEdit }
-  | { kind: "command"; command: string; args: unknown };
-
-// --- contesto di sessione (rispecchia fub_abi::session) -------------------
-//
-// L'unico tipo che viaggia nel verso opposto agli altri: lo COSTRUISCE la
-// shell e lo consuma il kernel (`setActiveContext`). Ogni campo è obbligatorio
-// anche quando è nullo: serde rifiuta un campo assente, e il mirror
-// (`mirror.test.ts`) verifica che le chiavi siano esattamente queste.
-
-// Che vista mostra un pannello (FEATURES 4.1): il documento com'è salvato, una
-// resa in cui si scrive, una resa da leggere. Ogni superficie ci proietta le
-// sue modalità (`SurfaceMode.contextMode`); i nomi vengono da Markdown.
-export type { PaneMode } from "./enums.generated";
-
-// Le parti del contesto che una view può dichiarare di seguire.
-export type { ContextKind } from "./enums.generated";
-
-// Ciò che è selezionato nel pannello — o dove stanno i cursori (`text` vuoto).
-//
-// Sono N, perché il multi-cursore dell'editor ne fa N e fino alla decisione
-// 0093 il confine sapeva dirne una sola. Due cose ne seguono, e sono la ragione
-// per cui questi tipi sono cinque e non uno con una lista dentro.
-//
-// La PRIMARIA è un campo: `EditorSelection` di CodeMirror la tiene in
-// `mainIndex` e di norma è l'ultima aggiunta, quindi «la prima della lista»
-// sarebbe stata una conversione che la perde.
-//
-// Le COORDINATE valgono o non valgono per tutte insieme: a deciderlo è lo stato
-// del buffer, che è uno per pannello, oppure una superficie che sceglie
-// elementi e non intervalli del sorgente (carte di una tela, celle), che
-// pubblica il loro testo fluttuante. Per questo la scelta sta sopra l'insieme
-// (`SelectionSet`) e non dentro le singole selezioni — un insieme metà
-// ancorato e metà no non è rappresentabile, ed è voluto.
-export interface FloatingSelection {
-  text: string;
-}
-
-// `span` è in byte UTF-8, e qui non è mai nullo: se c'è l'ancoraggio, c'è per
-// tutte.
-export interface AnchoredSelection {
-  span: Span;
-  text: string;
-}
-
-export interface AnchoredSelections {
-  primary: AnchoredSelection;
-  secondary: AnchoredSelection[];
-}
-
-export interface FloatingSelections {
-  primary: FloatingSelection;
-  secondary: FloatingSelection[];
-}
-
-// Il tag adiacente di serde (`kind`/`value`), come `WriteBase`.
-export type SelectionSet =
-  | { kind: "anchored"; value: AnchoredSelections }
-  | { kind: "floating"; value: FloatingSelections };
-
-// Il contesto del pannello con il focus.
-export interface ViewContext {
-  pane: string;
-  doc: string | null;
-  // `null` = niente cursore (lettura, o nessun documento). Un insieme vuoto non
-  // esiste: le due cose restano distinte.
-  selections: SelectionSet | null;
-  mode: PaneMode;
-}
-
-// --- il locale (rispecchia fub_abi::locale) ------------------------------
-//
-// Il secondo tipo che viaggia dalla shell al kernel, e per la stessa ragione
-// del contesto: lo sa la shell e non il kernel. Qui `Intl` porta un ICU intero
-// — lingua, nome IANA del fuso, offset, primo giorno della settimana — mentre
-// il lato Rust, per rispondere alla stessa domanda, avrebbe bisogno di un
-// database dei fusi orari.
-
-export type { Weekday } from "./enums.generated";
-
-export type { HourCycle } from "./enums.generated";
-
-// `utc_offset_minutes` è l'offset di ADESSO, e vale per adesso: chi fa
-// aritmetica su date passate usa `timezone`, che porta con sé le regole
-// dell'ora legale. Minuti e non ore perché esistono i fusi a mezz'ora
-// (`Asia/Kolkata`) e a tre quarti d'ora (`Asia/Kathmandu`).
-export interface Locale {
-  language: string;
-  timezone: string;
-  utc_offset_minutes: number;
-  first_day_of_week: Weekday;
-  hour_cycle: HourCycle;
-}
-
-/// Il **primo** riquadro di questa shell, e il `MAIN_PANE` del kernel.
-///
-/// Sta qui e non nel pannello del documento perché è un **valore del confine**,
-/// non un dettaglio di chi lo pubblica: il kernel confronta il `pane` di un
-/// contesto con quello di prima, e uno diverso è da contratto un cambio di
-/// pannello — cioè un ridisegno di tutto ciò che segue il contesto. Due
-/// costanti scritte a mano ai due lati potevano divergere in silenzio; ora la
-/// fixture del mirror porta il valore vero della costante Rust e
-/// `mirror.test.ts` lega questa a quella.
-///
-/// I riquadri adesso sono N (il modello di layout, §1.2), e questa costante
-/// **non** è diventata «un `PaneId` per riquadro»: gli altri li conia la shell
-/// (`state/layout.ts`), perché quanti riquadri ci siano è un fatto suo e non del
-/// confine. Questo resta il nome del primo — e resta per sempre, perché è già
-/// scritto dentro gli esemplari delle view nei file di stato di macchina (0037):
-/// cambiarlo vorrebbe dire buttare via lo stato di vista di chiunque abbia già
-/// aperto questa shell.
-export const MAIN_PANE = "main";
-
-// Il sorgente di un documento **e la revisione che lo nomina** (§18.1):
-// rispecchia `fub_app::DocumentSource`.
-//
-// Due campi e non uno perché chi apre un documento è chi lo salverà, e per
-// salvarlo in sicurezza deve poter dire da cosa era partito. Viaggiano insieme
-// e non in due porte per la ragione per cui la revisione è opaca: l'alternativa
-// a riceverla è ricalcolarla di qua, cioè una seconda implementazione di come
-// il kernel deriva le impronte — ed è esattamente ciò che ha costretto la
-// [0088](../../../docs/decisions/0187-autorita-e-schemi-su-disco.md) a
-// lasciare `DraftInfo.base` a `null`.
-/// Che cosa è il testo di un documento: il sorgente che `write_document`
-/// riceve, o il giornale delle celle di una cartella di Excel, i cui byte
-/// restano all'host (ADR 0216). Rispecchia `fub_host::DocumentText`.
-export type DocumentText = "source" | "grid_journal";
-
-export interface DocumentSource {
-  text: string;
-  revision: string;
-  format_id: string | null;
-  source_kind: SourceKind;
-  text_kind: DocumentText;
-}
-
-/** Specie dei byte aperti dal resource host; rispecchia `ResourceKind`. */
-export type ResourceKind = "image" | "audio" | "video" | "pdf" | "other";
-
-/** Descrittore piccolo dell'IPC risorse. I byte viaggiano separatamente. */
-export interface ResourceDescriptor {
-  handle: string;
-  id: string;
-  len: number;
-  mime: string;
-  kind: ResourceKind;
-  revision: string | null;
-}
-
-/**
- * La ricevuta di `resource_write`; rispecchia
- * `fub_host::resources::ResourceWriteReceipt`. `reused` vero: il vault aveva
- * già questi byte (`reuse: "same-content"`), niente è stato scritto, e `id` e
- * `revision` sono quelli del file che c'era. Una ricevuta senza il campo (un
- * host di prima) arriva a chi chiama con `reused: false`.
- */
-export interface ResourceWriteReceipt {
-  readonly id: string;
-  readonly revision: string;
-  readonly reused: boolean;
-}
-
-/**
- * Come depositare: `reuse: "same-content"` chiede all'host di non scrivere se
- * un file del vault ha esattamente questi byte, anche con un altro nome. Vale
- * solo per un file nuovo (`expected` nullo: altrimenti `bad_args`). Quando
- * l'host non sa rispondere, scrive: nel dubbio si deposita.
- */
-export interface ResourceWriteOptions {
-  readonly reuse?: "same-content";
-}
-
-/** IPC della sola finestra documento locale. Il vault è fissato dal parent. */
-export interface DocumentWindowRequest {
-  surface: "document";
-  channel: string;
-  document: string;
-  vault: string;
-  session: string;
-  surfaceId: string;
-  // Il profilo di testo che il registro delle superfici ha risolto per il
-  // documento: la finestra lo monta com'è, senza risolverlo di nuovo.
-  profile: string;
-}
-
-export interface DocumentWindowEvent {
-  label: string;
-  surface: "document";
-}
-
-// --- la sessione live (ADR 0205, rispecchia fub_live::host) -----------------
-//
-// Un tablet scrive sul disegno aperto in questa finestra. L'host tiene la rete
-// e controlla solo forma, misura e ritmo dei messaggi; le operazioni le valida
-// e le applica la shell, che risponde a ogni commit con `ack` o `nack`. Il
-// canale degli eventi non è autorevole: un commit resta in `liveStatus` finché
-// la shell non risponde. I contatori `u64` sono stringhe decimali, come nel
-// protocollo.
-
-/** Un contatore del protocollo live: un `u64` come stringa decimale. */
-export type LiveCounter = string;
-
-/** Un'operazione della scena, opaca per l'host: la valida la shell. */
-export type LiveOp = { op: string } & Record<string, unknown>;
-
-/** La richiesta di `live_start`. */
-export interface LiveStart {
-  document: { id: string; title: string };
-  /** Il documento com'è all'avvio, in SVG. */
-  snapshot: { seq: LiveCounter; text: string };
-  /** Un indirizzo di `LiveStarted.addresses`; senza, quello della rotta predefinita. */
-  address?: string;
-}
-
-/** Dove ascolta la sessione e con che certificato. */
-export interface LiveSessionInfo {
-  session: string;
-  /** `ip:porta`. */
-  addr: string;
-  /** L'impronta SHA-256 del certificato, in base64url. */
-  fingerprint: string;
-  hostName: string | null;
-}
-
-/** Il QR da mostrare. Porta il segreto: si mostra solo sul PC. */
-export interface LivePairing {
-  payload: string;
-  /** Il QR in SVG, un modulo per unità di `viewBox`. */
-  qrSvg: string;
-  expiresInMs: number;
-}
-
-/** Un indirizzo privato del PC su cui una sessione può ascoltare. */
-export interface LiveAddress {
-  addr: string;
-  interface: string;
-  defaultRoute: boolean;
-}
-
-export interface LiveStarted {
-  session: LiveSessionInfo;
-  pairing: LivePairing;
-  /** Quello della rotta predefinita per primo. */
-  addresses: LiveAddress[];
-}
-
-export interface LiveDevice {
-  name: string;
-  kind: string;
-}
-
-export interface LiveCaps {
-  pressure: boolean;
-  tilt: boolean;
-  coalesced: boolean;
-  predicted: boolean;
-}
-
-/** Lo scarto fra gli orologi: `offsetMs` si somma a quello dello scrittore. */
-export interface LiveClock {
-  offsetMs: number;
-  rttMs: number | null;
-}
-
-/** La vista dello scrittore, in coordinate del documento. */
-export interface LiveView {
-  x: number;
-  y: number;
-  scale: number;
-  w: number;
-  h: number;
-}
-
-export type LiveLeaveReason =
-  | "lost"
-  | "heartbeat"
-  | "writerBye"
-  | "sessionEnded"
-  | "congested"
-  | "tooMuchTraffic"
-  | { violation: { code: number } };
-
-export type LiveReleaseReason = "resumeExpired" | "pairingRenewed";
-
-/** Perché la sessione finisce; è anche il motivo di `live_stop`. */
-export type LiveEndReason = "hostClosing" | "terminated" | "documentClosed" | "readOnly";
-
-/** Un evento del canale. Arrivano a gruppi, nell'ordine d'arrivo. */
-export type LiveEvent =
-  | { t: "writerConnected"; writer: LiveCounter; device: LiveDevice; caps: LiveCaps; resumed: boolean }
-  | { t: "writerDisconnected"; writer: LiveCounter; reason: LiveLeaveReason; resumable: boolean }
-  | { t: "writerReleased"; writer: LiveCounter; reason: LiveReleaseReason }
-  | {
-      t: "inkBegin";
-      s: string;
-      layer: string;
-      tool: "pen" | "highlighter";
-      fill: string;
-      fillOpacity: number;
-      brush: string;
-    }
-  /** `[x, y, pressione, timeStamp]`, con il tempo sull'orologio dello scrittore. */
-  | { t: "inkPoints"; s: string; pts: [number, number, number, number][] }
-  | { t: "inkEnd"; s: string }
-  | { t: "inkCancel"; s: string }
-  /** L'inchiostro in coda di questi tratti è caduto: il loro commit lo sostituisce. */
-  | { t: "inkGap"; strokes: string[] }
-  | ({ t: "view" } & LiveView)
-  | { t: "commit"; writer: LiveCounter; c: LiveCounter; ops: LiveOp[] }
-  | ({ t: "clock" } & LiveClock)
-  | { t: "pairingExpired" }
-  | { t: "snapshotWanted" }
-  | { t: "ended"; reason: LiveEndReason };
-
-/** I motivi di `nack`: quelli del motore delle operazioni. */
-export type LiveNackReason =
-  | "missing-target"
-  | "missing-parent"
-  | "missing-anchor"
-  | "duplicate-id"
-  | "in-use"
-  | "invalid-elem"
-  | "locked"
-  | "foreign"
-  | "cycle"
-  | "limit"
-  | "read-only";
-
-/** Ciò che la shell manda allo scrittore con `live_send`. */
-export type LiveShellMessage =
-  | { t: "ack"; writer: LiveCounter; c: LiveCounter; seq: LiveCounter; echo: LiveOp[]; duplicate: boolean }
-  | {
-      t: "nack";
-      writer: LiveCounter;
-      c: LiveCounter;
-      reason: LiveNackReason;
-      detail: string;
-      index: number | null;
-    }
-  | { t: "ops"; seq: LiveCounter; ops: LiveOp[] }
-  | { t: "snapshot"; seq: LiveCounter; text: string };
-
-export interface LiveWriterStatus {
-  writer: LiveCounter;
-  device: LiveDevice;
-  caps: LiveCaps;
-  connected: boolean;
-  /** Fuori dalla connessione: quanto resta alla ripresa. */
-  resumeExpiresInMs: number | null;
-  lastC: LiveCounter;
-  clock: LiveClock | null;
-}
-
-/** Un commit che aspetta la risposta della shell. */
-export interface LivePendingCommit {
-  writer: LiveCounter;
-  c: LiveCounter;
-  ops: LiveOp[];
-}
-
-export interface LiveStats {
-  accepted: LiveCounter;
-  refused: LiveCounter;
-  admitted: LiveCounter;
-  rejected: LiveCounter;
-  commits: LiveCounter;
-  answered: LiveCounter;
-}
-
-export interface LiveStatus {
-  ended: boolean;
-  seq: LiveCounter;
-  /** `null` se il segreto del QR è già usato o scaduto. */
-  pairingExpiresInMs: number | null;
-  writer: LiveWriterStatus | null;
-  pending: LivePendingCommit[];
-  stats: LiveStats;
-}
-
-/** Ciò che resta alla fine: i commit a cui la shell non ha risposto. */
-export interface LiveStopReport {
-  pending: LivePendingCommit[];
-}
-
-// Dati strutturati a finestre per la famiglia grid. La shell possiede
-// rendering, input e clipboard; il provider possiede la lettura del file e
-// l'innesto delle celle. Nessun DOM, callback o oggetto CodeMirror attraversa
-// questo contratto. Le forme qui sotto sono quelle che il protocollo a byte
-// riusa.
-export const GRID_FAMILY = "grid";
-
-export interface GridSurfaceSpec {
-  id: string;
-  format: string;
-  family: string;
-  protocol_version: number;
-}
-
-export interface GridSheet {
-  id: string;
-  name: string;
-  row_count: number;
-  column_count: number;
-}
-
-export interface GridRow {
-  id: string;
-  index: number;
-  height: number | null;
-  hidden: boolean;
-}
-
-export interface GridColumn {
-  id: string;
-  index: number;
-  width: number | null;
-  hidden: boolean;
-}
-
-export interface GridCellKey {
-  sheet: string;
-  row: string;
-  column: string;
-}
-
-export type {
-  GridBorderStyle,
-  GridCalculation,
-  GridHorizontalAlign,
-  GridObjectKind,
-  GridObjectMissing,
-  GridScript,
-  GridShapeAlign,
-  GridShapeAnchor,
-  GridShapeKind,
-  GridUnderline,
-  GridVerticalAlign,
-  GridViewMode,
-} from "./enums.generated";
-
-/** Un lato del bordo; `color` assente è il colore automatico. */
-export interface GridBorder {
-  style: GridBorderStyle;
-  color: string | null;
-}
-
-export interface GridBorders {
-  top: GridBorder | null;
-  right: GridBorder | null;
-  bottom: GridBorder | null;
-  left: GridBorder | null;
-  diagonal_down: GridBorder | null;
-  diagonal_up: GridBorder | null;
-}
-
-/** L'aspetto di una cella, già risolto dal provider: tema, stile della
- *  tabella e formattazione condizionale sono dentro. Un campo assente è il
- *  valore di serie del formato. */
-export interface GridCellStyle {
-  bold: boolean;
-  italic: boolean;
-  text_color: string | null;
-  fill_color: string | null;
-  horizontal: GridHorizontalAlign | null;
-  number_format: string | null;
-  font: string | null;
-  /** In punti. */
-  font_size: number | null;
-  underline: GridUnderline | null;
-  strike: boolean;
-  script: GridScript | null;
-  vertical: GridVerticalAlign | null;
-  wrap: boolean;
-  shrink: boolean;
-  /** Livelli di rientro, come in Excel. */
-  indent: number;
-  /** Gradi in senso antiorario, da -90 a 90; 255 è il testo in colonna. */
-  rotation: number;
-  borders: GridBorders;
-}
-
-/** La rotazione del testo in colonna (`GRID_STACKED_ROTATION`). */
-export const GRID_STACKED_ROTATION = 255;
-
-export interface GridWindowRequest {
-  revision: string;
-  sheet: string;
-  row_start: number;
-  row_count: number;
-  column_start: number;
-  column_count: number;
-  /** Le chiavi delle immagini che la shell ha già: i loro byte non tornano. */
-  known_media: string[];
-}
-
-/** Le chiavi d'immagine che una richiesta di finestra porta, al più (`MAX_GRID_KNOWN_MEDIA`). */
-export const MAX_GRID_KNOWN_MEDIA = 256;
-/** La misura di una chiave d'immagine (`MAX_GRID_MEDIA_KEY_BYTES`). */
-export const MAX_GRID_MEDIA_KEY_BYTES = 64;
-
-/** Patch atomica input-only: lo stile resta intatto. */
-export interface GridCellPatch {
-  cell: GridCellKey;
-  before: string | null;
-  after: string;
-}
-
-export interface GridApplyRequest {
-  revision: string;
-  patches: GridCellPatch[];
-}
-
-export type GridInvalidation =
-  | { kind: "cells"; cells: GridCellKey[] }
-  | { kind: "all" };
-
-export interface GridSourceEdit {
-  from: number;
-  to: number;
-  deleted: string;
-  inserted: string;
-}
-
-export interface GridCommit {
-  revision: string;
-  edit: GridSourceEdit;
-  invalidation: GridInvalidation;
-}
-
-// La versione 2 della griglia (ADR 0216, `fub_abi::grid_bytes`): la superficie
-// si apre sui byte del documento, che legge l'host, e il testo della
-// `DocumentSession` è il **giornale** delle celle cambiate. Il
-// `GridCommit.edit` di `apply` è il diff del giornale.
-export const GRID_BYTES_PROTOCOL_VERSION = 2;
-
-/** Un avviso della sorgente, in un codice chiuso del provider. */
-export interface GridNotice {
-  code: string;
-  count: number;
-}
-
-export interface GridBytesSession {
-  instance: string;
-  revision: string;
-  sheets: GridSheet[];
-  /** Il foglio che la sorgente apre per primo. */
-  active: string;
-  /** I fogli che la sorgente nasconde. */
-  hidden: string[];
-  notices: GridNotice[];
-  /** Le voci del giornale che i byte non confermano. */
-  conflicts: GridCellKey[];
-  /** I comandi che la sessione serve (ADR 0219): vuoto per un provider che modifica soltanto con le patch. */
-  commands: GridCommandState[];
-  book: GridBook;
-}
-
-/** I colori del tema della cartella, sempre dodici (`GRID_THEME_COLORS`). */
-export const GRID_THEME_COLORS = 12;
-
-/**
- * Ciò che vale per tutta la cartella: i colori del tema in `#RRGGBB`, in
- * ordine (sfondo 1, testo 1, sfondo 2, testo 2, sei colori, collegamento,
- * collegamento visitato), i nomi definiti che l'utente vede, il calcolo, la
- * struttura protetta e il carattere dello stile Normale, che lo stile di una
- * cella tace.
- */
-export interface GridBook {
-  theme_colors: string[];
-  names: string[];
-  calculation: GridCalculation;
-  protected: boolean;
-  font: string;
-  /** In punti. */
-  font_size: number;
-}
-
-/** Il foglio, gli intervalli A1 separati da virgola e la cella attiva. */
-export interface GridSelection {
-  sheet: string;
-  selection: string;
-  active: string;
-}
-
-/** Un comando del catalogo; spento, porta il perché nel testo del provider. */
-export interface GridCommandState {
-  id: string;
-  enabled: boolean;
-  reason: string | null;
-}
-
-/**
- * Un comando del giornale (`GridCommand`): l'id del comando del provider, i
- * parametri come testo di un oggetto JSON e la selezione su cui è stato dato.
- */
-export interface GridCommand {
-  id: string;
-  params: string;
-  sheet: string;
-  selection: string;
-  active: string;
-}
-
-/** Un comando da dare alla sessione alla sua revisione. */
-export interface GridCommandRequest {
-  revision: string;
-  command: GridCommand;
-}
-
-/** Una finestra di dialogo che il comando chiede alla shell, con i parametri come testo JSON. */
-export interface GridDialog {
-  id: string;
-  params: string;
-}
-
-/**
- * L'esito di un comando: `commit.edit` è il diff del giornale (vuoto se la
- * cartella non cambia), poi i fogli, la selezione nuova, il risultato come
- * testo JSON, la finestra chiesta e il catalogo sulla selezione nuova.
- */
-export interface GridCommandOutcome {
-  commit: GridCommit;
-  sheets: GridSheet[];
-  hidden: string[];
-  selection: GridSelection;
-  result: string | null;
-  dialog: GridDialog | null;
-  commands: GridCommandState[];
-  book: GridBook;
-}
-
-/** Un errore porta il suo testo (`#N/A`, `#DIV/0!`): ogni formato ha i suoi. */
-export type GridValue =
-  | { kind: "blank" }
-  | { kind: "number"; value: number }
-  | { kind: "text"; value: string }
-  | { kind: "boolean"; value: boolean }
-  | { kind: "error"; value: string };
-
-/** La barra di dati della formattazione condizionale, già risolta. */
-export interface GridDataBar {
-  /** La parte della cella che la barra riempie, da 0 a 1. */
-  fraction: number;
-  color: string;
-  gradient: boolean;
-}
-
-/** L'icona di un insieme della formattazione condizionale. */
-export interface GridIcon {
-  set: string;
-  index: number;
-}
-
-export interface GridCommentReply {
-  author: string;
-  text: string;
-}
-
-/** Una nota o un commento in thread, con le risposte. */
-export interface GridComment {
-  author: string;
-  text: string;
-  threaded: boolean;
-  resolved: boolean;
-  replies: GridCommentReply[];
-}
-
-/** Un collegamento: un riferimento nella cartella, o fuori se `external`. */
-export interface GridLink {
-  target: string;
-  tooltip: string | null;
-  external: boolean;
-}
-
-/** Un'unione di celle che tocca la finestra, in coordinate del foglio. */
-export interface GridMerge {
-  row: number;
-  column: number;
-  rows: number;
-  columns: number;
-}
-
-/** Come il foglio si guarda: riquadri bloccati, griglia, intestazioni, zoom. */
-export interface GridSheetView {
-  frozen_rows: number;
-  frozen_columns: number;
-  gridlines: boolean;
-  headings: boolean;
-  /** Per cento, da 10 a 400. */
-  zoom: number;
-  right_to_left: boolean;
-  mode: GridViewMode;
-  /** Le celle mostrano le formule al posto dei valori. */
-  formulas: boolean;
-  /** Il foglio è protetto. */
-  protected: boolean;
-  /** La stampa porta la griglia e le intestazioni. */
-  print_gridlines: boolean;
-  print_headings: boolean;
-}
-
-/** Una tabella che tocca la finestra, in coordinate del foglio, con l'intestazione e i totali. */
-export interface GridTable {
-  name: string;
-  row: number;
-  column: number;
-  rows: number;
-  columns: number;
-  header_row: boolean;
-  totals_row: boolean;
-  banded_rows: boolean;
-  banded_columns: boolean;
-  first_column: boolean;
-  last_column: boolean;
-  filter_button: boolean;
-  /** Il nome dello stile (`TableStyleMedium2`), vuoto se la tabella non ne ha. */
-  style: string;
-}
-
-/**
- * Una forma come la shell la disegna: i colori risolti (`#RRGGBB`, `null` per
- * niente), il testo e il suo aspetto, con i predefiniti già scelti. Per
- * un'icona il testo è il nome; per un tratto a mano libera i punti
- * `x,y;x,y;…` in pixel dall'angolo dell'oggetto.
- */
-export interface GridShape {
-  kind: GridShapeKind;
-  fill: string | null;
-  line: string | null;
-  text: string;
-  font: string | null;
-  /** In punti. */
-  font_size: number;
-  bold: boolean;
-  italic: boolean;
-  text_color: string;
-  align: GridShapeAlign;
-  anchor: GridShapeAnchor;
-  right_to_left: boolean;
-}
-
-/**
- * I byte di un'immagine. `key` è la loro impronta: la stessa immagine ha la
- * stessa chiave in ogni finestra, e `data` (base64) è `null` quando la
- * richiesta dice di averla già o quando la finestra non ha più posto.
- */
-export interface GridMedia {
-  mime: string;
-  key: string;
-  data: string | null;
-}
-
-/**
- * Un oggetto del foglio che tocca la finestra: la cella dell'angolo in alto a
- * sinistra, lo scarto da lei e la misura in pixel a zoom 100. Un grafico porta
- * il suo disegno (`svg`), un'immagine i suoi byte, una forma il suo aspetto;
- * `missing` dice perché non porta niente. Gli oggetti vengono nell'ordine in
- * cui si disegnano.
- */
-export interface GridObject {
-  kind: GridObjectKind;
-  /** L'id del file per grafici, immagini e forme; per gli altri il posto nel foglio. */
-  id: number;
-  row: number;
-  column: number;
-  dx: number;
-  dy: number;
-  width: number;
-  height: number;
-  alt: string;
-  svg: string | null;
-  media: GridMedia | null;
-  shape: GridShape | null;
-  missing: GridObjectMissing | null;
-}
-
-/** Gli oggetti di una finestra, al più (`MAX_GRID_WINDOW_OBJECTS`). */
-export const MAX_GRID_WINDOW_OBJECTS = 1024;
-/** Il disegno di un grafico, al più (`MAX_GRID_OBJECT_SVG_BYTES`). */
-export const MAX_GRID_OBJECT_SVG_BYTES = 1024 * 1024;
-/** I byte di un'immagine in base64, al più (`MAX_GRID_MEDIA_BYTES`). */
-export const MAX_GRID_MEDIA_BYTES = 3 * 1024 * 1024;
-/** Il testo di una forma, al più (`MAX_GRID_SHAPE_TEXT_BYTES`). */
-export const MAX_GRID_SHAPE_TEXT_BYTES = 64 * 1024;
-/** I tipi d'immagine che una finestra porta (`GRID_MEDIA_TYPES`). */
-export const GRID_MEDIA_TYPES: readonly string[] = [
-  "image/png",
-  "image/jpeg",
-  "image/gif",
-  "image/bmp",
-  "image/webp",
-  "image/svg+xml",
-];
-
-export interface GridBytesCell {
-  key: GridCellKey;
-  input: string;
-  /** L'indice dello stile in `GridBytesWindow.styles`. */
-  style: number;
-  value: GridValue;
-  /** Il valore già formattato dal provider. */
-  display: string;
-  /** Perché la cella non si modifica, in un codice chiuso del provider. */
-  lock: string | null;
-  /** Il valore è quello del file, e una cella da cui dipende è cambiata. */
-  stale: boolean;
-  /** La cella è nel giornale e i byte hanno un terzo input. */
-  conflict: boolean;
-  data_bar: GridDataBar | null;
-  icon: GridIcon | null;
-  comment: GridComment | null;
-  link: GridLink | null;
-}
-
-export interface GridBytesWindow {
-  revision: string;
-  sheet: string;
-  row_start: number;
-  column_start: number;
-  total_rows: number;
-  total_columns: number;
-  rows: GridRow[];
-  columns: GridColumn[];
-  cells: GridBytesCell[];
-  /** Gli stili delle celle, ognuno una volta. */
-  styles: GridCellStyle[];
-  merges: GridMerge[];
-  view: GridSheetView;
-  tables: GridTable[];
-  /** Gli oggetti che toccano la finestra, anche quelli ancorati fuori. */
-  objects: GridObject[];
-}
-
-// ---------------------------------------------------------------------------
-// Il disegno sul motore (rispecchia `fub_abi::drawing`, K5)
-// ---------------------------------------------------------------------------
-//
-// Il client resta lo scrittore del file: il motore del disegno tiene una copia
-// che segue il testo della `DocumentSession` (`DrawingSync`), ci fa girare i
-// suoi strumenti con i campioni della penna (`DrawingGesture`) e risponde con
-// le operazioni di scena da applicare in un passo di annullamento
-// (`DrawingOutcome.ops`). Le revisioni sono `u64` e viaggiano come stringhe.
-// Le portano i sei comandi del disegno (`docs/reference/drawing-ipc.md`).
-
-/** Il testo di un disegno, al più (`fub_scene::MAX_EDIT_BYTES`). */
-export const MAX_DRAWING_TEXT_BYTES = 20 * 1024 * 1024;
-/** Gli eventi di una sola richiesta di gesto, al più. */
-export const MAX_GESTURE_EVENTS = 100_000;
-/** Le operazioni di un esito, e gli id di una selezione, al più (`MAX_BATCH`). */
-export const MAX_DRAWING_OPS = 10_000;
-/** Il JSON delle operazioni di un esito, al più (`MAX_OP_BYTES`). */
-export const MAX_DRAWING_OPS_BYTES = 8 * 1024 * 1024;
-/** Le parti che il motore non sa modificare, elencate al più. */
-export const MAX_DRAWING_LOSSES = 50_000;
-/** Un colore dello stile, al più. */
-export const MAX_DRAWING_COLOR_BYTES = 64;
-
-/** Colore del tratto: `value` è il colore. */
-export const DRAWING_COMMAND_STROKE_COLOR = "disegno.colore-tratto";
-/** Colore del riempimento: `value` è il colore, o `null` per nessuno. */
-export const DRAWING_COMMAND_FILL_COLOR = "disegno.colore-riempimento";
-/** Spessore del tratto: `value` è un numero, zero o più. */
-export const DRAWING_COMMAND_WIDTH = "disegno.spessore";
-/** Un'opzione di uno strumento del motore: `value` è
- *  `{ strumento: id, chiave: nome, valore: JSON }`. */
-export const DRAWING_COMMAND_TOOL_OPTION = "disegno.strumento.opzione";
-/** Lo stato di uno strumento del motore, senza cambiare niente: `value` è
- *  `{ strumento: id }`; l'esito porta lo `state`, senza operazioni. */
-export const DRAWING_COMMAND_TOOL_STATE = "disegno.strumento.stato";
-/** Prepara una famiglia di comandi del motore: `value` è `{ famiglia: id }`,
- *  con l'id fra `DRAWING_FAMILIES`. */
-export const DRAWING_COMMAND_FAMILY_PREPARE = "disegno.famiglia.prepara";
-/** Le 26 famiglie della mappa del motore (`crates/fub-disegno/mappa.tsv`). */
-export const DRAWING_FAMILIES = [
-  "aspetto", "automazione", "colore", "dati", "dinamici", "effetti", "formati",
-  "forme", "grafici", "immagini", "livelli", "nucleo", "pennelli", "prospettiva",
-  "pulizia", "raster", "simboli", "stampa", "tavole", "testo", "tracciati",
-  "trame", "trasforma", "tre-d", "vista", "web",
-] as const;
-/** L'id di uno strumento del motore, al più (ASCII: lettere, cifre, `_`, `-`). */
-export const MAX_DRAWING_TOOL_ID_BYTES = 64;
-/** Gli ingressi da tastiera di una sola richiesta di gesto, al più. */
-export const MAX_DRAWING_INPUTS = 10_000;
-
-// Che specie di parte resta com'è; la fase e la specie di un evento del
-// gesto; perché un gesto non ha fatto niente (`locked` e `hidden` sono il
-// livello bloccato o nascosto, come negli strumenti di oggi; `no_memory`,
-// `no_preview` e `unknown_tool` vengono dagli strumenti e dai comandi del
-// motore); il ruolo di un segno, che il client colora con i suoi token.
-export type {
-  DrawingLossKind,
-  DrawingOverlayRole,
-  DrawingPhase,
-  DrawingPointerKind,
-  DrawingRefusal,
-} from "./enums.generated";
-
-/** Lo strumento di un gesto: uno dei sei di K5, o uno del motore per id
- *  (`{ engine: { id: "pen" } }`, T4 di K6). */
-export type DrawingTool =
-  | "select"
-  | "rect"
-  | "ellipse"
-  | "line"
-  | "arrow"
-  | "text"
-  | { engine: { id: string } };
-
-/** I modificatori di un tasto; un campo che manca vale `false`. */
-export interface DrawingKeyMods {
-  shift?: boolean;
-  /** Option su macOS. */
-  alt?: boolean;
-  /** Ctrl su Windows e Linux, ⌘ su macOS. */
-  cmd?: boolean;
-  /** Ctrl su macOS (altrove è `cmd`). */
-  ctrl?: boolean;
-}
-
-/** Un ingresso da tastiera di un gesto con uno strumento del motore: lo
- *  strumento lo vede dopo i puntatori della stessa richiesta. `active` è
- *  `[da, a)` in caratteri Unicode di `preedit`, non in unità UTF-16. */
-export type DrawingInput =
-  | { kind: "key"; key: string; code: string; mods?: DrawingKeyMods; pressed: boolean }
-  | { kind: "text"; text: string }
-  | { kind: "ime"; preedit: string; active?: [number, number] | null };
-
-/** Un punto `[x, y]` in coordinate di scena. */
-export type DrawingPoint = [number, number];
-
-/** Un segno di uno strumento del motore, in coordinate di scena; `width` e
- *  `size` sono pixel dello schermo. I testi di `label`, `measure` e
- *  `distance` vengono dal motore. */
-export type DrawingOverlay =
-  | { kind: "marquee"; rect: [number, number, number, number] }
-  | { kind: "path"; d: string; role: DrawingOverlayRole; width: number; dashed: boolean }
-  | { kind: "line"; a: DrawingPoint; b: DrawingPoint; role: DrawingOverlayRole; dashed: boolean }
-  | { kind: "anchor"; at: DrawingPoint; role: DrawingOverlayRole; filled: boolean; size: number }
-  | { kind: "curve_point"; at: DrawingPoint; role: DrawingOverlayRole; filled: boolean; size: number }
-  | { kind: "handle"; at: DrawingPoint; role: DrawingOverlayRole }
-  | { kind: "label"; at: DrawingPoint; text: string; role: DrawingOverlayRole }
-  | { kind: "measure"; at: DrawingPoint; text: string }
-  | { kind: "distance"; a: DrawingPoint; b: DrawingPoint; text: string; role: DrawingOverlayRole }
-  | { kind: "highlight"; quad: [DrawingPoint, DrawingPoint, DrawingPoint, DrawingPoint]; role: DrawingOverlayRole }
-  | { kind: "swatch"; at: DrawingPoint; color: string; selected: boolean }
-  | { kind: "grid_line"; a: DrawingPoint; b: DrawingPoint; role: DrawingOverlayRole };
-
-/** Lo stato dello strumento del motore fra un gesto e l'altro. */
-export interface DrawingToolState {
-  /** Un'interazione è in corso (un trascinamento, un tracciato aperto). */
-  busy: boolean;
-  transforming: boolean;
-  /** Lo strumento vuole il testo: le scorciatoie a un tasto non partono. */
-  wants_text: boolean;
-  /** Un IME sta componendo: tasti, scorciatoie e annulla aspettano. */
-  composing: boolean;
-  /** Il puntatore in `snake_case` (`arrow`, `pen_close`); uno sconosciuto è la freccia. */
-  cursor: string;
-  /** Le opzioni dello strumento, `null` se non ne ha. */
-  options: unknown;
-  /** I punti di ancoraggio scelti dal gesto; manca se nessuno. */
-  anchors?: DrawingAnchor[];
-  /** Lo strumento a cui il gesto chiede di passare (il doppio clic su un testo
-   *  passa al Testo); manca se nessuno. */
-  switch_tool?: string;
-  /** I tasti (`Delete`, `Backspace`, `Escape`, `Enter`) che lo strumento prende
-   *  prima delle scorciatoie: vanno a lui come tasti del gesto; manca se nessuno. */
-  claims_keys?: string[];
-}
-
-/** Un punto di ancoraggio scelto, in coordinate di scena: torna nel `value`
- *  dei comandi sui punti (`anchors`), e vale solo se sta ancora lì. */
-export interface DrawingAnchor {
-  element: string;
-  subpath: number;
-  anchor: number;
-  at: DrawingPoint;
-  /** Il primo o l'ultimo punto di un sottotracciato aperto. */
-  end: boolean;
-}
-
-/** Perché un comando è spento: il client lo dice con i suoi testi; `other`
- *  porta il testo del motore. */
-export type DrawingDisabledReason =
-  | "no_selection"
-  | "needs_path"
-  | "needs_text"
-  | "needs_group"
-  | "needs_two"
-  | "needs_anchors"
-  | "fub_ink"
-  | "read_only"
-  | "unmapped"
-  | { other: { text: string } };
-
-/** Una parte del disegno che il motore non sa modificare. */
-export interface DrawingLoss {
-  /** L'id dell'elemento, o il suo percorso se non ne ha uno. */
-  element: string;
-  kind: DrawingLossKind;
-  detail: string;
-}
-
-/** Il disegno aperto nel motore. */
-export interface DrawingOpen {
-  instance: string;
-  revision: string;
-  mapped: number;
-  unmapped: number;
-  losses: DrawingLoss[];
-}
-
-/** Un intervallo sostituito, in unità UTF-16 sul testo LF (come `TextEdit`). */
-export interface DrawingEdit {
-  from: number;
-  to: number;
-  deleted: string;
-  inserted: string;
-}
-
-/** La differenza dal testo della copia, o il testo intero. */
-export type DrawingChange =
-  | { kind: "edits"; value: { edits: DrawingEdit[]; length_before: number; length_after: number } }
-  | { kind: "text"; value: { text: string } };
-
-export interface DrawingSync {
-  revision: string;
-  change: DrawingChange;
-}
-
-export interface DrawingSynced {
-  revision: string;
-}
-
-/** Un campione della penna, in coordinate di scena. */
-export interface DrawingPointer {
-  kind: DrawingPointerKind;
-  x: number;
-  y: number;
-  /** Da 0 a 1; 0 al rilascio. */
-  pressure: number;
-  shift: boolean;
-  alt: boolean;
-  /** Ctrl su Windows e Linux, ⌘ su macOS. */
-  cmd: boolean;
-}
-
-/**
- * La griglia magnetica: `grid` è il passo (`null` se spenta), `free` Ctrl/⌘ tenuto.
- * Gli interruttori di Visualizza per gli strumenti del motore, assenti se valgono
- * quelli di VectorCraft: `guides` le guide sensibili (accese), `points` l'aggancio
- * al punto (acceso), `glyphs` l'aggancio ai glifi (spento).
- */
-export interface DrawingSnap {
-  grid: number | null;
-  free: boolean;
-  guides?: boolean;
-  points?: boolean;
-  glyphs?: boolean;
-}
-
-export interface DrawingStyle {
-  stroke: string;
-  width: number;
-  fill: string | null;
-}
-
-/** Una richiesta di gesto: gli eventi nuovi dall'ultima dello stesso gesto. */
-export interface DrawingGesture {
-  revision: string;
-  phase: DrawingPhase;
-  tool: DrawingTool;
-  layer: string | null;
-  selection: string[];
-  zoom: number;
-  snap: DrawingSnap;
-  style: DrawingStyle | null;
-  /** La riga del testo nuovo, solo per `text`. */
-  text: string | null;
-  /** La cornice che il client tiene per più oggetti scelti; `null` se non ne
-   *  tiene una. Il Rust la legge anche assente (`#[serde(default)]`). */
-  frame: DrawingFrame | null;
-  events: DrawingPointer[];
-  /** Tasti, testo e IME, solo per uno strumento del motore; può mancare. */
-  inputs?: DrawingInput[];
-  /** I punti scelti prima del gesto, come li ha detti lo stato dello
-   *  strumento (al più 1000, come lì); solo per uno strumento del motore;
-   *  può mancare. Il motore lascia quelli che non stanno più lì. */
-  anchors?: DrawingAnchor[];
-}
-
-/** La cornice di trasformazione che il client tiene (`Frame` di
- *  `tools/frame.ts`): la matrice dalle sue coordinate alla scena
- *  `[a, b, c, d, e, f]`, il riquadro col contorno e quello della geometria
- *  `[x0, y0, x1, y1]` nelle sue coordinate. */
-export interface DrawingFrame {
-  matrix: [number, number, number, number, number, number];
-  bounds: [number, number, number, number];
-  geometry: [number, number, number, number];
-}
-
-/** L'anteprima del gesto: la forma nuova (un `Elem` della scena), la matrice
- *  della selezione `[a, b, c, d, e, f]`, il riquadro `[x, y, larghezza, altezza]`. */
-export interface DrawingPreview {
-  shape: unknown | null;
-  matrix: [number, number, number, number, number, number] | null;
-  marquee: [number, number, number, number] | null;
-  /** I segni di uno strumento del motore, nell'ordine in cui si disegnano. */
-  overlays?: DrawingOverlay[];
-}
-
-export interface DrawingOutcome {
-  revision: string;
-  preview: DrawingPreview | null;
-  /** Il JSON di un array di operazioni di scena, per `parseWireOp`. */
-  ops: string | null;
-  selection: string[];
-  losses: DrawingLoss[];
-  refused: DrawingRefusal | null;
-  /** La cornice che il client tiene per la selezione dopo, com'è diventata
-   *  (la forma di `DrawingGesture.frame`); `null`: nessuna. */
-  frame: DrawingFrame | null;
-  /** Lo strumento del motore dopo il gesto o dopo un'opzione; `null` per gli
-   *  strumenti di K5 e per i comandi. */
-  state?: DrawingToolState | null;
-  /** La lettura di un comando che legge e non cambia niente; `null` per gli altri. */
-  reading?: unknown;
-}
-
-export interface DrawingCommandInfo {
-  id: string;
-  enabled: boolean;
-  /** Perché è spento; `null` se è acceso. */
-  disabled_reason?: DrawingDisabledReason | null;
-}
-
-export interface DrawingCommandRequest {
-  revision: string;
-  id: string;
-  selection: string[];
-  value: unknown;
-  /** L'anteprima: il comando gira su una copia e le operazioni non entrano
-   *  nella cronologia; chi non ne sa dare risponde `no_preview`. Può mancare
-   *  (vale `false`). */
-  preview?: boolean;
-}
-
-// **Da cosa parte** una scrittura intera (rispecchia `fub_abi::edit::WriteBase`).
-// Tag adiacente (`kind` + `value`) come `LinkTarget`: un caso porta uno scalare
-// e l'altro niente.
-//
-// Due casi e non una revisione opzionale, ed è la
-// [0092](../../../docs/decisions/0187-autorita-e-schemi-su-disco.md): finché era
-// `string | null` col default `null`, scrivere ciechi era ciò che succedeva
-// **omettendo** — cioè il default, che non lo sceglie nessuno. Adesso chi copre
-// una scrittura altrui lo scrive, e chi legge questa riga lo vede.
-export type WriteBase =
-  // «Scrivi solo se il file è ancora quello da cui sono partito»: se non
-  // combacia, `PluginError` di specie `conflict` e non è stato scritto niente.
-  | { kind: "descends_from"; value: string }
-  // «Scrivi: questo testo non discende da un testo di prima, e se ne copre uno
-  // è voluto» — nella shell è un posto solo, «vince il mio testo».
-  | { kind: "dictated" };
-
-// Un documento **reso**: l'HTML, e le parti dichiarative che la shell monta da
-// sé (rispecchia `fub_kernel::RenderedDocument`).
-//
-// Non è una stringa sola perché un blocco custom può uscire come albero `UiNode`
-// invece che come markup (§3.2): l'HTML porta un buco `data-ui-slot="N"` e la
-// parte con quel numero ci va dentro, montata con lo stesso `mountTree` delle
-// view. È così che il blocco di un plugin arriva a schermo senza una riga in
-// questo bundle.
-export interface RenderedDocument {
-  html: string;
-  parts: RenderedPart[];
-}
-
-export interface RenderedPart {
-  slot: number;
-  /// Il `custom_kind` che l'ha prodotta: serve al CSS e a chi legge un log.
-  kind: string;
-  node: UiNode;
-}
-
-// `EmbedContent` porta un `RenderedDocument` appiattito (`#[serde(flatten)]`):
-// un embed passa dai renderer come l'anteprima.
-export interface EmbedContent extends RenderedDocument {
-  doc_id: string;
-}
-
-// Intervallo in byte (rispecchia fub_abi::model::Span).
-export interface Span {
-  start: number;
-  end: number;
-}
-
-// ---------------------------------------------------------------------------
-// Il canale dati (§5.3, §5.4): la query è un albero, non una stringa
-// ---------------------------------------------------------------------------
-//
-// La shell non ha più `search`, `list_tags` e `graph_data`: ha `query_index`,
-// come un plugin. Questi tipi rispecchiano `fub_abi::query` e la parte index
-// di `fub_abi::traits`, e il presidio è la fixture generata da Rust
-// (`mirror.test.ts`): una variante aggiunta là non può restare non gestita qui.
-//
-// La stringa che l'utente digita non è più una sintassi: è il campo `text` di
-// una foglia. Quello che prima era «Query incompleta» — l'errore del parser di
-// una dipendenza mostrato all'utente — non esiste più, perché fra la casella e
-// i risultati non c'è più nessun parser di terzi.
-
-// In che verso si cammina il grafo dei legame.
-export type { LinkDirection } from "./enums.generated";
-
-// Il bersaglio NON RISOLTO di un legame (rispecchia fub_abi::model::LinkTarget).
-// Tag ADIACENTE (`kind` + `value`): due varianti su tre portano uno scalare, e
-// col tag interno non attraverserebbero il JSON.
-//
-// Le tre specie sono tre regole di risoluzione diverse, e chi chiede dice quale
-// vuole: non c'è un'euristica che le indovini dalla stringa, perché `a/b.md` è
-// un wikilink per path *e* un legame markdown relativo, e le due non risolvono
-// allo stesso posto.
-export type LinkTarget =
-  | { kind: "wiki"; value: { page: string; heading?: string | null; block?: string | null } }
-  | { kind: "url"; value: string }
-  | { kind: "path"; value: string };
-
-// Come si intende la stringa di una `TextQuery`.
-export type { TextMode } from "./enums.generated";
-
-// Dove cercare il testo. Vuoto = i campi che il provider indicizza.
-// `heading` pesa a parte: distingue una nota che PARLA di una cosa da una che
-// ci ha dedicato una sezione.
-export type { TaskStatus, TextField } from "./enums.generated";
-
-// Quanto si vuole essere indovinati: un'INTENZIONE, mai una distanza di edit.
-// Chi non sa onorare `typos` risponde come per `exact` — restringe, non allarga.
-export type { TextTolerance } from "./enums.generated";
-
-export interface TextQuery {
-  text: string;
-  mode: TextMode;
-  fields: TextField[];
-  tolerance: TextTolerance;
-  case_sensitive: boolean;
-  // L'ultimo termine è ancora in corso di scrittura. È una proprietà
-  // dell'INVOCAZIONE e non della query: chi **salva** una query — una
-  // collezione, una vista, un template — la normalizza a `false` prima di
-  // scriverla, perché l'utente aveva finito di scrivere e nessuno era lì a
-  // vederlo.
-  partial_last_term: boolean;
-}
-
-// Una prova su una proprietà del frontmatter. `test` resta opaco per la shell
-// finché non ci sarà un query builder (9.2): la costruisce chi la conosce.
-export interface PropertyFilter {
-  key: string;
-  test: unknown;
-}
-
-// Le foglie del linguaggio (rispecchia fub_abi::query::QueryPredicate).
-export type QueryPredicate =
-  | ({ kind: "text" } & TextQuery)
-  | { kind: "property"; filter: PropertyFilter }
-  | { kind: "tag"; name: string; descendants: boolean }
-  | { kind: "folder"; path: string; descendants: boolean }
-  | { kind: "linked"; doc: string; direction: LinkDirection }
-  | { kind: "docs"; docs: string[] }
-  | { kind: "custom"; ns: string; predicate: unknown }
-  | { kind: "regex"; pattern: string; fields: TextField[] }
-  | { kind: "task"; status: TaskStatus }
-  | { kind: "path"; glob: string }
-  | { kind: "file"; extension: string }
-  | { kind: "scoped"; scope: TextScope; text: TextQuery }
-  | { kind: "task_due"; min: DueBound | null; max: DueBound | null };
-
-// Un estremo della scadenza di una task (rispecchia fub_abi::query::DueBound):
-// una data `AAAA-MM-GG` e se è compresa.
-export interface DueBound {
-  date: string;
-  inclusive: boolean;
-}
-
-// L'unità del corpo dentro cui uno `scoped` vuole tutti i suoi termini.
-export type { TextScope } from "./enums.generated";
-
-export interface QueryLiteral {
-  negated: boolean;
-  predicate: QueryPredicate;
-}
-
-// I letterali sono in AND; vuota = ogni documento.
-export interface QueryClause {
-  all: QueryLiteral[];
-}
-
-// Le clausole sono in OR; vuoto = ogni documento.
-export interface QueryExpr {
-  any: QueryClause[];
-}
-
-// Ogni documento del vault: la query da cui parte chi non ha filtri.
-export const EVERY_DOCUMENT: QueryExpr = { any: [] };
-
-// Il testo che l'utente ha digitato, ovunque il provider guardi.
-//
-// `whileTyping` accende `partial_last_term`: l'ultimo termine è incompleto,
-// e `arch` deve trovare *architettura* prima che la parola sia finita. Lo dice
-// la **query**, non la casella appendendo un `*` da sé: se lo facesse la
-// shell, la ricerca dell'utente e quella di CLI, API locale, automazioni e
-// centro di comando LLM parlerebbero due lingue diverse, e la differenza non
-// sarebbe scritto da nessuna parte.
-export function textQuery(text: string, whileTyping = false): QueryExpr {
-  return {
-    any: [
-      {
-        all: [
-          {
-            negated: false,
-            predicate: {
-              kind: "text",
-              text,
-              mode: "terms",
-              fields: [],
-              tolerance: "exact",
-              case_sensitive: false,
-              partial_last_term: whileTyping,
-            },
-          },
-        ],
-      },
-    ],
-  };
-}
-
-// Il testo cercato **dentro** un pugno di documenti: una clausola sola con due
-// letterali in AND.
-//
-// È la ricerca nella nota aperta (§21.4), ed è la prova che quella voce non
-// chiedeva niente di nuovo al linguaggio: `Docs { docs: [la nota] }` e un `Text`
-// nella stessa clausola sono già dicibili dalla 0019. Sta qui accanto alle altre
-// due, e non dentro il pannello che la usa, perché la regola della §21.5 è che
-// **una** porta serve tutte le superfici che accettano del testo e propongono
-// delle note: se ogni superficie si compone la propria query, il giorno in cui
-// il ranking cambia ne cambiamo quattro (0082).
-//
-// La composizione non è un `and` generico apposta: due `QueryExpr` in AND
-// vorrebbero il prodotto delle clausole, e un combinatore che lo fa in silenzio
-// è il posto dove nasce la query che non fa ciò che sembra. Qui i letterali
-// sono due e la clausola è una, scritto.
-export function textInDocument(
-  docs: string[],
-  text: string,
-  whileTyping = false,
-): QueryExpr {
-  return {
-    any: [
-      {
-        all: [
-          { negated: false, predicate: { kind: "docs", docs } },
-          {
-            negated: false,
-            predicate: {
-              kind: "text",
-              text,
-              mode: "terms",
-              fields: [],
-              tolerance: "exact",
-              case_sensitive: false,
-              partial_last_term: whileTyping,
-            },
-          },
-        ],
-      },
-    ],
-  };
-}
-
-// Il testo cercato **nel nome delle note**, e nient'altro.
-//
-// È la terza configurazione della porta unica (0082): il quick switcher e
-// l'autocompletamento dei wikilink non cercano dentro le note — propongono
-// **nomi**, ed è ciò che `TextField::Name` esiste per dire. La differenza con
-// `textQuery` non è di ranking ma di dominio: cercare `rust` ovunque trova le
-// trecento note che ne parlano, e chi ha premuto la scorciatoia per aprire la
-// nota *Rust* le voleva tutte e trecento davanti a sé come non le vorrebbe mai.
-//
-// `whileTyping` qui è il caso NORMALE e non l'eccezione: queste due
-// superfici partono a ogni battuta, e chi ha scritto `ar` sta cercando
-// *architettura* e non una nota che si chiami «ar». È il prefisso della §21.2,
-// e la ragione per cui non lo mette la casella appendendo un `*` è la stessa di
-// `textQuery`: la dice la query, o due chiamanti diversi cercano in due
-// lingue diverse.
-export function nameQuery(text: string, whileTyping = true): QueryExpr {
-  return {
-    any: [
-      {
-        all: [
-          {
-            negated: false,
-            predicate: {
-              kind: "text",
-              text,
-              mode: "terms",
-              fields: ["name"],
-              tolerance: "exact",
-              case_sensitive: false,
-              partial_last_term: whileTyping,
-            },
-          },
-        ],
-      },
-    ],
-  };
-}
-
-// Questi documenti, per nome: la foglia che chiede «quali di questi esistono?».
-// Chi la valuta la restringe a ciò che l'indice conosce, quindi la risposta è
-// l'intersezione — ed è il modo di verificare un pugno di path in UNA domanda
-// invece di chiedere l'elenco del vault per cercarli dentro.
-export function theseDocuments(docs: string[]): QueryExpr {
-  return { any: [{ all: [{ negated: false, predicate: { kind: "docs", docs } }] }] };
-}
-
-// Quali proprietà del frontmatter portarsi dietro in una risposta.
-export type PropertySelect = { kind: "none" } | { kind: "all" } | { kind: "keys"; keys: string[] };
-
-export interface Page {
-  offset: number;
-  limit: number;
-}
-
-// Una risposta a finestra: `total` è il conteggio PRIMA della finestra.
-export interface Paged<T> {
-  items: T[];
-  offset: number;
-  total: number;
-}
-
-// Un documento che ha combaciato (rispecchia fub_abi::traits::DocumentMatch).
-// `snippet` è testo semplice, MAI markup: si inserisce come testo. Le porzioni
-// da evidenziare sono `highlights`, intervalli in byte dentro `snippet`.
-// I campi opzionali sono **omessi** quando non ci sono: una selezione senza
-// pertinenza non ha né rilevanza né estratto.
-export interface DocumentMatch {
-  doc: string;
-  score?: number;
-  snippet?: string;
-  highlights?: Span[];
-  properties?: { key: string; value: unknown }[];
-  // DOVE, nel sorgente, sta ciò che ha combaciato — in ordine di posizione.
-  // Non è un doppione di `highlights`: quelli servono a **disegnare** una riga
-  // (byte dentro `snippet`), queste a **tornare** al testo (byte del sorgente,
-  // la stessa valuta di `reveal`). Assente = nessuno le ha calcolate, che è
-  // diverso da «nessuna occorrenza».
-  occurrences?: DocPosition[];
-}
-
-// UN PUNTO DENTRO UN DOCUMENTO (rispecchia fub_abi::traits::DocPosition).
-// `span` è in byte del SORGENTE; `anchor` è l'ancora del blocco che lo ospita
-// quando ce n'è una; `revision` dice DI QUANDO — uno span invecchia appena il
-// documento cambia sotto, e senza sapere di quale sorgente parla si porterebbe
-// il cursore altrove senza accorgersene.
-export interface DocPosition {
-  span: Span;
-  anchor?: string;
-  revision: string;
-}
-
-// Cosa nomina un riferimento (rispecchia fub_abi::traits::ResolvedRef):
-// QUALE documento e, quando il riferimento porta un punto e quel punto esiste
-// ancora, DOVE DENTRO.
-export interface ResolvedRef {
-  doc: string;
-  at?: DocPosition;
-}
-
-// Un vicino nel grafo: `via` è l'anello precedente, ed è ciò che rende la
-// risposta un albero invece che un sacchetto di nodi. A `depth: 1` l'arco è
-// (via → doc) per gli uscenti: sono esattamente gli archi del grafo.
-export interface NeighborRef {
-  doc: string;
-  via: string;
-  depth: number;
-}
-
-// Un problema trovato da un controllo di salute del vault.
-export interface HealthIssue {
-  doc: string;
-  check: string;
-  detail: string | null;
-  span: Span | null;
-}
-
-// UNA BOZZA (§15.2): ciò che l'utente stava scrivendo e non ha salvato.
-//
-// Porta il testo con sé e non un puntatore da risolvere con una seconda
-// domanda: la sola ragione per cui questo tipo esiste è che quel testo non vada
-// perso, e un elenco che dice «ci sono tre bozze» senza poterle mostrare
-// avrebbe rimandato l'unica cosa che conta a una chiamata che può fallire.
-export interface DraftInfo {
-  doc: string;
-  /// Millisecondi UNIX dell'ultima scrittura della bozza.
-  at: number;
-  /// La revisione del file su cui il buffer stava lavorando, QUANDO chi ha
-  /// scritto la bozza la sapeva. `null` vuol dire «non lo so», non «nota
-  /// nuova»: quello lo dice `exists`.
-  base: string | null;
-  /// Il documento c'è ancora? `false` è una bozza ORFANA: l'unica copia rimasta
-  /// di ciò che era stato scritto, e per questo non si butta da sola.
-  exists: boolean;
-  /// La revisione del file ADESSO, per quel che il vault ne sa. È un FATTO, non
-  /// un giudizio: che diverga da `base` vuol dire che il file è cambiato sotto,
-  /// e cosa farne lo decide chi lo mostra — cioè si chiede a una persona.
-  current: string | null;
-  text: string;
-}
-
-export interface PropertyCount {
-  value: unknown;
-  count: number;
-}
-
-// Un heading dell'outline di un documento.
-// `explicit_anchor` è l'ancora `^id` scritto dall'utente in coda al titolo,
-// com'è scritto (`null` quando lo slug è generato dal testo).
-export interface Heading {
-  level: number;
-  text: string;
-  slug: string;
-  span: Span;
-  explicit_anchor: string | null;
-}
-
-// Se una risposta porta gli estratti (§21.9). Sta fra i tipi ri-esportati e non
-// solo dentro `IndexQuery` perché chi compone una domanda dal canale
-// (`host/query.ts`) deve poterlo **nominare**: «voglio i nomi e non il testo
-// attorno» è una scelta di chi chiede, non un dettaglio della variante.
-export type { Excerpts } from "./enums.generated";
-
-// La forma dichiarata di una sintassi, rispecchiata dal contratto Rust/WIT.
-export type SyntaxTrigger =
-  | { readonly inline: { readonly open: string; readonly close: string } }
-  | { readonly fence: { readonly info: readonly string[] } };
-
-export interface SyntaxForm {
-  readonly name: string;
-  readonly trigger: SyntaxTrigger | null;
-}
-
-// Una interrogazione (rispecchia fub_abi::traits::IndexQuery).
-export type IndexQuery =
-  | {
-      kind: "documents";
-      matching: QueryExpr;
-      sort?: { key: string; descending: boolean } | null;
-      select?: PropertySelect;
-      page?: Page | null;
-      // Se le righe devono portare l'estratto attorno al match (§21.9).
-      // Omesso = "attach": chi non lo nomina riceve una risposta completa.
-      // Chi seleziona e basta — un conteggio, una lista di nomi — mette
-      // "omit" e non fa generare un estratto per ogni nota che combacia.
-      excerpts?: Excerpts;
-    }
-  | { kind: "backlinks"; target: string; page?: Page | null }
-  | { kind: "outline"; doc: string }
-  | { kind: "tags"; matching: QueryExpr; page?: Page | null }
-  | {
-      kind: "neighbors";
-      seeds: QueryExpr;
-      direction: LinkDirection;
-      depth: number;
-      page?: Page | null;
-    }
-  | { kind: "property_values"; key: string; matching: QueryExpr; page?: Page | null }
-  | { kind: "vault_health"; check: string; page?: Page | null }
-  | { kind: "custom"; ns: string; query: unknown }
-  // Questo vault sa quando cambia da fuori? (§9.7) L'unica variante che non
-  // chiede niente sul contenuto del vault: chiede del vault stesso. Passa dal
-  // canale dati e non da un comando suo perché i suoi due clienti sono già qui
-  // — questa shell, e una feature che ha `HostQuery` e nient'altro.
-  | { kind: "vault_status" }
-  // Cosa sta girando adesso? (§10.3) La seconda variante che chiede del vault e
-  // non del suo contenuto, ed è la RICONCILIAZIONE del centro attività:
-  // `job_started` e `job_progress` sono recuperabili, quindi i freni del canale
-  // possono buttarli, e senza questa domanda quel troncamento sarebbe una
-  // perdita definitiva.
-  | { kind: "jobs" }
-  // Com'è configurato questo vault? (§11.1) La terza che chiede del vault e non
-  // del suo contenuto. Torna le impostazioni RISOLTE — schema, valore che vale
-  // adesso, livello da cui viene — perché un elenco è dati, e i dati hanno un
-  // canale solo. `plugin` assente = tutte.
-  | { kind: "settings"; plugin?: string | null }
-  // Com'è organizzato questo vault? (§11.3) La quarta che chiede del vault e
-  // non del suo contenuto: icone, appuntate, ordinamenti, spazi. Prima era un
-  // comando IPC che restituiva il blob intero, cioè una cosa che questa shell
-  // sapeva chiedere e un provider no.
-  | { kind: "organization" }
-  // Cosa nomina questo riferimento, adesso? (§13.1) `from` è il documento
-  // dentro cui il riferimento è scritto: serve ai `path`, che sono relativi
-  // alla cartella di chi li ospita. Prima era `resolve_link`, un comando IPC
-  // scritto apposta — cioè un fatto sul vault che questa shell conosceva e un
-  // provider no.
-  | { kind: "resolve"; target: LinkTarget; from?: string | null }
-  // Cosa c'è nel vault? (§14.1, §14.2) L'anagrafe, non l'indice: è la sola
-  // domanda del canale che risponde anche su ciò che non è un documento — un
-  // PNG, uno ZIP, un file che nessuno sa cosa sia. `of_kind` assente = tutte le
-  // specie. È il canale con cui questa shell costruisce l'albero: prima
-  // chiedeva `list_documents`, che restituiva l'intero vault in un `string[]`
-  // senza finestra e senza allegati.
-  // `within` è la metà che mancava (§14.4): una lista PER CARTELLA, così che
-  // aprire un vault da diecimila note non trasferisca diecimila righe per
-  // disegnarne venti. Assente = tutto il vault, com'era prima.
-  | {
-      kind: "entries";
-      of_kind?: EntryKind | null;
-      within?: FolderScope | null;
-      page?: Page | null;
-    }
-  // Quali cartelle ci sono? (§14.3) Una domanda sua e non una specie in più di
-  // `EntryKind`: una cartella non ha dimensione, data né impronta. `under`
-  // assente = ogni cartella del vault, a ogni profondità.
-  | { kind: "folders"; under?: FolderScope | null; page?: Page | null }
-  // COSA È RIMASTO NON SALVATO (§15.2): le bozze che il buffer di crash ha
-  // lasciato sul disco. Passa dal canale dati e non da una porta sua per la
-  // ragione di `vault_status` — i clienti sono già qui — e per una che è di
-  // questa variante soltanto: leggere non è cambiare. È chi decide COSA FARNE a
-  // mutare qualcosa, e la scrittura di una bozza ha infatti una porta sua.
-  //
-  // In coda e non accanto a `vault_health`: l'ordine dei casi è il discriminante
-  // dell'ABI, quindi additiva vuol dire in fondo.
-  | { kind: "drafts"; page?: Page | null }
-  // RENDI QUESTO DOCUMENTO (0163, §16.6). Prima della 0163 l'anteprima passava
-  // da un comando IPC bespoke (`render_preview`) che solo la shell sapeva
-  // chiamare — un fatto sul vault che questa shell conosceva e un provider no.
-  // Ora passa dal canale dati, come l'outline e ogni altra lettura.
-  | { kind: "render_preview"; doc: string }
-  // RENDI QUESTO RITAGLIO (0163, §16.6): la transclusione `![[page#heading]]` o
-  // `![[page#^blocco]]`. Come `render_preview`, prima era un comando IPC suo
-  // (`render_embed`) e ora passa dal canale dati.
-  | { kind: "render_embed"; page: string; heading?: string | null; block?: string | null }
-  // Le forme sintattiche effettive, incluse quelle registrate a runtime.
-  | { kind: "syntax_forms"; doc: string }
-  // Il bersaglio di stampa percorre gli stessi provider senza usare l'anteprima.
-  | { kind: "render_print"; doc: string };
-
-// La risposta (rispecchia fub_abi::traits::IndexResult). Tag ADIACENTE
-// (`kind` + `value`): un payload che è una lista o uno scalare non attraversa
-// il JSON col tag interno.
-export type IndexResult =
-  | { kind: "documents"; value: Paged<DocumentMatch> }
-  | { kind: "backlinks"; value: Paged<BacklinkRef> }
-  | { kind: "outline"; value: Heading[] }
-  | { kind: "tags"; value: Paged<TagCount> }
-  | { kind: "neighbors"; value: Paged<NeighborRef> }
-  | { kind: "property_values"; value: Paged<PropertyCount> }
-  | { kind: "vault_health"; value: Paged<HealthIssue> }
-  | { kind: "custom"; value: unknown }
-  | { kind: "vault_status"; value: VaultStatus }
-  | { kind: "jobs"; value: JobStatus[] }
-  | { kind: "settings"; value: SettingEntry[] }
-  | { kind: "organization"; value: Organization }
-  // Il documento che un riferimento nomina, o nessuno. `null` non è un errore
-  // ed è metà del valore di questa risposta: legame rotto, URL esterno e nota
-  // rinominata via da sotto danno tutti e tre `null`, e chi ha chiesto sa che
-  // deve proporre qualcos'altro.
-  | { kind: "resolved"; value: ResolvedRef | null }
-  | { kind: "entries"; value: Paged<VaultEntry> }
-  | { kind: "folders"; value: Paged<VaultFolder> }
-  | { kind: "drafts"; value: Paged<DraftInfo> }
-  // Il documento reso (risposta a `render_preview`, 0163): l'HTML e le parti
-  // dichiarative che la shell monta da sé.
-  | { kind: "render_preview"; value: RenderedDocument }
-  // Il ritaglio reso (risposta a `render_embed`, 0163): il documento reso e il
-  // suo id, perché chi monta un embed deve sapere da quale nota viene.
-  | { kind: "render_embed"; value: EmbedContent }
-  | { kind: "syntax_forms"; value: SyntaxForm[] }
-  | { kind: "render_print"; value: RenderedDocument };
-
-// CHE SPECIE DI FILE È (§14.1). Non è una proprietà del file: è una proprietà
-// del file dato chi è registrato adesso — un `.canvas` è `unknown` finché
-// nessuno rivendica quell'estensione, e diventa `document` senza che un byte
-// cambi. Per questo non si persiste da nessuna parte.
-export type { EntryKind } from "./enums.generated";
-
-// Una voce del vault: un file, con ciò che si sa di lui SENZA aprirlo.
-export interface VaultEntry {
-  // La chiave è il path, come per ogni altra cosa del vault (decisione 0043).
-  id: string;
-  kind: EntryKind;
-  size: number;
-  // Ultima modifica in MILLISECONDI unix. Millisecondi perché serve a
-  // riconoscere una modifica, non a mostrare una data; non nanosecondi perché
-  // oltre 2^53 un intero non sopravvive al `double` del JSON.
-  mtime: number;
-  // L'identità del CONTENUTO, quando qualcuno l'ha già avuto in mano. `null` è
-  // il caso normale per un allegato: leggerne i byte all'apertura è il costo
-  // che l'anagrafe esiste per togliere.
-  fingerprint: string | null;
-}
-
-// Una CARTELLA del vault (§14.3). Esiste perché il disco ce l'ha, non perché il
-// path di un file la nomini: una cartella vuota c'è, e una che resta vuota
-// perché la sua ultima nota è finita nel cestino resta lì. Prima le cartelle
-// vivevano solo qui — le costruiva `buildTree` dai path delle note — e il
-// kernel non ne sapeva niente.
-export interface VaultFolder {
-  // Senza slash finale, mai vuoto: la radice non è una voce.
-  path: string;
-  // Sottocartelle dirette: è ciò che dice se disegnare la freccetta che apre,
-  // senza dover prima chiedere cosa c'è dentro.
-  folders: number;
-  // File diretti, DI OGNI SPECIE: la domanda è «questa cartella è vuota?», e
-  // una con dentro solo un PNG non lo è.
-  entries: number;
-}
-
-// DOVE guardare, per le domande che si fanno per cartella (§14.3, §14.4). È la
-// stessa coppia del predicato `folder`, di proposito: la regola che decide cosa
-// ci sta dentro è una sola.
-export interface FolderScope {
-  // Senza slash finale. "" è la radice del vault.
-  path: string;
-  // `false` = i soli figli diretti, che è la domanda che disegna un livello di
-  // albero.
-  descendants: boolean;
-}
-
-// --- le impostazioni (§11.1) ------------------------------------------------
-//
-// Rispecchiano `fub_abi::settings`. Il pezzo che si vede da qui e da nessun
-// altro lato: **il form lo genera questa shell**, dallo schema. Un provider
-// dichiara cosa si può configurare e legge i valori dall'`HostApi`; disegnare i
-// campi è della shell, e per questo questi tipi vivono nel contratto e non in un
-// albero `UiNode` — un albero sarebbe la UI di **un** provider, uno schema è ciò
-// da cui ogni pannello (questo, quello di un plugin, una CLI) sa costruirla.
-
-// DOVE un'impostazione ha il diritto di stare. Le chiavi `machine` scritte in un
-// `.fub/settings.json` si IGNORANO: un vault arriva da fuori, e non decide
-// della macchina di chi lo apre.
-export type { SettingScope } from "./enums.generated";
-
-// Da dove viene il valore che si sta leggendo. `default` = nessuno ha deciso, ed
-// è ciò che permette al pannello di dire «questa la stai sovrascrivendo» e al
-// pulsante «azzera» di comparire solo dove serve.
-export type { SettingSource } from "./enums.generated";
-export type { IndexingState } from "./enums.generated";
-
-// Di che specie è un'impostazione, col suo default dentro.
-export type SettingKind =
-  | { kind: "toggle"; default: boolean }
-  | { kind: "number"; default: number; min: number | null; max: number | null }
-  | { kind: "text"; default: string }
-  | { kind: "choice"; default: string; options: UiOption[] }
-  | { kind: "list"; default: string[] };
-
-// Il valore, NUDO sul confine JSON: `true`, `12`, `"scuro"`, `["a"]`. La specie
-// la dichiara lo schema, quindi un'etichetta non aggiungerebbe niente e
-// renderebbe illeggibile un file che si apre con un editor di testo.
-export type SettingValue = boolean | number | string | string[];
-
-export interface SettingSpec {
-  key: string;
-  label: string;
-  description: string;
-  // Sotto quale intestazione raggrupparla. Vuoto = le sciolte in fondo.
-  group: string;
-  scope: SettingScope;
-  kind: SettingKind;
-  // Un PROGRAMMA la può scrivere? Non riguarda questa shell — di qui passa
-  // l'utente, che le può cambiare tutte — riguarda `settings.set`, i plugin e le
-  // macro: il residuo della decisione 0010, chiuso per chiave.
-  program_writable: boolean;
-}
-
-// Una riga di configurazione risolta: è ciò che il pannello disegna.
-export interface SettingEntry {
-  spec: SettingSpec;
-  value: SettingValue;
-  source: SettingSource;
-}
-
-// Un componente che questo host sa montare, e se è acceso (rispecchia
-// `fub_host::BundleInfo`, §11.1).
-//
-// Non è `PluginInfo`: quello elenca chi è DICHIARATO NEL KERNEL, e un componente
-// spento non lo è affatto. La differenza è il punto — «spento» e «non c'è» sono
-// due stati diversi, e senza questo elenco il secondo si mangerebbe il primo.
-export interface BundleInfo {
-  id: string;
-  name: string;
-  mounted: boolean;
-  // La famiglia decide quale gesto la riga offre: un componente si accende, un
-  // tema si applica. Non è deducibile da `mounted`, perché anche uno spento
-  // deve restare classificabile.
-  kind: "component" | "theme";
-  // Quanto l'host si fida di chi lo ha prodotto. Non è una decorazione accanto
-  // ai permessi: «può leggere le mie note» non vuol dire la stessa cosa detto
-  // di una feature di questo repo e di un componente arrivato da fuori.
-  trust: Trust;
-  // I permessi che il suo manifest dichiara, coi loro parametri (§23.17). La
-  // chiave è `ns:nome`, il valore è il PARAMETRO: `true` per un permesso nudo,
-  // un elenco di host per `fub:network`. È la stessa regola di ogni altra
-  // `OptionMap` — presente = acceso, il valore porta il dettaglio.
-  //
-  // Ci sono anche per un componente SPENTO, ed è il punto: «cosa chiederebbe se
-  // lo accendessi» è una domanda che ci si pone prima di accenderlo.
-  permissions: Record<string, unknown>;
-}
-// Un'installazione scelta su questa macchina. Estende il manifest che l'host
-// usa per le righe native, ma tiene separate le tre decisioni che non sono lo
-// stesso stato: preferenza persistita, consenso all'esecuzione e montaggio
-// effettivo nel vault corrente.
-/** Verified feed provenance; generation is a decimal u64 string, not a JS number. */
-export interface CatalogProvenance {
-  key_id: string;
-  generation: string;
-  publisher: string;
-  url: string;
-  license: string;
-  compatible: string;
-}
-
-/** Entry from a natively verified signed feed. Size is a decimal u64 string. */
-export interface CatalogEntry {
-  id: string;
-  kind: "plugin" | "theme";
-  name: string;
-  version: string;
-  abi: string;
-  url: string;
-  digest: string;
-  size: string;
-  permissions: string[];
-  license: string;
-  compatible: string;
-  provenance: string;
-  revoked: boolean;
-}
-
-export interface InstalledPluginInfo extends BundleInfo {
-  // Identità u64 dell'installazione, serializzata come stringa per non perdere
-  // bit nel passaggio JSON. È questa, non `id`, che autorizza le mutazioni.
-  installation: string;
-  version: string;
-  enabled: boolean;
-  // `true` solo quando il registro runtime conosce la voce posseduta da questa
-  // installazione nel vault selezionato. Consente alla UI di togliere il suo
-  // duplicato da `listBundles` senza filtrare un bundle ufficiale omonimo.
-  runtime_known: boolean;
-  consent: "undecided" | "denied" | "granted";
-  catalog?: CatalogProvenance;
-  revoked: boolean;
-  revocation?: CatalogProvenance;
-}
-
-// --- la pagina «Componenti» (A7) -------------------------------------------
-//
-// Rispecchiano `fub_app_lib::{ComponentsMap, ComponentRow, ComponentProfile,
-// ComponentsApplied}` e i tipi di `fub_host::componenti` che ci stanno dentro.
-// I nomi Rust sono italiani (`Azione`, `Rifiuto`, `Esito`…); qui portano il
-// prefisso `Component` perché nel contratto TS stanno accanto a tutto il resto.
-
-export type { ComponentKind } from "./enums.generated";
-
-// Che cosa fare di ciò che dopo uno spegnimento non serve più a nessuno.
-// `chiedi` = nessuna risposta: restano accesi, in attesa.
-export type ComponentOrphans = "chiedi" | "togli" | "tieni";
-
-// Una scelta di chi usa l'app. I campi con un default in Rust possono mancare.
-export type ComponentAction =
-  | { azione: "accendi"; id: string }
-  | { azione: "spegni"; id: string; anche_questi?: boolean; orfani?: ComponentOrphans }
-  | { azione: "rispondi"; orfani: ComponentOrphans; ids?: string[] }
-  | { azione: "profilo"; nome: string };
-
-// Perché un componente è acceso, o che non lo è: la forma di default di serde
-// (`fub_componenti::Perche`), una stringa o `{ RichiestoDa: [...] }`.
-export type ComponentWhy =
-  | "Nucleo"
-  | "Scelto"
-  | { RichiestoDa: string[] }
-  | "InAttesa"
-  | "Spento"
-  | "Sconosciuto";
-
-// Lo stato che il vault ricorda: i componenti scelti e quelli in attesa.
-export interface ComponentState {
-  scelti: string[];
-  in_attesa: string[];
-}
-
-// Un id che una chiave `components.*` nomina e che non conta.
-export interface ComponentMissing {
-  chiave: string;
-  id: string;
-}
-
-// Una riga della pagina: `nome` e `descrizione` sono già nella lingua del vault
-// (l'id e la stringa vuota se il catalogo non li ha: mai una chiave), `gruppo`
-// è l'id di un `ComponentGroup` (`altro` se la riga non ne dice uno), `ui` le
-// cartelle del client che carica (`editors/media`), `richiede` i requisiti
-// diretti già risolti in id, `usa` gli «usa se c'è» che in questa build sono
-// righe.
-export interface ComponentRow {
-  id: string;
-  nome: string;
-  gruppo: string;
-  bundle: boolean;
-  acceso: boolean;
-  perche: ComponentWhy;
-  richiesto_da: string[];
-  descrizione: string;
-  tipo: ComponentKind;
-  ui: string[];
-  richiede: string[];
-  usa: string[];
-}
-
-// Un gruppo della pagina, con il nome nella lingua del vault.
-export interface ComponentGroup {
-  id: string;
-  nome: string;
-}
-
-// Un profilo: `etichetta` è il nome da mostrare, nella lingua del vault;
-// `piu_avanti` se aspetta componenti che non ci sono ancora (`arriva_con`), e
-// allora non si applica.
-export interface ComponentProfile {
-  nome: string;
-  etichetta: string;
-  componenti: string[];
-  arriva_con: string[];
-  piu_avanti: boolean;
-}
-
-// Ciò che `components_map` risponde. `profilo` null = personalizzato.
-// `gruppi` sono quelli che hanno righe, nell'ordine in cui si disegnano.
-export interface ComponentsMap {
-  gruppi: ComponentGroup[];
-  righe: ComponentRow[];
-  stato: ComponentState;
-  profilo: string | null;
-  profili: ComponentProfile[];
-  mancanti: ComponentMissing[];
-}
-
-// Che cosa una scelta cambia oltre al componente nominato. `accesi_anche` è
-// «Attivati anche …: … non funziona senza»; `mancanti` è `[chi, id]`.
-export interface ComponentEffect {
-  accesi_anche: string[];
-  spenti_anche: string[];
-  orfani: string[];
-  mancanti: [string, string][];
-}
-
-// Una riga che cambia: un bundle (`plugins.disabled`) o una riga senza bundle
-// (`components.off`).
-export interface ComponentWrite {
-  id: string;
-  acceso: boolean;
-  bundle: boolean;
-}
-
-// L'esito di una scelta: prima di farla (`applicato: false`, la prova senza
-// `apply`) o dopo. Una scrittura su `fub.lavagna` vuol dire che il vault si è
-// rimontato: la shell lo sa anche dall'evento `vault_opened` che segue il
-// `vault_closed` (vedi `KernelEvent`).
-export interface ComponentOutcome {
-  azione: ComponentAction;
-  effetto: ComponentEffect;
-  scritture: ComponentWrite[];
-  chiavi: string[];
-  stato: ComponentState;
-  applicato: boolean;
-  avvisi: PluginError[];
-}
-
-// Perché una scelta non si applica: una risposta, non un errore.
-export type ComponentRefusal =
-  | { rifiuto: "sconosciuto"; id: string }
-  | { rifiuto: "nucleo"; id: string }
-  | { rifiuto: "richiesto"; id: string; da: string[] }
-  | { rifiuto: "profilo_sconosciuto"; nome: string }
-  | { rifiuto: "profilo_piu_avanti"; nome: string; arriva_con: string[] };
-
-// Ciò che `components_apply` risponde: l'esito o il rifiuto tipato.
-export type ComponentsApplied =
-  | ({ risposta: "esito" } & ComponentOutcome)
-  | ({ risposta: "rifiuto" } & ComponentRefusal);
-
-
-// Un vault che questa macchina conosce (rispecchia `fub_host::VaultEntry`,
-// §11.1): la memoria fra un avvio e l'altro, che è un'altra cosa da `OpenVaults`
-// — quello dice cosa è aperto ADESSO e muore col processo.
-//
-// Si chiama `KnownVault` e non `VaultEntry` come il tipo Rust perché in Rust i
-// due `VaultEntry` — questo e quello dell'anagrafe
-// (`fub_abi::traits::VaultEntry`, sopra) — stanno in crate diversi, e in
-// TypeScript no: due `interface` omonime **si fondono in silenzio**, e il
-// risultato sarebbe un tipo con dieci campi che nessuna delle due parti
-// riconosce. Il nome che cede è questo, perché l'altro è nel contratto
-// congelato (`vault-entry` nel WIT) e questo è un record della shell. Il nome
-// nuovo è anche quello del comando che lo porta (`known_vaults`).
-export interface KnownVault {
-  root: string;
-  // Vuoto = il nome della cartella, che chi disegna ricava da sé: memorizzarlo
-  // vorrebbe dire mostrare il nome vecchio dopo una rinomina della cartella.
-  name: string;
-  icon: string | null;
-  favorite: boolean;
-  last_opened: number;
-  // Le scorciatoie di questo vault che l'utente ha già guardato (§23.13), chiave
-  // d'impostazione → accordo. È l'unico campo che non descrive il vault: dice
-  // cosa **questa macchina** ha visto di lui, e per questo vive nel registro
-  // della macchina e non nel vault.
-  //
-  // La shell non lo disegna — chi apre un vault vuole sapere come si chiama, non
-  // cosa gli ha risposto. Sta qui perché il mirror è il contratto intero e un
-  // campo taciuto è un campo che il giorno che serve nessuno sa esserci.
-  keys_seen: Record<string, string>;
-}
-
-// Che rapporto ha questo vault con il disco (rispecchia
-// fub_abi::traits::VaultStatus, §9.7). Tre domande diverse e non una: Fub
-// SAPREBBE che il vault è cambiato; è GIÀ successo qualcosa che non ha saputo
-// leggere; e cosa.
-export interface VaultStatus {
-  // `false` = nessuno vede le scritture altrui. Non è di nicchia: network share
-  // e cloud drive, vault sincronizzati con strumenti esterni, il limite di
-  // inotify sui vault grandi, e i tre host dove non esisterà affatto.
-  watching: boolean;
-  // Quante sincronizzazioni per-path sono fallite da quando il vault è aperto.
-  sync_failures: number;
-  // L'ultimo di quei fallimenti, già composto.
-  last_sync_error: string | null;
-  // A che punto è l'indicizzazione dell'apertura (§15.7). Un vault si apre in
-  // due tempi: appena scansionato è utilizzabile e la ricerca si popola dopo,
-  // quindi chi disegna un risultato deve poter dire «sto ancora indicizzando»
-  // invece di «niente trovato», che nei primi secondi di un vault grande
-  // sarebbe una risposta falsa.
-  indexing: IndexingState;
-}
-
-// A CHE PUNTO è un lavoro lungo (rispecchia fub_abi::traits::JobProgress,
-// §10.3). Un record solo per tutti e due i modi di saperlo: l'evento
-// `job_progress`, che lo dice quando cambia, e `JobStatus`, che lo dice a chi
-// arriva dopo e chiede.
-export interface JobProgress {
-  done: number;
-  // Assente = indeterminato: si disegna un'attesa senza barra, non una barra
-  // che mente.
-  total: number | null;
-  label: string | null;
-}
-
-// Un lavoro lungo VIVO (rispecchia fub_abi::traits::JobStatus, §10.3): da
-// `job_started` a `job_done`, quindi anche quelli che aspettano un thread
-// libero — uno in coda si annulla come uno in volo, e chi guarda deve poterlo
-// vedere per poterlo fermare.
-//
-// `id` è un u64 identità: attraversa l'IPC come stringa (vedi VersionRef.hash).
-// `since` è in millisecondi dall'epoca UNIX.
-export interface JobStatus {
-  id: string;
-  job: string;
-  plugin: string;
-  since: number;
-  progress: JobProgress | null;
-}
-
-// L'esito di un export, dentro il `result.Ok` del job che lo ha eseguito
-// (rispecchia fub_abi::transfer::ExportReport). Un artefatto porta i byte, o la
-// ricevuta di quanti ne sono già stati versati dove l'utente li voleva: quella
-// è un u64 conteggio e attraversa l'IPC come stringa.
-export type ExportContent =
-  | { kind: "bytes"; value: readonly number[] }
-  | { kind: "delivered"; value: string };
-export interface ExportArtifact {
-  path: string;
-  media_type: string;
-  content: ExportContent;
-}
-export interface TransferNote {
-  level: "info" | "warning" | "error";
-  message: string;
-  entry: string | null;
-}
-export interface ExportReport {
-  artifacts: ExportArtifact[];
-  log: TransferNote[];
-}
-
-// Un tag del vault con quante note lo portano (rispecchia
-// fub_abi::traits::TagCount). `name` è senza `#`, gerarchia intatta (`a/b`).
-export interface TagCount {
-  name: string;
-  count: number;
-}
-
-// Una voce del cestino (rispecchia fub_kernel::vault::TrashEntry).
-export interface TrashEntry {
-  // Dove il file si trova ora, dentro `.trash/`.
-  id: string;
-  // Dove tornerebbe un ripristino.
-  original: string;
-  // Istante della cancellazione, in secondi UNIX.
-  deleted_at: number;
-  size: number;
-}
-
-// L'organizzazione del vault (rispecchia fub_abi::organization::Organization):
-// icone, note appuntate, ordinamenti per-cartella, spazi. Vive nel sidecar
-// `.fub/workspace.json` dentro il vault, e dal §11.3 lo possiede il KERNEL —
-// prima erano due funzioni dell'host con `std::fs` nudo, e questo tipo si
-// chiamava `WorkspaceMeta` perché era dell'app. Le chiavi sono path relativi al
-// vault: DocId per le note, path senza slash finale per le cartelle ("" è la
-// radice).
-export interface Organization {
-  icons: Record<string, string>;
-  pinned: string[];
-  order: Record<string, string[]>;
-  // Cartelle registrate come "spazi" (striscia di icone), nel loro ordine.
-  // Lo spazio SELEZIONATO non è organizzazione del vault: è stato di vista
-  // per-macchina (§11.2), e sta nel file della macchina — non qui e non più in
-  // `localStorage`.
-  spaces: string[];
-}
-
-/// Gli id dei comandi strutturali che la shell invoca (decisione 0013).
-///
-/// Sono **stringhe del registro**, non funzioni dell'IPC: dalla decisione 0013 la shell
-/// chiede «crea una nota» esattamente come la chiederebbe una CLI, una macro o
-/// un plugin — `invokeCommand(id, args)` — e il fatto che l'implementazione sia
-/// una feature ufficiale non le dà più nessuna scorciatoia. Sono raccolti qui e
-/// non sparsi nei chiamanti perché un id è un dato del contratto: se cambia,
-/// cambia in un posto.
-export const COMMANDS = {
-  create: "note.create",
-  duplicate: "note.duplicate",
-  rename: "note.rename",
-  trash: "note.trash",
-  restore: "trash.restore",
-  clear: "trash.empty",
-  createFolder: "folder.create",
-  renameFolder: "folder.rename",
-  trashFolder: "folder.trash",
-  folderPage: "note.folder_page",
-  subpage: "note.subpage",
-  moveBlock: "note.block.move",
-  syncBlock: "note.block.sync",
-  tableSheet: "note.table.sheet",
-  fromNote: "canvas.from_note",
-  osTrash: "trash.os",
-  undo: "vault.undo",
-  replace: "vault.replace",
-} as const;
-
-/**
- * Che cosa succede nella finestra del visore web (`fub://viewer`), detto alla
- * finestra principale. Rispecchia `fub_app::resources::ViewerEvent`.
- */
-export type ViewerEvent =
-  | { kind: "navigated"; url: string }
-  | { kind: "blocked"; url: string }
-  | { kind: "closed" };
-
-/** I gesti della barra del visore (`viewer_control`). */
-export type ViewerAction = "back" | "forward" | "reload" | "close" | "focus";

@@ -357,7 +357,7 @@ pub fn declare_webview(webview: Webview) -> bool {
 /// Cambia **solo il default**: un valore che la persona ha scritto — anche
 /// `""` — resta il suo, perché il livello macchina legge il default soltanto
 /// dove non c'è un valore. La shell mostra il perché sotto la riga quando il
-/// default è `reduced` (`decorateMotion` in `apps/client/src/panels/settings.ts`).
+/// default è `reduced` (`decorateMotion` in `apps/client/src/panels/settings-form.ts`).
 pub fn motion_default(webview: Option<Webview>) -> &'static str {
     match webview {
         Some(webview) if webview.flickers_after_animations() => "reduced",
