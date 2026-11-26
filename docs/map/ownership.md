@@ -27,7 +27,7 @@
 | i lucchetti dell'host passano da una porta sola, senza callback sotto guardia | `crates/fub-host/src/custody.rs` | `crates/fub-host/src/legacy_tests/` | [architecture/runtime-events-and-jobs.md](../architecture/runtime-events-and-jobs.md) |
 | le capacità si rifiutano da un solo `Guard` per famiglie | `crates/fub-kernel/src/host/guard.rs` | `crates/fub-kernel/tests/effective_capabilities.rs` | [reference/permissions-and-security.md](../reference/permissions-and-security.md) |
 | la tabella di montaggio dei bundle è una, per app, CLI e headless | `crates/fub-host/src/mount.rs` | `crates/fub-host/tests/before_write_bundles.rs` | [architecture/components-and-boundaries.md](../architecture/components-and-boundaries.md) |
-| in quale vault arriva una scrittura è detto, non implicito | `crates/fub-host/src/session.rs` | `crates/fub-host/tests/the_vault_of_a_write.rs` | [architecture/storage-and-identity.md](../architecture/storage-and-identity.md) |
+| in quale vault arriva una scrittura è detto, non implicito | `crates/fub-host/src/session/documents.rs` | `crates/fub-host/tests/the_vault_of_a_write.rs` | [architecture/storage-and-identity.md](../architecture/storage-and-identity.md) |
 | la superficie IPC è un elenco chiuso | `crates/fub-app/src/lib.rs` | `crates/fub-app/tests/lean_ipc.rs` | [reference/ipc-contract.md](../reference/ipc-contract.md) |
 | ogni finestra ha solo i permessi che le spettano | `crates/fub-app/permissions/` | `crates/fub-app/tests/ipc_permissions.rs` | [reference/permissions-and-security.md](../reference/permissions-and-security.md) |
 | nessun modulo della shell importa Tauri fuori dalla cucitura | `apps/client/src/host/ipc.ts` | `apps/client/src/host/no-tauri-outside-host.test.ts` | [architecture/frontend-and-ipc.md](../architecture/frontend-and-ipc.md) |
@@ -60,7 +60,7 @@
 | la copia di un motore è derivata e verificata | `tools/vendor-craft/vendor.mjs` | `vendor.mjs check`, `verify-upstream` (`motori-provenienza.yml`), `gate` | [architecture/motori.md](../architecture/motori.md) |
 | un dato in `vendor/` è il file dell'URL dichiarato, e ogni cartella di `vendor/` è un motore o un dato | `tools/vendor-craft/dati.mjs`, `tools/vendor-craft/provenienza.mjs` | `provenienza.mjs check`, `elenco`, `verify-upstream` (`motori-provenienza.yml`) | [development/testing-and-quality.md](../development/testing-and-quality.md) |
 | i componenti WASM rispettano tempi e memoria | `crates/fub-wasm-host/src/limits.rs` | `crates/fub-wasm-host/tests/` | [reference/permissions-and-security.md](../reference/permissions-and-security.md) |
-| i plugin installati si accendono e spengono per vault | `crates/fub-host/src/session.rs` | `crates/fub-kernel/tests/deactivation.rs` e `crates/fub-host/tests/draw_feature.rs` | [product/plugins-and-extensions.md](../product/plugins-and-extensions.md) |
+| i plugin installati si accendono e spengono per vault | `crates/fub-host/src/session/settings_access.rs` | `crates/fub-kernel/tests/deactivation.rs` e `crates/fub-host/tests/draw_feature.rs` | [product/plugins-and-extensions.md](../product/plugins-and-extensions.md) |
 | il testo del vault passa dal kernel, mai dal formato sbagliato | `crates/fub-kernel/src/documents.rs` | `crates/fub-kernel/tests/text_fidelity.rs` | [architecture/document-model.md](../architecture/document-model.md) |
 
 ## I cinque proprietari del kernel

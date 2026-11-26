@@ -46,6 +46,7 @@
 | Nome | Dove sta |
 |---|---|
 | `Workspace` (il kernel) | `crates/fub-kernel/src/workspace.rs` tiene il tipo, la costruzione e la lingua; i metodi stanno in `workspace/`, un file per tema: `plugin_calls.rs` (plugin, servizi, chiusura), `hosts.rs`, `indexing.rs` e `index_batch.rs` (scansione e lotti), `resources.rs`, `writes.rs`, `sync.rs` e `sync_plans.rs` (il disco che cambia da fuori), `notes.rs`, `rename.rs` e `rename_plans.rs`, `models.rs`, `queries.rs`, `views.rs`, `commands.rs`, `import_export.rs`, `events.rs`, `settings_api.rs`, `housekeeping.rs` |
+| `Host` (chi tiene aperti i vault) | `crates/fub-host/src/session.rs` tiene il tipo e la costruzione; in `session/`: `vault_session.rs` (la sessione e le sue prenotazioni), `opening.rs` (aprire, ripristinare, montare), `themes.rs`, `vaults.rs`, `settings_access.rs`, `access.rs`, `documents.rs`, `commands.rs`, `host_commands.rs`, `user_commands.rs`, `resources.rs`, e un file per ogni modulo di prove |
 | `DocumentSession` | `apps/client/src/state/document-session.ts` |
 | `TextEngine` (il padrone di CodeMirror) | `apps/client/src/editors/text/engine.ts` |
 | il registro delle superfici | `apps/client/src/editors/core/registry.ts` |
