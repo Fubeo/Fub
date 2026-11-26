@@ -5038,7 +5038,7 @@ async function touchOn(page) {
 }
 
 /// La griglia al dito: apre la cartella grande, tiene il dito su B3 oltre
-/// `LONG_PRESS_MS` (450 ms in `editors/grid/engine.ts`) finché compaiono le due
+/// `LONG_PRESS_MS` (450 ms in `editors/grid/engine-parts.ts`) finché compaiono le due
 /// maniglie, e tira quella di fine fino a B6. Il dito passa dal browser vero
 /// (`Input.dispatchTouchEvent`), come in `bench/grid-gestures.mjs`.
 async function touchGridHandles(page) {

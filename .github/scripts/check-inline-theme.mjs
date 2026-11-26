@@ -37,7 +37,7 @@ const CONTRACT = "apps/client/theme/author/contract.json";
 /// Le occorrenze di oggi, per file. Possono solo scendere.
 const EXCEPTIONS = new Map([
   // Il foglio di calcolo ha ancora due ruoli in linea (la Lavagna nessuno, da T67).
-  [`${EDITORS}grid/engine.ts`, 2],
+  [`${EDITORS}grid/engine-paint.ts`, 2],
   // La stampa compone una pagina sua, fuori dalla pelle.
   [`${EDITORS}media/print-view.ts`, 2],
   [`${EDITORS}spatial/tools/accessibility-panel.ts`, 1],

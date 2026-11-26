@@ -296,7 +296,7 @@ anche su diecimila celle.
   `table-model.ts` e `table-widget.ts`
 - `apps/client/src/editors/rich/cell-selection.ts` e `table-structure.ts` (righe
   e colonne, comuni ai comandi del documento)
-- `apps/client/src/editors/grid/engine.ts` e `shortcuts.ts`
+- `apps/client/src/editors/grid/engine.ts` (coi pacchetti `engine-*.ts`) e `shortcuts.ts`
 - `apps/client/src/panels/format-bar.ts` (i tasti della tabella per il dito)
 - `apps/client/src/theme/scrittoio/skin/tabella.css`
 - `apps/client/src/shells/scrittoio/frame/selection-sum.ts` (la somma nella

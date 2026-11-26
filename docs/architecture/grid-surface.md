@@ -409,8 +409,10 @@ byte salvati, non la sessione, e il rapporto conta ciò che il PDF non porta.
 
 ## Dove si trova
 
-- `apps/client/src/editors/grid/`: `engine.ts`, `engine-geometry.ts`,
-  `engine-host.ts`, `dom-sync.ts`, `marks.ts`, `grid-motion.ts`,
+- `apps/client/src/editors/grid/`: `engine.ts` e i suoi pacchetti di metodi
+  `engine-*.ts` (sessione, scrittura, comandi, selezione, tasti, disegno,
+  segni, cella in modifica, appunti, puntatore, oggetti, fogli),
+  `engine-geometry.ts`, `engine-host.ts`, `dom-sync.ts`, `marks.ts`, `grid-motion.ts`,
   `workbook.ts`, `objects.ts`, `comment-card.ts`, `menu-comandi.ts`,
   `risultato.ts`, `motivi.ts`, `ribbon/` (`tabs/`), `dialogs/`, `palette/`
 - `apps/client/src/kit/ribbon/`; `crates/fub-format-xlsx/src/`: `grid.rs`,
