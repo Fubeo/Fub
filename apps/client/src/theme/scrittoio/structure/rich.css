@@ -1,0 +1,485 @@
+/* I documenti di videoscrittura. */
+
+/* La superficie dei documenti di videoscrittura (`editors/rich/`): una
+   colonna di testo che scorre, con la toolbar del riquadro sopra. Qui stanno
+   ciò che ProseMirror chiede al foglio (gli spazi come sono, la selezione di
+   un oggetto) e la geometria dei blocchi: rientri degli elenchi, tabelle,
+   oggetti in linea. Colori e tipografia sono della pelle (`skin/rich.css`). */
+.rich-surface {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+.rich-notice { flex: none; margin: 0; }
+/* Il pulsante che, sul telefono, apre il pannello del documento: in basso a
+   destra, sopra la carta. Altrove il pannello sta di lato, e lui non c'è
+   (`shells/scrittoio/mobile/mobile.css` lo mostra). */
+.rich-surface { position: relative; }
+.rich-side-open {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  z-index: 1;
+  display: none;
+  align-items: center;
+  gap: 4px;
+}
+/* La barra del documento (`editors/rich/ribbon.ts`) è la barra a schede del
+   kit (`.kit-ribbon-*`); qui soltanto ciò che è suo: la galleria degli stili,
+   che sta nelle due file del suo foglietto. L'accesso rapido accanto alle
+   schede prende la forma di `.kit-ribbon-quick`. */
+.rich-ribbon-styles {
+  display: flex;
+  grid-row: 1 / -1;
+  align-items: stretch;
+  height: calc(28px * 2 + var(--space-1, 2px));
+}
+.rich-ribbon-styles-cells { display: flex; align-items: stretch; min-width: 0; }
+.rich-ribbon-style {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  min-width: 0;
+  overflow: hidden;
+}
+.rich-ribbon-style-sample {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rich-strip-swatches { display: grid; grid-template-columns: repeat(6, 24px); }
+.rich-strip-swatch-none,
+.rich-strip-swatch-custom { grid-column: 1 / -1; }
+/* La barra di ricerca del documento, fra la barra multifunzione e il foglio. */
+.rich-findbar { flex: none; display: flex; flex-direction: column; }
+.rich-findbar-row { display: flex; flex-wrap: wrap; align-items: center; }
+.rich-findbar-row > .kit-field { flex: 0 1 240px; }
+.rich-findbar-close { margin-left: auto; }
+/* La ricerca e la pagina stanno sopra la barra, come la formula e la griglia
+   dei fogli: quando la barra si ritira o si riapre le salgono sopra e la
+   scoprono, e l'immagine del vassoio che svanisce (un riquadro fisso dentro
+   la barra) resta sotto di loro, che vengono dopo. Nessun `z-index`: la
+   pagina non diventa un contesto di sovrapposizione, così il disegno
+   ingrandito (`.rich-drawing-large`) resta sopra la ricerca, e il pulsante
+   dei commenti del telefono, che viene dopo, sopra la pagina. L'avviso sta
+   sopra la barra, fuori dalla tenda. */
+.rich-findbar,
+.rich-page { position: relative; }
+/* I riquadri della barra: titolo, campi, azioni in fondo. */
+.rich-strip-panel { display: flex; flex-direction: column; width: 288px; max-width: 100%; }
+.rich-strip-panel-body { display: flex; flex-direction: column; }
+.rich-strip-panel-pairs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.rich-strip-panel-pairs > .rich-strip-panel-note { grid-column: 1 / -1; }
+.rich-strip-panel-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; }
+.rich-strip-panel-check { display: flex; align-items: center; }
+.rich-strip-panel-fields { display: flex; flex-wrap: wrap; }
+.rich-strip-panel-area .kit-field-box { height: auto; }
+.rich-strip-panel-area textarea { resize: vertical; }
+.rich-strip-panel .rich-strip-swatches { padding: 0; }
+/* Il pannello del documento nell'ispettore (`editors/rich/side.ts`). */
+.rich-side, .rich-side-compose, .rich-side-list, .rich-side-item, .rich-side-answer { display: flex; flex-direction: column; }
+.rich-side-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+.rich-side-actions { display: flex; flex-wrap: wrap; }
+.rich-side-quote { display: block; width: 100%; text-align: start; overflow-wrap: anywhere; }
+.rich-side-reply[data-depth="2"] { margin-inline-start: 12px; }
+.rich-side-reply[data-depth="3"] { margin-inline-start: 24px; }
+.rich-side-section { display: flex; flex-direction: column; }
+.rich-side-preview { display: flex; justify-content: center; }
+.rich-side-preview-sheet { position: relative; aspect-ratio: var(--preview-ratio, 595.3 / 841.9); height: 132px; max-width: 100%; }
+.rich-side-preview-text { position: absolute; top: var(--preview-top, 6.7%); bottom: var(--preview-bottom, 6.7%); left: var(--preview-left, 9.5%); right: var(--preview-right, 9.5%); display: flex; }
+.rich-side-preview-column { flex: 1 1 0; min-width: 0; }
+.rich-side-facts { display: grid; grid-template-columns: auto 1fr; margin: 0; }
+.rich-side-facts dd { margin: 0; overflow-wrap: anywhere; }
+.rich-side-dot { display: inline-block; width: 8px; height: 8px; margin-inline-end: 6px; border-radius: 50%; vertical-align: middle; }
+/* La barra di modifica nel margine sinistro, accanto al paragrafo che ha una
+   revisione; in una cella non esce dalla cella. */
+.rich-changed { position: relative; }
+.rich-changed::after { content: ""; position: absolute; top: 0; bottom: 0; inset-inline-start: -18px; width: 2px; pointer-events: none; }
+.rich-cell .rich-changed::after { content: none; }
+.rich-strip-table-grid { display: grid; grid-template-columns: repeat(10, 20px); }
+.rich-strip-table-cell { width: 20px; height: 20px; }
+.rich-strip-count td { text-align: end; }
+.rich-strip-count th[scope="row"] { text-align: start; }
+.rich-page { flex: 1; min-height: 0; overflow: auto; }
+/* La scrivania: dietro il testo, le sagome della carta, che la pelle dipinge;
+   sopra, il testo trasparente. In Scrittura la carta non c'è, e il testo sta
+   nella colonna del tema. */
+.rich-desk { position: relative; }
+.rich-sheets { position: absolute; inset: 0; pointer-events: none; }
+.rich-sheet { position: absolute; inset: 0; }
+/* La carta di un foglio è la sua sagoma, che il moto muove da sola
+   (`editors/rich/rich-motion.ts`): l'intestazione e il piè, sopra, stanno
+   fermi. Di un foglio tolto resta per un momento la sagoma. La sagoma
+   risponde al puntatore, sotto il testo che le sta sopra, perché chi cerca
+   lo sfondo del testo (il controllo del contrasto) trovi la carta e non la
+   scrivania. */
+.rich-sheet-paper { position: absolute; inset: 0; box-sizing: border-box; pointer-events: auto; }
+.rich-sheet-ghost { position: absolute; pointer-events: none; }
+/* L'anello sopra un punto raggiunto: sulla scrivania, dopo il testo, e
+   largo quanto la riga più il suo bordo. */
+.rich-goto-ring { position: absolute; box-sizing: content-box; margin: -4px 0 0 -4px; padding: 2px; pointer-events: none; }
+.look-tema .rich-sheets { display: none; }
+/* Un foglio per interruzione (`editors/rich/sheets.ts`): le sagome stanno
+   in linea dove la misura le mette, e dove un foglio finisce il testo lascia
+   uno spazio alto quanto serve perché il foglio dopo cominci al suo margine.
+   In Scrittura lo spazio non c'è, e l'interruzione è una riga con un nome. */
+.rich-sheet-gap { display: block; }
+.look-tema .rich-sheet-gap { display: none; }
+/* L'intestazione e il piè di un foglio, coi numeri veri; il nome di
+   un'interruzione sta nello spazio fra due fogli. */
+.rich-sheet-head,
+.rich-sheet-foot {
+  position: absolute;
+  overflow: hidden;
+  white-space: pre-wrap;
+  font-family: Calibri, Carlito, sans-serif;
+  font-size: 11pt;
+  line-height: 1.2;
+}
+.rich-sheet-foot { display: flex; flex-direction: column; justify-content: flex-end; }
+.rich-sheet-name {
+  position: absolute;
+  inset-inline: 0;
+  transform: translateY(-50%);
+  text-align: center;
+  white-space: nowrap;
+  font-family: var(--font-ui, system-ui, sans-serif);
+  font-size: 11px;
+  line-height: 1.5;
+}
+/* Scrivendo l'intestazione il corpo si attenua, come in Word. */
+.rich-desk-running > .rich-content { opacity: 0.45; }
+.rich-running { position: absolute; z-index: 1; box-sizing: border-box; }
+.rich-running-bar {
+  position: absolute;
+  inset-inline-start: 0;
+  display: flex;
+  align-items: center;
+  white-space: nowrap;
+}
+.rich-running[data-kind="header"] .rich-running-bar { bottom: 100%; }
+.rich-running[data-kind="footer"] .rich-running-bar { top: 100%; }
+.rich-running-area {
+  min-height: 1.2em;
+  outline: none;
+  white-space: pre-wrap;
+  font-family: Calibri, Carlito, sans-serif;
+  font-size: 11pt;
+  line-height: 1.2;
+}
+.rich-token { display: inline-block; white-space: nowrap; user-select: all; }
+/* In Pagina e in Lettura la carta è quella vera: 1 pt è 1/72 di pollice, e
+   al 100 % un Letter è largo 816 px. Non si stringe col riquadro: si scorre.
+   Le misure sono del documento (`--page-*`, `page.ts`); senza, quelle
+   dell'ODT, un A4 con i margini di 2 cm. */
+.look-file .rich-page,
+.look-adattato .rich-page { padding: 24px; scrollbar-gutter: stable; }
+.look-file .rich-desk,
+.look-adattato .rich-desk {
+  width: var(--page-w, 595.3pt);
+  min-height: var(--page-h, 841.9pt);
+  margin-inline: auto;
+}
+.look-file .rich-content,
+.look-adattato .rich-content {
+  min-height: var(--desk-h, var(--page-h, 841.9pt));
+  padding: var(--page-top, 56.7pt) var(--page-right, 56.7pt) var(--page-bottom, 56.7pt) var(--page-left, 56.7pt);
+}
+/* La carta del file. In `look-file` il documento sta sulla carta del file,
+   chiara in ogni luce: la scrivania ricollega la carta (`--doc-*`) ai ruoli
+   `--paper-*`, con i valori della serie per un tema che non li dichiara. In
+   `look-adattato` la carta resta quella del tema, e i colori del file li porta
+   sulla carta `editors/rich/tints.ts`. La griglia di una cartella di Excel fa
+   lo stesso, nella sua vista. */
+.look-file .rich-desk,
+.look-file .grid-viewport {
+  --doc-bg: var(--paper-bg, #ffffff);
+  --doc-fg: var(--paper-ink, #131715);
+  --doc-heading: var(--paper-ink, #131715);
+  --doc-link: var(--paper-link, #007249);
+  --doc-danger: var(--paper-danger, #c80c19);
+  --doc-rule: var(--paper-rule, rgb(19 23 21 / 30%));
+  --doc-rule-soft: var(--paper-rule-soft, rgb(19 23 21 / 16%));
+  --doc-fill: var(--paper-fill, rgb(19 23 21 / 8%));
+  --doc-fill-soft: var(--paper-fill-soft, rgb(19 23 21 / 5%));
+  --doc-highlight: var(--paper-highlight, rgb(250 222 78 / 55%));
+  /* Il testo dei segni di Fub (il nome di un'interruzione, un segnaposto):
+     l'inchiostro verso la carta, a 5,5:1 sul bianco. */
+  --doc-gutter-fg: color-mix(in oklab, var(--paper-ink, #131715) 60%, var(--paper-bg, #ffffff));
+}
+/* L'anello del fuoco e la sintassi stanno sulle superfici di carta (il testo
+   del documento, l'intestazione e il piè in scrittura, le celle del foglio),
+   non sul fondo del tema: al buio l'accento chiaro del tema sul bianco
+   starebbe a 2,2:1, il «=» e i numeri di una formula a 1,8:1. Non su tutta la
+   scrivania: l'editor di un disegno ci galleggia col fondo del tema, e lì
+   l'anello del tema regge. L'anello prende l'accento della carta; la formula
+   l'inchiostro, come in Excel, dove hanno colore solo i riferimenti (i loro,
+   `--doc-author-*`, sono già della carta). */
+.look-file .rich-content,
+.look-file .rich-running,
+.look-file .grid-viewport {
+  --focus-ring: var(--paper-link, #007249);
+  --syn-keyword: var(--doc-fg);
+  --syn-name: var(--doc-fg);
+  --syn-function: var(--doc-fg);
+  --syn-literal: var(--doc-fg);
+  --syn-type: var(--doc-fg);
+  --syn-operator: var(--doc-fg);
+  --syn-string: var(--doc-fg);
+  --syn-heading: var(--doc-fg);
+  --syn-comment: var(--doc-gutter-fg);
+  --syn-invalid: var(--doc-danger);
+}
+/* I segni della griglia sulla carta: la cella attiva, la selezione, il
+   riempimento, lo spostamento, il taglio, la cella in modifica, gli oggetti,
+   il segno dei commenti. Erano dell'accento del tema, e al buio il verde
+   chiaro sul bianco sta a 2,2:1: la cella attiva quasi non si vede. Sui segni
+   l'accento è quello della carta, e il velo della selezione con lui. Le
+   intestazioni sono cornice, sul fondo del tema, e tengono l'accento del
+   tema: la regola va sulle celle e non sulla riga (`.grid-row`), che contiene
+   anche l'intestazione. Solo nella vista della griglia: la scheda di un
+   foglio sulla lavagna ha `look-file` ma la carta del tema, e lì l'accento
+   del tema regge. I pezzi del motore dei segni (`grid-mark-*`: l'anello, il
+   velo, il quadratino del riempimento, i tratteggi di copia e taglio) non
+   leggono l'accento ma `--grid-mark`, che sulla carta è già della carta. */
+.look-file .grid-viewport :is(.grid-cell, .grid-selection, .grid-move-preview, .grid-cell-editor, .grid-object, .grid-object-handle, .grid-object-text-editor, .grid-comment-mark) {
+  --accent: var(--paper-link, #007249);
+  --accent-veil: color-mix(in srgb, var(--paper-link, #007249) 12%, transparent);
+}
+/* Il testo del file: carattere, misura, colore, spazi e interlinea risolti
+   dal formato, come variabili di dato sull'elemento (`--file-*`,
+   `editors/rich/schema.ts`). Un paragrafo che non ne dice uno prende quello
+   del documento, che sta sulla radice; senza, quelli di un documento nuovo di
+   Word: Calibri 11, 8 pt dopo il paragrafo, interlinea 1,08. Gli stili del
+   browser per titoli, collegamenti ed evidenziato non sono del file. */
+.look-file .rich-content,
+.look-adattato .rich-content {
+  color: var(--doc-fg, #14161a);
+  font-family: var(--file-font, Calibri, Carlito, sans-serif);
+  font-size: var(--file-size, 11pt);
+  caret-color: var(--doc-caret, #2c57cd);
+}
+.look-file .rich-para,
+.look-adattato .rich-para {
+  margin-block: var(--file-before, 0) var(--file-after, 8pt);
+  font-family: var(--file-font, Calibri, Carlito, sans-serif);
+  font-size: var(--file-size, 11pt);
+  font-weight: 400;
+  line-height: var(--file-line, calc(1.2 * 1.08));
+}
+.look-file .rich-content [data-rich-font],
+.look-adattato .rich-content [data-rich-font] { font-family: var(--file-font, Calibri, Carlito, sans-serif); }
+.look-file .rich-content [data-rich-size],
+.look-adattato .rich-content [data-rich-size] { font-size: var(--file-size, 11pt); }
+.look-file .rich-content .rich-link,
+.look-adattato .rich-content .rich-link { color: inherit; text-decoration: none; }
+/* «Automatico» è l'inchiostro della carta, anche dentro un paragrafo di un
+   altro colore. */
+.look-file .rich-para { color: var(--file-color, var(--doc-fg, #14161a)); }
+.look-file .rich-content [data-rich-color] { color: var(--file-color, var(--doc-fg, #14161a)); }
+.look-file .rich-content [data-rich-color="auto"],
+.look-adattato .rich-content [data-rich-color="auto"] { color: var(--doc-fg, #14161a); }
+.look-file .rich-content mark { background-color: var(--file-hl, #ffff00); color: inherit; }
+/* Sulla carta del tema i colori del file sono quelli adattati, che
+   `editors/rich/tints.ts` mette accanto ai valori del file. */
+.look-adattato .rich-content mark { background-color: var(--doc-highlight, rgb(250 222 78 / 55%)); color: inherit; }
+.look-adattato .rich-tinted,
+.look-adattato .rich-tint[data-tint-color] { color: var(--file-color-a, currentColor); }
+.look-adattato .rich-tint[data-tint-hl] { background-color: var(--file-hl-a, transparent); }
+/* Le tabelle del file: il filo della griglia e i margini delle celle di Word
+   (0,19 cm). Il bordo del file non viaggia nella proiezione. */
+.look-file .rich-cell,
+.look-adattato .rich-cell {
+  padding: 0 5.4pt;
+  border: 0.5pt solid var(--doc-rule, rgb(20 22 26 / 30%));
+}
+/* Le interruzioni e le sezioni sulla carta, con il loro nome. */
+.look-file .rich-section,
+.look-adattato .rich-section {
+  margin-block: 12pt;
+  border-top: 3px double var(--doc-rule, rgb(20 22 26 / 30%));
+}
+.look-file .rich-break-page,
+.look-adattato .rich-break-page { border-top: 1px dashed var(--doc-rule, rgb(20 22 26 / 30%)); }
+.look-file .rich-break-column,
+.look-adattato .rich-break-column { border-top: 1px dotted var(--doc-rule-soft, rgb(20 22 26 / 16%)); }
+.look-file .rich-break[data-name]::after,
+.look-file .rich-section[data-name]::after,
+.look-adattato .rich-break[data-name]::after,
+.look-adattato .rich-section[data-name]::after {
+  background: var(--doc-bg, #ffffff);
+  color: var(--doc-gutter-fg, #5d626d);
+  font-family: var(--font-ui, system-ui, sans-serif);
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.5;
+}
+/* Un'interruzione che apre un foglio non è più una riga: il foglio dopo la
+   dice, e il suo nome sta fra i due fogli. */
+.look-file .rich-cut,
+.look-adattato .rich-cut { margin-block: 0; border-top: 0; }
+.look-file .rich-cut[data-name]::after,
+.look-adattato .rich-cut[data-name]::after { display: none; }
+.rich-content {
+  position: relative;
+  box-sizing: border-box;
+  min-height: 100%;
+  outline: none;
+  white-space: pre-wrap;
+  white-space: break-spaces;
+  overflow-wrap: break-word;
+  font-variant-ligatures: none;
+  font-feature-settings: "liga" 0;
+}
+.rich-content .ProseMirror-hideselection *::selection { background: transparent; }
+.rich-content.ProseMirror-hideselection { caret-color: transparent; }
+.rich-content [draggable][contenteditable="false"] { user-select: text; }
+.rich-content img.ProseMirror-separator {
+  display: inline !important;
+  border: none !important;
+  margin: 0 !important;
+}
+.rich-para { margin: 0; }
+/* Gli elenchi sono paragrafi con un livello, come in Word: il segno lo
+   disegna il foglio, il numero lo conta il foglio. Il formato del numero
+   (lettere, romani) non viaggia nella proiezione: qui è sempre decimale. */
+.rich-list { position: relative; }
+.rich-list[data-level="0"] { margin-inline-start: 1.5em; }
+.rich-list[data-level="1"] { margin-inline-start: 3em; }
+.rich-list[data-level="2"] { margin-inline-start: 4.5em; }
+.rich-list[data-level="3"] { margin-inline-start: 6em; }
+.rich-list[data-level="4"] { margin-inline-start: 7.5em; }
+.rich-list[data-level="5"] { margin-inline-start: 9em; }
+.rich-list[data-level="6"] { margin-inline-start: 10.5em; }
+.rich-list[data-level="7"] { margin-inline-start: 12em; }
+.rich-list[data-level="8"] { margin-inline-start: 13.5em; }
+.rich-list::before {
+  position: absolute;
+  inset-inline-end: 100%;
+  padding-inline-end: 0.5em;
+  white-space: nowrap;
+}
+.rich-list[data-list="bullet"]::before { content: "•"; }
+.rich-list[data-level="0"] { counter-increment: rich-list-0; }
+.rich-list[data-level="1"] { counter-increment: rich-list-1; }
+.rich-list[data-level="2"] { counter-increment: rich-list-2; }
+.rich-list[data-level="3"] { counter-increment: rich-list-3; }
+.rich-list[data-level="4"] { counter-increment: rich-list-4; }
+.rich-list[data-level="5"] { counter-increment: rich-list-5; }
+.rich-list[data-level="6"] { counter-increment: rich-list-6; }
+.rich-list[data-level="7"] { counter-increment: rich-list-7; }
+.rich-list[data-level="8"] { counter-increment: rich-list-8; }
+.rich-para:not(.rich-list) {
+  counter-reset: rich-list-0 rich-list-1 rich-list-2 rich-list-3 rich-list-4 rich-list-5 rich-list-6 rich-list-7 rich-list-8;
+}
+.rich-list[data-level="0"] + .rich-list[data-level="1"] { counter-reset: rich-list-1; }
+.rich-list[data-level="1"] + .rich-list[data-level="2"] { counter-reset: rich-list-2; }
+.rich-list[data-level="2"] + .rich-list[data-level="3"] { counter-reset: rich-list-3; }
+.rich-list[data-level="3"] + .rich-list[data-level="4"] { counter-reset: rich-list-4; }
+.rich-list[data-level="4"] + .rich-list[data-level="5"] { counter-reset: rich-list-5; }
+.rich-list[data-level="5"] + .rich-list[data-level="6"] { counter-reset: rich-list-6; }
+.rich-list[data-level="6"] + .rich-list[data-level="7"] { counter-reset: rich-list-7; }
+.rich-list[data-level="7"] + .rich-list[data-level="8"] { counter-reset: rich-list-8; }
+/* Un numerato dopo un puntato dello stesso livello è un altro elenco, e
+   ricomincia da uno. */
+.rich-list[data-list="bullet"][data-level="0"] + .rich-list[data-list="ordered"][data-level="0"] { counter-reset: rich-list-0; }
+.rich-list[data-list="bullet"][data-level="1"] + .rich-list[data-list="ordered"][data-level="1"] { counter-reset: rich-list-1; }
+.rich-list[data-list="bullet"][data-level="2"] + .rich-list[data-list="ordered"][data-level="2"] { counter-reset: rich-list-2; }
+.rich-list[data-list="bullet"][data-level="3"] + .rich-list[data-list="ordered"][data-level="3"] { counter-reset: rich-list-3; }
+.rich-list[data-list="bullet"][data-level="4"] + .rich-list[data-list="ordered"][data-level="4"] { counter-reset: rich-list-4; }
+.rich-list[data-list="bullet"][data-level="5"] + .rich-list[data-list="ordered"][data-level="5"] { counter-reset: rich-list-5; }
+.rich-list[data-list="bullet"][data-level="6"] + .rich-list[data-list="ordered"][data-level="6"] { counter-reset: rich-list-6; }
+.rich-list[data-list="bullet"][data-level="7"] + .rich-list[data-list="ordered"][data-level="7"] { counter-reset: rich-list-7; }
+.rich-list[data-list="bullet"][data-level="8"] + .rich-list[data-list="ordered"][data-level="8"] { counter-reset: rich-list-8; }
+.rich-list[data-list="ordered"][data-level="0"]::before { content: counter(rich-list-0) "."; }
+.rich-list[data-list="ordered"][data-level="1"]::before { content: counter(rich-list-1) "."; }
+.rich-list[data-list="ordered"][data-level="2"]::before { content: counter(rich-list-2) "."; }
+.rich-list[data-list="ordered"][data-level="3"]::before { content: counter(rich-list-3) "."; }
+.rich-list[data-list="ordered"][data-level="4"]::before { content: counter(rich-list-4) "."; }
+.rich-list[data-list="ordered"][data-level="5"]::before { content: counter(rich-list-5) "."; }
+.rich-list[data-list="ordered"][data-level="6"]::before { content: counter(rich-list-6) "."; }
+.rich-list[data-list="ordered"][data-level="7"]::before { content: counter(rich-list-7) "."; }
+.rich-list[data-list="ordered"][data-level="8"]::before { content: counter(rich-list-8) "."; }
+.rich-section { border: none; margin: 0; height: 0; overflow: visible; }
+.rich-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.rich-cell { vertical-align: top; overflow-wrap: anywhere; }
+.rich-atom {
+  display: inline-block;
+  box-sizing: border-box;
+  max-width: 100%;
+  vertical-align: text-bottom;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  user-select: none;
+}
+.rich-atom-marker { display: inline; }
+/* Un segnaposto con una misura: il segno e il nome al centro della casella. */
+.rich-atom-image,
+.rich-atom-graphic,
+.rich-atom-shape,
+.rich-atom-text_box,
+.rich-atom-group {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  white-space: normal;
+  text-align: center;
+}
+.rich-atom-equation { display: inline-flex; align-items: baseline; }
+.rich-atom-name { overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+/* Il richiamo di una nota, in apice: il suo numero, o un segno finché non
+   ce l'ha. */
+.rich-atom-note { vertical-align: super; }
+.rich-atom-note::before { content: "*"; }
+.rich-atom-note[data-number]::before { content: attr(data-number); }
+/* Un oggetto fuori dal testo (`float` della proiezione): davanti o dietro
+   sta al suo posto dal paragrafo dell'ancora, che è il riferimento e la pila;
+   «Quadrato» va all'inizio della riga col testo attorno. */
+.rich-para { position: relative; z-index: 0; }
+.rich-atom-float { position: absolute; max-width: none; overflow: visible; }
+.rich-atom-float-front { z-index: 1; }
+.rich-atom-float-behind { z-index: -1; pointer-events: none; }
+.rich-atom-float-square { position: static; float: inline-start; margin-inline-end: 0.5em; }
+/* L'inchiostro si disegna dai suoi tratti; l'evidenziatore si mescola col
+   testo che copre, come un pennarello sulla carta. */
+.rich-ink { display: block; width: 100%; height: 100%; overflow: visible; }
+.rich-ink-highlight { mix-blend-mode: multiply; }
+/* Il velo della scheda «Disegna»: sopra il documento mentre si disegna,
+   prende il puntatore e disegna l'anteprima del tratto. */
+.rich-ink-veil { position: absolute; inset: 0; z-index: 3; touch-action: none; cursor: crosshair; }
+.rich-ink-veil[data-tool="eraser"] { cursor: cell; }
+.rich-ink-veil[data-tool="lasso"] { cursor: default; }
+.rich-ink-veil > svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+/* Un disegno del documento aperto nell'editor dei disegni: sopra l'oggetto,
+   o alla finestra con «Apri grande». */
+.rich-drawing-editor { position: absolute; z-index: 4; display: flex; flex-direction: column; overflow: hidden; }
+.rich-drawing-large { position: fixed; inset: 24px; width: auto !important; height: auto !important; z-index: 40; }
+.rich-drawing-bar { flex: none; display: flex; align-items: center; }
+.rich-drawing-title { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rich-drawing-stage { position: relative; flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+.rich-break-page,
+.rich-break-column { display: block; height: 0; margin-block: 1em; }
+/* Il nome di un'interruzione sta sul suo filo, al centro. */
+.rich-break[data-name]::after,
+.rich-section[data-name]::after {
+  content: attr(data-name);
+  display: table;
+  margin: -0.75em auto 0;
+  padding-inline: 0.5em;
+  white-space: nowrap;
+}
+
+/* Il sorgente di un canvas troppo grande per la tela: scorre dentro il foglio. */
+.canvas-source {
+  box-sizing: border-box;
+  height: 100%;
+  margin: 0;
+  overflow: auto;
+}
+

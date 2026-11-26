@@ -53,7 +53,6 @@
 1856 apps/client/src/theme/scrittoio/skin/export.css
 1910 apps/client/src/theme/scrittoio/skin/kit.css
 2165 apps/client/src/theme/scrittoio/skin/settings.css
-7610 apps/client/src/theme/scrittoio/structure.css
 1757 apps/client/src/ui/menu.test.ts
 1884 apps/client/src/ui/menu.ts
 1577 apps/client/src/ui/mermaid.ts

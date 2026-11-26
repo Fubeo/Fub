@@ -1,0 +1,198 @@
+/* Il corpo: il binario, i cassetti, l'ispettore, il divisore. */
+
+/* ── Il corpo: binario, cassetti, scrivania ──────────────────────────────── */
+
+#workspace {
+  grid-row: 2;
+  display: flex;
+  min-height: 0;
+  min-width: 0;
+}
+
+.rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  width: var(--rail-w);
+  min-width: var(--rail-w);
+  flex: none;
+  min-height: 0;
+  position: relative;
+}
+
+/* `chrome.rail.visible` spegne la barra degli strumenti; il binario intero la
+   segue, piede compreso. */
+.rail:has(> #views-ribbon[hidden]) {
+  display: none;
+}
+
+#views-ribbon {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 0;
+  overflow: hidden auto;
+  scrollbar-width: none;
+}
+
+/* `panels/rail.ts` porta le icone fuori da `#rail-shell`, in coda alla barra:
+   il contenitore resta vuoto e non deve occupare una riga. */
+#rail-shell {
+  display: contents;
+}
+
+#rail-foot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: none;
+  width: 100%;
+}
+
+.rail .rail-btn {
+  width: var(--rail-target);
+  height: var(--rail-target);
+  flex: none;
+}
+
+.rail .rail-btn svg {
+  width: var(--rail-icon);
+  height: var(--rail-icon);
+}
+
+/* La tacca del pannello aperto: dove sta lo scrive `frame/rail.ts`. */
+.rail-notch {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+}
+
+/* La scena del cambio di luce: un cerchio che parte dal bottone. Colore e
+   misura li scrive chi la recita; non prende mai il puntatore. */
+.light-scene {
+  position: fixed;
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: var(--z-drag);
+}
+
+#layout {
+  flex: 1;
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: stretch;
+  min-height: 0;
+  min-width: 0;
+  position: relative;
+}
+
+#sidebar {
+  flex: 0 0 var(--sidebar-w);
+  width: var(--sidebar-w);
+  min-width: var(--sidebar-min);
+  max-width: 400px;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden auto;
+  /* Un piano a sé: WebKitGTK compone lo scorrimento dell'albero e dei
+     risultati della ricerca invece di ridipingerli a ogni passo
+     (docs/architecture/desktop-webview.md, «Gli scorrevoli»). */
+  isolation: isolate;
+  container-type: inline-size;
+  container-name: drawer;
+}
+
+#right-pane {
+  flex: 0 0 var(--inspector-w);
+  width: var(--inspector-w);
+  min-width: var(--inspector-min);
+  max-width: 440px;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  container-type: inline-size;
+  container-name: drawer;
+}
+
+.inspector {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* Le schede dell'ispettore salgono sulla riga delle linguette: in cima, prima
+   del titolo. */
+.inspector-tabs {
+  order: -1;
+}
+
+#views-right {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+#views-right > .declared-view-panel {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border-width: 0;
+  border-inline-end-width: 1px;
+}
+
+#views-right > .declared-view-panel[hidden] {
+  display: none !important;
+}
+
+#views-right > .declared-view-panel > .panel-title {
+  display: none;
+}
+
+/* Il divisore sta **sopra** il margine fra cassetto e scrivania, senza
+   allargarlo: la presa è larga, lo spazio che occupa è zero. Largo un pixel,
+   che il margine restituisce, perché è una fermata del Tab: un elemento largo
+   zero per chi misura non c'è, e il fuoco ci arriverebbe dal nulla. */
+.layout-divider {
+  flex: 0 0 1px;
+  width: 1px;
+  margin-right: -1px;
+  align-self: stretch;
+  position: relative;
+  z-index: var(--z-sheet-active);
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.layout-divider::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -4px;
+  width: 8px;
+}
+
+#views-bottom {
+  flex: 0 0 100%;
+  order: 9;
+  width: 100%;
+  overflow: auto;
+  max-height: 30vh;
+}
+
+#views-bottom .panel-title,
+#views-bottom .declared-view {
+  display: inline-flex;
+}
+

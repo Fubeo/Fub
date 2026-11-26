@@ -1,0 +1,639 @@
+/* La scrivania e i fogli: linguette, testata, barra di formato. */
+
+/* ── La scrivania e i fogli ──────────────────────────────────────────────── */
+
+/* L'ombra del foglio esce dalla scrivania. `#panes` taglia ciò che esce
+   (`overflow: hidden`): l'ombra della carta finiva contro il suo bordo, e
+   restava un rettangolo. La scrivania si allarga di `--sheet-reach` verso i
+   vicini che stanno dentro la finestra (il cassetto o il binario a sinistra,
+   l'ispettore agganciato a destra, la banda sotto) e restituisce la stessa
+   misura in padding: i fogli restano dove sono, la scatola esterna non cambia
+   e l'ombra ha spazio per sfumare. Verso il bordo della finestra non si
+   allarga mai: l'eccedenza renderebbe `#app` scorrevole da programma. La
+   fascia in più non prende i clic: il cassetto, l'ispettore, la banda e i
+   divisori sotto l'ombra restano vivi. */
+#panes {
+  --sheet-reach: 20px;
+  --reach-l: var(--sheet-reach);
+  --reach-r: 0px;
+  --reach-b: var(--sheet-reach);
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+  height: calc(100% + var(--reach-b));
+  overflow: hidden;
+  display: flex;
+  margin: 0 calc(-1 * var(--reach-r)) calc(-1 * var(--reach-b)) calc(-1 * var(--reach-l));
+  padding: 0 calc(var(--sheet-gap) + var(--reach-r)) calc(var(--sheet-gap) + var(--reach-b)) var(--reach-l);
+  pointer-events: none;
+}
+
+/* Senza cassetto accanto, il margine torna anche da quel lato. */
+#layout:not(:has(> #sidebar:not([hidden]))) > #panes,
+#layout.layout-compact > #panes {
+  padding-left: calc(var(--sheet-gap) + var(--reach-l));
+}
+
+#layout:has(> #right-pane:not([hidden])):not(.layout-compact):not(.layout-inspector-overlay) > #panes {
+  --reach-r: var(--sheet-reach);
+  padding-right: var(--reach-r);
+}
+
+/* Il benvenuto non ha fogli, la modalità concentrata non ha vicini ai lati:
+   niente fascia. Sotto, in concentrazione, resta la banda (con «Esci dalla
+   concentrazione»): l'ombra la raggiunge come sempre, della stessa misura. */
+#app[data-welcome] #panes,
+#app[data-focus-mode] #panes {
+  --sheet-reach: 0px;
+}
+
+#app[data-focus-mode] #panes {
+  --reach-b: 20px;
+}
+
+#app[data-status-off] #panes {
+  --reach-b: 0px;
+}
+
+#panes > * {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+  pointer-events: auto;
+}
+
+#panes:has(> .onboarding:not([hidden])) > .pane,
+#panes:has(> .onboarding:not([hidden])) > .pane-split {
+  display: none;
+}
+
+.pane-split {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+}
+
+.pane-split.row {
+  flex-direction: row;
+}
+
+.pane-split.col {
+  flex-direction: column;
+}
+
+.pane-split > * {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* Il divisore fra due fogli **è** lo spazio fra loro. */
+.pane-split > .pane-divider {
+  flex: 0 0 var(--sheet-gap);
+  position: relative;
+  z-index: var(--z-sheet-active);
+  touch-action: none;
+}
+
+.pane-split.row > .pane-divider {
+  width: var(--sheet-gap);
+  cursor: col-resize;
+}
+
+.pane-split.col > .pane-divider {
+  height: var(--sheet-gap);
+  cursor: row-resize;
+}
+
+/* Un foglio: le linguette sopra, sulla scrivania; sotto, la carta. La carta è
+   uno pseudo-elemento del riquadro e non un contenitore, perché testata, barra
+   di formattazione, avvisi e contenuto sono fratelli: così sono una superficie
+   sola senza cambiare il DOM che il controllore conosce. */
+/* Il foglio sta sopra i vicini, perché la sua ombra cada su di loro e non
+   sotto: l'ispettore viene dopo nel DOM e la coprirebbe. Divisori, cassetti
+   e menu restano sopra. */
+.pane {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  position: relative;
+  z-index: var(--z-sheet);
+  isolation: isolate;
+}
+
+/* La carta comincia `--tab-lap` sopra il fondo della striscia: lì la linguetta
+   attiva la copre, e il giunto resta chiuso anche a uno zoom frazionario.
+
+   La carta ha uno strato suo (`translateZ(0)`): la sua ombra, una pila di
+   strati, si dipinge una volta e non a ogni battuta. Nello stesso strato del
+   testo ogni carattere scritto ridipingeva anche l'ombra, e dove la WebView
+   dipinge senza GPU (WebKitGTK sotto Xvfb, una macchina senza accelerazione)
+   il tasto arrivava sullo schermo in quasi il doppio del tempo. Non
+   `will-change: transform`: Chromium allinea quello strato al pixel intero, e
+   con fogli larghi un numero frazionario di pixel il bordo della carta si
+   spostava di uno. */
+.pane::before {
+  content: "";
+  position: absolute;
+  inset: calc(var(--tab-h) - var(--tab-lap)) 0 0 0;
+  z-index: -1;
+  pointer-events: none;
+  transform: translateZ(0);
+}
+
+/* Senza linguette non c'è carta da raccordare: il segnaposto prende tutto il
+   riquadro. */
+.pane:has(> .pane-tabs[hidden])::before {
+  inset: 0;
+}
+
+/* La sagoma di un foglio chiuso (`stage-motion.ts`): ferma sul rettangolo
+   della carta che c'era, sopra la scrivania, mai sotto il puntatore. */
+.sheet-ghost {
+  position: fixed;
+  z-index: var(--z-sheet-active);
+  pointer-events: none;
+}
+
+.sheet-ghost::before {
+  content: "";
+  position: absolute;
+  inset: var(--sheet-inset, 0px) 0 0 0;
+}
+
+/* L'angolo vivo sotto la prima linguetta. È una toppa sopra l'angolo
+   arrotondato della carta, non un raggio che cambia: compare e si dissolve con
+   la sola opacità mentre la sagoma scorre, e il layout non si muove. Se la
+   striscia è scorsa la prima linguetta non è più lì, e la toppa nemmeno. */
+.pane::after {
+  content: "";
+  position: absolute;
+  top: calc(var(--tab-h) - var(--tab-lap));
+  left: 0;
+  width: var(--radius-sheet, 12px);
+  height: var(--radius-sheet, 12px);
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0;
+}
+
+.pane:has(> .pane-tabs:not([data-scrolled="start"]):not([data-scrolled="both"]) > [role="tablist"] + .tab-entry > .tab[aria-selected="true"])::after {
+  opacity: 1;
+}
+
+/* La striscia. La prima linguetta parte a filo del fianco del foglio; in fondo
+   stanno il «+» e l'elenco, che tengono il raccordo destro dell'ultima sempre
+   sul tratto dritto del bordo (raggio del foglio più un raccordo). */
+.pane-tabs {
+  display: flex;
+  align-items: flex-end;
+  flex: 0 0 var(--tab-h);
+  height: var(--tab-h);
+  min-height: var(--tab-h);
+  max-height: var(--tab-h);
+  min-width: 0;
+  padding: 0 var(--space-2, 4px) 0 0;
+  overflow: auto hidden;
+  scrollbar-width: none;
+  /* Portata a vista, una linguetta non finisce sotto l'elenco né nella
+     sfumatura: da una parte e dall'altra resta lo spazio del suo raccordo. */
+  scroll-padding: 0 calc(54px + var(--space-2, 4px) + 2 * var(--tab-fillet) + var(--space-6, 16px)) 0 calc(var(--space-8, 24px) + var(--tab-fillet));
+  position: relative;
+  z-index: 1;
+}
+
+/* Scorsa, la striscia sfuma dal lato da cui continua. A destra lo fa l'elenco,
+   che le sta sopra. */
+.pane-tabs[data-scrolled="start"],
+.pane-tabs[data-scrolled="both"] {
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 var(--space-8, 24px));
+  mask-image: linear-gradient(to right, transparent, #000 var(--space-8, 24px));
+}
+
+.pane-tabs > [role="tablist"] {
+  display: contents;
+}
+
+.tab-entry {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 1 var(--tab-max);
+  min-width: var(--tab-min);
+  max-width: var(--tab-max);
+  height: calc(var(--tab-h) - var(--tab-air));
+  position: relative;
+  isolation: isolate;
+}
+
+.tab-entry > .tab {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+}
+
+.tab-entry > .tab-close {
+  flex: 0 0 auto;
+}
+
+/* Una linguetta fissata è stretta quanto il suo nome e non ha chiusura a
+   vista: si chiude dal menu o con Canc, che è il gesto di chi l'ha fissata. */
+.tab-entry:has(> .tab-pinned) {
+  flex: 0 1 auto;
+  min-width: calc(var(--tab-h) + var(--tab-fillet));
+  max-width: calc(var(--tab-max) * 0.7);
+}
+
+.tab-entry:has(> .tab-pinned) > .tab-close {
+  display: none;
+}
+
+/* La sagoma della linguetta attiva. Corpo, angoli alti e raccordi concavi sono
+   una maschera sola su uno pseudo-elemento che sporge di un raccordo per lato:
+   la pelle le dà soltanto il colore del foglio. Sotto la prima linguetta la
+   sporgenza sinistra cade fuori dalla striscia e viene tagliata, e il fianco
+   scende dritto nel fianco del foglio.
+
+   Ogni strato della maschera sormonta il vicino di un pixel: due bordi
+   sfumati accostati lascerebbero un filo a metà copertura. */
+.tab-entry::before {
+  --tab-f: var(--tab-fillet);
+  --tab-r: var(--tab-radius, 8px);
+  --tab-shape:
+    linear-gradient(#000 0 0) left var(--tab-f) bottom 0 / calc(100% - 2 * var(--tab-f)) calc(100% - var(--tab-r) + 1px) no-repeat,
+    linear-gradient(#000 0 0) left calc(var(--tab-f) + var(--tab-r) - 1px) top 0 / calc(100% - 2 * var(--tab-f) - 2 * var(--tab-r) + 2px) var(--tab-r) no-repeat,
+    radial-gradient(circle at 100% 100%, #000 calc(var(--tab-r) - 0.5px), transparent calc(var(--tab-r) + 0.5px)) left var(--tab-f) top 0 / var(--tab-r) var(--tab-r) no-repeat,
+    radial-gradient(circle at 0 100%, #000 calc(var(--tab-r) - 0.5px), transparent calc(var(--tab-r) + 0.5px)) right var(--tab-f) top 0 / var(--tab-r) var(--tab-r) no-repeat,
+    radial-gradient(circle at 0 0, transparent calc(var(--tab-f) - 0.5px), #000 calc(var(--tab-f) + 0.5px)) left 0 bottom 0 / calc(var(--tab-f) + 1px) var(--tab-f) no-repeat,
+    radial-gradient(circle at 100% 0, transparent calc(var(--tab-f) - 0.5px), #000 calc(var(--tab-f) + 0.5px)) right 0 bottom 0 / calc(var(--tab-f) + 1px) var(--tab-f) no-repeat;
+  content: "";
+  position: absolute;
+  inset: 0 calc(-1 * var(--tab-fillet));
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0;
+  transform-origin: 0 100%;
+  -webkit-mask: var(--tab-shape);
+  mask: var(--tab-shape);
+}
+
+.tab-entry:has(> .tab[aria-selected="true"])::before {
+  opacity: 1;
+}
+
+/* L'ombra dell'attiva (la pelle) si ferma dove comincia la carta, `--tab-lap`
+   sopra il fondo: sotto c'è il foglio, che ha la sua, e il giunto resta
+   senza segno. Ai fianchi e sopra resta spazio per sfumare. */
+.tab-entry:has(> .tab[aria-selected="true"]):not([data-lifted]) {
+  clip-path: inset(-24px -24px var(--tab-lap) -24px);
+}
+
+/* Il fondo al passaggio: una pastiglia che resta staccata dalla carta. */
+.tab-entry::after {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0;
+}
+
+/* Il «+» segue l'ultima linguetta, a un raccordo di distanza; l'elenco sta in
+   fondo. Quando la striscia scorre restano a vista tutti e due: il «+» si
+   ferma accanto all'elenco e le linguette passano sotto, così non finisce
+   sotto l'elenco né oltre il bordo del foglio (IMP-014). Tutti e due sono
+   centrati sulle linguette, non sulla striscia, che sopra ha la sua aria. */
+.pane-tabs > .tab-new {
+  flex: 0 0 auto;
+  align-self: flex-end;
+  margin: 0 var(--space-2, 4px) calc((var(--tab-h) - var(--tab-air) - 24px) / 2) calc(var(--tab-fillet) + 2px);
+  position: sticky;
+  right: calc(24px + var(--space-2, 4px));
+  z-index: 1;
+}
+
+/* Con una scheda sola l'elenco non c'è, e il «+» si ferma sul bordo. */
+.pane-tabs:has(> [data-tab-menu][hidden]) > .tab-new {
+  right: 0;
+}
+
+.pane-tabs > [data-tab-menu] {
+  flex: 0 0 auto;
+  align-self: flex-end;
+  position: sticky;
+  right: 0;
+  margin: 0 0 calc((var(--tab-h) - var(--tab-air) - 24px) / 2) auto;
+  z-index: 1;
+}
+
+/* La testata. La cronologia del riquadro sta nella barra del titolo, che segue
+   il foglio col fuoco: qui non si ripete. L'ordine a vista è percorso,
+   stato, menu; quello del DOM resta del controllore. */
+.pane-toolbar {
+  display: flex;
+  align-items: center;
+  flex: 0 0 var(--sheet-head-h);
+  height: var(--sheet-head-h);
+  min-height: var(--sheet-head-h);
+  max-height: var(--sheet-head-h);
+  overflow: hidden;
+  white-space: nowrap;
+  min-width: 0;
+  /* La testata misura sé stessa: in un foglio stretto la pelle ne stringe i
+     passi (`skin/sheets.css`). */
+  container-type: inline-size;
+  container-name: sheet-head;
+}
+
+.pane-toolbar > .pane-nav {
+  display: none;
+}
+
+.pane-toolbar > .muted {
+  flex: 1 1 0;
+  min-width: 0;
+  order: 1;
+}
+
+/* Lo stato del documento sta subito dopo il percorso: il titolo, che di
+   solito spinge il resto a destra (`sheets/sheets.css`), gli cede lo spazio. */
+.pane-toolbar:has(> .pane-standing:not([hidden]):not([data-standing="writes"])) > .muted {
+  margin-right: 0;
+}
+
+/* Lo stato spinge lui il resto a destra. */
+.pane-toolbar > .pane-standing {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  order: 1;
+  margin-inline-end: auto;
+}
+.pane-toolbar > .pane-standing[hidden] {
+  display: none;
+}
+
+/* «Si scrive» è lo stato normale di un documento: non lo dice la testata ma
+   la banda, a voce bassa, accanto alla modalità (`status-band.ts`); sul
+   telefono, che non ha la banda, la prima voce di «…». Gli altri stati (parti
+   chiuse, solo il testo, sola lettura) restano qui, dove si vedono. */
+.pane-toolbar > .pane-standing[data-standing="writes"] {
+  display: none;
+}
+
+/* Se lo spazio non basta cede prima lo stato, che la banda ripete; mai il
+   menu, che è la sola strada, dal foglio, per dividerlo e chiuderlo. */
+.pane-toolbar > .pane-status-slot {
+  flex: 0 1 auto;
+  order: 3;
+}
+
+/* La modalità si sceglie dalla banda: la testata non mostra più né i
+   segmenti né il bottone che li riassume. Il bottone è un figlio del foglio,
+   dopo la barra di formato, e si vede soltanto sul telefono, dove la banda
+   non c'è o si è ritirata (`mobile.css`). */
+.pane-toolbar > .segmented,
+.pane > .pane-mode-current {
+  display: none;
+}
+
+/* In una testata stretta il percorso e lo stato avrebbero un pezzo di lettera
+   e un punto, e il punto dello stato si leggerebbe «modificato». Escono: il
+   percorso tiene il suo posto, lo stato lo dice la banda. */
+@container sheet-head (max-width: 300px) {
+  .pane-toolbar > .muted {
+    visibility: hidden;
+  }
+  .pane-toolbar > .pane-standing {
+    display: none;
+  }
+  .pane-toolbar > .pane-status-slot {
+    display: none;
+  }
+}
+
+.pane-toolbar > [data-pane-menu] {
+  flex: 0 0 auto;
+  order: 4;
+}
+
+/* Il registratore lo monta una superficie dentro la testata: senza un posto
+   finirebbe davanti al nome della nota. Il suo è accanto allo stato. */
+.pane-toolbar > .media-recorder {
+  flex: 0 1 auto;
+  order: 3;
+}
+
+.pane-status-slot {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  overflow: hidden;
+}
+
+#pane-status {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+#app[data-status-off] #pane-status {
+  display: none;
+}
+
+#views-status {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+/* Il documento a fuoco conta le sue parole (`EditorSurface.status`): il
+   conteggio della view dichiarata (`fub.stats`) si fa da parte, che lo stesso
+   numero da due fonti non si dice. */
+#status-band[data-surface-counts] #views-status > [data-view-id="stats"] {
+  display: none;
+}
+
+/* La barra di formato di un riquadro è una barra in una fila (`kit-bar`, più
+   sotto): la fila la dà il kit, qui restano l'altezza e il taglio, perché ciò
+   che non ci sta va in «…». */
+.format-bar {
+  flex: 0 0 var(--format-bar-h);
+  height: var(--format-bar-h);
+  overflow: hidden;
+  white-space: nowrap;
+}
+/* Col dito i pulsanti della fila sono alti 44 (la regola `pointer: coarse` di
+   `kit-bar-button`): la barra li segue invece di tagliarli. */
+@media (pointer: coarse) {
+  .format-bar.kit-bar {
+    flex-basis: auto;
+    height: auto;
+    min-height: var(--format-bar-h);
+  }
+}
+/* Fuori dal vassoio (la bolla della selezione, la mini-barra) la fila è sua. */
+.format-bar:not(.kit-bar) {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+/* La bolla di selezione: la barra, ristretta, accanto al testo scelto. Sta sopra
+   i fogli e sotto i menu (che la bolla può aprire), e va dove la mette
+   `bubblePlace`. */
+.selection-bubble {
+  position: fixed;
+  z-index: var(--z-popover);
+  width: max-content;
+  max-width: calc(100vw - 16px);
+}
+.selection-bubble .format-bar {
+  flex: 0 0 auto;
+  overflow: visible;
+}
+
+/* Barra spenta: i suoi gesti restano alla bolla di selezione, alla tastiera e al
+   menu «/». */
+#app[data-formatbar-off] .pane > .format-bar {
+  display: none;
+}
+
+.format-bar-overflow {
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+.pane > [role="tabpanel"] {
+  position: relative;
+  overflow: hidden;
+}
+
+.pane-editor {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  container-type: inline-size;
+  container-name: sheet;
+}
+
+.pane-editor[data-markdown-mode] {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.pane-editor[data-markdown-mode] > .cm-editor {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+}
+
+/* Lo scorrimento del foglio è una radice di layout. La sua misura la decide
+   la catena flessibile qui sopra, mai il testo che contiene: con il
+   contenimento di misura e di layout una battuta ridispone soltanto il testo
+   dello scorrimento. Senza, WebKit risale fino alla finestra (nessun antenato
+   ha larghezza e altezza fisse) e a ogni tasto ridispone e ridipinge la
+   finestra intera sotto la barra del titolo.
+   Niente `paint`: non taglia nulla in più di quanto già tagli lo scorrimento.
+   I suggerimenti di CodeMirror (completamento, menu «/», anteprime) stanno
+   fuori dallo scorrimento, in `.cm-editor`, e restano fissi rispetto alla
+   finestra; le maniglie dei blocchi vi stanno già in assoluto, e il blocco in
+   mano sale nello strato sopra la finestra, che il contenimento non tocca. */
+.pane-editor[data-markdown-mode] > .cm-editor > .cm-scroller {
+  contain: size layout;
+}
+
+/* In Scrittura i numeri di riga non si vedono, ma la colonna resta nella
+   disposizione, larga zero e senza disegno. CodeMirror le dà come altezza
+   minima quella del testo (`minHeight`): mentre ridisegna una riga, togliendo
+   il blocco d'altezza del contenuto, il fondo dello scorrimento resta dov'è.
+   Tolta del tutto (`display: none`), WebKit accorcia lo scorrimento per un
+   attimo e, a fondo nota, la prima lettera su una riga vuota (il «/» che apre
+   il menu) fa scendere la vista di una riga. */
+.pane-editor[data-markdown-mode="live_preview"] .cm-gutters,
+.pane-editor[data-markdown-mode="blocks"] .cm-gutters {
+  width: 0 !important;
+  min-width: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  overflow: hidden;
+  visibility: hidden;
+  content-visibility: hidden;
+  pointer-events: none;
+}
+
+.pane-editor[data-markdown-mode] > .pane-preview {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  overflow-y: auto;
+}
+
+.pane-editor[data-markdown-mode="reading"] > .cm-editor {
+  display: none !important;
+}
+
+.pane-editor[data-markdown-mode="source"] > .pane-preview,
+.pane-editor[data-markdown-mode="live_preview"] > .pane-preview,
+.pane-editor[data-markdown-mode="blocks"] > .pane-preview {
+  display: none;
+}
+
+.pane-editor[data-svg-mode] {
+  display: flex;
+  flex-direction: row;
+  overflow: hidden;
+}
+
+.pane-editor[data-svg-mode][data-svg-stack] {
+  flex-direction: column;
+}
+
+.pane-editor[data-svg-mode] > .cm-editor,
+.pane-editor[data-svg-mode] > .svg-preview {
+  flex: 1 1 0;
+  min-height: 0;
+  min-width: 0;
+}
+
+.pane-editor[data-svg-mode="reading"] > .cm-editor {
+  display: none !important;
+}
+
+.pane-editor[data-svg-mode="source"] > .svg-preview {
+  display: none;
+}
+
+.pane-view {
+  display: none;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+}
+
+.pane.con-vista .pane-view {
+  display: flex;
+}
+
+.pane.con-vista .pane-editor,
+.pane.con-vista .pane-preview {
+  display: none;
+}
+
+.pane-view > * {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+}
+
+.pane-empty {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+

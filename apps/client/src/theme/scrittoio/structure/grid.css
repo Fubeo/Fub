@@ -1,0 +1,772 @@
+/* Le superfici degli editor: il foglio di calcolo. */
+
+/* ── Le superfici degli editor: geometria che nessun tema decide ─────────── */
+
+.grid-surface {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+
+.grid-formula-bar {
+  display: flex;
+  flex: 0 0 2.25rem;
+  min-width: 0;
+}
+
+.grid-cell-name {
+  display: inline-flex;
+  flex: 0 0 4.25rem;
+  align-items: center;
+  justify-content: center;
+}
+
+.grid-formula-editor {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.grid-formula-editor .cm-editor,
+.grid-cell-editor .cm-editor {
+  height: 100%;
+}
+
+.grid-viewport {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+}
+/* Il dito scorre, e solo scorre: la selezione col dito la fa la griglia
+   (il tocco, il doppio tocco, il tocco lungo). La presa delle maniglie del
+   tocco lungo ferma lo scorrimento da sé (`touchstart`). */
+.grid-viewport {
+  touch-action: pan-x pan-y;
+}
+
+/* Il piano: grande quanto il foglio, a strati nella stessa cella di una
+   griglia CSS (le righe del corpo, i livelli dei segni, la testa). Le fasce
+   ferme (la testa in alto, la colonna a sinistra) restano al loro posto col
+   solo `sticky`, nello stesso fotogramma dello scorrimento, senza che lo
+   script le rimetta. Le misure le scrive la griglia (`--grid-w`, `--grid-h`,
+   `--grid-top-h`, `--grid-left-w`). Il piano non prende il puntatore: lo
+   prendono le righe, e dove non c'è niente va al riquadro. Il piano è largo
+   e alto quanto il foglio, non quanto il riquadro: un elemento `sticky` non
+   esce dal suo contenitore, e in un piano largo quanto il riquadro la
+   colonna ferma se ne andrebbe con lo scorrimento. */
+.grid-plane {
+  position: relative;
+  display: grid;
+  grid-template: var(--grid-h, 0px) / var(--grid-w, 0px);
+  width: var(--grid-w, 0px);
+  height: var(--grid-h, 0px);
+  isolation: isolate;
+  pointer-events: none;
+}
+.grid-plane > *,
+.grid-head > * {
+  grid-area: 1 / 1;
+  align-self: start;
+  justify-self: start;
+}
+/* La testa: la riga delle intestazioni e le righe bloccate. */
+.grid-head {
+  position: sticky;
+  top: 0;
+  z-index: 6;
+  display: grid;
+  grid-template: var(--grid-top-h, 0px) / var(--grid-w, 0px);
+  width: var(--grid-w, 0px);
+  height: var(--grid-top-h, 0px);
+}
+/* Il corpo: le righe vi stanno posate (`top`, `left`), e lui non ha misura,
+   come i livelli dei segni. WebKit, quando un figlio entra o esce, ridipinge
+   tutto il riquadro del genitore: con un corpo grande quanto il foglio ogni
+   riga aggiunta o tolta ai bordi ridipingeva il foglio intero, testo di
+   ogni cella compreso, uno o due fotogrammi su tre dello scorrimento
+   (IMP-6600). Senza misura entra e esce solo la riga. Le righe danno
+   comunque la misura da scorrere al riquadro, che la prende anche dal
+   piano. */
+.grid-rows {
+  position: relative;
+  width: 0;
+  height: 0;
+}
+/* Nella riga, ciò che sta fermo a sinistra (l'intestazione, le celle delle
+   colonne bloccate) è nel flusso senza occuparvi posto; il resto è
+   posato dove la colonna dice. */
+.grid-plane .grid-row {
+  display: flex;
+  pointer-events: auto;
+}
+.grid-plane .grid-row > * {
+  flex: none;
+  align-self: flex-start;
+}
+
+/* La carta sotto le righe, coi suoi fili: dove una riga non è ancora
+   disegnata (lo scorrimento veloce arriva prima del disegno) si vede la
+   griglia vuota, mai il bianco. La carta è grande quanto il riquadro e sta
+   ferma nel riquadro (`sticky`): così il browser l'ha sempre già dipinta,
+   anche quando lo scorrimento salta più in là delle righe dipinte, dove una
+   carta grande quanto il foglio sarebbe ancora da dipingere. Sta nel
+   riquadro, prima del piano, non dentro: WebKitGTK dà un livello del
+   compositore a un elemento `sticky` che scorre, e uno suo a ogni elemento
+   posato che si dipinge dopo di lui nello stesso contesto e lo copre. Nel
+   piano erano tutte le celle, e ogni riga aggiunta o tolta ai bordi faceva
+   ridipingere migliaia di livelli a ogni passo dello scorrimento (IMP-6600).
+   Fuori, sopra la carta c'è solo il piano, che è un contesto suo
+   (`isolation`) e prende un livello solo, con le celle dentro. Il margine
+   sotto la carta, negativo quanto lei, non le fa occupare posto nel
+   riquadro. Le fasce ferme del piano stanno sopra le celle (`z-index`
+   positivo), e non trascinano altri livelli. I suoi fili
+   seguono lo scorrimento: le righe con la fase che la griglia scrive
+   (`background-position`) sull'altezza di serie (`--grid-row`), le colonne
+   in `.grid-paper-rules`, spostato di lato, un elemento sottile dove ogni
+   colonna disegnata finisce. Ha una copia nelle fasce ferme: la testa
+   (`-top`), la colonna ferma (`-left`, con la striscia delle intestazioni
+   delle righe e quella delle colonne bloccate) e l'angolo. Le misure le
+   scrive la griglia. Le celle sono opache, perché il filo della carta non si
+   sommi al loro; i colori della cornice (le strisce delle intestazioni) li
+   dà la pelle. */
+.grid-paper,
+.grid-paper-left {
+  position: sticky;
+  top: 0;
+  left: 0;
+  overflow: hidden;
+}
+/* Fuori dal piano non eredita il suo `pointer-events`: dove non c'è una
+   riga, il puntatore va al riquadro, non alla carta. */
+.grid-paper {
+  z-index: 0;
+  pointer-events: none;
+}
+.grid-paper-rules {
+  position: absolute;
+  inset: 0;
+}
+.grid-rule-column {
+  position: absolute;
+  top: 0;
+  width: 1px;
+  height: 100%;
+}
+.look-file .grid-paper,
+.look-adattato .grid-paper,
+.look-file .grid-paper-left-cells,
+.look-adattato .grid-paper-left-cells {
+  background:
+    repeating-linear-gradient(to bottom, transparent 0 calc(var(--grid-row, 28px) - 1px), var(--doc-rule, rgb(20 22 26 / 30%)) 0 var(--grid-row, 28px)),
+    var(--doc-bg, #ffffff);
+}
+.look-file .grid-rule-column,
+.look-adattato .grid-rule-column { background: var(--doc-rule, rgb(20 22 26 / 30%)); }
+/* Il colore dei segni della selezione: sulla carta del file, chiara in ogni
+   luce, è l'inchiostro del suo cursore, che resta leggibile anche nelle luci
+   scure dove l'accento del tema è chiaro; sulla carta del tema è l'accento. */
+.grid-viewport { --grid-mark: var(--accent, #007249); }
+.look-file .grid-viewport { --grid-mark: var(--paper-caret, #007249); }
+/* Un foglio senza griglia: la carta senza fili, solo il fondo. */
+.look-file .no-gridlines .grid-paper,
+.look-adattato .no-gridlines .grid-paper,
+.look-file .no-gridlines .grid-paper-left-cells,
+.look-adattato .no-gridlines .grid-paper-left-cells { background: var(--doc-bg, #ffffff); }
+.no-gridlines .grid-rule-column { display: none; }
+/* La colonna ferma sta sopra le celle che le scorrono sotto, come le
+   intestazioni delle righe. */
+.grid-paper-left {
+  z-index: 2;
+  display: flex;
+}
+.grid-paper-left-head {
+  flex: none;
+  width: var(--grid-head-w, 0px);
+  box-sizing: border-box;
+}
+.grid-paper-left-cells {
+  flex: 1;
+}
+.grid-paper-top,
+.grid-paper-corner {
+  width: var(--grid-left-w, 0px);
+  height: var(--grid-top-h, 0px);
+}
+.grid-paper-top {
+  position: relative;
+  z-index: 0;
+  width: var(--grid-w, 0px);
+}
+.grid-paper-corner {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+}
+.grid-paper-top[hidden],
+.grid-paper-left[hidden],
+.grid-paper-corner[hidden] {
+  display: none;
+}
+
+/* I livelli dei segni, uno per zona: il corpo che scorre, la testa che
+   scorre solo di lato, la colonna ferma che scorre solo in giù, l'angolo che
+   non scorre. Ognuno taglia ciò che esce dalla sua zona; le fasce opache
+   coprono ciò che le scorre sotto. Il livello «lift» di una zona porta i
+   segni d'angolo (il quadratino) e gli oggetti, interi; per il corpo è il
+   suo livello. I livelli non hanno misura: un riquadro grande quanto la zona
+   starebbe davanti alle celle, e chi misura il contrasto (axe) non saprebbe
+   più su che fondo sta il testo. Il taglio lo fa `clip-path`, che va oltre
+   il riquadro vuoto fin dove arriva la zona. */
+.grid-marks-body {
+  position: relative;
+  z-index: 1;
+  width: 0;
+  height: 0;
+}
+.grid-marks-top {
+  position: relative;
+  z-index: 1;
+  width: 0;
+  height: 0;
+  clip-path: inset(0 calc(0px - var(--grid-w, 0px)) calc(0px - var(--grid-top-h, 0px)) 0);
+}
+.grid-lift-top {
+  position: relative;
+  z-index: 1;
+  width: 0;
+  height: 0;
+}
+.grid-marks-corner {
+  position: sticky;
+  left: 0;
+  z-index: 4;
+  width: 0;
+  height: 0;
+  clip-path: inset(0 calc(0px - var(--grid-left-w, 0px)) calc(0px - var(--grid-top-h, 0px)) 0);
+}
+.grid-lift-corner {
+  position: sticky;
+  left: 0;
+  z-index: 5;
+  width: 0;
+  height: 0;
+}
+.grid-marks-left {
+  position: sticky;
+  left: 0;
+  z-index: 4;
+  width: 0;
+  height: 0;
+  margin-top: var(--grid-top-h, 0px);
+  clip-path: inset(0 calc(0px - var(--grid-left-w, 0px)) calc(var(--grid-top-h, 0px) - var(--grid-h, 0px)) 0);
+}
+.grid-lift-left {
+  position: sticky;
+  left: 0;
+  z-index: 5;
+  width: 0;
+  height: 0;
+  margin-top: var(--grid-top-h, 0px);
+}
+/* Ciò che sta fermo nell'angolo in alto a sinistra del riquadro: la guida e
+   la misura di un bordo tirato. */
+.grid-fixed {
+  position: sticky;
+  top: 0;
+  left: 0;
+  z-index: 8;
+  width: 0;
+  height: 0;
+}
+
+.grid-cells,
+.grid-column-headers,
+.grid-row-headers {
+  position: absolute;
+  inset: 0;
+}
+
+.grid-column-headers,
+.grid-row-headers {
+  pointer-events: none;
+}
+
+.grid-cell,
+.grid-header,
+.grid-corner,
+.grid-cell-editor {
+  position: absolute;
+  box-sizing: border-box;
+}
+
+.grid-cell {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  overflow: hidden;
+  padding: 0.3rem 0.45rem;
+  white-space: nowrap;
+  /* Ogni cella ha larghezza e altezza scritte dalla griglia (`#place`,
+     `#stickLeft`; `card.ts` per la scheda della lavagna) e taglia ciò che
+     ha dentro: ciò che cambia in una cella non tocca le altre, e le righe
+     che lo scorrimento aggiunge si impaginano da sole. Nella WebKitGTK lo
+     scorrimento del foglio grande passa da 5,7 a 5,4 s di thread occupato
+     in 300 passi (banco WebView, S10). Fra i discendenti di una cella
+     nessuno ha uno `z-index`: il contesto di sovrapposizione che `paint`
+     le dà non cambia l'ordine di niente. */
+  contain: strict;
+}
+
+/* Il testo sta sopra la barra di dati, e si taglia dove la cella finisce.
+   Un testo che passa nelle celle vuote accanto è largo quanto serve, fino
+   al limite che la griglia gli dà. */
+/* Le celle sono contenuto con l'aspetto del file (`GRID_MODES`): in
+   `look-file` stanno sulla carta del file, chiara in ogni luce, con i
+   riempimenti e i colori del file; in `look-adattato` sulla carta del tema,
+   con i colori del file portati su di lei da `editors/grid/paint.ts`, fondo e
+   testo in coppia. Il testo automatico è l'inchiostro della carta, e i fili
+   della griglia sono quelli della carta. Le intestazioni di righe e colonne
+   sono cornice, e restano del tema. Una cella senza riempimento ha il fondo
+   della carta: è opaca, e copre ciò che le passa sotto (la carta coi suoi
+   fili, una cella che scorre sotto la colonna ferma). */
+.look-file .grid-viewport,
+.look-adattato .grid-viewport { background-color: var(--doc-bg, #ffffff); }
+.look-file .grid-cell,
+.look-adattato .grid-cell {
+  border-right: 1px solid var(--doc-rule, rgb(20 22 26 / 30%));
+  border-bottom: 1px solid var(--doc-rule, rgb(20 22 26 / 30%));
+  font-variant-numeric: tabular-nums;
+  line-height: 1.3;
+}
+.look-file .grid-cell {
+  background-color: var(--file-fill, var(--doc-bg, #ffffff));
+  color: var(--file-color, var(--doc-fg, #14161a));
+}
+.look-adattato .grid-cell {
+  background-color: var(--file-fill-a, var(--doc-bg, #ffffff));
+  color: var(--file-color-a, var(--doc-fg, #14161a));
+}
+/* Una formula appena scritta aspetta la risposta del foglio (griglia T5): si
+   vede come la si è scritta, più tenue sulla sua carta, finché il foglio non
+   dà il valore. */
+.look-file .grid-cell.pending {
+  color: color-mix(in srgb, var(--file-color, var(--doc-fg, #14161a)) 55%, var(--file-fill, var(--doc-bg, #ffffff)));
+}
+.look-adattato .grid-cell.pending {
+  color: color-mix(in srgb, var(--file-color-a, var(--doc-fg, #14161a)) 55%, var(--file-fill-a, var(--doc-bg, #ffffff)));
+}
+/* La cella aperta ha la carta e l'inchiostro della sua cella, in ogni luce:
+   la griglia le copia le proprietà del file (`--file-*`). */
+.look-file .grid-plane .grid-cell-editor {
+  background-color: var(--file-fill, var(--doc-bg, #ffffff));
+  color: var(--file-color, var(--doc-fg, #14161a));
+}
+.look-adattato .grid-plane .grid-cell-editor {
+  background-color: var(--file-fill-a, var(--doc-bg, #ffffff));
+  color: var(--file-color-a, var(--doc-fg, #14161a));
+}
+/* Un foglio senza griglia: i fili delle celle spariscono, i bordi del file
+   restano. */
+.look-file .no-gridlines .grid-cell,
+.look-adattato .no-gridlines .grid-cell { border-color: transparent; }
+/* Anche la testa ha la carta sotto: le righe bloccate hanno celle vuote, e
+   ciò che scorre sotto di lei (un testo che deborda) non deve trasparire. */
+.look-file .grid-head,
+.look-adattato .grid-head { background-color: var(--doc-bg, #ffffff); }
+
+.grid-cell-text {
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.grid-cell.spill {
+  overflow: visible;
+  z-index: 1;
+  /* Il testo che passa nelle celle accanto si vede: niente `paint`. */
+  contain: size layout style;
+}
+
+.grid-cell.spill > .grid-cell-text {
+  width: max-content;
+}
+
+/* Le righe non fanno da contesto di sovrapposizione: le celle, i segni e le
+   fasce ferme si ordinano tutti nel piano. Ciò che sta fermo a sinistra
+   (l'angolo, le intestazioni delle righe, le colonne bloccate) sta sopra le
+   celle che gli scorrono sotto e sopra il livello dei segni del corpo; la
+   testa sta sopra tutto il corpo, anche sopra la cella aperta di una riga
+   scorsa sotto di lei. */
+.grid-plane .grid-corner,
+.grid-plane .grid-row-header,
+.grid-plane .grid-column-header.frozen,
+.grid-plane .grid-cell.frozen,
+.grid-plane .grid-border.frozen {
+  z-index: 3;
+}
+
+/* I pezzi dei segni che restano e scivolano (`grid-motion.ts`): ognuno sta
+   fermo nel suo posto d'arrivo e un `transform` dall'angolo lo porta dove la
+   corsa lo vede. Non prendono il puntatore: il quadratino si prende dove si
+   vede il suo angolo, per geometria. Il quadratino sta sopra i lati, i fili
+   del blocco sopra tutti i segni del loro livello. */
+.grid-mark {
+  position: absolute;
+  box-sizing: border-box;
+  transform-origin: 0 0;
+  pointer-events: none;
+}
+.grid-mark-handle {
+  z-index: 4;
+}
+/* Le maniglie del tocco lungo: 14 × 14 px col centro sull'angolo dei fili.
+   Non prendono il puntatore: la presa è un cerchio attorno al loro angolo,
+   anche dove una fascia ferma ne copre metà. */
+.grid-mark-touch {
+  z-index: 3;
+}
+.grid-mark-freeze {
+  z-index: 7;
+}
+/* Le formiche (griglia T6): un nastro tratteggiato dentro il lato, più lungo
+   di un passo (`ANTS_STEP`, 8 px), che camminando si sposta di un passo; il
+   lato lo taglia. Il velo del battito di una copia sta sopra i lati. */
+.grid-mark-ants {
+  overflow: hidden;
+}
+.grid-ants {
+  position: absolute;
+  top: 0;
+  left: -8px;
+}
+.grid-mark-ants[data-dir="h"] > .grid-ants {
+  width: calc(100% + 8px);
+  height: 100%;
+}
+.grid-mark-ants[data-dir="v"] > .grid-ants {
+  top: -8px;
+  left: 0;
+  width: 100%;
+  height: calc(100% + 8px);
+}
+
+/* I bordi del file stanno sui fili della griglia, in un riquadro sopra la
+   cella. */
+.grid-border {
+  position: absolute;
+  box-sizing: border-box;
+  pointer-events: none;
+}
+
+.grid-data-bar {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: 2px;
+  pointer-events: none;
+}
+
+.grid-icon {
+  position: absolute;
+  bottom: 0.3rem;
+  left: 0.25rem;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.grid-comment-mark {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 0;
+  height: 0;
+  border-style: solid;
+  border-width: 0 7px 7px 0;
+  pointer-events: none;
+}
+
+/* La scheda di una nota o di un commento: il thread scorre, i gesti restano
+   sotto. */
+.grid-comment-card {
+  display: flex;
+  flex-direction: column;
+  min-width: 240px;
+}
+.grid-comment-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+}
+.grid-comment-thread {
+  max-height: min(240px, 40vh);
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  list-style: none;
+}
+.grid-comment-post {
+  display: flex;
+  flex-direction: column;
+}
+.grid-comment-text {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.grid-comment-reply {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+.grid-comment-field {
+  box-sizing: border-box;
+  width: 100%;
+  resize: vertical;
+}
+.grid-comment-actions {
+  display: flex;
+  flex-wrap: wrap;
+}
+.grid-comment-error {
+  margin: 0;
+}
+.grid-comment-error[hidden] { display: none; }
+
+/* Gli oggetti del foglio galleggiano sopra le celle, nel livello della zona
+   dove sono ancorati, sotto i segni: passano sotto le intestazioni e le
+   fasce ferme, come in Excel. Il livello non prende il puntatore, l'oggetto
+   sì; quelli nella cella (un grafico sparkline, un'immagine nella cella)
+   lasciano il clic alla cella. */
+.grid-object {
+  position: absolute;
+  z-index: 2;
+  box-sizing: border-box;
+  pointer-events: auto;
+}
+
+.grid-object.in-cell {
+  pointer-events: none;
+}
+
+.grid-object.movable {
+  cursor: move;
+  touch-action: none;
+  user-select: none;
+}
+
+.grid-object-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+  pointer-events: none;
+}
+
+.grid-object.in-cell .grid-object-image {
+  object-fit: contain;
+}
+
+.grid-object-missing {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  padding: 0.25rem;
+  overflow: hidden;
+  text-align: center;
+}
+
+.grid-object-shape {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.grid-object-figure {
+  position: absolute;
+  top: 0;
+  left: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.grid-object-text {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  overflow: hidden;
+  line-height: 1.2;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  pointer-events: none;
+}
+
+/* I segni stanno nel livello della loro zona, sopra gli oggetti, e non
+   prendono il puntatore: il quadratino si prende per geometria. Il contorno
+   `.grid-selection` è quello della scheda di un foglio (`card.ts`). */
+.grid-selection,
+.grid-move-preview,
+.grid-formula-ref {
+  position: absolute;
+  z-index: 3;
+  box-sizing: border-box;
+}
+
+.grid-viewport.fill-handle,
+.grid-viewport.filling {
+  cursor: crosshair;
+}
+
+/* Il bordo fra due intestazioni si tira: la guida e la misura stanno sopra
+   tutto, anche sulle intestazioni ferme, e non prendono il puntatore. */
+.grid-resize-guide,
+.grid-resize-label {
+  position: absolute;
+  z-index: 9;
+  box-sizing: border-box;
+  pointer-events: none;
+}
+
+.grid-resize-label {
+  white-space: nowrap;
+}
+
+.grid-viewport.resize-column {
+  cursor: col-resize;
+}
+
+.grid-viewport.resize-row {
+  cursor: row-resize;
+}
+
+/* Il bordo della selezione si tira per spostarla. */
+.grid-viewport.move-selection,
+.grid-viewport.moving {
+  cursor: move;
+}
+
+.grid-selection,
+.grid-move-preview,
+.grid-formula-ref {
+  pointer-events: none;
+}
+
+.grid-object-handle {
+  position: absolute;
+  z-index: 1;
+  box-sizing: border-box;
+  width: 9px;
+  height: 9px;
+  margin: -4.5px 0 0 -4.5px;
+}
+
+.grid-object-handle.nw,
+.grid-object-handle.se {
+  cursor: nwse-resize;
+}
+
+.grid-object-handle.ne,
+.grid-object-handle.sw {
+  cursor: nesw-resize;
+}
+
+.grid-object-handle.n,
+.grid-object-handle.s {
+  cursor: ns-resize;
+}
+
+.grid-object-handle.e,
+.grid-object-handle.w {
+  cursor: ew-resize;
+}
+
+.grid-object-text-editor {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  resize: none;
+  cursor: text;
+}
+
+.grid-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.grid-cell-editor {
+  z-index: 5;
+  overflow: hidden;
+}
+
+/* La cella aperta (griglia T4) è la cella stessa: sta nel livello «lift»
+   della zona della sua cella, sopra i segni, e ne esce. Il testo sta dove
+   stava nella cella: lo stesso carattere (`--field-font`, che la pelle
+   dell'editor dà a `.cm-content`), la stessa misura, lo stesso allineamento, gli
+   stessi margini (`--field-pad-*`, letti dalla cella), la stessa carta.
+   La cornice è un pezzo a parte attorno (`-frame`, nella pelle). La misura la
+   scrive la griglia: a colonne intere fin dove il testo ci sta, poi a capo
+   (`wraps`) e in giù; oltre metà del riquadro il testo scorre dentro. */
+.grid-plane .grid-cell-editor {
+  z-index: 1;
+  display: grid;
+  grid-template: minmax(0, 1fr) / minmax(0, 1fr);
+  overflow: visible;
+  font-variant-numeric: tabular-nums;
+  pointer-events: auto;
+}
+.grid-cell-editor-frame {
+  position: absolute;
+  inset: -1px;
+  pointer-events: none;
+}
+.grid-cell-editor-text {
+  grid-area: 1 / 1;
+  min-width: 0;
+  min-height: 0;
+}
+.grid-plane .grid-cell-editor .cm-editor {
+  height: 100%;
+  background-color: transparent;
+  color: inherit;
+}
+.grid-plane .grid-cell-editor .cm-editor.cm-focused {
+  outline: none;
+}
+.grid-plane .grid-cell-editor .cm-scroller {
+  line-height: inherit;
+}
+.grid-plane .grid-cell-editor .cm-content {
+  padding: var(--field-pad-top, 0px) var(--field-pad-right, 0px) 0 var(--field-pad-left, 0px);
+  font-size: inherit;
+  line-height: 1.3;
+}
+.grid-plane .grid-cell-editor .cm-line {
+  padding: 0;
+}
+/* Nella cella aperta niente margine: il segno di piega del testo
+   sposterebbe la prima lettera fuori dal posto che ha nella cella. */
+.grid-plane .grid-cell-editor .cm-gutters {
+  display: none;
+}
+
+.grid-notice { flex: none; margin: 0; }
+
+.grid-sheets {
+  flex: none;
+  min-width: 0;
+  overflow-x: auto;
+}
+

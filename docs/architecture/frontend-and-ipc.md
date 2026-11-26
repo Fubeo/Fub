@@ -338,10 +338,10 @@ pannelli) lo Scrittoio compone:
   verificata. Un valore scritto, anche `""`, vale sempre; sotto la riga
   Animazioni le Impostazioni dicono perché il valore di partenza è «ridotte»;
 - `theme/scrittoio/`: la serie di serie (motore `theme-2`), con ricetta dei
-  colori, fogli, struttura e pelle a pezzi. La pelle passa dal sanitizer CSS
-  del motore, e ogni classe di un pezzo è un hook dell'anatomia di quel pezzo.
-  Ogni hook dichiara il suo strato (cornice, segno o contenuto), e il
-  contratto del tema lo esporta in `layers`
+  colori, fogli, e struttura e pelle a pezzi (`structure/`, `skin/`) montate
+  da `theme:generate`. La pelle passa dal sanitizer CSS del motore, e ogni
+  classe di un pezzo è un hook dell'anatomia di quel pezzo, con il suo strato
+  (cornice, segno o contenuto), che il contratto del tema esporta in `layers`
   ([ADR 0222](../decisions/0222-tre-strati-e-l-aspetto-del-contenuto.md)).
 
 I predefiniti dell'aspetto (accento, i tre caratteri, corpo di 18 px,

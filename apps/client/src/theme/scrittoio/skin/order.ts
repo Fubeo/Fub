@@ -4,10 +4,12 @@
 // della stessa specificità decide chi vince, quindi l'ordine è **dichiarato**
 // qui e non dedotto dalla cartella; e un pezzo scritto ma non elencato non si
 // monta, quindi `assemble` lo rifiuta invece di uscire più corta in silenzio.
+// Il montaggio è quello comune a pelle e struttura (`../assemble.ts`).
 //
 // Ogni pezzo ha accanto il suo modulo di anatomia (`../anatomia/<pezzo>.ts`):
 // l'elenco qui sotto e quello di `../anatomia.ts` sono lo stesso, e un presidio
 // li confronta.
+import { assemblePieces } from "../assemble";
 
 /// I pezzi, nell'ordine in cui si montano: dal generale al particolare.
 ///
@@ -73,26 +75,7 @@ const HEADER = `/* La pelle della serie Scrittoio.
  */
 `;
 
-function header(part: string): string {
-  const prefix = `/* ── skin/${part}.css `;
-  return `${prefix}${"─".repeat(Math.max(3, 76 - prefix.length))} */\n`;
-}
-
 /// Monta la pelle dai suoi pezzi. `content` è il testo di ogni pezzo, per nome.
 export function assemble(content: Readonly<Record<string, string>>): string {
-  const extraParts = Object.keys(content).filter((name) => !(ORDER as readonly string[]).includes(name));
-  if (extraParts.length > 0) {
-    throw new Error(
-      `pelle: ${extraParts.map((name) => `«${name}.css»`).join(", ")} non è nell'ordine, e un pezzo ` +
-        "fuori dall'ordine non si monta: aggiungilo al punto in cui deve valere.",
-    );
-  }
-
-  const out = [HEADER];
-  for (const part of ORDER) {
-    const text = content[part];
-    if (text === undefined) throw new Error(`pelle: manca il pezzo «${part}.css»`);
-    out.push(`\n${header(part)}\n${text.replace(/\n+$/, "\n")}`);
-  }
-  return out.join("");
+  return assemblePieces({ order: ORDER, header: HEADER, folder: "skin", label: "pelle", content });
 }
