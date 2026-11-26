@@ -1,4 +1,3 @@
-
 use super::*;
 use fub_abi::settings::{SettingSource, SettingValue};
 use fub_kernel::MachineSettings;

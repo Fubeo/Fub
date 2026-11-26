@@ -1,4 +1,3 @@
-
 use super::*;
 
 /// Il motore spento nel vault arriva alla shell come `unserved` con una
