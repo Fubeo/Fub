@@ -87,7 +87,7 @@ righe bloccate) e colonna ferma (numeri delle righe, colonne bloccate) restano
 a posto col solo `sticky`, nello stesso fotogramma dello scorrimento. Ogni
 zona ha un livello di segni: `marks.ts` taglia un rettangolo per zona.
 
-Le righe restano (`#drawRow`): ognuna ricorda per indice la sua misura e le
+Le righe restano (`_drawRow`): ognuna ricorda per indice la sua misura e le
 sue celle, e una cella si rifà solo quando cambia ciò che mostra; se l'HTML è
 lo stesso resta lo stesso nodo e cambiano le sole classi della selezione,
 così il doppio clic arriva e l'editor aperto non perde il fuoco. Si disegna
