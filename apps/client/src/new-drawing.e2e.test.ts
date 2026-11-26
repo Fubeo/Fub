@@ -11,7 +11,7 @@
 // il modulo proprio del comando, con la cartella da cui parte, e se nessuno ne
 // ha registrato uno ripiega sulla palette dello stesso comando.
 //
-// Come in `shell.e2e.test.ts` ciò che resta finto è il di là del confine, e in
+// Come nelle prove `shell-*.e2e.test.ts` ciò che resta finto è il di là del confine, e in
 // `happy-dom` non c'è né CSS né misura: si asserisce su *cosa* c'è. Nemmeno la
 // rete c'è: la galleria vera chiede i caratteri dell'app con un indirizzo
 // relativo, che sotto `happy-dom` sarebbe una connessione a `localhost:3000`, e

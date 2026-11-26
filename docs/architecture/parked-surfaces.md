@@ -4,7 +4,7 @@
 > un foglio quando il riquadro passa a un'altra scheda, e quando si libera?
 > **Fonti autorevoli:** `apps/client/src/state/document-controller.ts`
 > (`ParkedSurface`, `parkSurface`, `unparkSurface`, `parkingWeight`), le
-> prove «tornare a una scheda già aperta» in `apps/client/src/shell.e2e.test.ts`
+> prove «tornare a una scheda già aperta» in `apps/client/src/shell-vault-scrittura.e2e.test.ts`
 > e «tornare a un foglio già aperto» in `apps/client/src/canvas-edit.e2e.test.ts`.
 
 ## In breve

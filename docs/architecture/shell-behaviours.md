@@ -170,7 +170,7 @@ Ciò che la shell fa sopra le porte generiche, senza contratti propri:
   altro pulsante) lascia il fuoco lì: né il menu né i suoi sottomenu lo
   riportano al pulsante d'origine (`keepFocusWhereItIs` in `ui/a11y.ts`).
   Torna al pulsante con Esc, con una voce scelta e con un clic su ciò che il
-  fuoco non lo prende. Guardie: `ui/menu.test.ts` e `shell.e2e.test.ts`.
+  fuoco non lo prende. Guardie: `ui/menu.test.ts` e le prove `shell-*.e2e.test.ts`.
 - **Fuoco dopo un cambio di scheda da tastiera.** Un comando che cambia la
   scheda attiva (Ctrl+W, Ctrl+Tab e Ctrl+Maiusc+Tab, Ctrl+PagGiù/PagSu,
   Ctrl+1…9, Ctrl+Maiusc+T, Ctrl+\ e «Dividi sotto», Ctrl+Maiusc+W,

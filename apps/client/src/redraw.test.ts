@@ -43,7 +43,7 @@ import { LEVEL_PAGE } from "./rules/organizer";
 // Ogni `start` monta la shell vera, e il primo caso la monta due volte: da
 // solo sta sui 4 s, sul runner CI ne ha messi ora 3,9 ora 7,2 con lo stesso
 // codice. Il banco conta elementi, non millisecondi: il tetto c'è solo per
-// fermare un blocco vero, come in `shell.e2e.test.ts`.
+// fermare un blocco vero, come nelle prove `shell-*.e2e.test.ts`.
 vi.setConfig({ testTimeout: 20_000 });
 
 const box = vi.hoisted(() => ({ host: null as FakeHost | null }));

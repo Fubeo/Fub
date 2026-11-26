@@ -37,7 +37,6 @@
 1934 apps/client/src/panels/document.ts
 1600 apps/client/src/panels/explorer.ts
 1686 apps/client/src/panels/settings.ts
-5544 apps/client/src/shell.e2e.test.ts
 2444 apps/client/src/shells/scrittoio/launcher/launcher.test.ts
 5405 apps/client/src/state/document-controller.ts
 2293 apps/client/src/state/document-session.ts

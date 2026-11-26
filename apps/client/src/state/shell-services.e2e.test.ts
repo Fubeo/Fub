@@ -4,8 +4,8 @@
 //
 // Quattro sequenze della shell decidono se un testo battuto arriva sul disco o
 // si perde: l'apertura di un vault, la guardia di chiusura della finestra, il
-// rilascio di una linguetta e il recupero delle bozze. `shell.e2e.test.ts` ne
-// prova gli esiti (l'ultima battuta arriva al disco, la finestra resta aperta
+// rilascio di una linguetta e il recupero delle bozze. Le prove `shell-*.e2e.test.ts` ne
+// provano gli esiti (l'ultima battuta arriva al disco, la finestra resta aperta
 // senza bozza, un «no» alla conferma tiene la nota); ciò che non guardava è
 // **l'ordine e le condizioni** — quale porta viene prima di quale, cosa ferma
 // la sequenza, cosa vale un dialogo che non risponde.
@@ -17,8 +17,8 @@
 // in quale modulo la sequenza abiti: devono restare verdi, immutate, quando si
 // sposta.
 //
-// Come `shell.e2e.test.ts`, monta `main.ts` sulla scocca vera: il perché sta
-// in testa a quel file, e vale qui parola per parola.
+// Come le prove `shell-*.e2e.test.ts`, monta `main.ts` sulla scocca vera: il
+// perché sta in testa a `shell-e2e-support.ts`, e vale qui parola per parola.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   appendToTextEditor as typeInEditor,
@@ -82,7 +82,7 @@ function stepName(name: string, args: unknown[]): string {
 }
 
 // Un modulo mimato solo, che delega all'host di adesso a ogni chiamata: il
-// perché sta in `shell.e2e.test.ts` (`vi.resetModules()` non azzera i mock).
+// perché sta in `shell-e2e-support.ts` (`vi.resetModules()` non azzera i mock).
 // In più registra ogni chiamata nel registro unico, e sostituisce la risposta
 // della sola domanda sulle bozze — che passa comunque dalla porta finta, così
 // freni, guasti e conteggi valgono anche per lei.

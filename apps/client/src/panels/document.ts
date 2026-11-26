@@ -1462,7 +1462,7 @@ function openPaneMenu(r: Pane, event: MouseEvent): void {
   const blocksOn = blocksPreferred();
   // Poi la concentrazione: il comando della shell, lo stesso del menu Vista e
   // di Ctrl O. La macchina da scrivere del prototipo non entra: il menu sta
-  // nel bilancio di nove voci (`shell.e2e.test.ts`), e la preferenza
+  // nel bilancio di nove voci (le prove `shell-*.e2e.test.ts`), e la preferenza
   // `editor.typewriter` sta nelle Impostazioni › Editor.
   const focusCommand = command("shell.focus.toggle");
   const writingRest: MenuItem[] = [
