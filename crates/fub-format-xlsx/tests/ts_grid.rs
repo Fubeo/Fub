@@ -7,7 +7,7 @@
 //! `UPDATE_MIRROR=1`.
 //!
 //! I codici chiusi della superficie (i blocchi, le parti non mostrate) sono
-//! anche in `apps/client/src/editors/grid/engine.ts`: uno che manca lì si
+//! anche in `apps/client/src/editors/grid/engine-parts.ts`: uno che manca lì si
 //! direbbe con una frase generica, e qui il test lo dice.
 
 mod common;
@@ -257,7 +257,7 @@ fn la_fixture_della_shell_è_la_superficie_della_cartella() {
 fn keys(source: &str, name: &str) -> BTreeSet<String> {
     let start = source
         .find(&format!("const {name}"))
-        .unwrap_or_else(|| panic!("{name} in engine.ts"));
+        .unwrap_or_else(|| panic!("{name} in engine-parts.ts"));
     let body = &source[start..start + source[start..].find("};").unwrap()];
     body.lines()
         .skip(1)
@@ -268,7 +268,7 @@ fn keys(source: &str, name: &str) -> BTreeSet<String> {
 
 #[test]
 fn la_shell_conosce_ogni_blocco_e_ogni_parte_non_mostrata() {
-    let path = client("editors/grid/engine.ts");
+    let path = client("editors/grid/engine-parts.ts");
     let source = std::fs::read_to_string(&path).unwrap();
     let locks: BTreeSet<String> = Lock::ALL
         .iter()

@@ -70,6 +70,14 @@ divide senza danno (una tabella unica, un blocco che spezzato si legge peggio),
 si scrive a mano la sua riga nell'elenco, o si alza il suo tetto, col motivo in
 coda (`<righe> <percorso> # perché`), e lo si scrive nel corpo della PR.
 
+Una classe troppo lunga (i due motori, `editors/canvas/engine.ts` e
+`editors/grid/engine.ts`) si divide a pacchetti di metodi: un gruppo di metodi
+sta in un oggetto in `engine-<tema>.ts`, coi corpi com'erano e `this: Motore`
+in testa ai parametri, e due righe accanto alla classe lo montano sul
+prototipo (`editors/core/mix-methods.ts`). Campi, costruttore e accessori
+restano nella classe; i membri sono `_nome` invece di `#nome`, e una guardia
+(`mix-methods.test.ts`) vieta di usarli fuori dai file del motore.
+
 ## 4. Verificare durante il lavoro
 
 ### Rust

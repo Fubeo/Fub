@@ -1,0 +1,408 @@
+/* La banda di stato, i menu sopra gli avvisi, il benvenuto, l'adattamento, il cassetto che si affaccia, la concentrazione, la barra del kit. */
+
+/* ── La banda di stato ───────────────────────────────────────────────────── */
+
+#status-band {
+  grid-row: 3;
+  display: flex;
+  align-items: center;
+  height: var(--status-h);
+  min-height: var(--status-h);
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+#app[data-status-off] #status-band {
+  display: none;
+}
+
+#status-band > .status-side {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+#status-band > .status-side--end {
+  margin-left: auto;
+  flex: none;
+}
+
+/* La cartella dei file trascinati (T52): un nome lunghissimo si accorcia con
+   i puntini; lo zoom e le schede restano. Un testo ha bisogno di un blocco, non
+   della riga flessibile della voce. */
+#status-band [data-surface-item="folder"] {
+  display: inline-block;
+  min-width: 0;
+  max-width: 28ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+/* La banda stretta. Con «Si scrive» e la modalità a destra, sotto gli 800 px
+   la lingua del documento si fa da parte (la dice già il correttore), e ciò
+   che sta a sinistra si taglia invece di passare sotto la parte destra. */
+#status-band > #status-start,
+#status-band > #views-status {
+  overflow: hidden;
+}
+@media (max-width: 800px) {
+  #status-band [data-surface-item="language"] {
+    display: none;
+  }
+}
+
+/* Un menu aperto non sta mai sotto un toast. La pila sta nel `body`, sopra
+   `#app` che isola i suoi piani, e il menu nasce dentro `#app`: nessun
+   `z-index` lo porterebbe sopra. La voce della modalità apre il suo menu in
+   basso a destra, proprio dove scende la pila, e un guasto resta finché non lo
+   si chiude: senza questa regola la voce che si vuole scegliere starebbe sotto
+   l'avviso. Finché il menu è aperto la pila si fa da parte, e torna intera
+   quando si chiude; la regione viva ha già detto il testo. */
+body:has(#context-menu:not([hidden])) > .toast-stack {
+  visibility: hidden;
+}
+
+#key-pending {
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--status-h) + 16px);
+  transform: translateX(-50%);
+  z-index: var(--z-toast);
+}
+
+/* ── Il benvenuto ────────────────────────────────────────────────────────── */
+
+/* Senza vault non c'è niente da sfogliare: i cassetti, i loro divisori, le
+   icone del binario che scelgono un pannello, indietro e avanti e il bottone
+   dell'ispettore si ritirano, e il benvenuto ha la scrivania intera. È
+   geometria, non stato: `hidden` resta quello della preferenza, e quando un
+   vault si apre tutto torna dov'era. In fondo al binario restano aiuto,
+   preferenze e luce, che non dipendono dal vault; la barra sopra di loro tiene
+   il suo posto, così non salgono. */
+#app[data-welcome] #sidebar,
+#app[data-welcome] #right-pane,
+#app[data-welcome] .layout-divider,
+#app[data-welcome] .drawer-scrim,
+#app[data-welcome] #rail-notch,
+#app[data-welcome] #nav-back,
+#app[data-welcome] #nav-forward,
+#app[data-welcome] #toggle-inspector {
+  display: none;
+}
+
+#app[data-welcome] #views-ribbon {
+  visibility: hidden;
+}
+
+/* Il binario resta a sinistra: lo stesso spazio a destra tiene il benvenuto
+   al centro della finestra, sotto la pillola, e non al centro di ciò che avanza. */
+#app[data-welcome] #workspace #layout > #panes {
+  padding: 0 calc(var(--rail-w) + var(--sheet-gap)) var(--sheet-gap) var(--sheet-gap);
+}
+
+#app[data-welcome] #workspace:has(> .rail > #views-ribbon[hidden]) #layout > #panes {
+  padding-right: var(--sheet-gap);
+}
+
+.onboarding {
+  margin: auto;
+  max-width: 760px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  overflow-y: auto;
+  max-height: 100%;
+}
+
+.onboarding-actions {
+  display: flex;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.onboarding-recent {
+  width: 100%;
+  min-width: 0;
+}
+
+#onboarding-recent-wrap {
+  align-self: stretch;
+}
+
+/* I recenti stanno in fila al centro: la loro etichetta li segue. */
+#onboarding-recent-title {
+  text-align: center;
+}
+
+/* Il profilo di un vault nuovo prende il posto del benvenuto: il resto della
+   colonna si ritira finché non si sceglie, e lo riprende chi lo gestisce. */
+#onboarding[data-step="profile"] > :not(#onboarding-profile) {
+  display: none;
+}
+
+.onboarding-profile {
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 0;
+}
+
+.onboarding-profile > .components-profiles {
+  justify-content: center;
+}
+
+/* ── L'adattamento ───────────────────────────────────────────────────────── */
+
+/* Il velo sta dietro il cassetto in sovrapposizione e copre i fogli, non la
+   cornice: binario e banda di stato restano vivi, così si cambia pannello
+   senza prima chiudere quello aperto. */
+.drawer-scrim {
+  position: fixed;
+  inset: var(--titlebar-h) 0 var(--status-h) var(--rail-w);
+  z-index: calc(var(--z-drawer) - 1);
+}
+
+#workspace:has(> .rail > #views-ribbon[hidden]) .drawer-scrim {
+  left: 0;
+}
+
+/* ── Il cassetto che si affaccia ─────────────────────────────────────────── */
+
+/* Il bordo: una striscia nel margine fra la cornice e i fogli, dalla parte di
+   un cassetto chiuso. Sostandoci il cassetto si affaccia (`frame/peek.ts`). */
+.drawer-edge {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 10px;
+  z-index: calc(var(--z-drawer) - 2);
+}
+
+.drawer-edge[data-edge="sidebar"] {
+  left: 0;
+}
+
+.drawer-edge[data-edge="inspector"] {
+  right: 0;
+}
+
+.drawer-edge[hidden],
+#app[data-welcome] .drawer-edge,
+#app[data-focus-mode] .drawer-edge {
+  display: none;
+}
+
+/* Affacciato, il cassetto resta `hidden` per la shell — la preferenza è
+   «chiuso» — e si vede sopra i fogli, staccato dal fondo quanto loro. È la
+   sola eccezione alla garanzia «`[hidden]` nasconde», e sta qui, nel foglio
+   che quella garanzia la dà: chi legge `hidden` continua a leggere la
+   preferenza, non ciò che si vede in questo momento. */
+#layout.peek-sidebar > #sidebar[hidden],
+#layout.peek-inspector > #right-pane[hidden] {
+  display: flex !important;
+  position: absolute;
+  top: 0;
+  bottom: var(--sheet-gap);
+  height: auto;
+  z-index: var(--z-drawer);
+  max-width: min(400px, 85vw);
+}
+
+#layout.peek-sidebar > #sidebar[hidden] {
+  left: 0;
+}
+
+#layout.peek-inspector > #right-pane[hidden] {
+  right: 0;
+}
+
+/* Fra 960 e 1199 l'ispettore si sovrappone; sotto 960 tutti e due i cassetti,
+   uno alla volta. La classe la mette la shell: l'adattamento non sovrascrive
+   la preferenza, la sospende. */
+@media (max-width: 1199px) {
+  #layout.layout-inspector-overlay #right-pane {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    z-index: var(--z-drawer);
+  }
+
+  #layout.layout-inspector-overlay #divider-inspector {
+    display: none;
+  }
+}
+
+@media (max-width: 959px) {
+  #layout.layout-compact #sidebar,
+  #layout.layout-compact #right-pane {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    z-index: var(--z-drawer);
+    max-width: min(340px, 85vw);
+  }
+
+  #layout.layout-compact #sidebar {
+    left: 0;
+  }
+
+  #layout.layout-compact #right-pane {
+    right: 0;
+  }
+
+  #layout.layout-compact #divider-sidebar,
+  #layout.layout-compact #divider-inspector {
+    display: none;
+  }
+}
+
+/* La barra del titolo cede per gradi: prima il percorso nella pillola, poi il
+   nome del vault, poi la pillola resta un'icona. */
+@media (max-width: 1100px) {
+  #topbar .titlebar-shortcut {
+    display: none;
+  }
+}
+
+@media (max-width: 960px) {
+  #topbar .pill-path,
+  #topbar .vault-chip-name {
+    display: none;
+  }
+}
+
+@media (max-width: 860px) {
+  #pill {
+    width: var(--chrome-btn);
+  }
+
+  #topbar .pill-title,
+  #topbar .pill-path {
+    display: none;
+  }
+}
+
+/* La concentrazione: cassetti, linguette e barra di formato si ritirano;
+   restano il foglio, la barra del titolo attenuata e la banda, dove sta
+   «Esci dalla concentrazione». */
+#app[data-focus-mode] #rail,
+#app[data-focus-mode] #sidebar,
+#app[data-focus-mode] #right-pane,
+#app[data-focus-mode] .layout-divider,
+#app[data-focus-mode] .drawer-scrim,
+#app[data-focus-mode] .pane > .pane-tabs,
+#app[data-focus-mode] .pane > .format-bar {
+  display: none !important;
+}
+
+/* La barra del titolo si attenua e torna piena al passaggio, o quando il
+   fuoco ci entra da tastiera: è una questione di colori, quindi della pelle
+   (`skin/frame.css`, «La concentrazione»). */
+
+/* Il blocco del cursore resta acceso, gli altri si attenuano: nel foglio che
+   ha il fuoco, mentre si scrive. Il blocco (le righe fino alla riga vuota
+   prima e dopo, o quelle della scelta) lo segna l'editor
+   (`editors/text/cursor-block.ts`); la riga sotto il puntatore si riaccende. */
+#app[data-focus-mode] .pane-editor .cm-editor.cm-focused .cm-content > :not(.cm-fub-cursor-block):not(:hover) {
+  opacity: 0.3;
+}
+
+/* Il bottone dell'ispettore esce con lui: premuto qui cambierebbe una
+   preferenza senza mostrare niente. Lascia il suo posto, perché i vicini non
+   saltino all'entrata. */
+#app[data-focus-mode] #toggle-inspector {
+  visibility: hidden;
+}
+
+#app[data-focus-mode] #panes {
+  padding-left: var(--sheet-gap);
+  padding-right: var(--sheet-gap);
+  justify-content: center;
+}
+
+/* Un foglio di testo rimasto solo si centra alla sua misura di lettura. Due
+   fogli affiancati, o una vista, tengono tutta la larghezza: là la scrivania
+   serve ancora. */
+#app[data-focus-mode] #panes > .pane:not(.con-vista):has(> [role="tabpanel"] > .pane-editor[data-markdown-mode]) {
+  flex: 0 1 var(--focus-sheet-width);
+}
+
+/* E la scrivania si spegne: un velo sopra il piano e sotto i fogli, che sono
+   posizionati e lo coprono. Si muove la sola opacità; il colore è della pelle. */
+.desk::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+}
+
+#app[data-focus-mode] .desk::before {
+  opacity: 1;
+}
+
+/* ── La barra in una fila (`kit-bar`) ────────────────────────────────────────
+   La stessa barra della barra a schede quando sta in una fila sola: il
+   vassoio (`kit-bar`), i foglietti senza nome (`kit-bar-group`), gli stessi
+   pulsanti (`kit-bar-button`) e campi (`kit-bar-field`). Le classi le mette
+   chi costruisce la barra: la barra di formato delle note, la testa del
+   disegno, la barra del PDF. Lo scorrimento resta di ciascuna: la barra di
+   formato taglia e manda il resto in «…». La lavagna segue il piano N6. */
+.kit-bar {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  min-width: 0;
+}
+.kit-bar-group {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+}
+/* La fila del kit (`kit/options-bar.ts`) dentro un vassoio: una riga sola, e
+   ciò che non ci sta va in «…» (`kit-options-more`). */
+.kit-options {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  min-width: 0;
+  overflow: hidden;
+}
+.kit-options-row {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+/* Un gruppo della fila non si stringe: il suo testo resta intero, e se non ci
+   sta il gruppo va in «…» (`kit/options-bar.ts`), non si tronca a «S…». La
+   misura del conto è la larghezza vera del gruppo. */
+.kit-options-row > *,
+.kit-options-row .kit-bar-button {
+  flex: none;
+}
+/* Col mouse i pulsanti della fila sono alti 28, come nella barra a schede; col
+   dito sono bersagli da 44. */
+@media (pointer: fine) {
+  .kit-bar-button,
+  .kit-options-more {
+    min-width: 28px;
+    min-height: 28px;
+    height: 28px;
+  }
+}
+@media (pointer: coarse) {
+  .kit-bar-button,
+  .kit-options-more {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
+

@@ -77,7 +77,7 @@
 | il registro dei comandi del vault | `crates/fub-features/src/commands.rs` e i suoi moduli in `commands/` (dogfood del `CommandProvider`) |
 | il catalogo dei comandi dei fogli | `crates/fub-abi/src/grid_bytes.rs`, servito in `crates/fub-format-xlsx` |
 | il lessico dei menu | `apps/client/src/i18n/lexicon.ts` |
-| le stringhe della shell | `apps/client/src/i18n/catalog.ts` |
+| le stringhe della shell | `apps/client/src/i18n/catalog.ts` (l'inglese in `catalog-en.ts`), con le voci per area in `catalog-it-<area>.ts` e `catalog-en-<area>.ts` |
 | le stringhe dell'editor dei disegni | `apps/client/src/editors/spatial/strings.ts`, con le voci per area (italiano e inglese insieme) in `strings/` |
 | il disegno sul motore (chi possiede che cosa) | [Il disegno sul motore](../architecture/disegno.md) |
 | il disegno completo (la parità, la mappa, le famiglie pigre, l'indice) | [Il disegno completo](../architecture/disegno-completo.md) |
@@ -92,7 +92,7 @@
 | le molle del moto | `apps/client/src/moto/spring.ts` |
 | `MemoryHost` (provare un provider) | `crates/fub-sdk/src/testing/mod.rs` |
 | i template dei disegni | `crates/fub-features/templates/` |
-| le scene del banco visivo | `apps/client/bench/scene.mjs` |
+| le scene del banco visivo | `apps/client/bench/scene.mjs` (l'elenco), i pezzi per area in `apps/client/bench/scene/` |
 | i cataloghi del banco e la pagina «Tutti i componenti» | `apps/client/src/dev/catalogo/` |
 | i comportamenti della shell (avvisi, menu delle modalità, tasto destro, albero, linguette, avvisi nel foglio) | `apps/client/src/panels/`, `apps/client/src/state/`, `apps/client/src/ui/` e `docs/architecture/shell-behaviours.md` |
 | la cornice del telefono e la soglia dei 600 px | `apps/client/src/shells/scrittoio/mobile/` e `docs/architecture/phone-frame.md` |
@@ -109,7 +109,7 @@
 | `apps/client/src/editors/rich/paper.generated.ts` | `UPDATE_MIRROR=1 cargo test -p fub-format-rich --test ts_projection` |
 | le fixture dei mirror (in `src/__fixtures__/`) | lo stesso giro di `UPDATE_MIRROR=1` del test che le cita |
 | `apps/client/src/__fixtures__/live-decorations.json` (l'impronta delle decorazioni della Live) | `UPDATE_MIRROR=1 npx vitest run src/editors/text/profiles/markdown/livepreview-identica.test.ts` da `apps/client/`, soltanto per un cambio voluto di ciò che la Live disegna |
-| la pelle del tema di serie | `npm run theme:generate` da `apps/client/` |
+| la pelle e la struttura del tema di serie (`skin.css` dai pezzi di `skin/`, `structure.css` da quelli di `structure/`) | `npm run theme:generate` da `apps/client/` |
 | `apps/client/src/editors/text/profiles/markdown/html-entities.generated.ts` | `npm run entities:generate` da `apps/client/` (verifica: `npm run entities:verify`, e `npm test`) |
 | il catalogo dei comandi serviti dei fogli | `UPDATE_MIRROR=1 cargo test -p fub-format-xlsx --lib catalogo_servito` |
 | il corpus dei documenti ricchi | `cargo run -p fub-format-rich --example genera_corpus` |

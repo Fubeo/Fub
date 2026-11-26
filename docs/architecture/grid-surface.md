@@ -87,7 +87,7 @@ righe bloccate) e colonna ferma (numeri delle righe, colonne bloccate) restano
 a posto col solo `sticky`, nello stesso fotogramma dello scorrimento. Ogni
 zona ha un livello di segni: `marks.ts` taglia un rettangolo per zona.
 
-Le righe restano (`#drawRow`): ognuna ricorda per indice la sua misura e le
+Le righe restano (`_drawRow`): ognuna ricorda per indice la sua misura e le
 sue celle, e una cella si rifà solo quando cambia ciò che mostra; se l'HTML è
 lo stesso resta lo stesso nodo e cambiano le sole classi della selezione,
 così il doppio clic arriva e l'editor aperto non perde il fuoco. Si disegna
@@ -409,18 +409,20 @@ byte salvati, non la sessione, e il rapporto conta ciò che il PDF non porta.
 
 ## Dove si trova
 
-- `apps/client/src/editors/grid/`: `engine.ts`, `engine-geometry.ts`,
-  `engine-host.ts`, `dom-sync.ts`, `marks.ts`, `grid-motion.ts`,
+- `apps/client/src/editors/grid/`: `engine.ts` e i suoi pacchetti di metodi
+  `engine-*.ts` (sessione, scrittura, comandi, selezione, tasti, disegno,
+  segni, cella in modifica, appunti, puntatore, oggetti, fogli),
+  `engine-geometry.ts`, `engine-host.ts`, `dom-sync.ts`, `marks.ts`, `grid-motion.ts`,
   `workbook.ts`, `objects.ts`, `comment-card.ts`, `menu-comandi.ts`,
   `risultato.ts`, `motivi.ts`, `ribbon/` (`tabs/`), `dialogs/`, `palette/`
 - `apps/client/src/kit/ribbon/`; `crates/fub-format-xlsx/src/`: `grid.rs`,
   `export.rs`, `objects.rs`
 - la pelle: `apps/client/src/theme/scrittoio/structure.css` (il piano, le
   zone, la carta, i livelli dei segni, la cella aperta),
-  `theme/scrittoio/skin/editors.css` (sezione «Il foglio di calcolo»: i
-  colori dei segni, delle formiche e della cella aperta) e gli hook in
-  `theme/scrittoio/anatomia/editors.ts` (voce `grid-surface`)
-- il banco: le scene `grid-*` di `apps/client/bench/scene.mjs` (sulla
+  `theme/scrittoio/skin/grid.css` (i colori dei segni, delle formiche e
+  della cella aperta) e gli hook in `theme/scrittoio/anatomia/grid.ts` (voce
+  `grid-surface`)
+- il banco: le scene `grid-*` di `apps/client/bench/scene/shell-base-griglia.mjs` (sulla
   cartella grande `?workbook=large`, gli stati del prototipo delle celle nel
   foglio pieno: l'intervallo, oltre la riga bloccata, la cella aperta e la
   colonna tirata, anche a 700 px; il riempimento in attesa, la copia nelle tre

@@ -1,0 +1,759 @@
+/* La lavagna: la barra dei comandi, gli strumenti, gli strati. */
+
+/* La barra dei comandi è la fila del kit (`kit/options-bar.ts`): una riga
+   sola, e ciò che non ci sta va in «…» (#411). Non scorre di lato. */
+.canvas-toolbar {
+  flex: none;
+}
+
+.canvas-toolbar-item {
+  flex: none;
+}
+
+/* La testata: la riga delle opzioni dello strumento (T50; come
+   .draw-header). */
+.canvas-header {
+  display: flex;
+  flex: none;
+  align-items: center;
+  min-width: 0;
+}
+.canvas-options {
+  flex: 1 1 auto;
+}
+.canvas-group {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+}
+.canvas-group[hidden],
+.canvas-options-item[hidden] {
+  display: none;
+}
+.canvas-button {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  min-height: 32px;
+  padding: 0;
+}
+@media (pointer: coarse) {
+  .canvas-button {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
+/* Un pulsante con un nome scritto (la penna): il testo accanto. */
+.canvas-button[data-label] {
+  gap: var(--space-3, 6px);
+  padding: 0 var(--space-4, 8px);
+  white-space: nowrap;
+}
+.canvas-options-hint {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Il corpo: la colonna degli strumenti e l'area della lavagna (come
+   .draw-body). */
+.canvas-body {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+/* La colonna, a sinistra della lavagna: scorre in verticale quando la
+   finestra è bassa (come .draw-rail). */
+.canvas-rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border-width: 0;
+  border-inline-end-width: 1px;
+}
+/* L'area: la vista e ciò che le sta sopra (come .draw-stage). */
+.canvas-area {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+.canvas-area > .canvas-viewport {
+  flex: 1;
+  min-width: 0;
+}
+/* La lavagna vuota (T62): al centro della vista, sopra di lei. Le sue righe non
+   prendono il puntatore, così il doppio clic nel vuoto arriva alla vista; i
+   pulsanti sì. */
+.canvas-blank {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  box-sizing: border-box;
+  transform: translate(-50%, -50%);
+  text-align: center;
+  pointer-events: none;
+}
+.canvas-blank[hidden],
+.canvas-blank-actions[hidden] {
+  display: none;
+}
+.canvas-blank-lines {
+  margin: 0;
+}
+.canvas-blank-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  pointer-events: auto;
+}
+/* La barra della selezione (T51), sopra ciò che è scelto (come .draw-arrange;
+   il posto lo scrive la tela in linea con bubblePlace). */
+.canvas-selection-bar {
+  position: absolute;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  box-sizing: border-box;
+  max-width: calc(100% - 16px);
+}
+.canvas-selection-bar[hidden] {
+  display: none;
+}
+/* Il navigatore (T55), in basso a destra della vista (come .draw-navigator;
+   una sola <canvas>). */
+.canvas-navigator {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  z-index: 1;
+  box-sizing: border-box;
+  width: 168px;
+  height: 120px;
+  cursor: pointer;
+  touch-action: none;
+}
+.canvas-navigator[hidden] {
+  display: none;
+}
+.canvas-navigator-map {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+/* Cerca nella lavagna (T60): in alto a destra, sopra la vista. Il campo si
+   stringe per primo quando la vista è stretta. */
+.canvas-find {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  max-width: calc(100% - 16px);
+}
+.canvas-find[hidden],
+.canvas-find-scope[hidden] {
+  display: none;
+}
+.canvas-find-input {
+  box-sizing: border-box;
+  width: 16rem;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.canvas-find-count {
+  flex: none;
+  min-width: 7ch;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.canvas-find-scope {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.canvas-find .canvas-button {
+  flex: none;
+}
+/* Una scheda velata dalla ricerca non prende il puntatore. */
+.canvas-node[data-card-veiled] {
+  pointer-events: none;
+}
+/* Stretta (finestra fino a 700 px o riquadro fino a 480): la colonna va
+   sotto la lavagna e si stende in riga (come .draw-editor[data-narrow]). */
+.canvas-surface[data-narrow] .canvas-body {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) auto;
+}
+.canvas-surface[data-narrow] .canvas-area {
+  grid-column: 1;
+  grid-row: 1;
+}
+.canvas-surface[data-narrow] .canvas-rail {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  flex-direction: row;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  border-inline-end-width: 0;
+  border-block-start-width: 1px;
+}
+/* «Righello» (T87) e «Il dito scrive» (T64) in fondo alla colonna, in tutti e
+   due gli spazi; «Completo», nello spazio Semplice (T65; come
+   .draw-rail-full), gli sta sotto. Stretta, tutti in fondo alla riga, uno
+   accanto all'altro; «Completo» subito dopo le caselle va al capo da solo. */
+.canvas-rail-ruler,
+.canvas-rail-finger {
+  flex: none;
+}
+.canvas-rail-ruler {
+  margin-block-start: auto;
+}
+.canvas-rail-ruler + .canvas-rail-finger {
+  margin-block-start: var(--space-2, 4px);
+}
+.canvas-surface[data-narrow] .canvas-rail-ruler {
+  margin-block-start: 0;
+  margin-inline-start: auto;
+}
+.canvas-surface[data-narrow] .canvas-rail-ruler + .canvas-rail-finger {
+  margin-block-start: 0;
+  margin-inline-start: var(--space-2, 4px);
+}
+.canvas-rail-full {
+  flex: none;
+  min-height: 44px;
+  white-space: nowrap;
+}
+.canvas-rail-finger + .canvas-rail-full {
+  margin-block-start: var(--space-2, 4px);
+}
+.canvas-rail-full:first-child,
+.canvas-rail > .kit-rail + .canvas-rail-full {
+  margin-block-start: auto;
+}
+.canvas-surface[data-narrow] .canvas-rail-full {
+  margin-block-start: 0;
+  margin-inline-start: var(--space-2, 4px);
+}
+.canvas-surface[data-narrow] .canvas-rail > .kit-rail + .canvas-rail-full {
+  margin-block-start: 0;
+  margin-inline-start: auto;
+}
+/* Senza interfaccia (Ctrl+., T65): restano la lavagna e le schede; va via
+   anche la barra di N4 (`.canvas-toolbar`), finché c'è. */
+.canvas-surface[data-bare] .canvas-header,
+.canvas-surface[data-bare] .canvas-toolbar,
+.canvas-surface[data-bare] .canvas-rail,
+.canvas-surface[data-bare] .canvas-selection-bar,
+.canvas-surface[data-bare] .canvas-navigator {
+  display: none;
+}
+/* Lo spazio Semplice (T65): i pulsanti della riga e della barra della
+   selezione sono bersagli da 44 px; le caselle della colonna le dà il kit
+   con data-size. */
+.canvas-surface[data-workspace="simple"] .canvas-button {
+  min-width: 44px;
+  min-height: 44px;
+}
+
+.canvas-viewport {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  touch-action: none;
+  overscroll-behavior: none;
+}
+/* Gli strumenti della colonna: la Mano prende la lavagna, il Testo la
+   scrive, Collega tira un filo. Il mouse che scrive (sotto) vince. */
+.canvas-viewport[data-tool="hand"] {
+  cursor: grab;
+}
+.canvas-viewport[data-tool="hand"]:not([data-ink]):active {
+  cursor: grabbing;
+}
+.canvas-viewport[data-tool="text"] {
+  cursor: text;
+}
+.canvas-viewport[data-tool="connect"] {
+  cursor: alias;
+}
+/* Spazio tenuto: la mano, con ogni strumento e sopra le schede. */
+.canvas-viewport[data-space-pan],
+.canvas-viewport[data-space-pan] * {
+  cursor: grab;
+}
+.canvas-viewport[data-space-pan]:active,
+.canvas-viewport[data-space-pan]:active * {
+  cursor: grabbing;
+}
+/* Il mouse che scrive (D tenuto o «Scrivi col mouse»): la croce, come
+   l'inchiostro delle note, su un velo sopra le schede (T20d). Non sul
+   viewport: `cursor` si eredita, e cambiarlo lì ricalcolava lo stile di ogni
+   elemento della lavagna (62–80 ms con un foglio vivo). Il velo si mostra
+   togliendo `data-idle`; nascosto non prende il puntatore. */
+.canvas-pen-veil {
+  position: absolute;
+  inset: 0;
+  cursor: crosshair;
+  touch-action: none;
+}
+.canvas-pen-veil[data-idle] {
+  visibility: hidden;
+}
+/* Con lo strumento Gomma del menu della penna: la cella. */
+.canvas-pen-veil[data-tool="eraser"] {
+  cursor: cell;
+}
+
+/* Il menu della penna: il pulsante col tondo del colore e il nome, e il
+   rialzo con le sezioni una sotto l'altra. */
+.canvas-ink-pen {
+  display: inline-flex;
+  align-items: center;
+}
+.canvas-ink-pen-chip {
+  flex: none;
+  width: 12px;
+  height: 12px;
+}
+.canvas-pen-menu {
+  display: flex;
+  flex-direction: column;
+  width: 288px;
+  max-width: calc(100vw - 16px);
+}
+.canvas-pen-section {
+  display: flex;
+  flex-direction: column;
+}
+.canvas-pen-section[hidden] {
+  display: none;
+}
+.canvas-pen-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.canvas-pen-item {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+.canvas-pen-preview {
+  flex: none;
+  width: 60px;
+  height: 28px;
+}
+.canvas-pen-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.canvas-pen-swatch {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+.canvas-pen-swatch > svg {
+  width: 20px;
+  height: 20px;
+}
+.canvas-pen-more {
+  display: inline-flex;
+  align-items: center;
+}
+.canvas-pen-width-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+.canvas-pen-width {
+  width: 100%;
+}
+.canvas-pen-width-preview {
+  display: block;
+  width: 100%;
+  height: 44px;
+}
+
+.canvas-stage,
+.canvas-edges {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+  pointer-events: none;
+}
+
+.canvas-edges {
+  overflow: visible;
+}
+
+/* Le prese del filo scelto (T91): un livello sopra lo stage, con la stessa
+   camera. Il livello non prende il puntatore; le prese sì, così vincono sui
+   punti delle schede che le coprono. */
+.canvas-edge-handles {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.canvas-edge-reconnect {
+  pointer-events: auto;
+}
+
+/* La griglia (T71): i punti nella vista, sotto le schede. Il livello non
+   prende il puntatore; la posizione e il passo li scrive la tela. */
+.canvas-grid {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* Le guide di un gesto (T71): un solo elemento sopra le schede, con una linea
+   per guida. La tela ne dà la posizione e la lunghezza sullo schermo; qui
+   c'è solo lo spessore di un pixel. */
+.canvas-guides {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.canvas-guide {
+  position: absolute;
+  pointer-events: none;
+}
+
+.canvas-guide[data-axis="v"] {
+  width: 1px;
+}
+
+.canvas-guide[data-axis="h"] {
+  height: 1px;
+}
+
+/* Dove nasceranno le schede di un trascinamento: rettangoli tratteggiati
+   sopra la scena, nelle coordinate della lavagna. Solo la forma: l'aspetto è
+   della pelle. */
+.canvas-drop-ghosts {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+  pointer-events: none;
+}
+
+.canvas-drop-ghost {
+  position: absolute;
+  top: 0;
+  left: 0;
+  box-sizing: border-box;
+  border-width: 1px;
+  border-style: dashed;
+  pointer-events: none;
+}
+
+/* Oltre i dodici file, la cornice del gruppo che li terrà, col numero in
+   mezzo (prototipo T25). */
+.canvas-drop-ghost-group {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.canvas-drop-ghost-name {
+  box-sizing: border-box;
+  max-width: 100%;
+}
+
+/* L'inchiostro della lavagna: la scia sopra lo stage, l'asciutto dentro la
+   scheda e sullo stage. Il colore è del tratto (`fill`), non del tema. */
+.canvas-ink-wet,
+.canvas-ink-board {
+  position: absolute;
+  top: 0;
+  left: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.canvas-ink-wet {
+  transform-origin: 0 0;
+}
+
+.canvas-ink-card {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.canvas-ink-card > svg {
+  overflow: visible;
+}
+
+/* L'avviso dei tratti sul testo che rifluisce: sotto la scheda, fuori dal
+   testo e dall'inchiostro. Si legge a ogni zoom: le sue misure si dividono
+   per lo zoom della lavagna (`--canvas-ink-reflow-k`) fino a metà, sotto
+   rimpicciolisce con le schede. La scheda che lo porta sta sopra le vicine,
+   come quella che scrive, perché nessuna lo copra. */
+.canvas-node[data-ink-reflowed] {
+  z-index: 1;
+}
+.canvas-ink-reflow {
+  --canvas-ink-reflow-k: max(var(--canvas-zoom, 1), 0.5);
+  position: absolute;
+  top: 100%;
+  left: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  box-sizing: border-box;
+  width: max(100%, calc(280px / var(--canvas-ink-reflow-k)));
+  pointer-events: auto;
+}
+.canvas-ink-reflow-text {
+  flex: 1 1 14em;
+  min-width: 0;
+  margin: 0;
+}
+.canvas-ink-reflow-back {
+  flex: 0 0 auto;
+}
+
+/* Il Lazo della lavagna (T86): sopra l'inchiostro libero dello stage, il giro
+   in corso, il contorno dei tratti scelti e la cornice attorno a loro, in
+   coordinate della lavagna. I segni restano sottili a ogni zoom; il colore è
+   della pelle. */
+.canvas-lasso {
+  position: absolute;
+  top: 0;
+  left: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.canvas-lasso-path,
+.canvas-lasso-frame,
+.canvas-lasso-chosen > path {
+  stroke-width: 1.5px;
+  vector-effect: non-scaling-stroke;
+}
+
+.canvas-lasso-path,
+.canvas-lasso-frame {
+  stroke-dasharray: 5 4;
+}
+
+/* Il rettangolo del trascinamento nel vuoto con la Selezione (N6 T20b): uno
+   strato sopra le schede, in coordinate della lavagna, che non prende il
+   puntatore; il contorno resta sottile a ogni zoom. */
+.canvas-marquee {
+  position: absolute;
+  top: 0;
+  left: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.canvas-marquee-box {
+  stroke-width: 1.5px;
+  vector-effect: non-scaling-stroke;
+}
+
+/* Il righello (T87): un fratello della vista, sopra di lei, che non prende il
+   puntatore; la riga è larga quanto basta a passare da un bordo all'altro a
+   ogni angolo, con il centro e l'angolo dalla lavagna (`--canvas-ruler-x`,
+   `--canvas-ruler-y` in pixel della vista, `--canvas-ruler-angle`). Il corpo
+   (`.canvas-ruler-grip`) prende il puntatore; le due fasce lungo i bordi,
+   larghe quanto la portata della penna (16 px), lo lasciano alla vista, dove
+   il tratto comincia e segue il bordo. */
+.canvas-ruler {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.canvas-ruler-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  box-sizing: border-box;
+  width: 400vmax;
+  height: var(--canvas-ruler-width, 72px);
+  border-block-width: 1px;
+  border-block-style: solid;
+  transform: translate(var(--canvas-ruler-x, 0px), var(--canvas-ruler-y, 0px)) rotate(var(--canvas-ruler-angle, 0deg)) translate(-50%, -50%);
+  transform-origin: 0 0;
+  pointer-events: none;
+}
+.canvas-ruler-grip {
+  position: absolute;
+  inset-block: 16px;
+  inset-inline: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: move;
+  touch-action: none;
+  pointer-events: auto;
+}
+.canvas-ruler-angle {
+  pointer-events: none;
+  user-select: none;
+  white-space: nowrap;
+}
+
+/* L'etichetta accanto alla penna, mentre si scrive (T69): sopra a destra
+   della punta, mai sotto; `data-flip-x` e `data-flip-y` la portano a
+   sinistra o sotto quando lì non c'è posto. Il punto della punta arriva
+   dalla lavagna (`--canvas-ink-x`, `--canvas-ink-y`, in pixel della vista). */
+.canvas-ink-label {
+  --canvas-ink-label-gap: 16px;
+  --canvas-ink-dx: var(--canvas-ink-label-gap);
+  --canvas-ink-dy: calc(-1 * var(--canvas-ink-label-gap) - 100%);
+  position: absolute;
+  top: 0;
+  left: 0;
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: none;
+  /* Segue la punta a ogni movimento: un suo strato, senza ridipingere la lavagna sotto. */
+  will-change: transform;
+  transform: translate(calc(var(--canvas-ink-x, 0px) + var(--canvas-ink-dx)), calc(var(--canvas-ink-y, 0px) + var(--canvas-ink-dy)));
+}
+
+.canvas-ink-label[data-flip-x] {
+  --canvas-ink-dx: calc(-1 * var(--canvas-ink-label-gap) - 100%);
+}
+
+.canvas-ink-label[data-flip-y] {
+  --canvas-ink-dy: var(--canvas-ink-label-gap);
+}
+
+/* A penna su: al suo posto e misurata, ma non si vede. */
+.canvas-ink-label[data-idle] {
+  visibility: hidden;
+}
+
+/* Il bordo tratteggiato della scheda a cui il tratto si attaccherà (T69):
+   quattro lati sottili sullo stage, a 4 px dalla scheda, come il contorno
+   del prototipo. Non è il contorno della scheda: mostrarlo o toglierlo
+   ridipinge i lati e non tutto il contenuto. Il riquadro della scheda arriva
+   dalla lavagna (`--canvas-frame-x`, `-y`, `-w`, `-h`, in unità della
+   lavagna); il colore è della pelle.
+
+   Il contenitore è uno strato composto suo (`will-change: opacity`) portato
+   sull'angolo della scheda con `transform`, sopra ogni scheda dello stage
+   (`z-index: 2`, sopra anche la scheda in scrittura): nessuna scheda dipinta
+   dopo lo copre, così il browser non deve dare uno strato anche a lei.
+   All'inizio del tratto sulla stessa scheda del tratto prima cambia solo
+   l'opacità dello strato: niente da ridipingere sotto i lati, neanche il
+   foglio vivo (T20f). Non `will-change: transform`: lo strato non si
+   ridisegnerebbe più allo zoom nuovo e i lati verrebbero sfocati. */
+.canvas-ink-frames {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 2;
+  pointer-events: none;
+  transform: translate(var(--canvas-frame-x, 0px), var(--canvas-frame-y, 0px));
+  will-change: opacity;
+}
+
+/* Senza una scheda bersaglio: al suo posto, ma non si vede. Non `[hidden]`: le regole
+   `:has()` della shell leggono quell'attributo, e cambiarlo qui farebbe
+   ricalcolare lo stile di tutta la finestra all'inizio di ogni tratto. Non
+   `visibility`: l'opacità di uno strato composto cambia senza ridipingerlo. */
+.canvas-ink-frames[data-idle] {
+  opacity: 0;
+}
+
+.canvas-ink-frame {
+  --canvas-frame-gap: 4px;
+  --canvas-frame-size: 2px;
+  --canvas-frame-out: calc(var(--canvas-frame-gap) + var(--canvas-frame-size));
+  position: absolute;
+  top: 0;
+  left: 0;
+  box-sizing: border-box;
+  border-width: 0;
+  border-style: dashed;
+  pointer-events: none;
+}
+
+.canvas-ink-frame[data-side="top"],
+.canvas-ink-frame[data-side="bottom"] {
+  width: calc(var(--canvas-frame-w, 0px) + 2 * var(--canvas-frame-out));
+  height: var(--canvas-frame-size);
+}
+
+.canvas-ink-frame[data-side="left"],
+.canvas-ink-frame[data-side="right"] {
+  width: var(--canvas-frame-size);
+  height: calc(var(--canvas-frame-h, 0px) + 2 * var(--canvas-frame-out));
+}
+
+/* I lati dall'angolo della scheda, che il contenitore ha già raggiunto. */
+.canvas-ink-frame[data-side="top"] {
+  border-top-width: var(--canvas-frame-size);
+  transform: translate(calc(-1 * var(--canvas-frame-out)), calc(-1 * var(--canvas-frame-out)));
+}
+
+.canvas-ink-frame[data-side="bottom"] {
+  border-bottom-width: var(--canvas-frame-size);
+  transform: translate(calc(-1 * var(--canvas-frame-out)), calc(var(--canvas-frame-h, 0px) + var(--canvas-frame-gap)));
+}
+
+.canvas-ink-frame[data-side="left"] {
+  border-left-width: var(--canvas-frame-size);
+  transform: translate(calc(-1 * var(--canvas-frame-out)), calc(-1 * var(--canvas-frame-out)));
+}
+
+.canvas-ink-frame[data-side="right"] {
+  border-right-width: var(--canvas-frame-size);
+  transform: translate(calc(var(--canvas-frame-w, 0px) + var(--canvas-frame-gap)), calc(-1 * var(--canvas-frame-out)));
+}
+
+.canvas-node {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  pointer-events: auto;
+}
+

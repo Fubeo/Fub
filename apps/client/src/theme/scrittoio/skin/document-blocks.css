@@ -1,0 +1,886 @@
+/* La pelle del documento: i blocchi (citazioni, ripiegabili, colonne, indice, elenchi, codice, tabelle, filetti, formule, immagini, incorporamenti). */
+
+/* ── Citazioni e richiami ────────────────────────────────────────────────── */
+
+/* La citazione è un filo e un corsivo in grafite: nessun fondo. */
+.markdown-rendered blockquote,
+.cm-editor .cm-content .cm-line.cm-fub-quote {
+  padding-left: 1em;
+  border-left: 2px solid var(--border-strong);
+  color: var(--muted);
+  font-style: italic;
+}
+/* Dentro un corsivo l'enfasi torna dritta, o non si vedrebbe. */
+.markdown-rendered blockquote em,
+.cm-editor .cm-content .cm-fub-quote .cm-fub-em {
+  font-style: normal;
+}
+.cm-editor .cm-content .cm-fub-quote-mark,
+.cm-editor .cm-content .cm-fub-quote-mark span {
+  color: var(--doc-gutter-fg);
+  font-style: normal;
+}
+/* Il richiamo è una scheda neutra: ogni tipo ha la stessa carta e lo stesso
+   filo, nel carattere dell'interfaccia. Il colore del tipo resta solo sul
+   cerchietto davanti al titolo (in Lettura) e sulla pastiglia del tipo (in
+   Live); il titolo in grassetto apre la riga e il testo lo segue. Un tipo che
+   la pelle non conosce ha il cerchietto dell'informazione. */
+.markdown-rendered .callout {
+  position: relative;
+  padding: var(--space-5) var(--space-7) var(--space-5) 44px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--sheet-2);
+  color: var(--doc-fg);
+  font-family: var(--font-ui);
+  font-size: var(--text-md);
+  line-height: 1.55;
+}
+.markdown-rendered .callout > .callout-title {
+  display: inline;
+  margin: 0 var(--space-2) 0 0;
+  color: var(--doc-heading);
+  font-size: 1em;
+  font-weight: var(--weight-bold);
+}
+.markdown-rendered .callout > .callout-title + p {
+  display: inline;
+}
+/* Il richiamo ripiegabile tiene il suo triangolo: il sommario resta una riga
+   a sé, e il testo comincia sotto. */
+.markdown-rendered .callout > summary.callout-title {
+  display: list-item;
+  cursor: pointer;
+}
+.markdown-rendered .callout > summary.callout-title + p {
+  display: block;
+}
+.markdown-rendered summary.callout-title:focus-visible {
+  border-radius: var(--radius-xs);
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: var(--focus-ring-offset);
+}
+.markdown-rendered .callout > .callout-title::before {
+  content: "i";
+  position: absolute;
+  top: 14px;
+  left: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 17px;
+  height: 17px;
+  border: 1.5px solid var(--accent);
+  border-radius: var(--radius-pill);
+  color: var(--accent);
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: var(--weight-bold);
+  line-height: 1;
+}
+.markdown-rendered .callout[data-callout="warning"] > .callout-title::before,
+.markdown-rendered .callout[data-callout="caution"] > .callout-title::before,
+.markdown-rendered .callout[data-callout="important"] > .callout-title::before {
+  content: "!";
+  border-color: var(--warning);
+  color: var(--warning);
+}
+.markdown-rendered .callout[data-callout="danger"] > .callout-title::before,
+.markdown-rendered .callout[data-callout="error"] > .callout-title::before,
+.markdown-rendered .callout[data-callout="bug"] > .callout-title::before {
+  content: "!";
+  border-color: var(--danger);
+  color: var(--danger);
+}
+.markdown-rendered .callout[data-callout="tip"] > .callout-title::before,
+.markdown-rendered .callout[data-callout="success"] > .callout-title::before,
+.markdown-rendered .callout[data-callout="done"] > .callout-title::before {
+  content: "✓";
+  border-color: var(--success);
+  color: var(--success);
+}
+.markdown-rendered .callout kbd {
+  font-size: var(--text-sm);
+}
+/* In Live il colore del tipo sta solo sulla sua pastiglia: il titolo resta
+   neutro, come in Lettura. */
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="note"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="info"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="abstract"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="summary"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="todo"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="tldr"] .cm-fub-callout-type {
+  color: var(--info);
+}
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="tip"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="hint"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="success"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="check"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="done"] .cm-fub-callout-type {
+  color: var(--success);
+}
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="warning"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="caution"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="attention"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="important"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="question"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="help"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="faq"] .cm-fub-callout-type {
+  color: var(--warning);
+}
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="danger"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="error"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="failure"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="fail"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="bug"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="missing"] .cm-fub-callout-type {
+  color: var(--danger);
+}
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="example"] .cm-fub-callout-type {
+  color: var(--accent);
+}
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="quote"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="cite"] .cm-fub-callout-type {
+  color: var(--doc-gutter-fg);
+}
+
+/* In Live, col cursore dentro, il callout resta un riquadro (D1): le righe
+   hanno la stessa carta neutra per ogni tipo, gli angoli la prima e l'ultima; la testata è la
+   pastiglia del tipo e il titolo. */
+.cm-editor .cm-content .cm-line.cm-fub-callout-line {
+  padding-inline: var(--space-6);
+  background: var(--sheet-2);
+}
+/* La prima riga del riquadro: quella che non segue un'altra sua riga (il
+   fratello a sinistra ha un nome, vedi `theme/fratelli.test.ts`). */
+.cm-editor .cm-content .cm-fub-callout-line:not(.cm-fub-callout-line + :where(.cm-fub-callout-line)) {
+  padding-top: var(--space-5);
+  border-top-left-radius: var(--radius-control);
+  border-top-right-radius: var(--radius-control);
+}
+.cm-editor .cm-content .cm-fub-callout-line:has(+ :not(.cm-fub-callout-line)),
+.cm-editor .cm-content .cm-fub-callout-line:last-child {
+  padding-bottom: var(--space-5);
+  border-bottom-right-radius: var(--radius-control);
+  border-bottom-left-radius: var(--radius-control);
+}
+/* Sulla carta del riquadro il verde dei segni vicini non si legge abbastanza
+   (il tipo scritto a mano, `[!tip`, resta sorgente col cursore dentro): lì i
+   segni prendono il colore dei commenti della Sorgente, il passo sotto. */
+.cm-editor .cm-content .cm-fub-callout-line .cm-fub-near,
+.cm-editor .cm-content .cm-fub-callout-line .cm-fub-near * {
+  color: var(--syn-comment);
+}
+.cm-editor .cm-content .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-title {
+  color: var(--doc-heading);
+  font-family: var(--font-ui);
+  font-size: 0.82em;
+  font-weight: var(--weight-bold);
+}
+.cm-editor .cm-content .cm-fub-callout-type {
+  margin-inline-end: var(--space-2);
+  border-radius: var(--radius-xs);
+  background: none;
+  cursor: pointer;
+}
+.cm-editor .cm-content .cm-fub-callout-type:hover,
+.cm-editor .cm-content .cm-fub-callout-type[aria-expanded="true"],
+.cm-editor .cm-content .cm-fub-callout-fold:hover {
+  background: var(--doc-fill-soft);
+}
+.cm-editor .cm-content .cm-fub-callout-fold {
+  color: var(--doc-gutter-fg);
+  background: none;
+  cursor: pointer;
+}
+.cm-editor .cm-content .cm-fub-callout-type:focus-visible,
+.cm-editor .cm-content .cm-fub-callout-fold:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+
+/* ── Ripiegabili (K2) ────────────────────────────────────────────────────── */
+.markdown-rendered details.fub-details {
+  margin: 0 0 var(--space-3);
+}
+/* Come in Live: la freccia sta nel margine, il sommario dove comincia il
+   testo, il contenuto rientrato sotto. */
+.markdown-rendered details.fub-details > summary {
+  margin-left: -1.4em;
+  list-style: none;
+  cursor: pointer;
+}
+.markdown-rendered details.fub-details > summary::before {
+  display: inline-block;
+  width: 1.4em;
+  color: var(--doc-gutter-fg);
+  text-align: center;
+  content: "▸";
+}
+.markdown-rendered details.fub-details[open] > summary::before {
+  content: "▾";
+}
+.markdown-rendered details.fub-details > summary:focus-visible {
+  border-radius: var(--radius-xs);
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: var(--focus-ring-offset);
+}
+.markdown-rendered details.fub-details > :not(summary) {
+  margin-left: 1.4em;
+}
+.cm-editor .cm-content .cm-fub-details-arrow {
+  color: var(--doc-gutter-fg);
+  border-radius: var(--radius-xs);
+}
+.cm-editor .cm-content .cm-fub-details-arrow:hover {
+  color: var(--doc-fg);
+  background: var(--doc-fill-soft);
+}
+.cm-editor .cm-content .cm-fub-details-arrow:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+.cm-editor .cm-content .cm-fub-details-empty {
+  color: var(--doc-gutter-fg);
+}
+
+/* ── Colonne (K3) ────────────────────────────────────────────────────────── */
+/* Da due a quattro colonne alla pari; un foglio stretto le mette una sotto
+   l'altra, nell'ordine in cui sono scritte. */
+.markdown-rendered .fub-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: var(--space-7);
+  row-gap: var(--space-5);
+  margin: 0 0 calc(var(--text-reading) * var(--leading-relaxed));
+}
+.markdown-rendered .fub-columns[data-columns="3"] {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.markdown-rendered .fub-columns[data-columns="4"] {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+.markdown-rendered .fub-column > :last-child {
+  margin-bottom: 0;
+}
+@container sheet (max-width: 700px) {
+  .markdown-rendered .fub-columns,
+  .markdown-rendered .fub-columns[data-columns="3"],
+  .markdown-rendered .fub-columns[data-columns="4"] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.cm-editor .cm-content .cm-fub-column-label {
+  color: var(--doc-gutter-fg);
+  font-family: var(--font-ui);
+  font-size: 0.82em;
+  font-weight: var(--weight-medium);
+}
+
+/* ── Indice (K4) ─────────────────────────────────────────────────────────── */
+/* Un elenco piatto di link ai titoli, ogni voce rientrata del suo livello:
+   si legge come un sommario, non come un elenco puntato. */
+.markdown-rendered .fub-toc {
+  margin: 0 0 calc(var(--text-reading) * var(--leading-relaxed));
+  padding-left: var(--space-5);
+  border-left: 2px solid var(--doc-rule);
+}
+.markdown-rendered .fub-toc ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.markdown-rendered .fub-toc-item {
+  margin: 0;
+}
+.markdown-rendered .fub-toc-item[data-depth="1"] {
+  padding-left: 1.2em;
+}
+.markdown-rendered .fub-toc-item[data-depth="2"] {
+  padding-left: 2.4em;
+}
+.markdown-rendered .fub-toc-item[data-depth="3"] {
+  padding-left: 3.6em;
+}
+.markdown-rendered .fub-toc-item[data-depth="4"] {
+  padding-left: 4.8em;
+}
+.markdown-rendered .fub-toc-item[data-depth="5"] {
+  padding-left: 6em;
+}
+.markdown-rendered .fub-toc-item > a {
+  color: var(--doc-fg);
+  text-decoration: underline;
+  text-decoration-color: var(--doc-rule);
+  text-underline-offset: 0.2em;
+}
+.markdown-rendered .fub-toc-item > a:hover {
+  text-decoration-color: currentColor;
+}
+.markdown-rendered .fub-toc-empty {
+  margin: 0;
+  color: var(--doc-gutter-fg);
+}
+
+/* ── Elenchi e caselle ───────────────────────────────────────────────────── */
+
+/* Un elenco in Live è una riga per voce, senza aria in mezzo: in Lettura le
+   voci (e i paragrafi che il renderer ci mette dentro) stanno a margine zero. */
+.markdown-rendered ol {
+  padding-left: 1.4em;
+}
+/* Il punto è grafite e staccato dal testo: in Lettura il rientro dell'elenco
+   puntato, in Live il margine attorno al segno che il pallino copre. */
+.markdown-rendered ul {
+  padding-left: 1.25em;
+}
+.cm-editor .cm-content .cm-fub-bullet:not(.cm-fub-bullet-task) {
+  margin-inline: 0.3em 0.35em;
+}
+.markdown-rendered li,
+.markdown-rendered li > p,
+.markdown-rendered li > ul,
+.markdown-rendered li > ol {
+  margin: 0;
+}
+.markdown-rendered li::marker {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.markdown-rendered dt {
+  font-weight: var(--weight-bold);
+}
+.markdown-rendered dd {
+  margin: 0 0 0 1.4em;
+  color: var(--muted);
+}
+.markdown-rendered li.task {
+  margin-left: -1.4em;
+  list-style: none;
+}
+.markdown-rendered ul > li.task {
+  margin-left: -1.25em;
+}
+/* La casella è quella dei controlli generici — una sola in tutta l'app, alta
+   quanto il corpo del testo. Qui c'è solo dove sta rispetto alla riga:
+   CodeMirror e il pezzo dei controlli le tolgono entrambi il margine. */
+.markdown-rendered li.task > input[type="checkbox"],
+.cm-editor .cm-content .cm-fub-checkbox {
+  margin: 0 0.46em 0 0;
+  vertical-align: -0.14em;
+}
+/* Il fatto arretra in grafite, con un tratto sopra. Solo il suo testo: ciò
+   che gli sta annidato sotto è un'altra voce, col suo stato. */
+.markdown-rendered li.task[data-task="x"] > span,
+.markdown-rendered li.task[data-task="X"] > span,
+.markdown-rendered li.task[data-task="x"] > p,
+.markdown-rendered li.task[data-task="X"] > p,
+.cm-editor .cm-content .cm-fub-done {
+  color: var(--muted);
+  opacity: 1;
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+}
+/* Gli stati personalizzati conservano il simbolo accanto al controllo. */
+.markdown-rendered li.task[data-task]:not([data-task=""]):not([data-task="x"]):not([data-task="X"])::before {
+  margin-right: var(--space-3);
+  color: var(--accent);
+  content: "[" attr(data-task) "]";
+  font-family: var(--font-mono);
+  font-size: 0.88em;
+  font-weight: var(--weight-medium);
+}
+
+/* ── Codice ──────────────────────────────────────────────────────────────── */
+
+.markdown-rendered code,
+.cm-editor .cm-content .cm-fub-code {
+  padding: 0.08em 0.32em;
+  border-radius: var(--radius-xs);
+  background: var(--doc-fill-soft);
+  color: var(--doc-fg);
+  font-family: var(--font-mono);
+  font-size: 0.88em;
+}
+/* La sintassi dà un fondo suo allo span interno: sarebbero due toppe una
+   sull'altra. Lo stesso dentro un blocco, dove il fondo è del blocco. */
+.cm-editor .cm-content .cm-fub-code span,
+.cm-editor .cm-content .cm-fub-code-line span {
+  background-color: transparent;
+}
+.markdown-rendered pre {
+  position: relative;
+  overflow-x: auto;
+  padding: var(--space-5) var(--space-6);
+  border-radius: var(--radius-control);
+  background: var(--sheet-2);
+  font-family: var(--font-mono);
+  font-size: var(--text-source);
+  line-height: var(--leading-normal);
+  tab-size: 2;
+}
+/* Dentro un blocco il codice non è un codice in riga: niente fondo e niente
+   margini per riga, o il blocco si legge a toppe. */
+.markdown-rendered pre code {
+  padding: 0;
+  border-radius: 0;
+  background: none;
+  font-size: 1em;
+}
+/* In Live il blocco è fatto di righe: il fondo è di ciascuna, gli angoli della
+   prima e dell'ultima. */
+.cm-editor .cm-content .cm-line.cm-fub-code-line {
+  font-family: var(--font-mono);
+  font-size: var(--text-source);
+  line-height: var(--leading-normal);
+}
+.cm-editor .cm-content .cm-line.cm-fub-codeblock {
+  padding-inline: var(--space-6);
+  background: var(--sheet-2);
+}
+/* Senza un fratello anonimo a sinistra di `+` o `~`: il perché è in `theme/fratelli.test.ts`. */
+.cm-editor .cm-content .cm-fub-codeblock:not(.cm-fub-codeblock + :where(.cm-fub-codeblock)) {
+  padding-top: var(--space-4);
+  border-top-left-radius: var(--radius-control);
+  border-top-right-radius: var(--radius-control);
+}
+.cm-editor .cm-content .cm-fub-codeblock:has(+ :not(.cm-fub-codeblock)),
+.cm-editor .cm-content .cm-fub-codeblock:last-child {
+  padding-bottom: var(--space-4);
+  border-bottom-right-radius: var(--radius-control);
+  border-bottom-left-radius: var(--radius-control);
+}
+/* La testata del blocco in Live (C1), al posto del recinto d'apertura: la
+   lingua a sinistra, «A capo» e «Copia» a destra, nei toni del margine. */
+.cm-editor .cm-content .cm-fub-code-header button {
+  font-family: var(--font-ui);
+  color: var(--doc-gutter-fg);
+}
+.cm-editor .cm-content .cm-fub-code-header button:hover,
+.cm-editor .cm-content .cm-fub-code-lang[aria-expanded="true"],
+.cm-editor .cm-content .cm-fub-code-wrap[aria-pressed="false"] {
+  color: var(--doc-fg);
+  background: var(--doc-fill-soft);
+}
+.cm-editor .cm-content .cm-fub-code-header button:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+/* Il riquadro della formula (C6): il TeX in carattere fisso, e sotto la resa. */
+.cm-fub-math-field {
+  font-family: var(--font-mono);
+}
+.cm-fub-math-popover-preview {
+  padding: var(--space-3) var(--space-4);
+  text-align: center;
+  color: var(--doc-fg);
+}
+/* Il bottone copia vive dentro il `pre` senza spostare il codice: in un
+   angolo, fuori dalla selezione del testo. Resta nascosto finché il blocco non
+   è sotto il puntatore o il fuoco, così non copre la prima riga. */
+.markdown-rendered .markdown-code-copy {
+  position: absolute;
+  top: var(--space-3);
+  right: var(--space-3);
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-chip);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-1);
+  color: var(--muted);
+  cursor: pointer;
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+  user-select: none;
+}
+.markdown-rendered pre:not(:hover):not(:focus-within) .markdown-code-copy {
+  opacity: 0;
+}
+.markdown-rendered .markdown-code-copy:hover,
+.markdown-rendered .markdown-code-copy:focus-visible {
+  background: var(--bg-elev);
+  color: var(--text);
+}
+.markdown-rendered .markdown-code-copy:active {
+  background: var(--bg-elev);
+  color: var(--accent);
+}
+.markdown-rendered pre:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 1px;
+}
+/* L'evidenziazione del codice riusa la tavolozza di sintassi dell'editor: gli
+   stessi nomi, nessuna seconda copia dei colori. I selettori ad attributo non
+   aggiungono hook: coprono anche le classi composte (`tok-variableName
+   tok-definition`). */
+.markdown-rendered [class*="tok-keyword"] {
+  color: var(--syn-keyword);
+}
+.markdown-rendered [class*="tok-typeName"] {
+  color: var(--syn-type);
+}
+.markdown-rendered [class*="tok-variableName"] {
+  color: var(--syn-name);
+}
+.markdown-rendered [class*="tok-variableName2"] {
+  color: var(--syn-literal);
+}
+.markdown-rendered [class*="tok-propertyName"] {
+  color: var(--syn-name);
+}
+.markdown-rendered [class*="tok-string"] {
+  color: var(--syn-string);
+}
+.markdown-rendered [class*="tok-comment"] {
+  color: var(--syn-comment);
+}
+.markdown-rendered [class*="tok-number"] {
+  color: var(--syn-type);
+}
+.markdown-rendered [class*="tok-bool"] {
+  color: var(--syn-literal);
+}
+.markdown-rendered [class*="tok-operator"] {
+  color: var(--syn-operator);
+}
+.markdown-rendered [class*="tok-punctuation"] {
+  color: var(--doc-fg);
+}
+
+/* ── Tabelle ─────────────────────────────────────────────────────────────── */
+
+/* Una tabella è un dato: carattere dell'interfaccia, cifre incolonnate, una
+   griglia di fili sottili dentro una cornice arrotondata (il prototipo,
+   `.gridw`, `.gr`, `.gr-box`). La griglia della Live è la stessa tabella con
+   le maniglie intorno: le celle prendono queste regole in tutte e due, e la
+   cornice della Live sta in `skin/tabella.css`, dove la prima riga e la
+   prima colonna della tabella non sono le prime del `<table>`.
+   Dentro la pagina i colori sono quelli del documento, come il resto del
+   contenuto: i fili `--doc-rule-soft` (il `--line` del prototipo), la
+   cornice `--doc-rule` (il `--line-2`), la testata `--doc-fill-soft` (il
+   `--tray`).
+   Il corpo è tre quarti del testo (13,5 px sul testo di serie, e cresce con
+   lui). La tabella riempie la colonna del testo e le celle non vanno a capo:
+   quando il contenuto è più largo, scorre l'involucro che la Lettura le mette
+   attorno (`markdown-table-scroll`, da `markdown/mount.ts`). Dove una resa
+   non lo mette (l'anteprima del lanciatore, le schede dei link) la tabella
+   resta larga quanto il contenuto e scorre da sé.
+   I bordi sono separati, non uniti (`structure.css`, perché una pelle non
+   scrive `border-spacing`): solo così gli angoli si arrotondano. Ogni
+   cella ha il filo a destra e sotto; l'ultima colonna e l'ultima riga hanno
+   al loro posto la cornice. La testata ha il suo fondo fino al bordo: la
+   cornice lì è trasparente, come nel prototipo dove il fondo la copre.
+   Queste regole sono delle tabelle Markdown, non delle tabelle che un
+   componente disegna dentro la pagina: la Base incorporata in una nota sta
+   dentro `.markdown-rendered`, e la sua tabella ha la sua pelle
+   (`skin/base-views.css`, `.base-table`). Per questo ogni selettore lascia
+   fuori ciò che sta in una `.base-surface`, dentro un `:where()` che non
+   alza la specificità. */
+.markdown-rendered table:not(:where(.base-surface *)) {
+  display: block;
+  width: fit-content;
+  max-width: 100%;
+  overflow-x: auto;
+  font-family: var(--font-ui);
+  font-size: 0.75em;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.4;
+}
+.markdown-rendered .markdown-table-scroll {
+  overflow-x: auto;
+}
+.markdown-rendered .markdown-table-scroll > table {
+  display: table;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  overflow: visible;
+}
+.markdown-rendered th:not(:where(.base-surface *)),
+.markdown-rendered td:not(:where(.base-surface *)) {
+  height: 34px;
+  min-width: 4ch;
+  padding: 0 var(--space-5);
+  border: 0;
+  border-right: 1px solid var(--doc-rule-soft);
+  border-bottom: 1px solid var(--doc-rule-soft);
+  /* Una cella non va a capo, come nel prototipo (`.gr td`): se la tabella
+     non ci sta, scorre. */
+  white-space: nowrap;
+  text-align: start;
+  vertical-align: middle;
+}
+.markdown-rendered th:not(:where(.base-surface *)) {
+  background: var(--doc-fill-soft);
+  color: var(--doc-heading);
+  font-weight: var(--weight-bold);
+}
+.markdown-rendered tr:not(:where(.base-surface *)) > :first-child {
+  border-left: 1px solid var(--doc-rule);
+}
+.markdown-rendered tr:not(:where(.base-surface *)) > :last-child {
+  border-right: 1px solid var(--doc-rule);
+}
+.markdown-rendered table:not(:where(.base-surface *)) > :first-child > tr:first-child > * {
+  border-top: 1px solid var(--doc-rule);
+}
+.markdown-rendered table:not(:where(.base-surface *)) > :last-child > tr:last-child > * {
+  border-bottom: 1px solid var(--doc-rule);
+}
+.markdown-rendered tr:not(:where(.base-surface *)) > th:first-child {
+  border-left-color: transparent;
+}
+.markdown-rendered tr:not(:where(.base-surface *)) > th:last-child {
+  border-right-color: transparent;
+}
+.markdown-rendered table:not(:where(.base-surface *)) > :first-child > tr:first-child > th {
+  border-top-color: transparent;
+}
+.markdown-rendered table:not(:where(.base-surface *)) > :last-child > tr:last-child > th {
+  border-bottom-color: transparent;
+}
+.markdown-rendered table:not(:where(.base-surface *)) > :first-child > tr:first-child > :first-child {
+  border-top-left-radius: var(--radius-md);
+}
+.markdown-rendered table:not(:where(.base-surface *)) > :first-child > tr:first-child > :last-child {
+  border-top-right-radius: var(--radius-md);
+}
+.markdown-rendered table:not(:where(.base-surface *)) > :last-child > tr:last-child > :first-child {
+  border-bottom-left-radius: var(--radius-md);
+}
+.markdown-rendered table:not(:where(.base-surface *)) > :last-child > tr:last-child > :last-child {
+  border-bottom-right-radius: var(--radius-md);
+}
+.markdown-rendered table:not(:where(.base-surface *)):focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 1px;
+}
+
+/* ── Filetti, formule, immagini ──────────────────────────────────────────── */
+
+.markdown-rendered hr {
+  height: 0;
+  border: 0;
+  border-top: 1px solid var(--doc-rule-soft);
+}
+.cm-editor .cm-content .cm-fub-hr {
+  border-top: 1px solid var(--doc-rule-soft);
+}
+/* KaTeX compone solo placeholder inerti prodotti dal renderer condiviso. */
+.markdown-rendered .math-inline {
+  display: inline-block;
+  max-width: 100%;
+  vertical-align: baseline;
+}
+/* Una formula larga scorre di lato; in verticale no: i puntelli invisibili di
+   KaTeX sotto una frazione sporgono di qualche pixel, e col solo `overflow-x`
+   il blocco scorrerebbe anche in alto e in basso, diventando una fermata del
+   Tab senza niente da leggere. */
+.markdown-rendered .math-block {
+  display: block;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: var(--space-2) 0;
+  text-align: center;
+}
+.markdown-rendered .math-block .katex-display {
+  margin: 0;
+}
+.markdown-rendered .math-inline[data-state="loading"],
+.markdown-rendered .math-inline[data-state="error"],
+.markdown-rendered .math-block[data-state="loading"],
+.markdown-rendered .math-block[data-state="error"] {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.88em;
+  white-space: pre-wrap;
+}
+.markdown-rendered .math-inline[data-state="error"],
+.markdown-rendered .math-block[data-state="error"] {
+  color: var(--doc-danger);
+}
+.markdown-rendered img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--radius-control);
+}
+/* Un'immagine da sola nel paragrafo è una figura (K10): la didascalia è il
+   suo testo alternativo, piccola e quieta sotto di lei, in Lettura come in
+   Live. */
+.markdown-rendered figure:not(.mermaid-diagram),
+.cm-editor .cm-content .cm-fub-image figure {
+  margin: var(--space-4) 0;
+}
+.markdown-rendered figure:not(.mermaid-diagram) > figcaption,
+.cm-editor .cm-content .cm-fub-image figcaption {
+  margin-top: var(--space-2);
+  color: var(--muted);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+  text-align: center;
+}
+/* La figura di un file Craft, di un PDF o di un documento (T15, T31) è
+   larga quanto la sua immagine: il nome sta sotto di lei, non al centro della
+   colonna. */
+.craft-figure {
+  width: fit-content;
+  max-width: 100%;
+}
+/* La prima pagina di un PDF o di un documento come figura (T31): un foglio
+   bianco sulla carta, col filo e l'ombra bassa del cartoncino delle foto. */
+.craft-figure-page {
+  box-shadow: 0 0 0 1px var(--border), var(--shadow-1);
+}
+/* L'immagine selezionata in Live (D8): il contorno d'accento e, sul bordo
+   destro, la maniglia della larghezza (D9) con la misura mentre la si tira. */
+.cm-editor .cm-content .cm-fub-image.cm-fub-image-selected img:not([hidden]),
+.cm-editor .cm-content .cm-fub-image.cm-fub-image-selected .embed,
+.cm-editor .cm-content .cm-fub-image.cm-fub-image-selected .image-missing,
+.cm-editor .cm-content .cm-fub-image.cm-fub-image-selected [data-web-embed-site] {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+/* Una pagina web incorporata (T37) non ha una larghezza da tirare: il
+   segnaposto è uno solo, e la pagina si vede nel visore. */
+.cm-editor .cm-content .cm-fub-image.cm-fub-image-selected:has([data-web-embed-site]) .cm-fub-image-handle {
+  display: none;
+}
+/* La selezione del testo non si stende sotto l'immagine scelta: il contorno
+   dice già che è presa, come in Word. */
+.cm-editor .cm-content .cm-fub-image.cm-fub-image-selected {
+  background: var(--doc-bg);
+}
+.cm-editor .cm-content .cm-fub-image-handle {
+  border: 2px solid var(--doc-bg);
+  border-radius: var(--radius-chip);
+  background: var(--accent);
+}
+.cm-editor .cm-content .cm-fub-image-size {
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-chip);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-1);
+  color: var(--doc-fg);
+  font-family: var(--font-ui);
+  font-size: var(--text-xs);
+}
+/* Il riquadro «Immagine»: i campi in colonna, le quote della pagina in fila. */
+.cm-fub-image-dialog {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  min-width: 18rem;
+}
+.cm-fub-image-shares {
+  display: flex;
+  gap: var(--space-2);
+}
+/* L'immagine che non si vede: il suo testo alternativo e il path, dove sarebbe
+   stata, invece dell'icona rotta del browser. */
+.image-missing {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-5);
+  border-radius: var(--radius-control);
+  background: var(--sheet-2);
+  color: var(--muted);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+}
+.image-missing::before {
+  width: 10px;
+  height: 10px;
+  flex: none;
+  border: 1.5px dashed var(--outline);
+  border-radius: 3px;
+  content: "";
+}
+/* L'immagine remota che non parte da sola: il sito da cui verrebbe e il gesto
+   che la scarica nel vault. */
+.image-remote {
+  flex-wrap: wrap;
+}
+.image-remote-load {
+  padding: var(--space-1) var(--space-4);
+  border-radius: var(--radius-chip);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-1);
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+}
+.image-remote-load:hover,
+.image-remote-load:focus-visible {
+  color: var(--accent);
+}
+.image-remote-load:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 1px;
+}
+.image-remote-load:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+/* ── Incorporamenti ──────────────────────────────────────────────────────── */
+
+/* Una nota riportata dentro un'altra: sta nel documento, col suo filo a
+   sinistra — è una citazione di sé — e un corpo appena più piccolo. */
+.embed {
+  display: block;
+  margin: 0;
+  padding: var(--space-2) 0 var(--space-2) var(--space-6);
+  border-left: 2px solid var(--accent-wash);
+  font-size: 0.94em;
+}
+/* I titoli di una nota riportata non fanno concorrenza a quelli della pagina
+   che la ospita: scendono di un gradino. */
+.embed h1 {
+  font-size: 1.5em;
+}
+.embed h2 {
+  font-size: 1.28em;
+}
+.embed h1:first-child,
+.embed h2:first-child,
+.embed h3:first-child {
+  padding-top: 0;
+}
+/* Il motivo lo scrive la shell nella lingua corrente (`data-embed-note`): un
+   ciclo, una catena troppo profonda e un blocco che non c'è più sono cose
+   diverse. */
+.embed-cycle::after,
+.embed-too-deep::after {
+  color: var(--muted);
+  content: " (" attr(data-embed-note) ")";
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+}
+.embed.unresolved {
+  border-left-color: var(--doc-rule-soft);
+  color: var(--muted);
+}
+/* Il blocco sincronizzato il cui blocco non c'è più: la frase, nella lingua
+   della UI, al posto del link. */
+.embed.embed-missing {
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+}
+/* Un'immagine, un audio o un video incorporati sono il media, non una nota
+   riportata: niente filo intorno. */
+.embed.embed-media {
+  padding: 0;
+  border-left: 0;
+  font-size: 1em;
+}
+.markdown-rendered .embed[data-embed-url],
+.markdown-rendered .embed[data-embed-path] {
+  min-height: var(--text-3xl);
+}
+

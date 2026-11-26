@@ -5,7 +5,7 @@
 // px, nome intero); qui si tiene la regola, dentro la sola domanda del
 // telefono, perché al computer la scelta resta in fondo alla stessa riga.
 import { describe, expect, it } from "vitest";
-import editors from "./skin/editors.css?raw";
+import editors from "./skin/base-views.css?raw";
 
 /// Il corpo della domanda `@container sheet (max-width: 560px)` che porta il
 /// calendario in colonna.

@@ -1,5 +1,9 @@
 /* La struttura della shell Scrittoio: ciò che non si tematizza.
  *
+ * GENERATO da `theme/scrittoio/structure/`: non si modifica qui. Si tocca il
+ * pezzo e si rigenera con `npm run theme:generate`; una regola scritta a mano
+ * in questo file sparisce alla prima rigenerazione.
+ *
  * Tre cose stanno qui e in nessun pezzo di pelle:
  *
  * 1. **La griglia della finestra**: barra del titolo, binario, cassetti,
@@ -17,6 +21,10 @@
  * attraversa il sanificatore, quindi può usare ciò che a una pelle è negato
  * (`container-type`, `overscroll-behavior`, `scrollbar-gutter`).
  */
+
+/* ── structure/foundation.css ───────────────────────────────────────────── */
+
+/* Le fondamenta della struttura: i token della cornice e le garanzie (`:root`, `[hidden]`, fuoco, moto ridotto, colori forzati). */
 
 :root {
   /* I piani. Una superficie che intrappola il fuoco sta su `--z-modal`, e
@@ -307,6 +315,10 @@
   border: 0;
 }
 
+/* ── structure/window.css ───────────────────────────────────────────────── */
+
+/* La finestra e la barra del titolo. */
+
 /* ── La finestra ─────────────────────────────────────────────────────────── */
 
 html,
@@ -527,6 +539,10 @@ body {
   display: none;
 }
 
+/* ── structure/rail.css ─────────────────────────────────────────────────── */
+
+/* Il corpo: il binario, i cassetti, l'ispettore, il divisore. */
+
 /* ── Il corpo: binario, cassetti, scrivania ──────────────────────────────── */
 
 #workspace {
@@ -722,6 +738,10 @@ body {
 #views-bottom .declared-view {
   display: inline-flex;
 }
+
+/* ── structure/sheets.css ───────────────────────────────────────────────── */
+
+/* La scrivania e i fogli: linguette, testata, barra di formato. */
 
 /* ── La scrivania e i fogli ──────────────────────────────────────────────── */
 
@@ -1360,6 +1380,10 @@ body {
   overflow-y: auto;
 }
 
+/* ── structure/frame-states.css ─────────────────────────────────────────── */
+
+/* La banda di stato, i menu sopra gli avvisi, il benvenuto, l'adattamento, il cassetto che si affaccia, la concentrazione, la barra del kit. */
+
 /* ── La banda di stato ───────────────────────────────────────────────────── */
 
 #status-band {
@@ -1765,6 +1789,10 @@ body:has(#context-menu:not([hidden])) > .toast-stack {
     min-height: 44px;
   }
 }
+
+/* ── structure/grid.css ─────────────────────────────────────────────────── */
+
+/* Le superfici degli editor: il foglio di calcolo. */
 
 /* ── Le superfici degli editor: geometria che nessun tema decide ─────────── */
 
@@ -2536,6 +2564,10 @@ body:has(#context-menu:not([hidden])) > .toast-stack {
   overflow-x: auto;
 }
 
+/* ── structure/ribbons.css ──────────────────────────────────────────────── */
+
+/* Le barre a schede, gli ospiti, i dialoghi del foglio, l'anteprima di stampa. */
+
 /* ── La barra degli strumenti di serie: la forma ───────────────────────────
    Ricavata a macchina dalle regole della barra dei fogli: `.grid-ribbon-*`
    diventa `.kit-ribbon-*`, con lo stesso testo, lo stesso ordine e la stessa
@@ -3027,12 +3059,15 @@ body:has(#context-menu:not([hidden])) > .toast-stack {
   min-height: 0;
 }
 
+/* ── structure/rich.css ─────────────────────────────────────────────────── */
+
+/* I documenti di videoscrittura. */
 
 /* La superficie dei documenti di videoscrittura (`editors/rich/`): una
    colonna di testo che scorre, con la toolbar del riquadro sopra. Qui stanno
    ciò che ProseMirror chiede al foglio (gli spazi come sono, la selezione di
    un oggetto) e la geometria dei blocchi: rientri degli elenchi, tabelle,
-   oggetti in linea. Colori e tipografia sono della pelle (`skin/editors.css`). */
+   oggetti in linea. Colori e tipografia sono della pelle (`skin/rich.css`). */
 .rich-surface {
   display: flex;
   flex-direction: column;
@@ -3510,6 +3545,10 @@ body:has(#context-menu:not([hidden])) > .toast-stack {
   margin: 0;
   overflow: auto;
 }
+
+/* ── structure/canvas.css ───────────────────────────────────────────────── */
+
+/* La lavagna: la barra dei comandi, gli strumenti, gli strati. */
 
 /* La barra dei comandi è la fila del kit (`kit/options-bar.ts`): una riga
    sola, e ciò che non ci sta va in «…» (#411). Non scorre di lato. */
@@ -4267,6 +4306,10 @@ body:has(#context-menu:not([hidden])) > .toast-stack {
   min-height: 0;
   pointer-events: auto;
 }
+
+/* ── structure/canvas-cards.css ─────────────────────────────────────────── */
+
+/* La lavagna: le schede. */
 
 /* Un gruppo è un recinto: il suo sfondo sta sotto i fili (che sono nello
    stage, prima di ogni scheda), così un filo che lo attraversa si vede (T91).
@@ -5386,6 +5429,10 @@ body:has(#context-menu:not([hidden])) > .toast-stack {
   margin: 0;
 }
 
+/* ── structure/base-window.css ──────────────────────────────────────────── */
+
+/* La Base, le tabelle Markdown, la finestra del documento. */
+
 .base-surface {
   display: flex;
   flex-direction: column;
@@ -5424,7 +5471,7 @@ body:has(#context-menu:not([hidden])) > .toast-stack {
 
 /* Le tabelle Markdown, in Lettura e nella griglia della Live, hanno i bordi
    separati e accostati: è il modello in cui la loro cornice
-   (`skin/document.css`, `skin/tabella.css`) arrotonda gli angoli, e una
+   (`skin/document-blocks.css`, `skin/tabella.css`) arrotonda gli angoli, e una
    pelle non può scrivere `border-spacing`. La tabella di una Base
    incorporata in una nota non è una tabella Markdown: resta unita. */
 .markdown-rendered table:not(:where(.base-surface *)) {
@@ -5515,6 +5562,10 @@ body:has(#context-menu:not([hidden])) > .toast-stack {
   flex: none;
   flex-wrap: wrap;
 }
+
+/* ── structure/draw.css ─────────────────────────────────────────────────── */
+
+/* L'editor dei disegni. */
 
 /* ---- L'editor dei disegni (FubDraw) e le sue finestre ---- */
 
@@ -6503,6 +6554,11 @@ body:has(#context-menu:not([hidden])) > .toast-stack {
 .draw-stage[data-rulers] > .draw-link-layer {
   clip-path: inset(24px 0 0 24px);
 }
+
+/* ── structure/draw-panels.css ──────────────────────────────────────────── */
+
+/* I pannelli dell'editor dei disegni e le annotazioni dei PDF. */
+
 /* Il foglio e, accanto, i pannelli: l'albero degli oggetti, le proprietà e
    gli attributi, uno sotto l'altro. Su un riquadro stretto i pannelli vanno
    sotto il foglio. Una riga dell'albero misura almeno 44 px: è un bersaglio

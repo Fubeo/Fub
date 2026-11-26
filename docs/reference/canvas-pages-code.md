@@ -101,7 +101,7 @@ accanto a `near`, o con `in_place` la scheda stessa.
   `spread_pages`; senza conto il nucleo non lo sa.
 - **Sul posto.** La scheda tiene id, posto, misure e colore; cambiano solo
   `subpath` e `fub:parts`, come il selettore delle sezioni; a differenza del
-  ritaglio della GUI l'altezza non cambia (`#finishCrop` la rifà dalle
+  ritaglio della GUI l'altezza non cambia (`_finishCrop` la rifà dalle
   proporzioni della zona, anche con «Togli il ritaglio»). Se aveva già un
   estratto valido della stessa specie, i suoi campi sconosciuti restano.
   `in_place` con `near`, `side` o `content_size` è `Invalid`; anche

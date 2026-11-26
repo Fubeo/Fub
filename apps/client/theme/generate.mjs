@@ -60,6 +60,8 @@ const vite = await createServer({
 const recipe = await vite.ssrLoadModule("/src/theme/scrittoio/recipe.ts");
 /** @type {{ SKIN: string, assemble: (c: Record<string,string>) => string }} */
 const skin = await vite.ssrLoadModule("/src/theme/scrittoio/skin/order.ts");
+/** @type {{ STRUCTURE: string, assemble: (c: Record<string,string>) => string }} */
+const structure = await vite.ssrLoadModule("/src/theme/scrittoio/structure/order.ts");
 /** @type {{ HOOKS: readonly string[], HOOK_LAYERS: Readonly<Record<string, string>>, LAYERS: readonly string[], STATE_NAMES: readonly string[], COMPONENTS: readonly { name: string, part: string, hooks: readonly string[], states: readonly { name: string }[] }[] }} */
 const anatomy = await vite.ssrLoadModule("/src/theme/scrittoio/anatomia.ts");
 /** @type {{ THEME_2_ENGINE: string, THEME_2_PROFILE: { requiredRoles: readonly string[], contrastPairs: readonly unknown[], optionalPairs?: readonly unknown[], preferenceTokens: readonly string[], vocabulary: { properties?: readonly string[], functions?: readonly string[], atRules?: readonly string[] } } }} */
@@ -132,6 +134,8 @@ try {
   // rompere.
   const assembledSkin = skin.assemble(await parts(join(SERIES, "skin")));
   await derived(skin.SKIN, assembledSkin, "ai suoi pezzi");
+  // La struttura si monta allo stesso modo, dai pezzi di `structure/`.
+  await derived(structure.STRUCTURE, structure.assemble(await parts(join(SERIES, "structure"))), "ai suoi pezzi");
 
   const engine = profile.THEME_2_ENGINE;
   const roles = [...new Set([...recipe.roles(), ...profile.THEME_2_PROFILE.requiredRoles])].sort();

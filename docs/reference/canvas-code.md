@@ -209,7 +209,7 @@ lavagna dà gli stessi posti in Rust, in WebAssembly e da riga di comando. I
 casi con i numeri stanno in `apps/client/src/__fixtures__/canvas-layout.json`.
 
 - **Aggancio.** `snap(v) = floor(v / 8 + 0.5) * 8`: è `Math.round` di
-  `engine.ts` con il passo di 8 (`CANVAS_SNAP`).
+  `engine-geometry.ts` con il passo di 8 (`CANVAS_SNAP`, in `engine-options.ts`).
 - **Specie.** Un testo è `text`, un gruppo è `group`, un collegamento è `web`.
   Un file prende l'estensione in minuscolo, senza il `#` e il sottopercorso:
   `md` e `markdown` sono `note`; `docx`, `doc`, `dot`, `rtf` e `odt` sono

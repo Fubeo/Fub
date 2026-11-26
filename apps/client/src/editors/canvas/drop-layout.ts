@@ -14,12 +14,12 @@
 import type { CardKind, CardSize, Rect } from "../core/cards/contract";
 
 /// Il passo a cui la tela aggancia le posizioni e le misure ridimensionate a
-/// mano. È `CANVAS_SNAP` di `engine.ts`, ripetuto qui perché `engine.ts` tira
+/// mano. È `CANVAS_SNAP` di `engine-options.ts`, ripetuto qui perché il motore tira
 /// dentro il DOM e i testi; `drop-layout.test.ts` controlla che i due valori
 /// restino uguali. Le misure di nascita non si agganciano (A-16).
 export const DROP_SNAP = 8;
 
-/// La misura più piccola di una scheda: `CANVAS_MIN_SIZE` di `engine.ts`,
+/// La misura più piccola di una scheda: `CANVAS_MIN_SIZE` di `engine-options.ts`,
 /// ripetuta qui per lo stesso motivo e controllata dallo stesso test.
 export const DROP_MIN_SIZE = 40;
 

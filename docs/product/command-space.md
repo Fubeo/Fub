@@ -202,7 +202,7 @@ Il codice è in `apps/client/src/shells/scrittoio/launcher/`:
 - `launcher.ts`: il disegno, i tasti (pubblicati sulla porta dei suggerimenti,
   `editors/core/hints.ts`, che la banda di stato mostra) e la gara fra le risposte.
 
-Le parole sono in `i18n/catalog.ts`, con la chiave `launcher.*`.
+Le parole sono in `i18n/catalog-it-cornice.ts` (e `catalog-en-cornice.ts`), con la chiave `launcher.*`.
 
 ## Limiti
 

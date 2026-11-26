@@ -12,7 +12,7 @@
 //   così finché nessuno cambia il colore. Il valore si guarda soltanto: un
 //   nove scritto in maiuscolo si riconosce, un colore che non è un colore
 //   (`"7"`, `"rosso"`) si tiene e si disegna senza colore.
-// - **Che aspetto ha** lo dice la pelle (`skin/editors.css`), non questo
+// - **Che aspetto ha** lo dice la pelle (`skin/canvas-cards.css`), non questo
 //   modulo: il nodo porta `data-canvas-color` con la chiave del colore (`1`…`6`,
 //   il nome di uno dei nove o `custom`) e, per un colore libero, la variabile
 //   `--canvas-color` col suo valore, che è un dato del file. Al buio i nove

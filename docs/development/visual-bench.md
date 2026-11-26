@@ -9,7 +9,7 @@ Il banco visuale usa scene deterministiche e baseline del runner Linux. In caso
 di differenza, la CI conserva immagini attuali, diff e foglio di contatto.
 
 Le baseline coprono le scene in
-[`bench/scene.mjs`](../../apps/client/bench/scene.mjs), in luce scura e chiara.
+[`bench/scene.mjs`](../../apps/client/bench/scene.mjs) (i pezzi in `bench/scene/`), in luce scura e chiara.
 L'ambiente di riferimento usa Ubuntu, Node 22, Chromium della revisione
 Playwright fissata dal lockfile e i font del runner, inclusi DejaVu Sans Mono.
 Prima di usare un ambiente Ubuntu ricostruito, eseguire il banco sul commit
@@ -57,7 +57,7 @@ con altezze stimate, e quale viewport resta dipende da quando le schede vive
 finiscono di montarsi, così le righe in vista si spostavano di una frazione di
 pixel da un giro all'altro (#510). Le scene che fotografano il fondo di una
 nota con schede (`schede-vive-03-mancante`, `mobile-schede-mancante`) passano
-da `scrollLiveToEnd` in `bench/scene.mjs`: la finestra si allunga finché la
+da `scrollLiveToEnd` in `bench/scene/gesti-scrittura.mjs`: la finestra si allunga finché la
 nota è disegnata tutta e misurata, poi torna com'era e si scorre in fondo; la
 scena fallisce se in fondo restano vuoti stimati (`.cm-gap`).
 

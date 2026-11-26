@@ -83,7 +83,10 @@ function logicalLines(code) {
   return lines;
 }
 
-export function violations(text, relative) {
+/// `ownerText` è il testo in cui si cerca chi chiude ciò che il file apre: il
+/// file stesso, o tutti i pezzi della classe a cui appartiene (i motori divisi
+/// in `engine*.ts`, dove un timer si apre in un pezzo e si chiude in un altro).
+export function violations(text, relative, ownerText = text) {
   const names = GLOBAL_TARGETS.map((target) => target.replace(".", "\\s*\\??\\.\\s*")).join("|");
   const globalListener = new RegExp(
     String.raw`(?<![.\w])(${names})\s*\??\.\s*addEventListener\b`,
@@ -104,6 +107,7 @@ export function violations(text, relative) {
   // nascondere il codice accanto (`/* … */ window.addEventListener(…)`), e un
   // `clearTimeout(id)` scritto in un commento non rende proprietario nessuno.
   const source = codeOnly(text);
+  const owners = ownerText === text ? source : codeOnly(ownerText);
   const original = text.split("\n");
   // I nomi locali dati a un globale o a una `MediaQueryList`
   // (`const doc = document`, `const mq = matchMedia(q)`): un ascoltatore
@@ -136,7 +140,7 @@ export function violations(text, relative) {
       // dicono i test del modulo.
       const named = /(?<![\w$])(#?\w*(?:stop|dispose|unsubscribe)\w*)\s*=\s*[\s\S]*\.subscribe\s*\(/i.exec(code);
       const used = named !== null &&
-        (source.match(new RegExp(String.raw`(?<![\w$])${quoted(named[1])}(?![\w$])`, "g"))?.length ?? 0) > 1;
+        (owners.match(new RegExp(String.raw`(?<![\w$])${quoted(named[1])}(?![\w$])`, "g"))?.length ?? 0) > 1;
       const owned = used ||
         // Il disposer consegnato a un `Lifetime` che lo chiude allo smontaggio.
         /\b(?:this\s*\.\s*#?)?\w*life\w*\s*\.\s*add\s*\(\s*[\w$.#]+\.subscribe\s*\(/i.test(code) ||
@@ -167,12 +171,12 @@ export function violations(text, relative) {
         const id = quoted(assignment[1]);
         owned ||= new RegExp(
           String.raw`\b(?:clearTimeout|clearInterval|cancelAnimationFrame|cancelIdleCallback)\s*(?:\?\.\s*)?\(\s*${id}\s*\)`,
-        ).test(source);
+        ).test(owners);
         // Il timeout di un'attesa conservato nel suo record (`{ …, timer }`) e
         // cancellato da chi consuma quel record (`clearTimeout(x.timer)`).
         owned ||= assignment[1] === "timer" &&
-          /\{[^}]*\btimer\s*\}/.test(source) &&
-          /\b(?:clearTimeout|clearInterval)\s*\(\s*[\w$.]+\.timer\s*\)/.test(source);
+          /\{[^}]*\btimer\s*\}/.test(owners) &&
+          /\b(?:clearTimeout|clearInterval)\s*\(\s*[\w$.]+\.timer\s*\)/.test(owners);
       }
       if (!owned) {
         found.push({ line: index + 1, kind: "timer", text: line.trim() });
@@ -183,7 +187,7 @@ export function violations(text, relative) {
     if (observer.test(code)) {
       const assignment = /(?:(?:const|let|var)\s+)?([A-Za-z_$][\w$]*(?:\.#[\w$]+|\.[\w$]+)?)\s*=\s*new\s+(?:MutationObserver|ResizeObserver|IntersectionObserver)\s*\(/.exec(code);
       const owned = assignment &&
-        new RegExp(String.raw`\b${quoted(assignment[1])}\s*(?:\?\s*)?\.\s*disconnect\s*\(`).test(source);
+        new RegExp(String.raw`\b${quoted(assignment[1])}\s*(?:\?\s*)?\.\s*disconnect\s*\(`).test(owners);
       if (!owned) {
         found.push({ line: index + 1, kind: "observer", text: line.trim() });
       }
@@ -292,11 +296,25 @@ if (!fs.existsSync(sourceRoot)) {
 
 let problems = 0;
 let inspected = 0;
+/// I pezzi di una classe divisa a pacchetti (`editors/canvas/engine*.ts`,
+/// `editors/grid/engine*.ts`): per la proprietà sono un file solo.
+const CLASS_PARTS = /^apps\/client\/src\/editors\/(?:canvas|grid)\/engine[^/]*\.ts$/;
+function ownerTextOf(file, relative, text) {
+  if (!CLASS_PARTS.test(relative)) return text;
+  const dir = path.dirname(file);
+  return fs.readdirSync(dir)
+    .filter((name) => /^engine[^/]*\.ts$/.test(name) && !/\.test\.ts$/.test(name))
+    .sort()
+    .map((name) => fs.readFileSync(path.join(dir, name), "utf8"))
+    .join("\n");
+}
+
 for (const file of sourceFiles(sourceRoot).sort()) {
   const relative = path.relative(root, file).split(path.sep).join("/");
   if (relative === GATE) continue;
   inspected++;
-  for (const violation of violations(fs.readFileSync(file, "utf8"), relative)) {
+  const text = fs.readFileSync(file, "utf8");
+  for (const violation of violations(text, relative, ownerTextOf(file, relative, text))) {
     problems++;
     console.error(`${relative}:${violation.line}: ${violation.kind} without explicit ownership`);
     console.error(`  ${violation.text}`);

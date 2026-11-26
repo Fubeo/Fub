@@ -72,5 +72,5 @@ I menu sul testo scelto (la mini-barra) e il «/» sono in
   `apps/client/src/desktop-shell.ts`: `data-toolbar` e `shell.toolbar.toggle`;
   `crates/fub-host/src/settings/editor_specs.rs`: `editor.toolbar`;
   `apps/client/src/theme/scrittoio/skin/menus.css`: la sua veste;
-- `apps/client/bench/scene.mjs`: le scene `barra-blocco-*` e
-  `mobile-keyboard`.
+- `apps/client/bench/scene/shell-scrittura.mjs`: le scene `barra-blocco-*`;
+  `mobile-keyboard` in `altre-pagine.mjs`.

@@ -200,7 +200,7 @@ Le scene `testata-*` e `mobile-testata` del banco la fotografano.
   allineato al titolo (`keepTitle`, `retitleIn`); `blocks/page.ts` lo
   nasconde in Scrittura (`titleFold`) e lo riscrive con la rinomina
   (`retitleView`), `page/header.ts` lo segna in Lettura e
-  `skin/document.css` lo nasconde; `shells/scrittoio/sheets/title-rename.ts`
+  `skin/document-meta.css` lo nasconde; `shells/scrittoio/sheets/title-rename.ts`
   lo riscrive dopo la rinomina dal titolo del foglio;
 - `apps/client/src/editors/text/profiles/markdown/page/properties/`: le
   righe delle proprietà (`row.ts`), il tipo di una riga e il registro
@@ -215,5 +215,5 @@ Le scene `testata-*` e `mobile-testata` del banco la fotografano.
   `apps/client/src/state/page-icons.ts`: le icone fuori dalla pagina;
   `apps/client/src/ui/page-mark.ts`: che cosa vuol dire un valore d'icona
   (un'emoji o una figura `fub:<nome>`);
-- `apps/client/bench/scene.mjs`: le scene `testata-*`, `mobile-testata` e
-  `proprieta-*` (gli editor dei tipi).
+- `apps/client/bench/scene/shell-testata-diagrammi.mjs`: le scene `testata-*` e
+  `proprieta-*` (gli editor dei tipi); `mobile-testata` in `altre-pagine.mjs`.

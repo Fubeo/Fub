@@ -33,7 +33,7 @@ import { describe, expect, it } from "vitest";
 
 const SHEETS: Record<string, string> = Object.fromEntries(
   Object.entries(import.meta.glob("/src/**/*.css", { query: "?raw", import: "default", eager: true }))
-    .filter(([path]) => path !== "/src/theme/scrittoio/skin.css")
+    .filter(([path]) => path !== "/src/theme/scrittoio/skin.css" && path !== "/src/theme/scrittoio/structure.css")
     .map(([path, text]) => [path, text as string]),
 );
 

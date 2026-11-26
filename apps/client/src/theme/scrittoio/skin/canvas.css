@@ -1,0 +1,931 @@
+/* La pelle della lavagna: la superficie, gli strumenti, le barre e i pannelli. */
+
+/* ── Il canvas ───────────────────────────────────────────────────────────── */
+
+/* La lavagna è carta: i nodi sono schede posate sopra, staccate da un filo e
+   da un'ombra corta. Coordinate e aree di presa sono della struttura. */
+.canvas-surface {
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: var(--text-base);
+}
+/* I comandi: una riga quieta sotto la testata, come nelle altre superfici.
+   Ciò che non ci sta va in «…» (la fila del kit); a voce bassa finché non
+   servono. I comandi finiti in «…» hanno lo stesso aspetto nel popover:
+   le regole stanno su `.canvas-toolbar-item`, non sulla riga. */
+.canvas-toolbar {
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-5);
+  border-bottom: 1px solid var(--border);
+}
+.canvas-toolbar > .kit-options-row {
+  gap: var(--space-1);
+}
+button.canvas-toolbar-item {
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-chip);
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+}
+button.canvas-toolbar-item:hover,
+button.canvas-toolbar-item:focus-visible {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+button.canvas-toolbar-item:active {
+  background: var(--overlay-active);
+  color: var(--text);
+}
+button.canvas-toolbar-item:disabled,
+button.canvas-toolbar-item:disabled:hover {
+  background: transparent;
+  color: var(--muted);
+}
+/* L'interruttore «Scrivi col mouse» acceso: il fondo tenue dell'accento e
+   la scritta nell'accento, come i pulsanti premuti dei disegni. Due segni,
+   non uno solo. */
+button.canvas-toolbar-item[aria-pressed="true"],
+button.canvas-toolbar-item[aria-pressed="true"]:hover {
+  background: var(--accent-wash);
+  color: var(--accent);
+}
+/* La colonna degli strumenti: lo stesso fondo della testata, un filo verso
+   la lavagna (come .draw-rail). */
+.canvas-rail {
+  gap: var(--space-2);
+  padding: var(--space-1);
+  background: var(--bg-elev);
+  border-style: solid;
+  border-color: var(--border);
+}
+/* Uno strumento spento in sola lettura: si vede, non si sceglie. */
+.canvas-tool[aria-disabled="true"] {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+/* La testata con la riga delle opzioni (T50): lo stesso fondo della
+   colonna, un filo verso la lavagna (come .draw-header). */
+.canvas-header {
+  gap: var(--space-2) var(--space-5);
+  padding: var(--space-2);
+  background: var(--bg-elev);
+  border-bottom: 1px solid var(--border);
+}
+.canvas-options {
+  gap: var(--space-2) var(--space-5);
+}
+.canvas-group {
+  gap: var(--space-1);
+}
+/* I pulsanti della riga (come .draw-button). */
+.canvas-button {
+  color: var(--muted);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+  transition:
+    background var(--duration-fast) var(--ease),
+    color var(--duration-fast) var(--ease),
+    box-shadow var(--duration-fast) var(--ease);
+}
+.canvas-button:hover:not(:disabled, [aria-disabled="true"]) {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+.canvas-button[aria-checked="true"],
+.canvas-button[aria-pressed="true"] {
+  background: var(--accent-wash);
+  color: var(--accent);
+}
+.canvas-button[aria-expanded="true"] {
+  background: var(--overlay-active);
+  color: var(--text);
+}
+.canvas-button:disabled,
+.canvas-button[aria-disabled="true"] {
+  opacity: 0.4;
+}
+.canvas-button:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 0;
+}
+.canvas-button[data-label] {
+  color: var(--text);
+}
+.canvas-options-hint {
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+/* Il pozzo del colore delle schede scelte: il colore come lo dipinge la
+   lavagna (T47, più sotto, «I colori»); spento in sola lettura. */
+.canvas-color-well[aria-disabled="true"] {
+  opacity: 0.4;
+}
+.canvas-options .canvas-color-well [data-canvas-color] {
+  background: var(--canvas-color);
+}
+/* Il pulsante della penna, nella riga: il colore e il nome della penna di
+   adesso. Il menu aperto tiene il velo del passaggio. */
+.canvas-ink-pen {
+  gap: var(--space-3);
+}
+.canvas-options .canvas-ink-pen[aria-expanded="true"] {
+  background: var(--overlay-active);
+  color: var(--text);
+}
+.canvas-ink-pen-name {
+  color: inherit;
+}
+/* La misura del testo nella riga (T92): una «A» per misura, grande come
+   la misura che sceglie. */
+.canvas-text-size > span {
+  font-weight: var(--weight-bold);
+  line-height: 1;
+}
+.canvas-text-size[data-size="s"] > span {
+  font-size: 12px;
+}
+.canvas-text-size[data-size="m"] > span {
+  font-size: 16px;
+}
+.canvas-text-size[data-size="l"] > span {
+  font-size: 21px;
+}
+.canvas-text-size[data-size="xl"] > span {
+  font-size: 26px;
+}
+/* Il menu: un rialzo del kit (questo pezzo viene dopo kit), con le sezioni una sotto l'altra. */
+.canvas-pen-popover {
+  padding: var(--space-4);
+}
+.canvas-pen-menu {
+  gap: var(--space-5);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+}
+.canvas-pen-section {
+  gap: var(--space-3);
+}
+.canvas-pen-heading {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-bold);
+}
+.canvas-pen-list {
+  gap: var(--space-1);
+}
+.canvas-pen-item {
+  gap: var(--space-3);
+  padding: var(--space-1);
+  border-radius: var(--radius-chip);
+  color: var(--text);
+  font-size: var(--text-sm);
+  text-align: start;
+  box-shadow: inset 0 0 0 1px transparent;
+}
+.canvas-pen-item:hover {
+  background: var(--overlay-hover);
+}
+.canvas-pen-item[aria-checked="true"] {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+/* L'anteprima è inchiostro su carta, bianca anche col buio, come nella
+   galleria dei disegni: il colore del tratto è quello del file. */
+.canvas-pen-preview {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-chip);
+  background: #ffffff;
+}
+.canvas-pen-swatches {
+  gap: var(--space-2);
+}
+.canvas-pen-swatch {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: var(--radius-pill);
+  box-shadow: inset 0 0 0 1px transparent;
+}
+.canvas-pen-swatch:hover {
+  background: var(--overlay-hover);
+}
+.canvas-pen-swatch[aria-checked="true"] {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+.canvas-pen-more {
+  gap: var(--space-2);
+  margin-left: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-chip);
+  color: var(--accent);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+}
+.canvas-pen-more:hover {
+  background: var(--overlay-hover);
+}
+.canvas-pen-more[aria-checked="true"] {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+.canvas-pen-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-xs);
+  line-height: var(--leading-normal);
+}
+/* Lo spessore: il valore in pixel accanto al titolo, il cursore come quelli
+   del grafo (un filo con il pomello nell'accento; le due famiglie di
+   pseudo-elementi separate), e sotto il tratto vero su carta. */
+.canvas-pen-width-value {
+  color: var(--text);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+.canvas-pen-width {
+  appearance: none;
+  -webkit-appearance: none;
+  height: 24px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+}
+.canvas-pen-width::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: var(--radius-pill);
+  background: var(--outline);
+}
+.canvas-pen-width::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  margin-top: -5px;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  box-shadow: 0 0 0 2px var(--bg-elev);
+}
+.canvas-pen-width:hover::-webkit-slider-thumb {
+  background: var(--accent-soft);
+}
+.canvas-pen-width::-moz-range-track {
+  height: 4px;
+  border-radius: var(--radius-pill);
+  background: var(--outline);
+}
+.canvas-pen-width::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  box-shadow: 0 0 0 2px var(--bg-elev);
+}
+.canvas-pen-width:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 2px;
+  border-radius: var(--radius-chip);
+}
+.canvas-pen-width-preview {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-chip);
+  background: #ffffff;
+}
+.canvas-pen-item:focus-visible,
+.canvas-pen-swatch:focus-visible,
+.canvas-pen-more:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: -2px;
+}
+/* L'ispettore della lavagna (T58): «Schede», il filtro e l'elenco in
+   ordine di lettura, coi gruppi in grassetto e il loro contenuto rientrato. */
+.canvas-inspector {
+  gap: var(--space-5);
+  padding: var(--space-2) 0;
+  font-size: var(--text-sm);
+}
+.canvas-inspector-filter {
+  gap: var(--space-3);
+}
+.canvas-inspector-filter > input,
+.canvas-inspector-filter > select {
+  height: 28px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+}
+.canvas-inspector-heading {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-bold);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.canvas-inspector-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.canvas-inspector-row {
+  gap: var(--space-3);
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+}
+.canvas-inspector-row:hover {
+  background: var(--overlay-hover);
+}
+.canvas-inspector-row[aria-selected="true"] {
+  background: var(--accent-wash);
+  color: var(--accent);
+}
+.canvas-inspector-row:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: -2px;
+}
+.canvas-inspector-row > svg {
+  width: 16px;
+  height: 16px;
+  color: var(--muted);
+}
+.canvas-inspector-row[data-group] {
+  font-weight: var(--weight-bold);
+}
+.canvas-inspector-kind {
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+.canvas-inspector-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-xs);
+  line-height: var(--leading-normal);
+}
+.canvas-inspector-filter > input:focus-visible,
+.canvas-inspector-filter > select:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 0;
+}
+/* Le parti «Scheda» e «Fili» (T59): i numeri a coppie, il colore col suo pozzo,
+   «Avanzate» col nodo grezzo, e le punte e i lati del filo. */
+.canvas-inspector[data-part="card"],
+.canvas-inspector[data-part="edge"] {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+.canvas-inspector-numbers,
+.canvas-inspector-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+.canvas-inspector-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.canvas-inspector-field[data-wide] {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+.canvas-inspector-field > label,
+.canvas-inspector-field > span {
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+.canvas-inspector-field > input,
+.canvas-inspector-field > select {
+  width: 100%;
+  min-width: 0;
+  height: 28px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+}
+.canvas-inspector-field > input:focus-visible,
+.canvas-inspector-field > select:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 0;
+}
+.canvas-inspector-field > .canvas-inspector-path {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-size: var(--text-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.canvas-inspector-disclosure {
+  display: inline-flex;
+  gap: var(--space-2);
+  align-items: center;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: var(--text-xs);
+  font-weight: var(--weight-bold);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.canvas-inspector-disclosure:hover {
+  color: var(--text);
+}
+.canvas-inspector-disclosure:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 2px;
+}
+.canvas-inspector-disclosure > svg {
+  width: 14px;
+  height: 14px;
+}
+.canvas-inspector-disclosure[aria-expanded="true"] > svg {
+  transform: rotate(180deg);
+}
+.canvas-inspector-raw {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-xs);
+}
+.canvas-inspector-raw th,
+.canvas-inspector-raw td {
+  padding: var(--space-1) var(--space-2);
+  border-bottom: 1px solid var(--border);
+  text-align: start;
+  vertical-align: top;
+}
+.canvas-inspector-raw th {
+  width: 34%;
+  color: var(--muted);
+  font-weight: var(--weight-medium);
+}
+.canvas-inspector-raw input {
+  width: 100%;
+  min-width: 0;
+  height: 26px;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+}
+.canvas-inspector-raw input[readonly] {
+  border-color: transparent;
+  background: transparent;
+  color: var(--muted);
+}
+.canvas-inspector-raw input[aria-invalid="true"] {
+  border-color: var(--danger);
+}
+.canvas-inspector-raw input:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 0;
+}
+.canvas-inspector-raw tr[data-locked] td {
+  color: var(--muted);
+}
+.canvas-inspector-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+/* Le punte nel pannello stretto: le tre scelte vanno a capo, non escono dal bordo. */
+[role="radiogroup"].canvas-inspector-tips {
+  display: flex;
+  flex-wrap: wrap;
+  width: 100%;
+}
+.canvas-inspector-tips > [role="radio"] {
+  flex: 1 1 auto;
+  white-space: nowrap;
+}
+.canvas-inspector-swatches {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 200px;
+  padding: var(--space-2);
+}
+.canvas-inspector-swatches > .canvas-inspector-heading {
+  padding: var(--space-2) var(--space-3) var(--space-1);
+}
+.canvas-inspector-swatch {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  height: 28px;
+  padding: 0 var(--space-3);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-sm);
+  text-align: start;
+  cursor: pointer;
+}
+.canvas-inspector-swatch:hover {
+  background: var(--overlay-hover);
+}
+.canvas-inspector-swatch[aria-checked="true"] {
+  background: var(--accent-wash);
+  color: var(--accent);
+}
+.canvas-inspector-swatch:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: -2px;
+}
+/* Il pallino del colore nell'ispettore e nel suo popover: il colore che la
+   chiave porta (vedi «I colori», più sotto). */
+.canvas-inspector [data-canvas-color],
+.canvas-inspector-popover [data-canvas-color] {
+  background: var(--canvas-color);
+}
+/* Le fonti (T77): una riga per file con un filo sotto, il nome, il numero
+   delle schede e la barra. I pezzi sulla lavagna in colore d'accento, gli
+   altri grigi; un file mancante grigio e barrato, come la sua scheda. */
+.canvas-sources-list {
+  gap: var(--space-5);
+}
+.canvas-sources-file {
+  gap: var(--space-2);
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--border);
+}
+.canvas-sources-name {
+  color: var(--text);
+  font-weight: var(--weight-medium);
+}
+.canvas-sources-count {
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+.canvas-sources-bar {
+  gap: 1px;
+  overflow: hidden;
+  border-radius: var(--radius-xs);
+}
+.canvas-sources-piece {
+  border: none;
+  background: var(--overlay-active);
+  cursor: pointer;
+}
+.canvas-sources-piece[data-used] {
+  background: var(--accent);
+}
+.canvas-sources-piece:hover {
+  background: var(--border-strong);
+}
+.canvas-sources-piece[data-used]:hover {
+  background: var(--accent-soft);
+}
+.canvas-sources-piece:focus-visible,
+.canvas-sources-file:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 1px;
+}
+.canvas-sources-file[data-missing] .canvas-sources-name,
+.canvas-sources-file[data-missing] .canvas-sources-state {
+  color: var(--muted);
+}
+.canvas-sources-file[data-missing] .canvas-sources-name {
+  text-decoration: line-through;
+  text-decoration-color: var(--border-strong);
+}
+.canvas-sources-file[data-missing] .canvas-sources-piece {
+  background: var(--overlay-hover);
+  cursor: default;
+}
+.canvas-sources-loose,
+.canvas-sources-state {
+  color: var(--accent);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--weight-medium);
+}
+.canvas-sources-empty {
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+/* Il selettore delle sezioni (T74): il fondo e l'ombra di .kit-popover, le
+   righe di .kit-list-item. La casella dice la scelta; il colore d'accento
+   resta della riga attiva, e il grassetto dei titoli più alti. */
+.canvas-parts-title {
+  color: var(--text);
+  font-size: var(--text-md);
+  font-weight: var(--weight-bold);
+  line-height: var(--leading-tight);
+}
+.canvas-parts-close {
+  border: none;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--muted);
+}
+.canvas-parts-close:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+.canvas-parts-close:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 1px;
+}
+.canvas-parts-field-hint {
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+.canvas-parts-field-hint[data-tone="warn"] {
+  color: var(--warning);
+}
+.canvas-parts-row {
+  font-size: var(--text-base);
+}
+.canvas-parts-row[data-depth="1"] {
+  font-weight: var(--weight-bold);
+}
+.canvas-parts-check {
+  border: 1.5px solid var(--outline);
+  border-radius: var(--radius-xs);
+  background: var(--bg-elev);
+}
+.canvas-parts-check::before {
+  background: var(--accent-contrast);
+  clip-path: polygon(8% 54%, 20% 42%, 40% 62%, 80% 20%, 92% 32%, 40% 86%);
+  transform: scale(0);
+  transition: transform var(--duration-fast) var(--ease-out);
+}
+.canvas-parts-row[aria-selected="true"] > .canvas-parts-check {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+.canvas-parts-row[aria-selected="true"] > .canvas-parts-check::before {
+  transform: scale(1);
+}
+.canvas-parts-preview {
+  border-radius: var(--radius-control);
+  background: var(--sheet-2);
+}
+.canvas-parts-preview > .canvas-card-note-content {
+  padding: var(--space-5) var(--space-6);
+  border-radius: var(--radius-control);
+  background: var(--doc-bg);
+  box-shadow: 0 0 0 1px var(--border);
+  color: var(--doc-fg);
+  font-family: var(--font-reading);
+  font-size: var(--text-md);
+  line-height: var(--leading-normal);
+}
+.canvas-parts-preview-title {
+  padding: var(--space-3) var(--space-4) 0;
+  color: var(--muted);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+}
+.canvas-parts-keys {
+  color: var(--muted);
+  font-size: var(--text-xs);
+  line-height: var(--leading-normal);
+}
+.canvas-parts-count {
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+/* Il ritaglio di un'immagine (T78): la zona col filo d'accento e i terzi,
+   il velo attorno, le maniglie, la barra a pillola. */
+.canvas-crop {
+  border-radius: inherit;
+}
+.canvas-crop-box {
+  border: calc(1.5px / var(--canvas-zoom, 1)) solid var(--accent);
+  background-image:
+    linear-gradient(to right, transparent calc(33.33% - 0.5px), color-mix(in srgb, var(--paper-bg) 70%, transparent) calc(33.33% - 0.5px), color-mix(in srgb, var(--paper-bg) 70%, transparent) calc(33.33% + 0.5px), transparent calc(33.33% + 0.5px), transparent calc(66.66% - 0.5px), color-mix(in srgb, var(--paper-bg) 70%, transparent) calc(66.66% - 0.5px), color-mix(in srgb, var(--paper-bg) 70%, transparent) calc(66.66% + 0.5px), transparent calc(66.66% + 0.5px)),
+    linear-gradient(to bottom, transparent calc(33.33% - 0.5px), color-mix(in srgb, var(--paper-bg) 70%, transparent) calc(33.33% - 0.5px), color-mix(in srgb, var(--paper-bg) 70%, transparent) calc(33.33% + 0.5px), transparent calc(33.33% + 0.5px), transparent calc(66.66% - 0.5px), color-mix(in srgb, var(--paper-bg) 70%, transparent) calc(66.66% - 0.5px), color-mix(in srgb, var(--paper-bg) 70%, transparent) calc(66.66% + 0.5px), transparent calc(66.66% + 0.5px));
+  box-shadow: 0 0 0 9999px color-mix(in srgb, var(--scrim) 70%, transparent);
+}
+.canvas-crop-handle {
+  border-radius: calc(4px / var(--canvas-zoom, 1));
+}
+/* Il segno della maniglia: 14 px sullo schermo a ogni zoom, dentro l'area
+   di presa di 24 px. */
+.canvas-crop-handle::after {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: calc(14px / var(--canvas-zoom, 1));
+  height: calc(14px / var(--canvas-zoom, 1));
+  box-sizing: border-box;
+  border: calc(1.5px / var(--canvas-zoom, 1)) solid var(--accent);
+  border-radius: calc(3px / var(--canvas-zoom, 1));
+  background: var(--bg-elev);
+  content: "";
+  transform: translate(-50%, -50%);
+}
+.canvas-crop-handle:focus-visible {
+  outline: calc(var(--focus-ring-width) / var(--canvas-zoom, 1)) solid var(--focus-ring);
+  outline-offset: 0;
+}
+.canvas-crop-bar {
+  border-radius: var(--radius-pill);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-2);
+}
+.canvas-crop-note {
+  color: var(--muted);
+  font-size: var(--text-xs);
+  text-align: center;
+}
+select.canvas-toolbar-item,
+input.canvas-toolbar-item {
+  flex: none;
+  height: 26px;
+  margin-inline: var(--space-1);
+  border-radius: var(--radius-chip);
+  font-size: var(--text-sm);
+}
+input.canvas-toolbar-item {
+  width: 9rem;
+}
+.canvas-intake-error {
+  margin-inline-end: var(--space-4);
+  color: var(--danger);
+  font-size: var(--text-sm);
+}
+/* La lavagna vuota (T62): tre righe e tre pulsanti, al centro. La prima riga
+   è il titolo. */
+.canvas-blank {
+  width: min(30rem, calc(100% - 32px));
+  gap: var(--space-6);
+  color: var(--muted);
+}
+.canvas-blank-lines {
+  font-size: var(--text-base);
+  line-height: var(--leading-normal);
+}
+.canvas-blank-lines > span {
+  display: block;
+}
+.canvas-blank-lines > span:first-child {
+  color: var(--text);
+  font-family: var(--font-reading);
+  font-size: var(--text-lg);
+}
+.canvas-blank-actions {
+  gap: var(--space-4);
+}
+/* La barra della selezione (T51): una pillola sopra le schede (come
+   .draw-arrange). Il pallino del colore come la carta della scheda (T47). */
+.canvas-selection-bar {
+  gap: var(--space-1);
+  padding: var(--space-1);
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  box-shadow: var(--shadow-md);
+}
+.canvas-selection-bar .canvas-button {
+  border-radius: var(--radius-pill);
+}
+.canvas-selection-chip {
+  width: 16px;
+  height: 16px;
+  border: none;
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+}
+.canvas-selection-chip[data-canvas-color] {
+  background: var(--canvas-color);
+}
+/* Cerca nella lavagna (T60): una barra in alto a destra della vista, col
+   campo, il contatore, ‹ › e la ×. «Nessun risultato» è testo pieno. */
+.canvas-find {
+  gap: var(--space-1);
+  padding: var(--space-1);
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+}
+.canvas-find-input {
+  height: var(--control-h);
+  padding: 0 var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-sm);
+}
+.canvas-find-input:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 0;
+}
+.canvas-find-count {
+  padding: 0 var(--space-3);
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+.canvas-find-count[data-none] {
+  color: var(--text);
+}
+.canvas-find-scope {
+  padding-inline-end: var(--space-3);
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+/* Il navigatore (T55, come .draw-navigator). La mappa è una <canvas>: la tela
+   la dipinge leggendo queste variabili, una volta per disegno. Le schede
+   senza colore e i gruppi col filo marcato, quelle colorate col loro
+   `--canvas-color` (lo stesso dei fili), il riquadro della vista con
+   l'accento. */
+.canvas-navigator {
+  --canvas-navigator-card: var(--border-strong);
+  --canvas-navigator-group: var(--border-strong);
+  --canvas-navigator-view: var(--accent);
+  --canvas-navigator-view-fill: var(--accent-wash);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+.canvas-navigator:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 2px;
+}
+.canvas-viewport {
+  outline: none;
+}
+.canvas-viewport:focus-visible {
+  box-shadow: inset 0 0 0 var(--focus-ring-width) var(--focus-ring);
+}
+/* La griglia (T71): un punto sottile per intersezione, velato dal contorno,
+   così si legge sul fondo senza far rumore. Passo e posizione li scrive la
+   tela; qui solo il punto. */
+.canvas-grid {
+  background-image: radial-gradient(circle, color-mix(in srgb, var(--outline) 70%, transparent) 1px, transparent 1.5px);
+  background-repeat: repeat;
+}
+/* Le guide di un gesto (T71): una linea sottile dell'accento sopra le schede.
+   Quelle di spaziatura uguale hanno due trattini alle estremità, che le
+   chiudono e le fanno leggere come misura. */
+.canvas-guide {
+  background: var(--accent);
+}
+.canvas-guide[data-kind="gap"]::before,
+.canvas-guide[data-kind="gap"]::after {
+  content: "";
+  position: absolute;
+  background: var(--accent);
+}
+.canvas-guide[data-kind="gap"][data-axis="v"]::before,
+.canvas-guide[data-kind="gap"][data-axis="v"]::after {
+  left: -3px;
+  width: 7px;
+  height: 1px;
+}
+.canvas-guide[data-kind="gap"][data-axis="v"]::before {
+  top: 0;
+}
+.canvas-guide[data-kind="gap"][data-axis="v"]::after {
+  bottom: 0;
+}
+.canvas-guide[data-kind="gap"][data-axis="h"]::before,
+.canvas-guide[data-kind="gap"][data-axis="h"]::after {
+  top: -3px;
+  width: 1px;
+  height: 7px;
+}
+.canvas-guide[data-kind="gap"][data-axis="h"]::before {
+  left: 0;
+}
+.canvas-guide[data-kind="gap"][data-axis="h"]::after {
+  right: 0;
+}
+.canvas-large-fallback {
+  margin: 0;
+  padding: var(--space-9);
+  color: var(--muted);
+  text-align: center;
+}

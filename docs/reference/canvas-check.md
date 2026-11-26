@@ -9,7 +9,7 @@
 > `crates/fub-canvas-core/tests/check.rs`, i vettori in
 > `apps/client/src/__fixtures__/canvas-ops/`, e il comando in
 > `crates/fub-features/src/lavagna/check.rs`; nella lavagna
-> `apps/client/src/editors/canvas/engine.ts`, `code-text.ts` e `code-paste.ts`.
+> `apps/client/src/editors/canvas/engine.ts` e le sue parti `engine-*.ts`, `code-text.ts` e `code-paste.ts`.
 
 Questa pagina dice che cosa si legge di una lista prima di scriverla. Le
 operazioni e la loro forma stanno in

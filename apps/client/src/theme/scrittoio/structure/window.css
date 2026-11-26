@@ -1,0 +1,222 @@
+/* La finestra e la barra del titolo. */
+
+/* ── La finestra ─────────────────────────────────────────────────────────── */
+
+html,
+body,
+#app {
+  margin: 0;
+  height: 100%;
+}
+
+body {
+  overflow: hidden;
+}
+
+#app {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: var(--titlebar-h) minmax(0, 1fr) auto;
+  position: relative;
+  isolation: isolate;
+}
+
+/* ── La barra del titolo ─────────────────────────────────────────────────── */
+
+#topbar {
+  grid-row: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, auto) minmax(0, 1fr);
+  align-items: center;
+  min-width: 0;
+  /* Il menu dell'applicazione e la scena della luce si posano su di lei. */
+  position: relative;
+}
+
+.titlebar {
+  height: var(--titlebar-h);
+  min-height: var(--titlebar-h);
+  max-height: var(--titlebar-h);
+  white-space: nowrap;
+  user-select: none;
+  -webkit-app-region: drag;
+}
+
+.titlebar button,
+.titlebar a,
+.titlebar input,
+.titlebar select,
+.titlebar #window-controls,
+.titlebar [data-tauri-drag-region="false"] {
+  -webkit-app-region: no-drag;
+}
+
+/* Le righe dell'albero e delle appuntate sono controlli, non testo: due o tre
+   clic aprono o rinominano, e il nome non resta evidenziato come una frase
+   scelta (IMP-004). WebKitGTK legge soltanto la proprietà col prefisso, e la
+   pelle non la può dare (il filtro dei temi la scarta): sta qui. Il campo della
+   rinomina, dentro la riga, resta un campo. */
+.tree-row {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.tree-row input {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+#titlebar-left,
+#titlebar-right {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+#titlebar-left {
+  justify-self: start;
+  overflow: hidden;
+}
+
+#titlebar-right {
+  justify-self: end;
+}
+
+#titlebar-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+}
+
+#pill {
+  width: min(420px, 38vw);
+  min-width: 0;
+  height: var(--chrome-btn);
+}
+
+/* I bersagli della barra hanno una misura sola, e la decide lo «spazio
+   dell'interfaccia»: un tema li veste, non li ridimensiona. */
+.titlebar .brand-mark,
+.titlebar .titlebar-btn--icon {
+  width: var(--chrome-btn);
+  height: var(--chrome-btn);
+  flex: none;
+}
+
+/* Marcuzzo coi colori forzati (D26): il logo diventa una sagoma nei colori
+   del sistema, nel marchio e nelle Informazioni. Sta qui e non nella pelle
+   perché è una garanzia: `forced-color-adjust` a una pelle è negato, e un
+   tema non deve poterla togliere. La cartella e le pupille nel colore del
+   testo, il gufo nel grigio del sistema, le facce, gli occhi e i fogli nel
+   colore del fondo. */
+@media (forced-colors: active) {
+  .marcuzzo {
+    forced-color-adjust: none;
+  }
+
+  .marcuzzo path[class] {
+    fill: CanvasText;
+    stroke: none;
+  }
+
+  .marcuzzo path.logo-piumaggio,
+  .marcuzzo path.logo-pancia,
+  .marcuzzo path.logo-ali,
+  .marcuzzo path.logo-ombra,
+  .marcuzzo path.logo-zampe {
+    fill: GrayText;
+  }
+
+  .marcuzzo path.logo-bianco,
+  .marcuzzo path.logo-occhi,
+  .marcuzzo path.logo-becco-luce,
+  .marcuzzo path.logo-foglio-1,
+  .marcuzzo path.logo-foglio-2 {
+    fill: Canvas;
+  }
+
+  .marcuzzo path.logo-pupille {
+    stroke: CanvasText;
+  }
+}
+
+.titlebar .vault-chip {
+  height: var(--chrome-btn);
+  min-width: 0;
+  flex: 0 1 auto;
+}
+
+.titlebar .frame-nav {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+}
+
+#window-controls .win-ctrl {
+  width: var(--win-ctrl-w);
+  height: var(--titlebar-h);
+  flex: none;
+}
+
+#vault-path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+#window-controls {
+  display: inline-flex;
+  align-items: stretch;
+  flex: 0 0 auto;
+  height: var(--titlebar-h);
+  -webkit-app-region: no-drag;
+}
+
+/* Il menu dell'applicazione si apre dal marchio: a riposo non occupa la
+   barra; aperto è una striscia che copre l'ala sinistra, subito dopo il
+   marchio (`--brand-end` lo misura `frame/brand-menu.ts`). Le tendine restano
+   appese sotto le sue voci. */
+#app-menu {
+  display: none;
+}
+
+#app-menu.open {
+  display: flex;
+  align-items: center;
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: var(--brand-end, calc(var(--chrome-btn) + 16px));
+  max-width: calc(100% - var(--brand-end, 48px) - 8px);
+  overflow: auto hidden;
+  scrollbar-width: none;
+  z-index: var(--z-menu);
+}
+
+#app-menu.open > button {
+  height: var(--chrome-btn);
+  flex: none;
+}
+
+/* Il manico del menu compatto: `ui/titlebar.ts` lo accende sotto i 1100 px,
+   ma in questa cornice il menu si apre dal marchio a ogni larghezza. */
+#app-menu-toggle,
+#command-search,
+#open-palette,
+#open-vault {
+  display: none !important;
+}
+
+#app-menu-extra {
+  display: flex;
+  align-items: center;
+  gap: 0;
+}
+
+#app-menu-extra .declared-view-panel > .panel-title {
+  display: none;
+}
+

@@ -634,7 +634,7 @@ const toHeader = Prec.high(keymap.of([{
 }]));
 
 /// Le regole dei riquadri della testata, che si aprono fuori dal foglio. La
-/// testata stessa la disegna la pelle (`skin/document.css`), in Scrittura e
+/// testata stessa la disegna la pelle (`skin/document-page.css`), in Scrittura e
 /// in Lettura.
 const theme = EditorView.baseTheme({
   ".cm-fub-page-picker": { display: "grid", gap: "0.5em", padding: "0.5em", width: "17em" },

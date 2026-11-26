@@ -603,20 +603,7 @@
     "cm-fub-strong",
     "cm-fub-em",
     "cm-fub-strike",
-    "cm-fub-highlight",
-    "inline-highlight",
-    "cm-fub-comment",
     "cm-fub-code",
-    "math-inline",
-    "fub-details",
-    "cm-fub-details-arrow",
-    "cm-fub-details-empty",
-    "fub-columns",
-    "fub-column",
-    "cm-fub-column-label",
-    "fub-toc",
-    "fub-toc-item",
-    "fub-toc-empty",
     "cm-fub-link-card",
     "cm-fub-link-card-main",
     "cm-fub-link-card-text",
@@ -631,77 +618,16 @@
     "cm-fub-address-choice-link",
     "cm-fub-address-choice-card",
     "cm-fub-address-choice-embed",
-    "fub-color-gray",
-    "fub-color-brown",
-    "fub-color-orange",
-    "fub-color-yellow",
-    "fub-color-green",
-    "fub-color-blue",
-    "fub-color-purple",
-    "fub-color-pink",
-    "fub-color-red",
-    "fub-bg-gray",
-    "fub-bg-brown",
-    "fub-bg-orange",
-    "fub-bg-yellow",
-    "fub-bg-green",
-    "fub-bg-blue",
-    "fub-bg-purple",
-    "fub-bg-pink",
-    "fub-bg-red",
     "cm-fub-link",
     "cm-fub-wikilink",
     "cm-fub-link-pill",
     "cm-fub-person",
-    "unresolved",
-    "footnote-ref",
-    "footnote-backref",
-    "footnote-inline",
-    "cm-fub-footnote-label",
-    "cm-fub-footnote-back",
-    "tag",
-    "cm-fub-tag",
-    "cm-fub-quote",
-    "cm-fub-quote-mark",
     "callout",
-    "callout-title",
-    "cm-fub-callout-line",
-    "cm-fub-callout-type",
-    "cm-fub-callout-title",
-    "cm-fub-callout-fold",
-    "cm-fub-bullet",
-    "cm-fub-bullet-task",
-    "task",
-    "cm-fub-checkbox",
-    "cm-fub-done",
     "cm-fub-code-line",
-    "cm-fub-codeblock",
-    "markdown-code-copy",
-    "cm-fub-code-header",
-    "cm-fub-code-lang",
-    "cm-fub-code-wrap",
-    "cm-fub-math-field",
-    "cm-fub-math-popover-preview",
-    "cm-fub-hr",
     "math-block",
-    "katex-display",
-    "image-missing",
-    "image-remote",
-    "image-remote-load",
     "cm-fub-image",
-    "cm-fub-image-selected",
-    "cm-fub-image-handle",
-    "cm-fub-image-size",
-    "cm-fub-image-dialog",
-    "cm-fub-image-shares",
-    "craft-figure",
-    "craft-figure-page",
     "mermaid-diagram",
     "embed",
-    "embed-cycle",
-    "embed-too-deep",
-    "embed-missing",
-    "embed-media",
     "cm-fub-block-handles",
     "cm-fub-blocks-touch",
     "cm-fub-block-add",
@@ -723,6 +649,42 @@
     "cm-fub-block-slot",
     "cm-fub-block-id",
     "cm-fub-block-menu",
+    "fub-note--wide",
+    "cm-fub-frontmatter",
+    "cm-fub-properties",
+    "cm-fub-properties-hidden",
+    "cm-fub-properties-empty",
+    "ui-slot",
+    "cm-fub-highlight",
+    "inline-highlight",
+    "cm-fub-comment",
+    "fub-color-gray",
+    "fub-color-brown",
+    "fub-color-orange",
+    "fub-color-yellow",
+    "fub-color-green",
+    "fub-color-blue",
+    "fub-color-purple",
+    "fub-color-pink",
+    "fub-color-red",
+    "fub-bg-gray",
+    "fub-bg-brown",
+    "fub-bg-orange",
+    "fub-bg-yellow",
+    "fub-bg-green",
+    "fub-bg-blue",
+    "fub-bg-purple",
+    "fub-bg-pink",
+    "fub-bg-red",
+    "unresolved",
+    "footnote-ref",
+    "footnote-backref",
+    "footnote-inline",
+    "cm-fub-footnote-label",
+    "cm-fub-footnote-back",
+    "tag",
+    "cm-fub-tag",
+    "image-missing",
     "cm-fub-color-swatch",
     "cm-fub-page",
     "cm-fub-page-cover",
@@ -735,7 +697,6 @@
     "cm-fub-page-tool",
     "cm-fub-page-title",
     "cm-fub-page-check",
-    "fub-note--wide",
     "fub-note--small",
     "fub-note--serif",
     "fub-note--sans",
@@ -799,6 +760,54 @@
     "note-fact",
     "note-fact-tags",
     "note-tag",
+    "md-link-dialog",
+    "md-link-dialog-notes",
+    "md-link-dialog-note",
+    "md-link-dialog-preview",
+    "math-inline",
+    "fub-details",
+    "cm-fub-details-arrow",
+    "cm-fub-details-empty",
+    "fub-columns",
+    "fub-column",
+    "cm-fub-column-label",
+    "fub-toc",
+    "fub-toc-item",
+    "fub-toc-empty",
+    "cm-fub-quote",
+    "cm-fub-quote-mark",
+    "callout-title",
+    "cm-fub-callout-line",
+    "cm-fub-callout-type",
+    "cm-fub-callout-title",
+    "cm-fub-callout-fold",
+    "cm-fub-bullet",
+    "cm-fub-bullet-task",
+    "task",
+    "cm-fub-checkbox",
+    "cm-fub-done",
+    "cm-fub-codeblock",
+    "markdown-code-copy",
+    "cm-fub-code-header",
+    "cm-fub-code-lang",
+    "cm-fub-code-wrap",
+    "cm-fub-math-field",
+    "cm-fub-math-popover-preview",
+    "cm-fub-hr",
+    "katex-display",
+    "image-remote",
+    "image-remote-load",
+    "cm-fub-image-selected",
+    "cm-fub-image-handle",
+    "cm-fub-image-size",
+    "cm-fub-image-dialog",
+    "cm-fub-image-shares",
+    "craft-figure",
+    "craft-figure-page",
+    "embed-cycle",
+    "embed-too-deep",
+    "embed-missing",
+    "embed-media",
     "cm-fub-comment-margin",
     "cm-fub-comment-bubble",
     "cm-fub-comment-sign",
@@ -827,22 +836,13 @@
     "cm-fub-comments-note",
     "cm-fub-comments-empty",
     "cm-fub-comments-clear",
-    "cm-fub-frontmatter",
-    "cm-fub-properties",
-    "cm-fub-properties-hidden",
-    "cm-fub-properties-empty",
     "block-frontmatter-unparsed",
     "block-footnote-definition",
-    "ui-slot",
     "ui-heading",
     "empty-note",
     "ui-list-item",
     "ui-list-item-title",
     "ui-list-item-subtitle",
-    "md-link-dialog",
-    "md-link-dialog-notes",
-    "md-link-dialog-note",
-    "md-link-dialog-preview",
     "link-preview",
     "doc-preview",
     "tb-frame",
@@ -1114,140 +1114,19 @@
     "grid-dialog-signature",
     "grid-dialog-swatch",
     "grid-dialog-toolbar",
-    "base-status",
-    "base-body",
-    "base-summaries",
-    "ui-custom",
-    "base-bar",
-    "base-tabs",
-    "base-tab",
-    "base-tab-label",
-    "base-tab-more",
-    "base-tab-more-count",
-    "base-bar-space",
-    "base-tool",
-    "base-tool-count",
-    "base-tool-new-view",
-    "compact",
-    "stacked",
-    "on",
-    "base-new",
-    "base-search-row",
-    "base-search",
-    "base-strip",
-    "base-chips",
-    "base-chip",
-    "base-note",
-    "base-written",
-    "base-written-lines",
-    "base-written-where",
-    "base-written-added",
-    "base-written-removed",
-    "base-popover",
-    "base-pop-title",
-    "base-pop-note",
-    "base-pop-foot",
-    "base-filter-rows",
-    "base-filter-row",
-    "base-filter-value",
-    "base-filter-search",
-    "base-filter-remove",
-    "base-filter-add",
-    "base-sort-rows",
-    "base-sort-row",
-    "base-sort-name",
-    "base-sort-add",
-    "base-sort-remove",
-    "base-grouping",
-    "base-column-list",
-    "base-column",
-    "base-column-grip",
-    "base-column-hidden",
-    "base-column-label",
-    "base-column-fixed",
-    "base-column-fixed-note",
-    "dragging",
-    "base-rename",
-    "base-rename-field",
-    "base-table",
-    "base-table-viewport",
-    "base-cell",
-    "base-cell-error",
-    "base-head",
-    "base-head-icon",
-    "base-head-label",
-    "base-head-sort",
-    "base-title",
-    "base-add-row",
-    "base-add-row-button",
-    "base-foot-count",
-    "base-foot-summary",
-    "base-foot-value",
-    "base-foot-error",
-    "base-foot-dimmed",
-    "base-cards",
-    "base-list",
-    "base-card",
-    "base-field",
-    "base-kanban",
-    "base-kanban-column",
-    "base-kanban-card",
-    "base-kanban-head",
-    "base-kanban-empty",
-    "base-view-key",
-    "base-view-key-select",
-    "base-calendar",
-    "base-cal-head",
-    "base-cal-title",
-    "base-cal-nav",
-    "base-cal-prev",
-    "base-cal-today",
-    "base-cal-undated",
-    "base-cal-scroll",
-    "base-cal-grid",
-    "base-cal-week",
-    "base-cal-dow",
-    "base-cal-day",
-    "base-cal-num",
-    "base-cal-weekday",
-    "base-cal-event",
-    "base-cal-more",
-    "base-cal-empty",
-    "base-timeline",
-    "base-tl-head",
-    "base-tl-title",
-    "base-tl-nav",
-    "base-tl-prev",
-    "base-tl-today",
-    "base-tl-zoom",
-    "base-tl-zoom-option",
-    "base-tl-undated",
-    "base-tl-scroll",
-    "base-tl",
-    "base-tl-axis",
-    "base-tl-axis-label",
-    "base-tl-scale",
-    "base-tl-tick",
-    "base-tl-now",
-    "base-tl-row",
-    "base-tl-name",
-    "base-tl-track",
-    "base-tl-bar",
-    "base-tl-edge",
-    "base-tl-point",
-    "base-tl-off",
-    "base-tl-none",
-    "base-tl-empty",
-    "base-map-atlas",
-    "base-map-attribution",
-    "base-map-marker",
+    "rich-ribbon-bold",
+    "rich-ribbon-field-label",
+    "rich-ribbon-italic",
+    "rich-ribbon-mini",
+    "rich-ribbon-strike",
+    "rich-ribbon-underline",
+    "look-file",
     "canvas-surface",
     "canvas-toolbar",
     "canvas-toolbar-item",
     "canvas-intake-error",
     "canvas-viewport",
     "canvas-large-fallback",
-    "canvas-source",
     "canvas-grid",
     "canvas-guide",
     "canvas-rail",
@@ -1322,6 +1201,12 @@
     "canvas-card-note-content",
     "canvas-parts-keys",
     "canvas-parts-count",
+    "canvas-crop",
+    "canvas-crop-box",
+    "canvas-crop-handle",
+    "canvas-crop-bar",
+    "canvas-crop-note",
+    "canvas-source",
     "canvas-excerpt-parts",
     "canvas-excerpt-open",
     "canvas-excerpt-section",
@@ -1337,11 +1222,6 @@
     "canvas-reader-page",
     "canvas-reader-section",
     "canvas-reader-unreadable",
-    "canvas-crop",
-    "canvas-crop-box",
-    "canvas-crop-handle",
-    "canvas-crop-bar",
-    "canvas-crop-note",
     "canvas-node",
     "canvas-node-group",
     "canvas-node-file",
@@ -1381,19 +1261,167 @@
     "canvas-card-pdf-status",
     "canvas-card-missing",
     "canvas-card-missing-actions",
-    "rich-ribbon-bold",
+    "canvas-edge",
+    "canvas-edge-draft",
+    "canvas-edge-hit",
+    "canvas-edge-line",
+    "canvas-edge-arrow",
+    "canvas-edge-label",
+    "canvas-edge-reconnect",
+    "canvas-card-note",
+    "canvas-exit-hint",
+    "canvas-card-lock",
+    "save-state",
+    "canvas-card-sheet",
+    "canvas-formula-text",
+    "canvas-ink-label",
+    "canvas-ink-frame",
+    "canvas-ink-reflow",
+    "canvas-ink-reflow-back",
+    "canvas-lasso-path",
+    "canvas-lasso-frame",
+    "canvas-lasso-chosen",
+    "canvas-marquee-box",
+    "canvas-drop-ghost",
+    "canvas-drop-ghost-group",
+    "canvas-drop-ghost-name",
+    "canvas-ruler-bar",
+    "canvas-ruler-grip",
+    "canvas-ruler-angle",
+    "base-status",
+    "base-body",
+    "ui-custom",
+    "base-bar",
+    "base-tabs",
+    "base-tab",
+    "base-tab-label",
+    "base-tab-more",
+    "base-tab-more-count",
+    "base-bar-space",
+    "base-tool",
+    "base-tool-count",
+    "base-tool-new-view",
+    "compact",
+    "stacked",
+    "on",
+    "base-new",
+    "base-search-row",
+    "base-search",
+    "base-strip",
+    "base-chips",
+    "base-chip",
+    "base-note",
+    "base-written",
+    "base-written-lines",
+    "base-written-where",
+    "base-written-added",
+    "base-written-removed",
+    "base-popover",
+    "base-pop-title",
+    "base-pop-note",
+    "base-pop-foot",
+    "base-filter-rows",
+    "base-filter-row",
+    "base-filter-value",
+    "base-filter-search",
+    "base-filter-remove",
+    "base-filter-add",
+    "base-sort-rows",
+    "base-sort-row",
+    "base-sort-name",
+    "base-sort-add",
+    "base-sort-remove",
+    "base-grouping",
+    "base-column-list",
+    "base-column",
+    "base-column-grip",
+    "base-column-hidden",
+    "base-column-label",
+    "base-column-fixed",
+    "base-column-fixed-note",
+    "dragging",
+    "base-rename",
+    "base-rename-field",
+    "base-map-attribution",
+    "base-summaries",
+    "base-table",
+    "base-table-viewport",
+    "base-cell",
+    "base-cell-error",
+    "base-head",
+    "base-head-icon",
+    "base-head-label",
+    "base-head-sort",
+    "base-title",
+    "base-add-row",
+    "base-add-row-button",
+    "base-foot-count",
+    "base-foot-summary",
+    "base-foot-value",
+    "base-foot-error",
+    "base-foot-dimmed",
+    "base-cards",
+    "base-list",
+    "base-card",
+    "base-field",
+    "base-kanban",
+    "base-kanban-column",
+    "base-kanban-card",
+    "base-kanban-head",
+    "base-kanban-empty",
+    "base-view-key",
+    "base-view-key-select",
+    "base-calendar",
+    "base-cal-head",
+    "base-cal-title",
+    "base-cal-nav",
+    "base-cal-prev",
+    "base-cal-today",
+    "base-cal-undated",
+    "base-cal-scroll",
+    "base-cal-grid",
+    "base-cal-week",
+    "base-cal-dow",
+    "base-cal-day",
+    "base-cal-num",
+    "base-cal-weekday",
+    "base-cal-event",
+    "base-cal-more",
+    "base-cal-empty",
+    "base-timeline",
+    "base-tl-head",
+    "base-tl-title",
+    "base-tl-nav",
+    "base-tl-prev",
+    "base-tl-today",
+    "base-tl-zoom",
+    "base-tl-zoom-option",
+    "base-tl-undated",
+    "base-tl-scroll",
+    "base-tl",
+    "base-tl-axis",
+    "base-tl-axis-label",
+    "base-tl-scale",
+    "base-tl-tick",
+    "base-tl-now",
+    "base-tl-row",
+    "base-tl-name",
+    "base-tl-track",
+    "base-tl-bar",
+    "base-tl-edge",
+    "base-tl-point",
+    "base-tl-off",
+    "base-tl-none",
+    "base-tl-empty",
+    "base-map-atlas",
+    "base-map-marker",
     "rich-ribbon-color-bar",
-    "rich-ribbon-field-label",
     "rich-ribbon-input",
-    "rich-ribbon-italic",
     "rich-ribbon-marker",
-    "rich-ribbon-mini",
     "rich-ribbon-quick",
     "rich-ribbon-select",
-    "rich-ribbon-strike",
     "rich-ribbon-style",
     "rich-ribbon-styles",
-    "rich-ribbon-underline",
     "rich-surface",
     "rich-notice",
     "rich-page",
@@ -1454,7 +1482,6 @@
     "rich-drawing-bar",
     "rich-drawing-title",
     "look-tema",
-    "look-file",
     "look-adattato",
     "rich-atom",
     "rich-atom-image",
@@ -1527,33 +1554,6 @@
     "ui-empty-title",
     "cm-day-page",
     "cm-day-page-note",
-    "canvas-edge",
-    "canvas-edge-draft",
-    "canvas-edge-hit",
-    "canvas-edge-line",
-    "canvas-edge-arrow",
-    "canvas-edge-label",
-    "canvas-edge-reconnect",
-    "canvas-card-note",
-    "canvas-exit-hint",
-    "canvas-card-lock",
-    "save-state",
-    "canvas-card-sheet",
-    "canvas-formula-text",
-    "canvas-ink-label",
-    "canvas-ink-frame",
-    "canvas-ink-reflow",
-    "canvas-ink-reflow-back",
-    "canvas-lasso-path",
-    "canvas-lasso-frame",
-    "canvas-lasso-chosen",
-    "canvas-marquee-box",
-    "canvas-drop-ghost",
-    "canvas-drop-ghost-group",
-    "canvas-drop-ghost-name",
-    "canvas-ruler-bar",
-    "canvas-ruler-grip",
-    "canvas-ruler-angle",
     "cm-fub-comment-range",
     "cm-fub-comment-range-on",
     "comment-range",
@@ -3175,20 +3175,7 @@
     "cm-fub-strong": "contenuto",
     "cm-fub-em": "contenuto",
     "cm-fub-strike": "contenuto",
-    "cm-fub-highlight": "contenuto",
-    "inline-highlight": "contenuto",
-    "cm-fub-comment": "contenuto",
     "cm-fub-code": "contenuto",
-    "math-inline": "contenuto",
-    "fub-details": "contenuto",
-    "cm-fub-details-arrow": "contenuto",
-    "cm-fub-details-empty": "contenuto",
-    "fub-columns": "contenuto",
-    "fub-column": "contenuto",
-    "cm-fub-column-label": "contenuto",
-    "fub-toc": "contenuto",
-    "fub-toc-item": "contenuto",
-    "fub-toc-empty": "contenuto",
     "cm-fub-link-card": "contenuto",
     "cm-fub-link-card-main": "contenuto",
     "cm-fub-link-card-text": "contenuto",
@@ -3203,77 +3190,16 @@
     "cm-fub-address-choice-link": "contenuto",
     "cm-fub-address-choice-card": "contenuto",
     "cm-fub-address-choice-embed": "contenuto",
-    "fub-color-gray": "contenuto",
-    "fub-color-brown": "contenuto",
-    "fub-color-orange": "contenuto",
-    "fub-color-yellow": "contenuto",
-    "fub-color-green": "contenuto",
-    "fub-color-blue": "contenuto",
-    "fub-color-purple": "contenuto",
-    "fub-color-pink": "contenuto",
-    "fub-color-red": "contenuto",
-    "fub-bg-gray": "contenuto",
-    "fub-bg-brown": "contenuto",
-    "fub-bg-orange": "contenuto",
-    "fub-bg-yellow": "contenuto",
-    "fub-bg-green": "contenuto",
-    "fub-bg-blue": "contenuto",
-    "fub-bg-purple": "contenuto",
-    "fub-bg-pink": "contenuto",
-    "fub-bg-red": "contenuto",
     "cm-fub-link": "contenuto",
     "cm-fub-wikilink": "contenuto",
     "cm-fub-link-pill": "contenuto",
     "cm-fub-person": "contenuto",
-    "unresolved": "contenuto",
-    "footnote-ref": "contenuto",
-    "footnote-backref": "contenuto",
-    "footnote-inline": "contenuto",
-    "cm-fub-footnote-label": "contenuto",
-    "cm-fub-footnote-back": "contenuto",
-    "tag": "contenuto",
-    "cm-fub-tag": "contenuto",
-    "cm-fub-quote": "contenuto",
-    "cm-fub-quote-mark": "contenuto",
     "callout": "contenuto",
-    "callout-title": "contenuto",
-    "cm-fub-callout-line": "contenuto",
-    "cm-fub-callout-type": "contenuto",
-    "cm-fub-callout-title": "contenuto",
-    "cm-fub-callout-fold": "contenuto",
-    "cm-fub-bullet": "contenuto",
-    "cm-fub-bullet-task": "contenuto",
-    "task": "contenuto",
-    "cm-fub-checkbox": "contenuto",
-    "cm-fub-done": "contenuto",
     "cm-fub-code-line": "contenuto",
-    "cm-fub-codeblock": "contenuto",
-    "markdown-code-copy": "cornice",
-    "cm-fub-code-header": "contenuto",
-    "cm-fub-code-lang": "contenuto",
-    "cm-fub-code-wrap": "contenuto",
-    "cm-fub-math-field": "contenuto",
-    "cm-fub-math-popover-preview": "contenuto",
-    "cm-fub-hr": "contenuto",
     "math-block": "contenuto",
-    "katex-display": "contenuto",
-    "image-missing": "contenuto",
-    "image-remote": "contenuto",
-    "image-remote-load": "contenuto",
     "cm-fub-image": "contenuto",
-    "cm-fub-image-selected": "contenuto",
-    "cm-fub-image-handle": "contenuto",
-    "cm-fub-image-size": "contenuto",
-    "cm-fub-image-dialog": "contenuto",
-    "cm-fub-image-shares": "contenuto",
-    "craft-figure": "contenuto",
-    "craft-figure-page": "contenuto",
     "mermaid-diagram": "contenuto",
     "embed": "contenuto",
-    "embed-cycle": "contenuto",
-    "embed-too-deep": "contenuto",
-    "embed-missing": "contenuto",
-    "embed-media": "contenuto",
     "cm-fub-block-handles": "contenuto",
     "cm-fub-blocks-touch": "contenuto",
     "cm-fub-block-add": "contenuto",
@@ -3295,6 +3221,42 @@
     "cm-fub-block-slot": "contenuto",
     "cm-fub-block-id": "contenuto",
     "cm-fub-block-menu": "cornice",
+    "fub-note--wide": "contenuto",
+    "cm-fub-frontmatter": "contenuto",
+    "cm-fub-properties": "contenuto",
+    "cm-fub-properties-hidden": "contenuto",
+    "cm-fub-properties-empty": "contenuto",
+    "ui-slot": "cornice",
+    "cm-fub-highlight": "contenuto",
+    "inline-highlight": "contenuto",
+    "cm-fub-comment": "contenuto",
+    "fub-color-gray": "contenuto",
+    "fub-color-brown": "contenuto",
+    "fub-color-orange": "contenuto",
+    "fub-color-yellow": "contenuto",
+    "fub-color-green": "contenuto",
+    "fub-color-blue": "contenuto",
+    "fub-color-purple": "contenuto",
+    "fub-color-pink": "contenuto",
+    "fub-color-red": "contenuto",
+    "fub-bg-gray": "contenuto",
+    "fub-bg-brown": "contenuto",
+    "fub-bg-orange": "contenuto",
+    "fub-bg-yellow": "contenuto",
+    "fub-bg-green": "contenuto",
+    "fub-bg-blue": "contenuto",
+    "fub-bg-purple": "contenuto",
+    "fub-bg-pink": "contenuto",
+    "fub-bg-red": "contenuto",
+    "unresolved": "contenuto",
+    "footnote-ref": "contenuto",
+    "footnote-backref": "contenuto",
+    "footnote-inline": "contenuto",
+    "cm-fub-footnote-label": "contenuto",
+    "cm-fub-footnote-back": "contenuto",
+    "tag": "contenuto",
+    "cm-fub-tag": "contenuto",
+    "image-missing": "contenuto",
     "cm-fub-color-swatch": "contenuto",
     "cm-fub-page": "contenuto",
     "cm-fub-page-cover": "contenuto",
@@ -3307,7 +3269,6 @@
     "cm-fub-page-tool": "contenuto",
     "cm-fub-page-title": "contenuto",
     "cm-fub-page-check": "contenuto",
-    "fub-note--wide": "contenuto",
     "fub-note--small": "contenuto",
     "fub-note--serif": "contenuto",
     "fub-note--sans": "contenuto",
@@ -3371,6 +3332,54 @@
     "note-fact": "contenuto",
     "note-fact-tags": "contenuto",
     "note-tag": "contenuto",
+    "md-link-dialog": "cornice",
+    "md-link-dialog-notes": "cornice",
+    "md-link-dialog-note": "cornice",
+    "md-link-dialog-preview": "cornice",
+    "math-inline": "contenuto",
+    "fub-details": "contenuto",
+    "cm-fub-details-arrow": "contenuto",
+    "cm-fub-details-empty": "contenuto",
+    "fub-columns": "contenuto",
+    "fub-column": "contenuto",
+    "cm-fub-column-label": "contenuto",
+    "fub-toc": "contenuto",
+    "fub-toc-item": "contenuto",
+    "fub-toc-empty": "contenuto",
+    "cm-fub-quote": "contenuto",
+    "cm-fub-quote-mark": "contenuto",
+    "callout-title": "contenuto",
+    "cm-fub-callout-line": "contenuto",
+    "cm-fub-callout-type": "contenuto",
+    "cm-fub-callout-title": "contenuto",
+    "cm-fub-callout-fold": "contenuto",
+    "cm-fub-bullet": "contenuto",
+    "cm-fub-bullet-task": "contenuto",
+    "task": "contenuto",
+    "cm-fub-checkbox": "contenuto",
+    "cm-fub-done": "contenuto",
+    "cm-fub-codeblock": "contenuto",
+    "markdown-code-copy": "cornice",
+    "cm-fub-code-header": "contenuto",
+    "cm-fub-code-lang": "contenuto",
+    "cm-fub-code-wrap": "contenuto",
+    "cm-fub-math-field": "contenuto",
+    "cm-fub-math-popover-preview": "contenuto",
+    "cm-fub-hr": "contenuto",
+    "katex-display": "contenuto",
+    "image-remote": "contenuto",
+    "image-remote-load": "contenuto",
+    "cm-fub-image-selected": "contenuto",
+    "cm-fub-image-handle": "contenuto",
+    "cm-fub-image-size": "contenuto",
+    "cm-fub-image-dialog": "contenuto",
+    "cm-fub-image-shares": "contenuto",
+    "craft-figure": "contenuto",
+    "craft-figure-page": "contenuto",
+    "embed-cycle": "contenuto",
+    "embed-too-deep": "contenuto",
+    "embed-missing": "contenuto",
+    "embed-media": "contenuto",
     "cm-fub-comment-margin": "segno",
     "cm-fub-comment-bubble": "segno",
     "cm-fub-comment-sign": "segno",
@@ -3399,22 +3408,13 @@
     "cm-fub-comments-note": "cornice",
     "cm-fub-comments-empty": "cornice",
     "cm-fub-comments-clear": "cornice",
-    "cm-fub-frontmatter": "contenuto",
-    "cm-fub-properties": "contenuto",
-    "cm-fub-properties-hidden": "contenuto",
-    "cm-fub-properties-empty": "contenuto",
     "block-frontmatter-unparsed": "contenuto",
     "block-footnote-definition": "contenuto",
-    "ui-slot": "cornice",
     "ui-heading": "cornice",
     "empty-note": "cornice",
     "ui-list-item": "cornice",
     "ui-list-item-title": "cornice",
     "ui-list-item-subtitle": "cornice",
-    "md-link-dialog": "cornice",
-    "md-link-dialog-notes": "cornice",
-    "md-link-dialog-note": "cornice",
-    "md-link-dialog-preview": "cornice",
     "link-preview": "cornice",
     "doc-preview": "cornice",
     "tb-frame": "contenuto",
@@ -3686,140 +3686,19 @@
     "grid-dialog-signature": "cornice",
     "grid-dialog-swatch": "cornice",
     "grid-dialog-toolbar": "cornice",
-    "base-status": "cornice",
-    "base-body": "cornice",
-    "base-summaries": "cornice",
-    "ui-custom": "cornice",
-    "base-bar": "cornice",
-    "base-tabs": "cornice",
-    "base-tab": "cornice",
-    "base-tab-label": "cornice",
-    "base-tab-more": "cornice",
-    "base-tab-more-count": "cornice",
-    "base-bar-space": "cornice",
-    "base-tool": "cornice",
-    "base-tool-count": "cornice",
-    "base-tool-new-view": "cornice",
-    "compact": "cornice",
-    "stacked": "cornice",
-    "on": "cornice",
-    "base-new": "cornice",
-    "base-search-row": "cornice",
-    "base-search": "cornice",
-    "base-strip": "cornice",
-    "base-chips": "cornice",
-    "base-chip": "cornice",
-    "base-note": "cornice",
-    "base-written": "cornice",
-    "base-written-lines": "cornice",
-    "base-written-where": "cornice",
-    "base-written-added": "cornice",
-    "base-written-removed": "cornice",
-    "base-popover": "cornice",
-    "base-pop-title": "cornice",
-    "base-pop-note": "cornice",
-    "base-pop-foot": "cornice",
-    "base-filter-rows": "cornice",
-    "base-filter-row": "cornice",
-    "base-filter-value": "cornice",
-    "base-filter-search": "cornice",
-    "base-filter-remove": "cornice",
-    "base-filter-add": "cornice",
-    "base-sort-rows": "cornice",
-    "base-sort-row": "cornice",
-    "base-sort-name": "cornice",
-    "base-sort-add": "cornice",
-    "base-sort-remove": "cornice",
-    "base-grouping": "cornice",
-    "base-column-list": "cornice",
-    "base-column": "cornice",
-    "base-column-grip": "cornice",
-    "base-column-hidden": "cornice",
-    "base-column-label": "cornice",
-    "base-column-fixed": "cornice",
-    "base-column-fixed-note": "cornice",
-    "dragging": "cornice",
-    "base-rename": "cornice",
-    "base-rename-field": "cornice",
-    "base-table": "contenuto",
-    "base-table-viewport": "contenuto",
-    "base-cell": "contenuto",
-    "base-cell-error": "contenuto",
-    "base-head": "contenuto",
-    "base-head-icon": "contenuto",
-    "base-head-label": "contenuto",
-    "base-head-sort": "contenuto",
-    "base-title": "contenuto",
-    "base-add-row": "contenuto",
-    "base-add-row-button": "contenuto",
-    "base-foot-count": "contenuto",
-    "base-foot-summary": "contenuto",
-    "base-foot-value": "contenuto",
-    "base-foot-error": "contenuto",
-    "base-foot-dimmed": "contenuto",
-    "base-cards": "contenuto",
-    "base-list": "contenuto",
-    "base-card": "contenuto",
-    "base-field": "contenuto",
-    "base-kanban": "contenuto",
-    "base-kanban-column": "contenuto",
-    "base-kanban-card": "contenuto",
-    "base-kanban-head": "contenuto",
-    "base-kanban-empty": "contenuto",
-    "base-view-key": "contenuto",
-    "base-view-key-select": "contenuto",
-    "base-calendar": "contenuto",
-    "base-cal-head": "contenuto",
-    "base-cal-title": "contenuto",
-    "base-cal-nav": "contenuto",
-    "base-cal-prev": "contenuto",
-    "base-cal-today": "contenuto",
-    "base-cal-undated": "contenuto",
-    "base-cal-scroll": "contenuto",
-    "base-cal-grid": "contenuto",
-    "base-cal-week": "contenuto",
-    "base-cal-dow": "contenuto",
-    "base-cal-day": "contenuto",
-    "base-cal-num": "contenuto",
-    "base-cal-weekday": "contenuto",
-    "base-cal-event": "contenuto",
-    "base-cal-more": "contenuto",
-    "base-cal-empty": "contenuto",
-    "base-timeline": "contenuto",
-    "base-tl-head": "contenuto",
-    "base-tl-title": "contenuto",
-    "base-tl-nav": "contenuto",
-    "base-tl-prev": "contenuto",
-    "base-tl-today": "contenuto",
-    "base-tl-zoom": "contenuto",
-    "base-tl-zoom-option": "contenuto",
-    "base-tl-undated": "contenuto",
-    "base-tl-scroll": "contenuto",
-    "base-tl": "contenuto",
-    "base-tl-axis": "contenuto",
-    "base-tl-axis-label": "contenuto",
-    "base-tl-scale": "contenuto",
-    "base-tl-tick": "contenuto",
-    "base-tl-now": "contenuto",
-    "base-tl-row": "contenuto",
-    "base-tl-name": "contenuto",
-    "base-tl-track": "contenuto",
-    "base-tl-bar": "contenuto",
-    "base-tl-edge": "contenuto",
-    "base-tl-point": "contenuto",
-    "base-tl-off": "contenuto",
-    "base-tl-none": "contenuto",
-    "base-tl-empty": "contenuto",
-    "base-map-atlas": "contenuto",
-    "base-map-attribution": "cornice",
-    "base-map-marker": "contenuto",
+    "rich-ribbon-bold": "cornice",
+    "rich-ribbon-field-label": "cornice",
+    "rich-ribbon-italic": "cornice",
+    "rich-ribbon-mini": "cornice",
+    "rich-ribbon-strike": "cornice",
+    "rich-ribbon-underline": "cornice",
+    "look-file": "contenuto",
     "canvas-surface": "cornice",
     "canvas-toolbar": "cornice",
     "canvas-toolbar-item": "cornice",
     "canvas-intake-error": "cornice",
     "canvas-viewport": "contenuto",
     "canvas-large-fallback": "cornice",
-    "canvas-source": "contenuto",
     "canvas-grid": "segno",
     "canvas-guide": "segno",
     "canvas-rail": "cornice",
@@ -3894,6 +3773,12 @@
     "canvas-card-note-content": "cornice",
     "canvas-parts-keys": "cornice",
     "canvas-parts-count": "cornice",
+    "canvas-crop": "cornice",
+    "canvas-crop-box": "segno",
+    "canvas-crop-handle": "segno",
+    "canvas-crop-bar": "cornice",
+    "canvas-crop-note": "cornice",
+    "canvas-source": "contenuto",
     "canvas-excerpt-parts": "segno",
     "canvas-excerpt-open": "segno",
     "canvas-excerpt-section": "contenuto",
@@ -3909,11 +3794,6 @@
     "canvas-reader-page": "cornice",
     "canvas-reader-section": "cornice",
     "canvas-reader-unreadable": "cornice",
-    "canvas-crop": "cornice",
-    "canvas-crop-box": "segno",
-    "canvas-crop-handle": "segno",
-    "canvas-crop-bar": "cornice",
-    "canvas-crop-note": "cornice",
     "canvas-node": "contenuto",
     "canvas-node-group": "contenuto",
     "canvas-node-file": "contenuto",
@@ -3953,19 +3833,167 @@
     "canvas-card-pdf-status": "contenuto",
     "canvas-card-missing": "contenuto",
     "canvas-card-missing-actions": "contenuto",
-    "rich-ribbon-bold": "cornice",
+    "canvas-edge": "contenuto",
+    "canvas-edge-draft": "segno",
+    "canvas-edge-hit": "segno",
+    "canvas-edge-line": "contenuto",
+    "canvas-edge-arrow": "contenuto",
+    "canvas-edge-label": "contenuto",
+    "canvas-edge-reconnect": "segno",
+    "canvas-card-note": "cornice",
+    "canvas-exit-hint": "cornice",
+    "canvas-card-lock": "cornice",
+    "save-state": "cornice",
+    "canvas-card-sheet": "cornice",
+    "canvas-formula-text": "cornice",
+    "canvas-ink-label": "cornice",
+    "canvas-ink-frame": "segno",
+    "canvas-ink-reflow": "segno",
+    "canvas-ink-reflow-back": "cornice",
+    "canvas-lasso-path": "segno",
+    "canvas-lasso-frame": "segno",
+    "canvas-lasso-chosen": "segno",
+    "canvas-marquee-box": "segno",
+    "canvas-drop-ghost": "segno",
+    "canvas-drop-ghost-group": "segno",
+    "canvas-drop-ghost-name": "segno",
+    "canvas-ruler-bar": "cornice",
+    "canvas-ruler-grip": "cornice",
+    "canvas-ruler-angle": "cornice",
+    "base-status": "cornice",
+    "base-body": "cornice",
+    "ui-custom": "cornice",
+    "base-bar": "cornice",
+    "base-tabs": "cornice",
+    "base-tab": "cornice",
+    "base-tab-label": "cornice",
+    "base-tab-more": "cornice",
+    "base-tab-more-count": "cornice",
+    "base-bar-space": "cornice",
+    "base-tool": "cornice",
+    "base-tool-count": "cornice",
+    "base-tool-new-view": "cornice",
+    "compact": "cornice",
+    "stacked": "cornice",
+    "on": "cornice",
+    "base-new": "cornice",
+    "base-search-row": "cornice",
+    "base-search": "cornice",
+    "base-strip": "cornice",
+    "base-chips": "cornice",
+    "base-chip": "cornice",
+    "base-note": "cornice",
+    "base-written": "cornice",
+    "base-written-lines": "cornice",
+    "base-written-where": "cornice",
+    "base-written-added": "cornice",
+    "base-written-removed": "cornice",
+    "base-popover": "cornice",
+    "base-pop-title": "cornice",
+    "base-pop-note": "cornice",
+    "base-pop-foot": "cornice",
+    "base-filter-rows": "cornice",
+    "base-filter-row": "cornice",
+    "base-filter-value": "cornice",
+    "base-filter-search": "cornice",
+    "base-filter-remove": "cornice",
+    "base-filter-add": "cornice",
+    "base-sort-rows": "cornice",
+    "base-sort-row": "cornice",
+    "base-sort-name": "cornice",
+    "base-sort-add": "cornice",
+    "base-sort-remove": "cornice",
+    "base-grouping": "cornice",
+    "base-column-list": "cornice",
+    "base-column": "cornice",
+    "base-column-grip": "cornice",
+    "base-column-hidden": "cornice",
+    "base-column-label": "cornice",
+    "base-column-fixed": "cornice",
+    "base-column-fixed-note": "cornice",
+    "dragging": "cornice",
+    "base-rename": "cornice",
+    "base-rename-field": "cornice",
+    "base-map-attribution": "cornice",
+    "base-summaries": "cornice",
+    "base-table": "contenuto",
+    "base-table-viewport": "contenuto",
+    "base-cell": "contenuto",
+    "base-cell-error": "contenuto",
+    "base-head": "contenuto",
+    "base-head-icon": "contenuto",
+    "base-head-label": "contenuto",
+    "base-head-sort": "contenuto",
+    "base-title": "contenuto",
+    "base-add-row": "contenuto",
+    "base-add-row-button": "contenuto",
+    "base-foot-count": "contenuto",
+    "base-foot-summary": "contenuto",
+    "base-foot-value": "contenuto",
+    "base-foot-error": "contenuto",
+    "base-foot-dimmed": "contenuto",
+    "base-cards": "contenuto",
+    "base-list": "contenuto",
+    "base-card": "contenuto",
+    "base-field": "contenuto",
+    "base-kanban": "contenuto",
+    "base-kanban-column": "contenuto",
+    "base-kanban-card": "contenuto",
+    "base-kanban-head": "contenuto",
+    "base-kanban-empty": "contenuto",
+    "base-view-key": "contenuto",
+    "base-view-key-select": "contenuto",
+    "base-calendar": "contenuto",
+    "base-cal-head": "contenuto",
+    "base-cal-title": "contenuto",
+    "base-cal-nav": "contenuto",
+    "base-cal-prev": "contenuto",
+    "base-cal-today": "contenuto",
+    "base-cal-undated": "contenuto",
+    "base-cal-scroll": "contenuto",
+    "base-cal-grid": "contenuto",
+    "base-cal-week": "contenuto",
+    "base-cal-dow": "contenuto",
+    "base-cal-day": "contenuto",
+    "base-cal-num": "contenuto",
+    "base-cal-weekday": "contenuto",
+    "base-cal-event": "contenuto",
+    "base-cal-more": "contenuto",
+    "base-cal-empty": "contenuto",
+    "base-timeline": "contenuto",
+    "base-tl-head": "contenuto",
+    "base-tl-title": "contenuto",
+    "base-tl-nav": "contenuto",
+    "base-tl-prev": "contenuto",
+    "base-tl-today": "contenuto",
+    "base-tl-zoom": "contenuto",
+    "base-tl-zoom-option": "contenuto",
+    "base-tl-undated": "contenuto",
+    "base-tl-scroll": "contenuto",
+    "base-tl": "contenuto",
+    "base-tl-axis": "contenuto",
+    "base-tl-axis-label": "contenuto",
+    "base-tl-scale": "contenuto",
+    "base-tl-tick": "contenuto",
+    "base-tl-now": "contenuto",
+    "base-tl-row": "contenuto",
+    "base-tl-name": "contenuto",
+    "base-tl-track": "contenuto",
+    "base-tl-bar": "contenuto",
+    "base-tl-edge": "contenuto",
+    "base-tl-point": "contenuto",
+    "base-tl-off": "contenuto",
+    "base-tl-none": "contenuto",
+    "base-tl-empty": "contenuto",
+    "base-map-atlas": "contenuto",
+    "base-map-marker": "contenuto",
     "rich-ribbon-color-bar": "cornice",
-    "rich-ribbon-field-label": "cornice",
     "rich-ribbon-input": "cornice",
-    "rich-ribbon-italic": "cornice",
     "rich-ribbon-marker": "cornice",
-    "rich-ribbon-mini": "cornice",
     "rich-ribbon-quick": "cornice",
     "rich-ribbon-select": "cornice",
-    "rich-ribbon-strike": "cornice",
     "rich-ribbon-style": "cornice",
     "rich-ribbon-styles": "cornice",
-    "rich-ribbon-underline": "cornice",
     "rich-surface": "cornice",
     "rich-notice": "cornice",
     "rich-page": "cornice",
@@ -4026,7 +4054,6 @@
     "rich-drawing-bar": "cornice",
     "rich-drawing-title": "cornice",
     "look-tema": "contenuto",
-    "look-file": "contenuto",
     "look-adattato": "contenuto",
     "rich-atom": "segno",
     "rich-atom-image": "segno",
@@ -4099,33 +4126,6 @@
     "ui-empty-title": "cornice",
     "cm-day-page": "segno",
     "cm-day-page-note": "segno",
-    "canvas-edge": "contenuto",
-    "canvas-edge-draft": "segno",
-    "canvas-edge-hit": "segno",
-    "canvas-edge-line": "contenuto",
-    "canvas-edge-arrow": "contenuto",
-    "canvas-edge-label": "contenuto",
-    "canvas-edge-reconnect": "segno",
-    "canvas-card-note": "cornice",
-    "canvas-exit-hint": "cornice",
-    "canvas-card-lock": "cornice",
-    "save-state": "cornice",
-    "canvas-card-sheet": "cornice",
-    "canvas-formula-text": "cornice",
-    "canvas-ink-label": "cornice",
-    "canvas-ink-frame": "segno",
-    "canvas-ink-reflow": "segno",
-    "canvas-ink-reflow-back": "cornice",
-    "canvas-lasso-path": "segno",
-    "canvas-lasso-frame": "segno",
-    "canvas-lasso-chosen": "segno",
-    "canvas-marquee-box": "segno",
-    "canvas-drop-ghost": "segno",
-    "canvas-drop-ghost-group": "segno",
-    "canvas-drop-ghost-name": "segno",
-    "canvas-ruler-bar": "cornice",
-    "canvas-ruler-grip": "cornice",
-    "canvas-ruler-angle": "cornice",
     "cm-fub-comment-range": "segno",
     "cm-fub-comment-range-on": "segno",
     "comment-range": "segno",
@@ -6850,52 +6850,10 @@
         "cm-fub-strong",
         "cm-fub-em",
         "cm-fub-strike",
-        "cm-fub-highlight",
-        "inline-highlight",
-        "cm-fub-comment",
-        "cm-fub-code",
-        "math-inline"
+        "cm-fub-code"
       ],
       "states": [
         "rest"
-      ]
-    },
-    {
-      "name": "document-details",
-      "part": "document",
-      "hooks": [
-        "fub-details",
-        "cm-fub-details-arrow",
-        "cm-fub-details-empty"
-      ],
-      "states": [
-        "rest",
-        "focused"
-      ]
-    },
-    {
-      "name": "document-columns",
-      "part": "document",
-      "hooks": [
-        "fub-columns",
-        "fub-column",
-        "cm-fub-column-label"
-      ],
-      "states": [
-        "rest"
-      ]
-    },
-    {
-      "name": "document-toc",
-      "part": "document",
-      "hooks": [
-        "fub-toc",
-        "fub-toc-item",
-        "fub-toc-empty"
-      ],
-      "states": [
-        "rest",
-        "hover"
       ]
     },
     {
@@ -6937,88 +6895,26 @@
       ]
     },
     {
-      "name": "document-color",
-      "part": "document",
-      "hooks": [
-        "fub-color-gray",
-        "fub-color-brown",
-        "fub-color-orange",
-        "fub-color-yellow",
-        "fub-color-green",
-        "fub-color-blue",
-        "fub-color-purple",
-        "fub-color-pink",
-        "fub-color-red",
-        "fub-bg-gray",
-        "fub-bg-brown",
-        "fub-bg-orange",
-        "fub-bg-yellow",
-        "fub-bg-green",
-        "fub-bg-blue",
-        "fub-bg-purple",
-        "fub-bg-pink",
-        "fub-bg-red"
-      ],
-      "states": [
-        "rest"
-      ]
-    },
-    {
       "name": "document-link",
       "part": "document",
       "hooks": [
         "cm-fub-link",
         "cm-fub-wikilink",
         "cm-fub-link-pill",
-        "cm-fub-person",
-        "unresolved",
-        "footnote-ref",
-        "footnote-backref",
-        "footnote-inline",
-        "cm-fub-footnote-label",
-        "cm-fub-footnote-back"
+        "cm-fub-person"
       ],
       "states": [
         "rest",
         "hover",
         "focused",
         "disabled"
-      ]
-    },
-    {
-      "name": "document-tag",
-      "part": "document",
-      "hooks": [
-        "tag",
-        "cm-fub-tag"
-      ],
-      "states": [
-        "rest",
-        "hover",
-        "focused"
-      ]
-    },
-    {
-      "name": "document-quote",
-      "part": "document",
-      "hooks": [
-        "cm-fub-quote",
-        "cm-fub-quote-mark"
-      ],
-      "states": [
-        "rest"
       ]
     },
     {
       "name": "document-callout",
       "part": "document",
       "hooks": [
-        "callout",
-        "callout-title",
-        "cm-fub-callout-line",
-        "cm-fub-callout-type",
-        "cm-fub-callout-title",
-        "cm-fub-callout-fold"
+        "callout"
       ],
       "states": [
         "rest",
@@ -7026,44 +6922,10 @@
       ]
     },
     {
-      "name": "document-list",
-      "part": "document",
-      "hooks": [
-        "cm-fub-bullet",
-        "cm-fub-bullet-task"
-      ],
-      "states": [
-        "rest"
-      ]
-    },
-    {
-      "name": "document-task",
-      "part": "document",
-      "hooks": [
-        "task",
-        "cm-fub-checkbox",
-        "cm-fub-done"
-      ],
-      "states": [
-        "rest",
-        "hover",
-        "selected",
-        "focused",
-        "disabled"
-      ]
-    },
-    {
       "name": "document-code",
       "part": "document",
       "hooks": [
-        "cm-fub-code-line",
-        "cm-fub-codeblock",
-        "markdown-code-copy",
-        "cm-fub-code-header",
-        "cm-fub-code-lang",
-        "cm-fub-code-wrap",
-        "cm-fub-math-field",
-        "cm-fub-math-popover-preview"
+        "cm-fub-code-line"
       ],
       "states": [
         "rest",
@@ -7076,20 +6938,8 @@
       "name": "document-figure",
       "part": "document",
       "hooks": [
-        "cm-fub-hr",
         "math-block",
-        "katex-display",
-        "image-missing",
-        "image-remote",
-        "image-remote-load",
         "cm-fub-image",
-        "cm-fub-image-selected",
-        "cm-fub-image-handle",
-        "cm-fub-image-size",
-        "cm-fub-image-dialog",
-        "cm-fub-image-shares",
-        "craft-figure",
-        "craft-figure-page",
         "mermaid-diagram"
       ],
       "states": [
@@ -7100,11 +6950,7 @@
       "name": "document-embed",
       "part": "document",
       "hooks": [
-        "embed",
-        "embed-cycle",
-        "embed-too-deep",
-        "embed-missing",
-        "embed-media"
+        "embed"
       ],
       "states": [
         "rest"
@@ -7134,6 +6980,149 @@
         "cm-fub-block-lift-to",
         "cm-fub-block-slot",
         "cm-fub-block-id",
+        "cm-fub-block-menu"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "selected",
+        "focused"
+      ]
+    },
+    {
+      "name": "document-page",
+      "part": "document",
+      "hooks": [
+        "fub-note--wide"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "focused"
+      ]
+    },
+    {
+      "name": "document-properties",
+      "part": "document",
+      "hooks": [
+        "cm-fub-frontmatter",
+        "cm-fub-properties",
+        "cm-fub-properties-hidden",
+        "cm-fub-properties-empty"
+      ],
+      "states": [
+        "rest"
+      ]
+    },
+    {
+      "name": "declarative-slot",
+      "part": "document",
+      "hooks": [
+        "ui-slot"
+      ],
+      "states": [
+        "rest"
+      ]
+    },
+    {
+      "name": "document-column",
+      "part": "document-page",
+      "hooks": [
+        "pane-editor",
+        "markdown-rendered",
+        "cm-editor",
+        "cm-content"
+      ],
+      "states": [
+        "rest",
+        "focused"
+      ]
+    },
+    {
+      "name": "document-inline",
+      "part": "document-page",
+      "hooks": [
+        "cm-fub-highlight",
+        "inline-highlight",
+        "cm-fub-comment"
+      ],
+      "states": [
+        "rest"
+      ]
+    },
+    {
+      "name": "document-color",
+      "part": "document-page",
+      "hooks": [
+        "fub-color-gray",
+        "fub-color-brown",
+        "fub-color-orange",
+        "fub-color-yellow",
+        "fub-color-green",
+        "fub-color-blue",
+        "fub-color-purple",
+        "fub-color-pink",
+        "fub-color-red",
+        "fub-bg-gray",
+        "fub-bg-brown",
+        "fub-bg-orange",
+        "fub-bg-yellow",
+        "fub-bg-green",
+        "fub-bg-blue",
+        "fub-bg-purple",
+        "fub-bg-pink",
+        "fub-bg-red"
+      ],
+      "states": [
+        "rest"
+      ]
+    },
+    {
+      "name": "document-link",
+      "part": "document-page",
+      "hooks": [
+        "unresolved",
+        "footnote-ref",
+        "footnote-backref",
+        "footnote-inline",
+        "cm-fub-footnote-label",
+        "cm-fub-footnote-back"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "focused",
+        "disabled"
+      ]
+    },
+    {
+      "name": "document-tag",
+      "part": "document-page",
+      "hooks": [
+        "tag",
+        "cm-fub-tag"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "focused"
+      ]
+    },
+    {
+      "name": "document-figure",
+      "part": "document-page",
+      "hooks": [
+        "image-missing"
+      ],
+      "states": [
+        "rest"
+      ]
+    },
+    {
+      "name": "document-blocks",
+      "part": "document-page",
+      "hooks": [
+        "cm-fub-blocks-touch",
         "cm-fub-block-menu",
         "cm-fub-color-swatch"
       ],
@@ -7146,7 +7135,7 @@
     },
     {
       "name": "document-page",
-      "part": "document",
+      "part": "document-page",
       "hooks": [
         "cm-fub-page",
         "cm-fub-page-cover",
@@ -7173,7 +7162,7 @@
     },
     {
       "name": "document-page-type",
-      "part": "document",
+      "part": "document-page",
       "hooks": [
         "cm-fub-page-type-notice",
         "cm-fub-page-type-text",
@@ -7188,7 +7177,7 @@
     },
     {
       "name": "document-page-properties",
-      "part": "document",
+      "part": "document-page",
       "hooks": [
         "cm-fub-page-props",
         "cm-fub-page-prop",
@@ -7252,7 +7241,271 @@
     },
     {
       "name": "document-facts",
-      "part": "document",
+      "part": "document-page",
+      "hooks": [
+        "note-facts",
+        "note-fact",
+        "note-fact-tags",
+        "note-tag"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "focused"
+      ]
+    },
+    {
+      "name": "link-dialog",
+      "part": "document-page",
+      "hooks": [
+        "md-link-dialog",
+        "md-link-dialog-notes",
+        "md-link-dialog-note",
+        "md-link-dialog-preview"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "focused"
+      ]
+    },
+    {
+      "name": "document-column",
+      "part": "document-blocks",
+      "hooks": [
+        "markdown-rendered",
+        "cm-editor",
+        "cm-content",
+        "cm-line",
+        "markdown-table-scroll",
+        "base-surface"
+      ],
+      "states": [
+        "rest",
+        "focused"
+      ]
+    },
+    {
+      "name": "document-inline",
+      "part": "document-blocks",
+      "hooks": [
+        "cm-fub-near",
+        "cm-fub-em",
+        "cm-fub-code",
+        "math-inline"
+      ],
+      "states": [
+        "rest"
+      ]
+    },
+    {
+      "name": "document-details",
+      "part": "document-blocks",
+      "hooks": [
+        "fub-details",
+        "cm-fub-details-arrow",
+        "cm-fub-details-empty"
+      ],
+      "states": [
+        "rest",
+        "focused"
+      ]
+    },
+    {
+      "name": "document-columns",
+      "part": "document-blocks",
+      "hooks": [
+        "fub-columns",
+        "fub-column",
+        "cm-fub-column-label"
+      ],
+      "states": [
+        "rest"
+      ]
+    },
+    {
+      "name": "document-toc",
+      "part": "document-blocks",
+      "hooks": [
+        "fub-toc",
+        "fub-toc-item",
+        "fub-toc-empty"
+      ],
+      "states": [
+        "rest",
+        "hover"
+      ]
+    },
+    {
+      "name": "document-link",
+      "part": "document-blocks",
+      "hooks": [
+        "unresolved"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "focused",
+        "disabled"
+      ]
+    },
+    {
+      "name": "document-quote",
+      "part": "document-blocks",
+      "hooks": [
+        "cm-fub-quote",
+        "cm-fub-quote-mark"
+      ],
+      "states": [
+        "rest"
+      ]
+    },
+    {
+      "name": "document-callout",
+      "part": "document-blocks",
+      "hooks": [
+        "callout",
+        "callout-title",
+        "cm-fub-callout-line",
+        "cm-fub-callout-type",
+        "cm-fub-callout-title",
+        "cm-fub-callout-fold"
+      ],
+      "states": [
+        "rest",
+        "focused"
+      ]
+    },
+    {
+      "name": "document-list",
+      "part": "document-blocks",
+      "hooks": [
+        "cm-fub-bullet",
+        "cm-fub-bullet-task"
+      ],
+      "states": [
+        "rest"
+      ]
+    },
+    {
+      "name": "document-task",
+      "part": "document-blocks",
+      "hooks": [
+        "task",
+        "cm-fub-checkbox",
+        "cm-fub-done"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "selected",
+        "focused",
+        "disabled"
+      ]
+    },
+    {
+      "name": "document-code",
+      "part": "document-blocks",
+      "hooks": [
+        "cm-fub-code-line",
+        "cm-fub-codeblock",
+        "markdown-code-copy",
+        "cm-fub-code-header",
+        "cm-fub-code-lang",
+        "cm-fub-code-wrap",
+        "cm-fub-math-field",
+        "cm-fub-math-popover-preview"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused"
+      ]
+    },
+    {
+      "name": "document-figure",
+      "part": "document-blocks",
+      "hooks": [
+        "cm-fub-hr",
+        "math-block",
+        "katex-display",
+        "image-missing",
+        "image-remote",
+        "image-remote-load",
+        "cm-fub-image",
+        "cm-fub-image-selected",
+        "cm-fub-image-handle",
+        "cm-fub-image-size",
+        "cm-fub-image-dialog",
+        "cm-fub-image-shares",
+        "craft-figure",
+        "craft-figure-page",
+        "mermaid-diagram"
+      ],
+      "states": [
+        "rest"
+      ]
+    },
+    {
+      "name": "document-embed",
+      "part": "document-blocks",
+      "hooks": [
+        "embed",
+        "embed-cycle",
+        "embed-too-deep",
+        "embed-missing",
+        "embed-media"
+      ],
+      "states": [
+        "rest"
+      ]
+    },
+    {
+      "name": "document-column",
+      "part": "document-meta",
+      "hooks": [
+        "pane-editor",
+        "pane-preview",
+        "markdown-preview",
+        "markdown-rendered",
+        "cm-editor",
+        "cm-content",
+        "cm-line"
+      ],
+      "states": [
+        "rest",
+        "focused"
+      ]
+    },
+    {
+      "name": "document-tag",
+      "part": "document-meta",
+      "hooks": [
+        "tag",
+        "cm-fub-tag"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "focused"
+      ]
+    },
+    {
+      "name": "document-page",
+      "part": "document-meta",
+      "hooks": [
+        "cm-fub-page"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "focused"
+      ]
+    },
+    {
+      "name": "document-facts",
+      "part": "document-meta",
       "hooks": [
         "note-facts",
         "note-fact",
@@ -7267,7 +7520,7 @@
     },
     {
       "name": "document-comment-margin",
-      "part": "document",
+      "part": "document-meta",
       "hooks": [
         "cm-fub-comment-margin",
         "cm-fub-comment-bubble",
@@ -7283,7 +7536,7 @@
     },
     {
       "name": "document-comment-discussion",
-      "part": "document",
+      "part": "document-meta",
       "hooks": [
         "kit-popover",
         "cm-fub-comment-popover",
@@ -7310,7 +7563,7 @@
     },
     {
       "name": "document-comments-panel",
-      "part": "document",
+      "part": "document-meta",
       "hooks": [
         "cm-fub-comments-panel",
         "cm-fub-comments-head",
@@ -7332,12 +7585,9 @@
     },
     {
       "name": "document-properties",
-      "part": "document",
+      "part": "document-meta",
       "hooks": [
         "cm-fub-frontmatter",
-        "cm-fub-properties",
-        "cm-fub-properties-hidden",
-        "cm-fub-properties-empty",
         "block-frontmatter-unparsed",
         "block-footnote-definition"
       ],
@@ -7347,7 +7597,7 @@
     },
     {
       "name": "declarative-slot",
-      "part": "document",
+      "part": "document-meta",
       "hooks": [
         "ui-slot"
       ],
@@ -7357,7 +7607,7 @@
     },
     {
       "name": "declarative-node-content",
-      "part": "document",
+      "part": "document-meta",
       "hooks": [
         "ui-heading",
         "empty-note"
@@ -7368,7 +7618,7 @@
     },
     {
       "name": "declarative-node-feedback",
-      "part": "document",
+      "part": "document-meta",
       "hooks": [
         "ui-list-item",
         "ui-list-item-title",
@@ -7382,23 +7632,8 @@
       ]
     },
     {
-      "name": "link-dialog",
-      "part": "document",
-      "hooks": [
-        "md-link-dialog",
-        "md-link-dialog-notes",
-        "md-link-dialog-note",
-        "md-link-dialog-preview"
-      ],
-      "states": [
-        "rest",
-        "hover",
-        "focused"
-      ]
-    },
-    {
       "name": "link-preview",
-      "part": "document",
+      "part": "document-meta",
       "hooks": [
         "link-preview",
         "doc-preview"
@@ -7735,8 +7970,22 @@
       ]
     },
     {
+      "name": "text-editor",
+      "part": "grid",
+      "hooks": [
+        "cm-editor",
+        "cm-content",
+        "cm-activeLine"
+      ],
+      "states": [
+        "rest",
+        "focused",
+        "selected"
+      ]
+    },
+    {
       "name": "grid-surface",
-      "part": "editors",
+      "part": "grid",
       "hooks": [
         "grid-surface",
         "grid-formula-bar",
@@ -7823,7 +8072,7 @@
     },
     {
       "name": "grid-objects",
-      "part": "editors",
+      "part": "grid",
       "hooks": [
         "grid-object",
         "grid-object-handle",
@@ -7841,7 +8090,7 @@
     },
     {
       "name": "grid-ribbon",
-      "part": "editors",
+      "part": "grid",
       "hooks": [
         "grid-ribbon-mini",
         "grid-ribbon-quick",
@@ -7863,7 +8112,7 @@
     },
     {
       "name": "grid-ribbon-popover",
-      "part": "editors",
+      "part": "grid",
       "hooks": [
         "grid-ribbon-popup-group",
         "grid-ribbon-palette",
@@ -7887,7 +8136,7 @@
     },
     {
       "name": "grid-dialog",
-      "part": "editors",
+      "part": "grid",
       "hooks": [
         "grid-dialog",
         "grid-dialog-border-cell",
@@ -7935,13 +8184,15 @@
       ]
     },
     {
-      "name": "base-surface",
-      "part": "editors",
+      "name": "rich-ribbon",
+      "part": "grid",
       "hooks": [
-        "base-surface",
-        "base-status",
-        "base-body",
-        "base-summaries"
+        "rich-ribbon-bold",
+        "rich-ribbon-field-label",
+        "rich-ribbon-italic",
+        "rich-ribbon-mini",
+        "rich-ribbon-strike",
+        "rich-ribbon-underline"
       ],
       "states": [
         "rest",
@@ -7952,245 +8203,18 @@
       ]
     },
     {
-      "name": "base-embed",
-      "part": "editors",
+      "name": "content-look",
+      "part": "grid",
       "hooks": [
-        "ui-slot",
-        "ui-custom"
+        "look-file"
       ],
       "states": [
         "rest"
       ]
     },
     {
-      "name": "base-bar",
-      "part": "editors",
-      "hooks": [
-        "base-bar",
-        "base-tabs",
-        "base-tab",
-        "base-tab-label",
-        "base-tab-more",
-        "base-tab-more-count",
-        "base-bar-space",
-        "base-tool",
-        "base-tool-count",
-        "base-tool-new-view",
-        "compact",
-        "stacked",
-        "on",
-        "base-new",
-        "base-search-row",
-        "base-search",
-        "base-strip",
-        "base-chips",
-        "base-chip",
-        "base-note",
-        "base-written",
-        "base-written-lines",
-        "base-written-where",
-        "base-written-added",
-        "base-written-removed"
-      ],
-      "states": [
-        "rest",
-        "hover",
-        "pressed",
-        "focused",
-        "disabled"
-      ]
-    },
-    {
-      "name": "base-popover",
-      "part": "editors",
-      "hooks": [
-        "base-popover",
-        "base-pop-title",
-        "base-pop-note",
-        "base-pop-foot",
-        "base-filter-rows",
-        "base-filter-row",
-        "base-filter-value",
-        "base-filter-search",
-        "base-filter-remove",
-        "base-filter-add",
-        "base-sort-rows",
-        "base-sort-row",
-        "base-sort-name",
-        "base-sort-add",
-        "base-sort-remove",
-        "base-grouping",
-        "base-column-list",
-        "base-column",
-        "base-column-grip",
-        "base-column-hidden",
-        "base-column-label",
-        "base-column-fixed",
-        "base-column-fixed-note",
-        "dragging",
-        "base-rename",
-        "base-rename-field"
-      ],
-      "states": [
-        "rest",
-        "hover",
-        "focused",
-        "disabled"
-      ]
-    },
-    {
-      "name": "base-table",
-      "part": "editors",
-      "hooks": [
-        "base-table",
-        "base-table-viewport",
-        "base-cell",
-        "base-cell-error",
-        "base-head",
-        "base-head-icon",
-        "base-head-label",
-        "base-head-sort",
-        "base-title",
-        "base-add-row",
-        "base-add-row-button",
-        "base-foot-count",
-        "base-foot-summary",
-        "base-foot-value",
-        "base-foot-error",
-        "base-foot-dimmed"
-      ],
-      "states": [
-        "rest",
-        "hover",
-        "focused"
-      ]
-    },
-    {
-      "name": "base-cards",
-      "part": "editors",
-      "hooks": [
-        "base-cards",
-        "base-list",
-        "base-card",
-        "base-field"
-      ],
-      "states": [
-        "rest",
-        "hover",
-        "pressed",
-        "focused"
-      ]
-    },
-    {
-      "name": "base-kanban",
-      "part": "editors",
-      "hooks": [
-        "base-kanban",
-        "base-kanban-column",
-        "base-kanban-card",
-        "base-kanban-head",
-        "base-kanban-empty",
-        "base-view-key",
-        "base-view-key-select"
-      ],
-      "states": [
-        "rest",
-        "hover",
-        "pressed",
-        "focused",
-        "disabled",
-        "selected",
-        "dragging"
-      ]
-    },
-    {
-      "name": "base-calendar",
-      "part": "editors",
-      "hooks": [
-        "base-calendar",
-        "base-cal-head",
-        "base-cal-title",
-        "base-cal-nav",
-        "base-cal-prev",
-        "base-cal-today",
-        "base-cal-undated",
-        "base-cal-scroll",
-        "base-cal-grid",
-        "base-cal-week",
-        "base-cal-dow",
-        "base-cal-day",
-        "base-cal-num",
-        "base-cal-weekday",
-        "base-cal-event",
-        "base-cal-more",
-        "base-cal-empty"
-      ],
-      "states": [
-        "rest",
-        "hover",
-        "pressed",
-        "focused",
-        "disabled",
-        "selected",
-        "dragging"
-      ]
-    },
-    {
-      "name": "base-timeline",
-      "part": "editors",
-      "hooks": [
-        "base-timeline",
-        "base-tl-head",
-        "base-tl-title",
-        "base-tl-nav",
-        "base-tl-prev",
-        "base-tl-today",
-        "base-tl-zoom",
-        "base-tl-zoom-option",
-        "base-tl-undated",
-        "base-tl-scroll",
-        "base-tl",
-        "base-tl-axis",
-        "base-tl-axis-label",
-        "base-tl-scale",
-        "base-tl-tick",
-        "base-tl-now",
-        "base-tl-row",
-        "base-tl-name",
-        "base-tl-track",
-        "base-tl-bar",
-        "base-tl-edge",
-        "base-tl-point",
-        "base-tl-off",
-        "base-tl-none",
-        "base-tl-empty"
-      ],
-      "states": [
-        "rest",
-        "hover",
-        "pressed",
-        "focused",
-        "disabled",
-        "selected",
-        "dragging"
-      ]
-    },
-    {
-      "name": "base-map",
-      "part": "editors",
-      "hooks": [
-        "base-map-atlas",
-        "base-map-attribution",
-        "base-map-marker"
-      ],
-      "states": [
-        "rest",
-        "focused"
-      ]
-    },
-    {
       "name": "canvas-surface",
-      "part": "editors",
+      "part": "canvas",
       "hooks": [
         "canvas-surface",
         "canvas-toolbar",
@@ -8199,7 +8223,6 @@
         "canvas-intake-error",
         "canvas-viewport",
         "canvas-large-fallback",
-        "canvas-source",
         "canvas-grid",
         "canvas-guide"
       ],
@@ -8213,7 +8236,7 @@
     },
     {
       "name": "canvas-rail",
-      "part": "editors",
+      "part": "canvas",
       "hooks": [
         "canvas-rail",
         "canvas-tool"
@@ -8228,7 +8251,7 @@
     },
     {
       "name": "canvas-empty",
-      "part": "editors",
+      "part": "canvas",
       "hooks": [
         "canvas-blank",
         "canvas-blank-lines",
@@ -8240,7 +8263,7 @@
     },
     {
       "name": "canvas-navigator",
-      "part": "editors",
+      "part": "canvas",
       "hooks": [
         "canvas-navigator"
       ],
@@ -8251,7 +8274,7 @@
     },
     {
       "name": "canvas-find",
-      "part": "editors",
+      "part": "canvas",
       "hooks": [
         "canvas-find",
         "canvas-find-input",
@@ -8267,7 +8290,7 @@
     },
     {
       "name": "canvas-options",
-      "part": "editors",
+      "part": "canvas",
       "hooks": [
         "canvas-header",
         "canvas-options",
@@ -8288,7 +8311,7 @@
     },
     {
       "name": "canvas-selection-bar",
-      "part": "editors",
+      "part": "canvas",
       "hooks": [
         "canvas-selection-bar",
         "canvas-selection-chip"
@@ -8303,7 +8326,7 @@
     },
     {
       "name": "canvas-pen-menu",
-      "part": "editors",
+      "part": "canvas",
       "hooks": [
         "canvas-ink-pen",
         "canvas-ink-pen-name",
@@ -8333,7 +8356,7 @@
     },
     {
       "name": "canvas-inspector",
-      "part": "editors",
+      "part": "canvas",
       "hooks": [
         "canvas-inspector",
         "canvas-inspector-filter",
@@ -8363,7 +8386,7 @@
     },
     {
       "name": "canvas-sources",
-      "part": "editors",
+      "part": "canvas",
       "hooks": [
         "canvas-sources-list",
         "canvas-sources-file",
@@ -8385,7 +8408,7 @@
     },
     {
       "name": "canvas-parts-picker",
-      "part": "editors",
+      "part": "canvas",
       "hooks": [
         "canvas-parts-title",
         "canvas-parts-close",
@@ -8406,8 +8429,101 @@
       ]
     },
     {
+      "name": "canvas-crop",
+      "part": "canvas",
+      "hooks": [
+        "canvas-crop",
+        "canvas-crop-box",
+        "canvas-crop-handle",
+        "canvas-crop-bar",
+        "canvas-crop-note"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "focused"
+      ]
+    },
+    {
+      "name": "text-editor",
+      "part": "canvas-cards",
+      "hooks": [
+        "cm-editor",
+        "cm-focused",
+        "cm-content",
+        "cm-line"
+      ],
+      "states": [
+        "rest",
+        "focused",
+        "selected"
+      ]
+    },
+    {
+      "name": "grid-surface",
+      "part": "canvas-cards",
+      "hooks": [
+        "grid-formula-bar",
+        "grid-formula-editor",
+        "grid-cell-editor",
+        "selected"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused",
+        "disabled",
+        "selected"
+      ]
+    },
+    {
+      "name": "canvas-surface",
+      "part": "canvas-cards",
+      "hooks": [
+        "canvas-surface",
+        "canvas-source"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused",
+        "disabled"
+      ]
+    },
+    {
+      "name": "canvas-options",
+      "part": "canvas-cards",
+      "hooks": [
+        "canvas-options"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused",
+        "selected",
+        "disabled"
+      ]
+    },
+    {
+      "name": "canvas-inspector",
+      "part": "canvas-cards",
+      "hooks": [
+        "canvas-inspector",
+        "canvas-inspector-popover"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "focused",
+        "selected"
+      ]
+    },
+    {
       "name": "canvas-excerpt",
-      "part": "editors",
+      "part": "canvas-cards",
       "hooks": [
         "canvas-excerpt-parts",
         "canvas-excerpt-open",
@@ -8423,7 +8539,7 @@
     },
     {
       "name": "canvas-reader",
-      "part": "editors",
+      "part": "canvas-cards",
       "hooks": [
         "canvas-reader",
         "canvas-reader-head",
@@ -8444,24 +8560,8 @@
       ]
     },
     {
-      "name": "canvas-crop",
-      "part": "editors",
-      "hooks": [
-        "canvas-crop",
-        "canvas-crop-box",
-        "canvas-crop-handle",
-        "canvas-crop-bar",
-        "canvas-crop-note"
-      ],
-      "states": [
-        "rest",
-        "hover",
-        "focused"
-      ]
-    },
-    {
       "name": "canvas-node",
-      "part": "editors",
+      "part": "canvas-cards",
       "hooks": [
         "canvas-node",
         "canvas-node-group",
@@ -8514,22 +8614,430 @@
       ]
     },
     {
-      "name": "rich-ribbon",
-      "part": "editors",
+      "name": "canvas-edge",
+      "part": "canvas-cards",
       "hooks": [
-        "rich-ribbon-bold",
+        "canvas-edge",
+        "canvas-edge-draft",
+        "canvas-edge-hit",
+        "canvas-edge-line",
+        "canvas-edge-arrow",
+        "canvas-edge-label",
+        "canvas-edge-reconnect"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "selected",
+        "dragging"
+      ]
+    },
+    {
+      "name": "canvas-card-writing",
+      "part": "canvas-cards",
+      "hooks": [
+        "canvas-card-note",
+        "canvas-exit-hint",
+        "canvas-card-lock",
+        "save-state",
+        "format-bar",
+        "conflict-banner",
+        "conflict-actions",
+        "cm-fub-heading-line",
+        "canvas-card-sheet",
+        "canvas-formula-text"
+      ],
+      "states": [
+        "rest",
+        "focused"
+      ]
+    },
+    {
+      "name": "canvas-ink-target",
+      "part": "canvas-cards",
+      "hooks": [
+        "canvas-ink-label",
+        "canvas-ink-frame"
+      ],
+      "states": [
+        "rest"
+      ]
+    },
+    {
+      "name": "canvas-ink-reflow",
+      "part": "canvas-cards",
+      "hooks": [
+        "canvas-ink-reflow",
+        "canvas-ink-reflow-back"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused"
+      ]
+    },
+    {
+      "name": "canvas-lasso",
+      "part": "canvas-cards",
+      "hooks": [
+        "canvas-lasso-path",
+        "canvas-lasso-frame",
+        "canvas-lasso-chosen"
+      ],
+      "states": [
+        "rest"
+      ]
+    },
+    {
+      "name": "canvas-marquee",
+      "part": "canvas-cards",
+      "hooks": [
+        "canvas-marquee-box"
+      ],
+      "states": [
+        "rest"
+      ]
+    },
+    {
+      "name": "canvas-drop",
+      "part": "canvas-cards",
+      "hooks": [
+        "canvas-drop-ghost",
+        "canvas-drop-ghost-group",
+        "canvas-drop-ghost-name"
+      ],
+      "states": [
+        "rest"
+      ]
+    },
+    {
+      "name": "canvas-ruler",
+      "part": "canvas-cards",
+      "hooks": [
+        "canvas-ruler-bar",
+        "canvas-ruler-grip",
+        "canvas-ruler-angle"
+      ],
+      "states": [
+        "rest",
+        "focused"
+      ]
+    },
+    {
+      "name": "text-editor",
+      "part": "base-bar",
+      "hooks": [
+        "cm-content"
+      ],
+      "states": [
+        "rest",
+        "focused",
+        "selected"
+      ]
+    },
+    {
+      "name": "base-surface",
+      "part": "base-bar",
+      "hooks": [
+        "base-surface",
+        "base-status",
+        "base-body"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused",
+        "disabled"
+      ]
+    },
+    {
+      "name": "base-embed",
+      "part": "base-bar",
+      "hooks": [
+        "ui-slot",
+        "ui-custom"
+      ],
+      "states": [
+        "rest"
+      ]
+    },
+    {
+      "name": "base-bar",
+      "part": "base-bar",
+      "hooks": [
+        "base-bar",
+        "base-tabs",
+        "base-tab",
+        "base-tab-label",
+        "base-tab-more",
+        "base-tab-more-count",
+        "base-bar-space",
+        "base-tool",
+        "base-tool-count",
+        "base-tool-new-view",
+        "compact",
+        "stacked",
+        "on",
+        "base-new",
+        "base-search-row",
+        "base-search",
+        "base-strip",
+        "base-chips",
+        "base-chip",
+        "base-note",
+        "base-written",
+        "base-written-lines",
+        "base-written-where",
+        "base-written-added",
+        "base-written-removed"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused",
+        "disabled"
+      ]
+    },
+    {
+      "name": "base-popover",
+      "part": "base-bar",
+      "hooks": [
+        "base-popover",
+        "base-pop-title",
+        "base-pop-note",
+        "base-pop-foot",
+        "base-filter-rows",
+        "base-filter-row",
+        "base-filter-value",
+        "base-filter-search",
+        "base-filter-remove",
+        "base-filter-add",
+        "base-sort-rows",
+        "base-sort-row",
+        "base-sort-name",
+        "base-sort-add",
+        "base-sort-remove",
+        "base-grouping",
+        "base-column-list",
+        "base-column",
+        "base-column-grip",
+        "base-column-hidden",
+        "base-column-label",
+        "base-column-fixed",
+        "base-column-fixed-note",
+        "dragging",
+        "base-rename",
+        "base-rename-field"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "focused",
+        "disabled"
+      ]
+    },
+    {
+      "name": "base-map",
+      "part": "base-bar",
+      "hooks": [
+        "base-map-attribution"
+      ],
+      "states": [
+        "rest",
+        "focused"
+      ]
+    },
+    {
+      "name": "tasks-block",
+      "part": "base-bar",
+      "hooks": [
+        "markdown-rendered"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "focused",
+        "selected"
+      ]
+    },
+    {
+      "name": "base-surface",
+      "part": "base-views",
+      "hooks": [
+        "base-body",
+        "base-summaries"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused",
+        "disabled"
+      ]
+    },
+    {
+      "name": "base-table",
+      "part": "base-views",
+      "hooks": [
+        "base-table",
+        "base-table-viewport",
+        "base-cell",
+        "base-cell-error",
+        "base-head",
+        "base-head-icon",
+        "base-head-label",
+        "base-head-sort",
+        "base-title",
+        "base-add-row",
+        "base-add-row-button",
+        "base-foot-count",
+        "base-foot-summary",
+        "base-foot-value",
+        "base-foot-error",
+        "base-foot-dimmed"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "focused"
+      ]
+    },
+    {
+      "name": "base-cards",
+      "part": "base-views",
+      "hooks": [
+        "base-cards",
+        "base-list",
+        "base-card",
+        "base-field"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused"
+      ]
+    },
+    {
+      "name": "base-kanban",
+      "part": "base-views",
+      "hooks": [
+        "base-kanban",
+        "base-kanban-column",
+        "base-kanban-card",
+        "base-kanban-head",
+        "base-kanban-empty",
+        "base-view-key",
+        "base-view-key-select"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused",
+        "disabled",
+        "selected",
+        "dragging"
+      ]
+    },
+    {
+      "name": "base-calendar",
+      "part": "base-views",
+      "hooks": [
+        "base-calendar",
+        "base-cal-head",
+        "base-cal-title",
+        "base-cal-nav",
+        "base-cal-prev",
+        "base-cal-today",
+        "base-cal-undated",
+        "base-cal-scroll",
+        "base-cal-grid",
+        "base-cal-week",
+        "base-cal-dow",
+        "base-cal-day",
+        "base-cal-num",
+        "base-cal-weekday",
+        "base-cal-event",
+        "base-cal-more",
+        "base-cal-empty"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused",
+        "disabled",
+        "selected",
+        "dragging"
+      ]
+    },
+    {
+      "name": "base-timeline",
+      "part": "base-views",
+      "hooks": [
+        "base-timeline",
+        "base-tl-head",
+        "base-tl-title",
+        "base-tl-nav",
+        "base-tl-prev",
+        "base-tl-today",
+        "base-tl-zoom",
+        "base-tl-zoom-option",
+        "base-tl-undated",
+        "base-tl-scroll",
+        "base-tl",
+        "base-tl-axis",
+        "base-tl-axis-label",
+        "base-tl-scale",
+        "base-tl-tick",
+        "base-tl-now",
+        "base-tl-row",
+        "base-tl-name",
+        "base-tl-track",
+        "base-tl-bar",
+        "base-tl-edge",
+        "base-tl-point",
+        "base-tl-off",
+        "base-tl-none",
+        "base-tl-empty"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused",
+        "disabled",
+        "selected",
+        "dragging"
+      ]
+    },
+    {
+      "name": "base-map",
+      "part": "base-views",
+      "hooks": [
+        "base-map-atlas",
+        "base-map-marker"
+      ],
+      "states": [
+        "rest",
+        "focused"
+      ]
+    },
+    {
+      "name": "rich-ribbon",
+      "part": "rich",
+      "hooks": [
         "rich-ribbon-color-bar",
-        "rich-ribbon-field-label",
         "rich-ribbon-input",
-        "rich-ribbon-italic",
         "rich-ribbon-marker",
-        "rich-ribbon-mini",
         "rich-ribbon-quick",
         "rich-ribbon-select",
-        "rich-ribbon-strike",
         "rich-ribbon-style",
-        "rich-ribbon-styles",
-        "rich-ribbon-underline"
+        "rich-ribbon-styles"
       ],
       "states": [
         "rest",
@@ -8541,7 +9049,7 @@
     },
     {
       "name": "rich-surface",
-      "part": "editors",
+      "part": "rich",
       "hooks": [
         "rich-surface",
         "rich-notice",
@@ -8612,7 +9120,7 @@
     },
     {
       "name": "content-look",
-      "part": "editors",
+      "part": "rich",
       "hooks": [
         "look-tema",
         "look-file",
@@ -8624,7 +9132,7 @@
     },
     {
       "name": "rich-atom",
-      "part": "editors",
+      "part": "rich",
       "hooks": [
         "rich-atom",
         "rich-atom-image",
@@ -8650,7 +9158,7 @@
     },
     {
       "name": "rich-marks",
-      "part": "editors",
+      "part": "rich",
       "hooks": [
         "rich-ins",
         "rich-del",
@@ -8677,7 +9185,7 @@
     },
     {
       "name": "rich-sheet-marks",
-      "part": "editors",
+      "part": "rich",
       "hooks": [
         "rich-sheet-head",
         "rich-sheet-foot",
@@ -8694,7 +9202,7 @@
     },
     {
       "name": "task-due",
-      "part": "editors",
+      "part": "rich",
       "hooks": [
         "cm-fub-due",
         "cm-fub-due-near",
@@ -8712,7 +9220,7 @@
     },
     {
       "name": "task-reminder",
-      "part": "editors",
+      "part": "rich",
       "hooks": [
         "cm-fub-reminder",
         "cm-fub-reminder-figure",
@@ -8730,7 +9238,7 @@
     },
     {
       "name": "reminders-startup",
-      "part": "editors",
+      "part": "rich",
       "hooks": [
         "kit-dialog",
         "reminders-dialog",
@@ -8749,7 +9257,7 @@
     },
     {
       "name": "tasks-block",
-      "part": "editors",
+      "part": "rich",
       "hooks": [
         "markdown-rendered",
         "block-tasks",
@@ -8774,7 +9282,7 @@
     },
     {
       "name": "day-page",
-      "part": "editors",
+      "part": "rich",
       "hooks": [
         "cm-editor",
         "cm-content",
@@ -8796,119 +9304,8 @@
       ]
     },
     {
-      "name": "canvas-edge",
-      "part": "editors",
-      "hooks": [
-        "canvas-edge",
-        "canvas-edge-draft",
-        "canvas-edge-hit",
-        "canvas-edge-line",
-        "canvas-edge-arrow",
-        "canvas-edge-label",
-        "canvas-edge-reconnect"
-      ],
-      "states": [
-        "rest",
-        "hover",
-        "selected",
-        "dragging"
-      ]
-    },
-    {
-      "name": "canvas-card-writing",
-      "part": "editors",
-      "hooks": [
-        "canvas-card-note",
-        "canvas-exit-hint",
-        "canvas-card-lock",
-        "save-state",
-        "format-bar",
-        "conflict-banner",
-        "conflict-actions",
-        "cm-fub-heading-line",
-        "canvas-card-sheet",
-        "canvas-formula-text"
-      ],
-      "states": [
-        "rest",
-        "focused"
-      ]
-    },
-    {
-      "name": "canvas-ink-target",
-      "part": "editors",
-      "hooks": [
-        "canvas-ink-label",
-        "canvas-ink-frame"
-      ],
-      "states": [
-        "rest"
-      ]
-    },
-    {
-      "name": "canvas-ink-reflow",
-      "part": "editors",
-      "hooks": [
-        "canvas-ink-reflow",
-        "canvas-ink-reflow-back"
-      ],
-      "states": [
-        "rest",
-        "hover",
-        "pressed",
-        "focused"
-      ]
-    },
-    {
-      "name": "canvas-lasso",
-      "part": "editors",
-      "hooks": [
-        "canvas-lasso-path",
-        "canvas-lasso-frame",
-        "canvas-lasso-chosen"
-      ],
-      "states": [
-        "rest"
-      ]
-    },
-    {
-      "name": "canvas-marquee",
-      "part": "editors",
-      "hooks": [
-        "canvas-marquee-box"
-      ],
-      "states": [
-        "rest"
-      ]
-    },
-    {
-      "name": "canvas-drop",
-      "part": "editors",
-      "hooks": [
-        "canvas-drop-ghost",
-        "canvas-drop-ghost-group",
-        "canvas-drop-ghost-name"
-      ],
-      "states": [
-        "rest"
-      ]
-    },
-    {
-      "name": "canvas-ruler",
-      "part": "editors",
-      "hooks": [
-        "canvas-ruler-bar",
-        "canvas-ruler-grip",
-        "canvas-ruler-angle"
-      ],
-      "states": [
-        "rest",
-        "focused"
-      ]
-    },
-    {
       "name": "note-comments",
-      "part": "editors",
+      "part": "rich",
       "hooks": [
         "cm-fub-comment-range",
         "cm-fub-comment-range-on",
@@ -8923,7 +9320,7 @@
     },
     {
       "name": "live-transclusion",
-      "part": "editors",
+      "part": "transclusion",
       "hooks": [
         "embed",
         "transclusion",
@@ -13188,8 +13585,8 @@
     "optional_roles": 73,
     "hooks": 2570,
     "state_names": 7,
-    "assigned_states": 1134,
-    "components": 333,
+    "assigned_states": 1224,
+    "components": 364,
     "preference_tokens": 196
   }
 }
