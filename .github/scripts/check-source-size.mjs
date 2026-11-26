@@ -11,6 +11,12 @@
 // crescere. Quando uno si accorcia, `--aggiorna` abbassa il suo tetto (mai lo
 // alza) e toglie dall'elenco chi è rientrato o non c'è più.
 //
+// La regola si può aggirare, ma è l'eccezione: quando un file davvero non si
+// divide senza danno (una tabella unica, un blocco che spezzato si legge
+// peggio), si scrive a mano la sua riga, o si alza il suo tetto, col motivo in
+// coda (`<righe> <percorso> # perché`), e lo si dice nella PR. Una riga senza
+// motivo sopra il tetto di partenza non è un'eccezione: è una svista.
+//
 // Fuori dal conto: `vendor/`, i file generati (un'intestazione che lo dice
 // nelle prime righe), le WIT congelate e le fixture.
 
@@ -32,27 +38,29 @@ export function counts(relative, head) {
   return !GENERATED.test(head);
 }
 
-/** L'elenco dei tetti: righe `<righe> <percorso>`, `#` per i commenti. */
+/** L'elenco dei tetti: righe `<righe> <percorso> [# motivo]`, `#` per i commenti. */
 export function parseCeilings(text) {
   const out = new Map();
   for (const raw of text.split(/\r?\n/)) {
     const line = raw.trim();
     if (!line || line.startsWith("#")) continue;
-    const m = line.match(/^(\d+)\s+(\S+)$/);
+    const m = line.match(/^(\d+)\s+(\S+)(?:\s+#\s*(.+))?$/);
     if (!m) throw new Error(`riga dei tetti non valida: «${line}»`);
-    out.set(m[2], Number(m[1]));
+    out.set(m[2], { lines: Number(m[1]), why: m[3] ?? null });
   }
   return out;
 }
+
+const AGGIRARE = "se proprio non si può, scrivi la sua riga in source-size-ceilings.txt col motivo dopo `#`";
 
 /** Cosa non va: file nuovi oltre la soglia, file cresciuti, voci superflue. */
 export function problems(sizes, ceilings, limit = LIMIT) {
   const out = [];
   for (const [file, lines] of sizes) {
     if (lines <= limit) continue;
-    const ceiling = ceilings.get(file);
-    if (ceiling === undefined) out.push(`${file}: ${lines} righe, la soglia è ${limit}: dividilo per tema`);
-    else if (lines > ceiling) out.push(`${file}: ${lines} righe, il suo tetto è ${ceiling}: non può crescere, dividilo`);
+    const ceiling = ceilings.get(file)?.lines;
+    if (ceiling === undefined) out.push(`${file}: ${lines} righe, la soglia è ${limit}: dividilo per tema (${AGGIRARE})`);
+    else if (lines > ceiling) out.push(`${file}: ${lines} righe, il suo tetto è ${ceiling}: non può crescere, dividilo (${AGGIRARE})`);
   }
   for (const [file] of ceilings) {
     const lines = sizes.get(file);
@@ -62,26 +70,26 @@ export function problems(sizes, ceilings, limit = LIMIT) {
   return out;
 }
 
-/** I tetti abbassati: mai più alti di prima, senza chi è rientrato. */
+/** I tetti abbassati: mai più alti di prima, senza chi è rientrato; il motivo resta. */
 export function lowered(sizes, ceilings, limit = LIMIT) {
   const out = new Map();
-  for (const [file, ceiling] of ceilings) {
+  for (const [file, { lines: ceiling, why }] of ceilings) {
     const lines = sizes.get(file);
-    if (lines !== undefined && lines > limit) out.set(file, Math.min(ceiling, lines));
+    if (lines !== undefined && lines > limit) out.set(file, { lines: Math.min(ceiling, lines), why });
   }
   return out;
 }
 
 if (process.argv.includes("--self-test")) {
   const sizes = new Map([["a.rs", 1600], ["b.ts", 2000], ["c.ts", 1000], ["d.ts", 3000]]);
-  const ceilings = new Map([["b.ts", 1900], ["c.ts", 1700], ["d.ts", 3500], ["e.ts", 1800]]);
+  const ceilings = parseCeilings("# x\n1900 b.ts\n1700 c.ts\n3500 d.ts # una tabella sola\n1800 e.ts\n");
   const found = problems(sizes, ceilings);
   const expected = ["a.rs:", "b.ts:", "c.ts:", "e.ts:"];
   const low = lowered(sizes, ceilings);
   const ok =
     found.length === expected.length &&
     expected.every((p, i) => found[i].startsWith(p)) &&
-    [...low].join(";") === "b.ts,1900;d.ts,3000" &&
+    [...low].map(([f, c]) => `${f},${c.lines},${c.why}`).join(";") === "b.ts,1900,null;d.ts,3000,una tabella sola" &&
     !counts("vendor/x/a.rs", "") &&
     !counts("apps/a.ts", "// GENERATO da x") &&
     counts("crates/a/src/b.rs", "//! modulo") &&
@@ -110,7 +118,9 @@ const ceilings = parseCeilings(text);
 if (process.argv.includes("--aggiorna")) {
   const next = lowered(sizes, ceilings);
   const head = text.split(/\r?\n/).filter((line) => line.startsWith("#"));
-  const body = [...next].sort(([a], [b]) => a.localeCompare(b)).map(([file, lines]) => `${lines} ${file}`);
+  const body = [...next]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([file, { lines, why }]) => `${lines} ${file}${why ? ` # ${why}` : ""}`);
   fs.writeFileSync(CEILINGS, [...head, ...body].join("\n") + "\n");
   console.log(`Tetti aggiornati: ${ceilings.size} prima, ${next.size} dopo.`);
 }

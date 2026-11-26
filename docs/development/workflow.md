@@ -65,6 +65,11 @@ tetto: possono restare, non crescere. Chi ne accorcia uno lancia
 `node .github/scripts/check-source-size.mjs --aggiorna`, che abbassa i tetti.
 Fuori dal conto: `vendor/`, i file generati, le WIT congelate, le fixture.
 
+La regola si può aggirare, ma è molto meglio di no. Se un file davvero non si
+divide senza danno (una tabella unica, un blocco che spezzato si legge peggio),
+si scrive a mano la sua riga nell'elenco, o si alza il suo tetto, col motivo in
+coda (`<righe> <percorso> # perché`), e lo si scrive nel corpo della PR.
+
 ## 4. Verificare durante il lavoro
 
 ### Rust

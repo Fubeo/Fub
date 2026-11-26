@@ -2,8 +2,9 @@
 # quando la regola è nata (26/11/2026), ciascuno col suo tetto in righe.
 # Possono restare, non crescere: chi ne tocca uno e lo accorcia lancia
 # `node .github/scripts/check-source-size.mjs --aggiorna`, che abbassa i tetti
-# e toglie chi è rientrato. Non si aggiunge una riga a mano: un file nuovo
-# oltre la soglia si divide.
+# e toglie chi è rientrato. Un file nuovo oltre la soglia si divide; solo se
+# davvero non si può senza danno si aggiunge (o si alza) la sua riga a mano,
+# col motivo in coda: `<righe> <percorso> # perché`, e lo si dice nella PR.
 3503 apps/client/bench/conformita/mappa-editor.mjs
 4003 apps/client/bench/fake-ipc.ts
 2896 apps/client/bench/grid-gestures.mjs
