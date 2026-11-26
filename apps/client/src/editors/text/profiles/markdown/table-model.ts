@@ -300,6 +300,19 @@ export function tableChanges(parsed: ParsedTable, next: TableData): TableChange[
   return changes;
 }
 
+/// Come `tableChanges`, ma la tabella da scrivere si calcola da `base`, una
+/// sorgente di prima, e i cambi portano lì da `current`, la sorgente di
+/// adesso. Le battute di una cella aperta passano da qui: ognuna riscrive la
+/// cella come la scriverebbe la conferma partendo da prima della cella, così
+/// gli spazi di un valore a metà («Prova ») non restano come imbottitura.
+export function tableChangesSince(base: ParsedTable, current: string, next: TableData): TableChange[] {
+  let target = base.source;
+  for (const change of [...tableChanges(base, next)].sort((a, b) => b.from - a.from)) {
+    target = `${target.slice(0, change.from)}${change.insert}${target.slice(change.to)}`;
+  }
+  return smallestChanges(current, target);
+}
+
 // ── Operazioni ───────────────────────────────────────────────────────────────
 
 export function tableWidth(data: TableData): number {

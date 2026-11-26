@@ -56,7 +56,10 @@ si apre, e costruito soltanto allora.
 
 Gli strumenti stanno nella colonna a sinistra, a gruppi; i più rari nelle
 tendine, che si aprono tenendo premuta la casella, col tasto destro o con la
-freccia a destra. Ogni strumento ha un tasto: selezione (`V`), penna (`P`),
+freccia a destra. Nel Disegno completo la colonna ha sei gruppi (selezione,
+disegno, forme, modifica, colore, vista) e in fondo **Tutti gli strumenti**
+apre il cassetto: la ricerca, i gruppi con il tasto di ogni strumento, e
+«Modifica la colonna…». Col motore presente la colonna del Completo ha solo gli strumenti del motore con la riga della mappa «fatto», nessuno di Fub, e nemmeno il pulsante delle immagini del vault (come in VectorCraft l'immagine si mette dal menu; finché il motore non arriva restano quelli di Fub), e la riga delle opzioni in alto ha solo le opzioni dello strumento scelto, senza il colore, gli spessori, la modifica, i livelli e la vista di Fub (uno strumento senza opzioni la lascia vuota; il menu ≡, Annulla, Ripeti ed «Esporta» restano): le selezioni, la vista e i ventuno dei tracciati ([penne](drawing-pen.md#la-penna-di-bézier-disegno-completo)). Le caselle che non stanno nello spazio della colonna passano nel cassetto. Ogni strumento ha un tasto: selezione (`V`), inchiostro (`P`),
 evidenziatore (`Maiusc+P`), gomma per oggetto (`E`), rettangolo (`R`),
 ellisse (`O`), linea (`L`) e freccia (`Maiusc+L`); la
 **Mano** (`H`) e lo **Zoom** (`Z`) muovono la vista in tutti e due gli spazi
@@ -134,6 +137,29 @@ ancora gli oggetti a cui sono agganciati, [sfumature](drawing-gradients.md),
 oggetto che li porta si sceglie, si sposta, si trasforma e si elimina come
 gli altri.
 
+## Finestre dei comandi
+
+Un comando del Completo che chiede dei parametri, come «Sposta tracciato»,
+apre una finestra con i suoi campi: i numeri con la loro unità e i loro
+limiti, la scelta a segmenti, la casella, il testo e il colore, che si
+sceglie col selettore di colore (per esempio quello di «Ombra esterna» o della
+luce del 3D). Con **«Anteprima»**
+accesa il foglio mostra l'esito prima di applicarlo, e la finestra sta di lato
+senza coprirlo; l'anteprima parte appena la finestra è pronta, e poi al più
+ogni 120 millisecondi, col valore dell'ultimo momento. **OK** applica il
+comando una volta sola, come un passo della cronologia; **Annulla** ed **Esc**
+chiudono senza fare niente, e **Invio** conferma come OK.
+
+Un numero fuori dai suoi limiti non si prende: il campo dice quali sono, e OK
+resta spento finché il valore non rientra. Se la funzione del comando non si
+carica, per esempio perché la memoria dei motori è piena, la finestra lo dice
+e offre «Riprova». Chiudere il disegno chiude la finestra senza eseguire
+niente. I valori dell'ultima volta restano per la sessione, non vanno sul
+disco.
+
+Nessun comando dell'editor apre ancora questa finestra: la usano le funzioni
+del motore che arrivano con le loro famiglie.
+
 ## Disporre
 
 Nello spazio Completo, finché c'è qualcosa di scelto, accanto alla selezione
@@ -154,7 +180,8 @@ comando è un passo di annulla, e la selezione segue ciò che ha fatto.
   (`Ctrl+]`), indietro di un posto (`Ctrl+[`) o in secondo piano
   (`Ctrl+Maiusc+[`), nel livello di ciascun oggetto. Sul foglio fanno lo
   stesso `PagSu` e `PagGiù`, con `Maiusc` agli estremi. Le parentesi valgono
-  per posizione: su una tastiera italiana sono `è` e `+`. Il menu spegne la
+  per posizione: su una tastiera italiana sono `è` e `+`, e il menu le scrive
+  così ([tasti del motore](drawing-keys.md)). Il menu spegne la
   voce che non cambierebbe niente.
 - **Allinea e distribuisci** allinea i bordi o i centri della selezione al
   suo riquadro, o alla pagina se l'oggetto è uno solo; distribuire lascia
@@ -168,39 +195,9 @@ aspetto si scrive lo stile di prima ([Disegni, appunti](drawing-clipboard.md)).
 
 ## Livelli
 
-Un livello del disegno è un gruppo figlio della radice con `fub:layer`, che
-ne porta il nome. Nello spazio Completo la barra ha il pulsante «Livelli»: mostra
-il livello in cui si disegna, quello corrente, col suo nome e, a parole, il suo
-stato, «bloccato» o «nascosto». Il suo menu elenca i livelli dalla cima, e
-sceglierne uno lo rende corrente; poi ha i comandi su quello corrente:
-
-- **Nuovo livello** ne crea uno vuoto sopra quello corrente, che diventa lui,
-  col primo nome libero fra «Livello 2», «Livello 3» e così via;
-- **Rinomina…** chiede il nome, che non resta vuoto né fatto di soli spazi e
-  ha al più 80 caratteri;
-- **Nascondi** e **Mostra** scrivono e tolgono `display="none"`, che lo
-  nasconde anche negli altri programmi; **Blocca** e **Sblocca** scrivono e
-  tolgono `fub:locked="true"`. Gli oggetti di un livello nascosto o bloccato
-  non si scelgono e non si cancellano, ed escono dalla selezione;
-- **Sposta su** e **Sposta giù** lo portano sopra il livello che ha sopra, o
-  sotto quello che ha sotto; ciò che sta alla radice fra i due resta dov'era;
-- **Elimina** lo toglie con ciò che contiene, e diventa corrente il livello
-  sotto, o quello sopra. L'unico livello e uno bloccato non si eliminano, e la
-  voce spenta dice perché.
-
-Penna, evidenziatore, forme, testi e immagini, incollate o dal vault, vanno nel
-livello corrente. Se è nascosto o bloccato il gesto non scrive, e un annuncio
-dice perché e che cosa fare. Scegliere oggetti tutti in un livello lo rende
-corrente, e l'albero degli oggetti lo dice: «Livello «Note», corrente».
-
-Nella barra «Disponi», **Sposta in un livello** porta gli oggetti scelti in cima
-a un altro livello, nell'ordine in cui stavano, dove si vedevano e con lo stile
-che ereditavano. Il menu spegne il livello che li ha già tutti e quelli nascosti
-o bloccati; senza un altro livello dove portarli il pulsante non c'è.
-
-Ogni comando è un passo di annulla, e annullarlo rende corrente il livello
-che ha toccato, se c'è ancora. Nel Semplice il pulsante non c'è, e il
-disegno va nel livello più alto che si vede e non è bloccato.
+Un livello del disegno è un gruppo figlio della radice con `fub:layer`. Il
+livello corrente, i comandi del pulsante «Livelli» e lo spostamento fra i
+livelli stanno in [Disegni, pannello dei livelli](drawing-layers.md).
 
 ## Griglia e pagina
 
@@ -316,6 +313,26 @@ apre, per esempio perché non c'è più, lo dice con un avviso.
 Chi monta l'editor sceglie e apre i documenti con `links`; senza, il disegno
 non ha segni né «Collega a una nota…», e un collegamento si toglie lo stesso.
 
+## Campioni e gruppi di colori
+
+Nel Completo i campioni del disegno si raccolgono in gruppi di colori: Nuovo
+gruppo colori ne fa uno coi campioni scelti o con colori nuovi (senza nome si
+chiama «Gruppo colori»), Modifica gruppo colori ne cambia i colori e il nome, e
+chi usa un campione segue il nuovo colore, Separa gruppo colori lascia i
+campioni dove sono, senza gruppo. Un tema salvato si aggiunge ai campioni come
+un gruppo col suo nome. Un gruppo vuoto non si salva: Fub chiede di scegliere
+almeno un campione.
+
+Campioni predefiniti rimette i campioni di serie, coi nomi in italiano, i grigi
+e i colori brillanti in due gruppi; un campione che il disegno ha già non torna
+due volte. Le sfumature di serie non entrano, perché nel file un campione è un
+colore pieno, e Fub lo dice insieme a «fatto». Togliendo i campioni del
+disegno, un oggetto che ne usava uno tiene il suo colore.
+
+Nel file un gruppo è un attributo dei suoi campioni: un Fub più vecchio, o un
+altro programma, vede gli stessi colori senza gruppo
+([il formato](../reference/scene-format-resources.md#2-le-risorse)).
+
 ## Ciò che il disegno porta
 
 Un disegno può portare ciò che Fub disegna ma non crea più da quando il
@@ -335,7 +352,7 @@ cursore, 10 pixel per volta, 50 con `Maiusc` e 1 con `Ctrl` o `⌘`; `Spazio`
 preme e, di nuovo, rilascia, e `Invio` rilascia anche lui. In mezzo il cursore
 traccia: un rettangolo, un tratto a penna, la gomma su ciò che attraversa, un
 trascinamento con la selezione. `Esc` annulla il gesto. Il cursore dice dove
-si trova e che cosa c'è sotto, per esempio «x 120, y 80: Rettangolo, Blu».
+si trova e che cosa c'è sotto, per esempio «x 120, y 80: Rettangolo, Blu». La colonna è una barra con le frecce: il triangolino di una casella con più strumenti si apre con la freccia di lato, Esc riporta il fuoco alla casella, e nel cassetto le frecce passano fra gli strumenti.
 
 Con una selezione le frecce la spostano di 1, 10 con `Maiusc`, e con `Ctrl` o
 `⌘` la ridimensionano dall'angolo in alto a sinistra; con l'aggancio alla
@@ -360,7 +377,7 @@ nascosto. Oltre 500 righe l'albero disegna soltanto quelle che si vedono.
 
 La scelta non si legge mai dal solo colore: lo strumento, il colore e lo
 spessore scelti hanno un filo sotto, le righe scelte la spunta. La vista non
-si anima: ogni inquadratura è subito quella nuova, e non c'è moto da ridurre.
+si anima: ogni inquadratura è subito quella nuova, e non c'è moto da ridurre. Per i tasti dei comandi del motore nel Completo: [Disegni, tasti del motore](drawing-keys.md); per le sue preferenze: [Disegni, preferenze del motore](drawing-engine-preferences.md).
 
 ## Documenti che non si modificano subito
 

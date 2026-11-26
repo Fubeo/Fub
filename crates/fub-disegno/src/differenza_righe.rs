@@ -1,0 +1,337 @@
+//! Le righe di un testo del motore come le scrive il file (K6 T16): la
+//! posizione del `<text>` (`x`, `y`, per un testo in area `fub:wrap`) e un
+//! `<tspan>` per riga, con `x`, `dy` e, in area, `fub:join`
+//! (`docs/reference/scene-format-text.md`, §4).
+//!
+//! Le righe di un testo in area sono quelle che il motore dispone nel suo
+//! riquadro, largo quanto il riquadro e alto quanto serve: il formato non
+//! scrive l'altezza, che va dalla prima riga all'ultima.
+
+use serde_json::{json, Value};
+use vectorcraft_doc::text::{FirstBaseline, Justify, TextKind, TextObject, VerticalAlign};
+use vectorcraft_geom::{shapes, Affine, Point, Rect};
+
+use super::{numero, DECIMALI_GEOMETRIA};
+
+/// Il perché di un testo che va a capo in modo che il file non dice.
+pub(crate) const RIQUADRO_FUORI: &str =
+    "il testo in area di Fub è un riquadro solo, senza margine interno, colonne o righe, con il testo orizzontale";
+/// Il perché di un testo in area allineato in altezza (Opzioni testo in area).
+pub(crate) const ALLINEATO_IN_ALTEZZA: &str =
+    "il file non scrive l'allineamento verticale né la prima linea di base del testo in area: il riquadro cresce col testo, che parte dall'alto";
+/// Il perché del giustificato in area.
+pub(crate) const GIUSTIFICATO_IN_AREA: &str =
+    "il file non scrive il giustificato: il testo in area si allinea a sinistra, al centro o a destra";
+
+/// Vero se la cornice è il suo riquadro: punti d'angolo senza maniglie, tutti sugli angoli del
+/// riquadro, e i quattro angoli ci sono. Un'altra cornice (un triangolo, un'ellisse, un rettangolo
+/// girato) il file non la scrive: `fub:wrap` dà solo la larghezza, e il testo andrebbe a capo
+/// altrove.
+fn rettangolo_dritto(cornice: &vectorcraft_geom::SubPath, fb: Rect) -> bool {
+    let tolleranza = 1e-6 * fb.width().max(fb.height()).max(1.0);
+    let vicini = |a: f64, b: f64| (a - b).abs() <= tolleranza;
+    let mut angoli = [false; 4];
+    for a in &cornice.anchors {
+        if a.h_in.distance(a.p) > tolleranza || a.h_out.distance(a.p) > tolleranza {
+            return false;
+        }
+        let i = match (
+            vicini(a.p.x, fb.x0),
+            vicini(a.p.x, fb.x1),
+            vicini(a.p.y, fb.y0),
+            vicini(a.p.y, fb.y1),
+        ) {
+            (true, _, true, _) => 0,
+            (_, true, true, _) => 1,
+            (_, true, _, true) => 2,
+            (true, _, _, true) => 3,
+            _ => return false,
+        };
+        angoli[i] = true;
+    }
+    angoli.iter().all(|a| *a)
+}
+
+/// La posizione e le righe di un testo, come attributi e figli del `<text>`.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct RigheScritte {
+    pub x: String,
+    pub y: String,
+    /// `fub:wrap`, per un testo in area.
+    pub wrap: Option<String>,
+    /// I `<tspan>`, come `children` di un `add`.
+    pub righe: Vec<Value>,
+}
+
+/// Le colonne di un testo di punto verticale (formato del testo, §10): il
+/// `<text>` ha in `x` la linea di mezzo della prima colonna e in `y` la sua
+/// cima; ogni `<tspan>` ha la `y` dove la sua colonna comincia, secondo
+/// l'allineamento, e il `dx` dalla colonna prima. Le colonne sono quelle che
+/// il motore dispone; se non tornano con le righe del testo, si va di
+/// un'interlinea del primo pezzo verso sinistra. `m` è già controllata
+/// uniforme e dritta.
+fn colonne_scritte(t: &TextObject, m: Affine, righe_di_punto: Option<Vec<String>>) -> RigheScritte {
+    let s = m.as_coeffs()[0];
+    let testo = t.plain_text();
+    let righe =
+        righe_di_punto.unwrap_or_else(|| dividi(&testo).into_iter().map(str::to_string).collect());
+    let lay = vectorcraft_text::layout(vectorcraft_text::FontDb::global(), t);
+    let o = m * Point::ZERO;
+    // La cima di ogni colonna nello spazio del `<text>`: dove comincia, a
+    // metà o dove finisce, come l'ancora del testo (`text-anchor`).
+    let cime: Option<Vec<Point>> = (lay.vertical && lay.lines.len() == righe.len()).then(|| {
+        lay.lines
+            .iter()
+            .map(|l| {
+                let lungo = match t.para.justify {
+                    Justify::Center => (l.x0 + l.x1) / 2.0,
+                    Justify::Right => l.x1,
+                    _ => l.x0,
+                };
+                let mezzo = l.baseline + (l.descent - l.ascent) / 2.0;
+                m * lay.physical_point(Point::new(lungo, mezzo))
+            })
+            .collect()
+    });
+    let interlinea = t
+        .runs
+        .first()
+        .map(|r| r.style.effective_leading())
+        .unwrap_or(0.0)
+        * s;
+    let punto = |i: usize| match &cime {
+        Some(c) => c[i],
+        None => Point::new(o.x - interlinea * i as f64, o.y),
+    };
+    let geo = |v: f64| numero(v, DECIMALI_GEOMETRIA);
+    let primo = punto(0);
+    let figli = righe
+        .into_iter()
+        .enumerate()
+        .map(|(i, riga)| {
+            let qui = punto(i);
+            let dx = if i == 0 {
+                "0".to_string()
+            } else {
+                geo(qui.x - punto(i - 1).x)
+            };
+            json!({ "tag": "tspan", "attrs": { "y": geo(qui.y), "dx": dx }, "text": riga })
+        })
+        .collect();
+    RigheScritte {
+        x: geo(primo.x),
+        y: geo(primo.y),
+        wrap: None,
+        righe: figli,
+    }
+}
+
+/// Le righe del testo `t`, con `m` dallo spazio del testo a quello del
+/// `<text>`. `righe_di_punto` sono le righe di un testo di punto già pronte
+/// (quelle che non cambiano restano come le scrive il file); senza, sono le
+/// righe del motore. Un errore dice perché il file non le scrive.
+pub(crate) fn righe_scritte(
+    t: &TextObject,
+    m: Affine,
+    righe_di_punto: Option<Vec<String>>,
+) -> Result<RigheScritte, &'static str> {
+    if t.vertical && !matches!(t.kind, TextKind::Point) {
+        return Err(RIQUADRO_FUORI);
+    }
+    let [a, b, c, d, _, _] = m.as_coeffs();
+    let s = a;
+    if !(s.is_finite() && s > 1e-9)
+        || b.abs() > 1e-6 * s
+        || c.abs() > 1e-6 * s
+        || (d - s).abs() > 1e-6 * s
+    {
+        return Err("il testo è ruotato, inclinato o schiacciato: le sue righe non si riscrivono");
+    }
+    let passo = |dy: f64| numero(dy * s, DECIMALI_GEOMETRIA);
+    match &t.kind {
+        TextKind::Point if t.vertical => Ok(colonne_scritte(t, m, righe_di_punto)),
+        TextKind::Point => {
+            let testo = t.plain_text();
+            let righe = righe_di_punto
+                .unwrap_or_else(|| dividi(&testo).into_iter().map(str::to_string).collect());
+            let lay = vectorcraft_text::layout(vectorcraft_text::FontDb::global(), t);
+            let interlinea = t
+                .runs
+                .first()
+                .map(|r| r.style.effective_leading())
+                .unwrap_or(0.0);
+            let basi: Option<Vec<f64>> = (lay.lines.len() == righe.len())
+                .then(|| lay.lines.iter().map(|l| l.baseline).collect());
+            let o = m * Point::ZERO;
+            let x = numero(o.x, DECIMALI_GEOMETRIA);
+            let figli = righe
+                .into_iter()
+                .enumerate()
+                .map(|(i, riga)| {
+                    let dy = match (&basi, i) {
+                        (_, 0) => "0".to_string(),
+                        (Some(basi), i) => passo(basi[i] - basi[i - 1]),
+                        (None, _) => passo(interlinea),
+                    };
+                    json!({ "tag": "tspan", "attrs": { "x": x, "dy": dy }, "text": riga })
+                })
+                .collect();
+            Ok(RigheScritte {
+                x: x.clone(),
+                y: numero(o.y, DECIMALI_GEOMETRIA),
+                wrap: None,
+                righe: figli,
+            })
+        }
+        TextKind::Area { frame } => {
+            let area = &t.area;
+            if area.rows != 1
+                || area.columns != 1
+                || area.inset.abs() > 1e-9
+                || frame.subpaths.len() != 1
+                || !t.wrap.is_empty()
+            {
+                return Err(RIQUADRO_FUORI);
+            }
+            // Il file dà solo la larghezza: il riquadro è alto quanto il testo, che parte
+            // dall'alto con la prima linea di base di serie.
+            if area.vertical_align != VerticalAlign::Top
+                || area.first_baseline != FirstBaseline::Ascent
+                || area.first_baseline_min.abs() > 1e-9
+            {
+                return Err(ALLINEATO_IN_ALTEZZA);
+            }
+            let fb = frame.bounds().ok_or(RIQUADRO_FUORI)?;
+            if fb.width() <= 1e-6
+                || !fb.width().is_finite()
+                || !rettangolo_dritto(&frame.subpaths[0], fb)
+            {
+                return Err(RIQUADRO_FUORI);
+            }
+            let ancora = match t.para_at(0).justify {
+                Justify::Left | Justify::Auto => 0.0,
+                Justify::Center => 0.5,
+                Justify::Right => 1.0,
+                _ => return Err(GIUSTIFICATO_IN_AREA),
+            };
+            if (0..t.paras.len()).any(|i| t.para_at(i).justify != t.para_at(0).justify) {
+                return Err(
+                    "i paragrafi di un testo in area hanno tutti lo stesso allineamento nel file",
+                );
+            }
+            // La larghezza come il file la scrive, coi suoi decimali: le righe
+            // sono quelle di quel riquadro, e chi riapre il file ritrova gli
+            // stessi a capo.
+            let scritta = numero(fb.width() * s, DECIMALI_GEOMETRIA);
+            let larghezza = scritta
+                .parse::<f64>()
+                .ok()
+                .map(|w| w / s)
+                .filter(|w| w.is_finite() && *w > 1e-6)
+                .ok_or(RIQUADRO_FUORI)?;
+            // Il riquadro alto quanto serve: le righe che il formato scrive.
+            let mut alto = t.clone();
+            alto.area.fit = Default::default();
+            alto.kind = TextKind::Area {
+                frame: shapes::rectangle(Rect::new(fb.x0, fb.y0, fb.x0 + larghezza, fb.y0 + 1e7)),
+            };
+            let lay = vectorcraft_text::layout(vectorcraft_text::FontDb::global(), &alto);
+            let testo = alto.plain_text();
+            let mut righe: Vec<(String, Option<&'static str>)> = Vec::new();
+            for (i, l) in lay.lines.iter().enumerate() {
+                let riga = testo.get(l.start..l.end).ok_or(RIQUADRO_FUORI)?;
+                let unione = match l.start.checked_sub(1).map(|p| testo.as_bytes()[p]) {
+                    _ if i == 0 => None,
+                    Some(b'\n') | None => None,
+                    Some(b' ') => Some("space"),
+                    Some(_) => Some("word"),
+                };
+                if unione == Some("space") {
+                    if let Some((prima, _)) = righe.last_mut() {
+                        if prima.ends_with(' ') {
+                            prima.pop();
+                        }
+                    }
+                }
+                righe.push((riga.strip_suffix('\n').unwrap_or(riga).to_string(), unione));
+            }
+            if righe.is_empty() {
+                righe.push((String::new(), None));
+            }
+            // Le righe tornano il testo senza perdere un carattere.
+            let mut di_nuovo = String::new();
+            for (i, (riga, unione)) in righe.iter().enumerate() {
+                if i > 0 {
+                    di_nuovo.push_str(match unione {
+                        None => "\n",
+                        Some("space") => " ",
+                        Some(_) => "",
+                    });
+                }
+                di_nuovo.push_str(riga);
+            }
+            if di_nuovo != testo.replace("\r\n", "\n") {
+                return Err("il testo non si scrive riga per riga nel riquadro: le righe del file non lo ridanno uguale");
+            }
+            // Un paragrafo vuoto si scrive come uno spazio indivisibile: un
+            // `<tspan>` vuoto non sposterebbe la riga dopo. L'apertura lo
+            // rilegge vuoto (`apertura.rs`, `RIGA_VUOTA`).
+            for i in 0..righe.len() {
+                let solo = righe[i].1.is_none() && righe.get(i + 1).is_none_or(|r| r.1.is_none());
+                if solo && righe[i].0.is_empty() {
+                    righe[i].0 = crate::apertura::RIGA_VUOTA.to_string();
+                }
+            }
+            let base = lay.lines.first().map_or(fb.y0, |l| l.baseline);
+            let o = m * Point::new(fb.x0 + ancora * larghezza, base);
+            let x = numero(o.x, DECIMALI_GEOMETRIA);
+            let basi: Vec<f64> = lay.lines.iter().map(|l| l.baseline).collect();
+            let figli = righe
+                .into_iter()
+                .enumerate()
+                .map(|(i, (riga, unione))| {
+                    let dy = if i == 0 {
+                        "0".to_string()
+                    } else {
+                        passo(basi[i] - basi[i - 1])
+                    };
+                    let mut attrs = serde_json::Map::new();
+                    if let Some(u) = unione {
+                        attrs.insert("fub:join".into(), json!(u));
+                    }
+                    attrs.insert("x".into(), json!(x));
+                    attrs.insert("dy".into(), json!(dy));
+                    json!({ "tag": "tspan", "attrs": attrs, "text": riga })
+                })
+                .collect();
+            Ok(RigheScritte {
+                x: x.clone(),
+                y: numero(o.y, DECIMALI_GEOMETRIA),
+                wrap: Some(scritta),
+                righe: figli,
+            })
+        }
+        _ => Err("dal motore si scrivono il testo di punto e il testo in area"),
+    }
+}
+
+/// Le righe di un testo: si va a capo con LF, CRLF, CR e i separatori di
+/// riga e di paragrafo del motore.
+pub(crate) fn dividi(testo: &str) -> Vec<&str> {
+    let mut fuori = Vec::new();
+    let mut da = 0;
+    let mut it = testo.char_indices().peekable();
+    while let Some((i, c)) = it.next() {
+        if matches!(c, '\n' | '\r' | '\u{2028}' | '\u{2029}' | '\u{3}') {
+            fuori.push(&testo[da..i]);
+            let mut fine = i + c.len_utf8();
+            if c == '\r' && it.peek().is_some_and(|(_, d)| *d == '\n') {
+                it.next();
+                fine += 1;
+            }
+            da = fine;
+        }
+    }
+    fuori.push(&testo[da..]);
+    fuori
+}

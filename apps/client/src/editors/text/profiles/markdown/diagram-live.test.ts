@@ -2,7 +2,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { titleEdit, type DiagramProblem, type MermaidView } from "../../../../ui/mermaid";
 import { markdown } from "@codemirror/lang-markdown";
-import { ensureSyntaxTree } from "@codemirror/language";
 import { EditorState } from "@codemirror/state";
 import { EditorView, runScopeHandlers } from "@codemirror/view";
 import { styleDirectiveEdit } from "../../../../theme/diagram-style";
@@ -11,6 +10,7 @@ import { markdownGrammar } from "./grammar";
 import { livePreview } from "./livepreview";
 import { blocksMode } from "./blocks";
 import { blockSelection, selectCursorBlock } from "./blocks/selection";
+import { parsedView } from "./test-support";
 
 // La corsa del diagramma (C5): una resa vecchia non sostituisce la nuova, e
 // un errore non toglie l'ultimo disegno buono.
@@ -227,8 +227,7 @@ describe("i tasti del diagramma scelto", () => {
         extensions: [markdown({ base: markdownGrammar }), livePreview({ openWikilink() {}, searchTag() {} }), blocksMode({ page: () => "Nota" })],
       }),
     });
-    ensureSyntaxTree(view.state, view.state.doc.length, 1000);
-    view.dispatch({});
+    parsedView(view);
     return view;
   };
   const press = (view: EditorView, key: string) =>
@@ -272,8 +271,7 @@ describe("il sorgente aperto", () => {
         extensions: [markdown({ base: markdownGrammar }), livePreview({ openWikilink() {}, searchTag() {} }), ...(blocks ? [blocksMode({ page: () => "Nota" })] : [])],
       }),
     });
-    ensureSyntaxTree(view.state, view.state.doc.length, 1000);
-    view.dispatch({});
+    parsedView(view);
     // happy-dom manda `selectionchange` dentro l'aggiornamento di un editor
     // col fuoco: qui il fuoco non serve.
     view.focus = () => {};

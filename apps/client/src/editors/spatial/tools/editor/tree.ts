@@ -196,6 +196,7 @@ export function installTree(ctx: EditorContext): void {
       if (refusal !== null) refusals.set(node.key, refusal);
       const inner = under ?? (!locked ? null : layer ? "layer_locked" : "container_locked");
       const title = layer ? node.name : cleanName(node.item.title ?? "");
+      const name = title === null || title === "" ? null : title;
       return {
         key: node.key,
         layer,
@@ -203,9 +204,12 @@ export function installTree(ctx: EditorContext): void {
         locked,
         hidden: node.item.hidden === true,
         toggles: editable() && (layer ? has("layers") : has("selection") && under === null),
-        name: title === null || title === "" ? null : title,
+        name,
         renames: editable() && has("layers"),
         moves,
+        // Un livello mostra il suo nome, e «Livello «nome»» lo dice a parole
+        // (il nome accessibile): non si ripete la parola in ogni riga.
+        ...(layer ? { shown: () => name ?? t("draw.kind.layer"), current: node.key === current } : {}),
         ...(has("layers") ? { thumbnail: () => thumbnailOf(node.item) } : {}),
         kind: treeKind(node.item.role),
         children: layer || (holds && has("selection")) ? entriesOf(node.children, index, current, inner, refusals, moves) : [],
@@ -324,6 +328,13 @@ export function installTree(ctx: EditorContext): void {
       announce(t("draw.rename.foreign"));
       return false;
     }
+    // Nel Completo del motore un livello bloccato non cambia nome (K6 T15, giro 4).
+    const layer = outlined.item.role === "layer" ? currentIndex().layers.find((each) => keyOf(each) === key) : undefined;
+    const frozen = layer === undefined ? null : ctx.layerFrozen(layer);
+    if (frozen !== null) {
+      announce(t(frozen));
+      return false;
+    }
     return true;
   }
   ctx.canRename = canRename;
@@ -344,11 +355,21 @@ export function installTree(ctx: EditorContext): void {
         announce(t("draw.layer.name.required"));
         return null;
       }
-      const arranged = renameLayerOps(model, layer, next, newIds());
-      const now = arranged.keys[0] ?? key;
+      if (next === layer.name) {
+        announce(t("draw.unchanged"));
+        return null;
+      }
       // Il livello corrente resta lui anche se riceve un id.
       const before = ctx.currentLayer();
       const isCurrent = before !== null && keyOf(before) === key;
+      // Col Completo del motore acceso il nome passa dal motore (K6 T15, giro 4), e arriva
+      // dopo: la chiave resta la stessa, perché ci passa solo un livello che ha già il suo id.
+      if ((ctx.livelliMotore?.() ?? null) !== null && layer.id !== null) {
+        ctx.layerWrite(ctx.layerRename(layer, next, isCurrent));
+        return key;
+      }
+      const arranged = renameLayerOps(model, layer, next, newIds());
+      const now = arranged.keys[0] ?? key;
       if (!ctx.writeLayers("draw.action.layer_rename", arranged, isCurrent ? now : null)) return null;
       announce(t("draw.layer.renamed", { name: layerTitle({ ...layer, name: next }) }));
       return now;
@@ -388,14 +409,17 @@ export function installTree(ctx: EditorContext): void {
       if (refusal !== undefined) return `draw.move.${refusal}`;
       items.push(item);
     }
-    // Un livello va solo fra i livelli, e da solo; un oggetto non va fra i
-    // livelli, ma dentro.
+    // Un livello va solo alla radice o dentro un livello, dove diventa un
+    // sottolivello (formato della scena §3), e da solo; un oggetto non va fra
+    // i livelli della radice, ma dentro.
     const layers = items[0]!.item.role === "layer";
     const inside = drop.place === "top" || drop.place === "bottom";
-    if (items.some((item) => (item.item.role === "layer") !== layers) || (host.item.role === "layer" ? inside === layers : layers)) return "draw.move.layers";
+    if (items.some((item) => (item.item.role === "layer") !== layers)) return "draw.move.layers";
     const target = nodeOf(model, host.item);
     const parent = inside ? target : target.parent;
     if (parent === null || parent.kind !== "container") return null;
+    const parentIsLayer = parent.details?.role === "layer";
+    if (layers ? parent !== model.root && !parentIsLayer : parent === model.root && host.item.role === "layer") return "draw.move.layers";
     const moving = items.map((item) => nodeOf(model, item.item));
     // Né dentro sé stesso, né dentro qualcosa di bloccato, né un
     // collegamento dentro un altro.

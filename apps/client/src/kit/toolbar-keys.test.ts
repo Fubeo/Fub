@@ -2,7 +2,7 @@
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { openLifetime, type Lifetime } from "../ui/lifetime";
-import { listenerLedger, press } from "./testing";
+import { listenerLedger, press, WEBKIT_COMPOSING } from "./testing";
 import { rovingToolbar, type RovingToolbar } from "./toolbar-keys";
 
 let life: Lifetime;
@@ -156,6 +156,9 @@ describe("rovingToolbar", () => {
     const escapes: string[] = [];
     const used = bar({ onEscape: () => escapes.push("esc") });
     used.b.focus();
+    // Esc che chiude una composizione (WebKit: codice 229) non è della barra.
+    expect(press(used.b, "Escape", WEBKIT_COMPOSING).defaultPrevented).toBe(false);
+    expect(escapes).toEqual([]);
     expect(press(used.b, "Escape").defaultPrevented).toBe(true);
     expect(escapes).toEqual(["esc"]);
     life.close();

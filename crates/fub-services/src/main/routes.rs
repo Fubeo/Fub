@@ -91,14 +91,10 @@ pub(super) fn dispatch(
                 &parsed.body,
             )
         }
-        Route::PublishCommit => {
-            // Preflight custom-JS fuori dal lock (solo file I/O, mai KDF).
-            if let Err(r) = fub_services::site_isolation::preflight_commit(data_dir, &parsed.body) {
-                r
-            } else {
-                handle_commit(state, auth, &parsed.body)
-            }
-        }
+        // Il preflight del custom JS sta dentro `plan_commit`, dopo
+        // autenticazione e autorizzazione: prima di allora il corpo non si
+        // legge e nessun file del sito si apre.
+        Route::PublishCommit => handle_commit(state, auth, &parsed.body),
         Route::PublishStatus => {
             let mut state = state.lock();
             fub_services::publish::handle(
@@ -143,6 +139,11 @@ fn handle_sync(
     parsed: &Parsed,
     auth: Option<&str>,
 ) -> HttpResponse {
+    // Prima il token, poi il corpo: senza una sessione valida la richiesta
+    // non si legge e non prende il lock di nessun vault.
+    if let Err(response) = state.lock().bearer(auth) {
+        return response;
+    }
     let vault = fub_services::sync::vault_of_request(&parsed.method, &parsed.path, &parsed.body)
         .map(|vault_id| {
             let locks = Arc::clone(&state.lock().vault_locks);
@@ -182,6 +183,11 @@ fn handle_commit(
     auth: Option<&str>,
     body: &[u8],
 ) -> HttpResponse {
+    // Prima il token, poi il corpo (fino a 64 MiB): senza sessione il commit
+    // non si legge e non prende il lock del sito.
+    if let Err(response) = state.lock().bearer(auth) {
+        return response;
+    }
     let site = site_lock(state, body);
     let _site = site.as_ref().map(|lock| lock.lock());
     let plan = {

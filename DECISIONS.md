@@ -65,8 +65,9 @@ Queste scelte l'orchestratore le prende da solo, ma con una soglia più alta,
 le scrive nel registro e le dice nel resoconto:
 
 - **il merge in `main`** di una consegna o di un ramo di piano: solo con la
-  PR pronta (non bozza), la CI completa verde sull'ultima testa (Linux,
-  Windows e macOS, banchi compresi quando tocca `apps/client/`), la
+  PR pronta (non bozza), la CI completa verde sull'ultima testa (Linux e
+  Windows, banchi compresi quando tocca `apps/client/`; macOS è in pausa,
+  ADR 0245), la
   revisione del diff fatta, le baseline prese dal runner e guardate, e
   nessun rosso tranne un instabile noto con la sua issue, rilanciato una
   volta e passato. Mai `--admin`, mai saltare un controllo richiesto, mai
@@ -111,6 +112,142 @@ ciò che non dipende dalla risposta.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-22 · K6 T13 · Nel Completo non ci sono «Posizione e misure» né i gruppi Distribuisci: li dà la sezione Trasforma e la sezione Allinea. Decisione del coordinatore (giro 4).
+  - Il Semplice non cambia. La sezione Trasforma prende i valori dalla vista del
+    pannello, senza chiedere il motore, e li mostra nell'unità del pannello. Il
+    valore scritto va alle unità della scena (1 px è 1 unità) prima del comando.
+- 2026-11-22 · K6 T13 · Le finestre di Sposta, Ruota, Scala, Rifletti e Inclina misurano in px, cioè nelle unità della scena, non in pt. Correzione del giro 3.
+  - Il motore sposta in unità della scena; l'etichetta «pt» diceva un'altra misura.
+- 2026-11-22 · K6 T13 · Nel Completo il gruppo a icone dei sei allineamenti del Design non c'è: resta la sezione Allinea, con «alla tavola». Decisione del coordinatore (giro 3).
+  - Il Semplice non cambia. Nel Completo restano le due icone di «Distribuisci» e le
+    quattro di «Disponi», che la sezione Allinea non ripete.
+- 2026-11-22 · K6 T13 · La finestra delle forme si apre solo col clic sul foglio, come oggi. Decisione del coordinatore (giro 3).
+  - Scegliere una forma nella colonna non apre la finestra: la apre il clic sul foglio.
+- 2026-11-22 · K6 T13 · I valori di partenza delle finestre sono misure vere, non 0. Decisione del coordinatore (giro 3).
+  - Il predefinito dello schema del comando; se manca, 100 per larghezza, altezza e
+    raggio. Un valore sotto il minimo (0,01 per una misura, 0,01 % per la scala) è in
+    errore accanto al campo e OK resta spento; la prova è in finestre.test.ts, con il
+    DOM. Un valore fuori dai limiti non fa partire l'anteprima.
+- 2026-11-22 · K6 T13 · Allinea resta solo nell'app: il prototipo non la disegna. Decisione del coordinatore (giro 3).
+  - Lo dice PLAN.md. La mappa della conformità non la confronta, e il prototipo non
+    va toccato per questo.
+- 2026-11-22 · K6 T13 · Una trasformazione con un oggetto bloccato nella selezione è rifiutata, e la frase dice di sbloccarlo o toglierlo; il motore non la salta.
+  - È la stessa regola della decisione (b) dell'allineamento, estesa a Sposta, Ruota,
+    Scala, Rifletti, Inclina e alla sezione Trasforma. Il piano diceva «il motore lo
+    salta, e lo si dice»: la differenza resta dichiarata, e il salto richiede una
+    modifica del motore o della famiglia, da decidere.
+- 2026-11-22 · K6 T13 · La sezione «Allinea» sta nel Completo, costruita dall'indice; la famiglia `trasforma` si porta al primo clic, decisa dal coordinatore.
+  - Perché: la sezione deve esserci in una sessione nuova senza caricare la
+    famiglia per mostrarla. Le voci `align.*` dell'indice hanno già comando e
+    valore; acceso o spento lo dice il client dal numero di oggetti scelti (due,
+    alla tavola uno). Il comando passa dal percorso unico, e un errore di
+    preparazione si dice e si riprova al clic successivo. Il prototipo non mostra
+    la barra Allinea (sta in un modello nascosto): la mappa della conformità non
+    la confronta, e la scelta «selezione o tavola» non è nel prototipo.
+- 2026-11-22 · K6 T13 · Oggetto bloccato nella selezione dell'allineamento: opzione (b), decisa dal coordinatore.
+  - Niente cambio a fub-abi: il comando resta rifiutato con il messaggio
+    «sblocca o togli dalla selezione». Il piano voleva che il motore saltasse
+    l'elemento bloccato e lo dicesse: quel salto con la perdita resta un lavoro
+    dichiarato, da riprendere solo con un cambio ABI approvato.
+- 2026-11-22 · K6 T13 · Oggetto chiave di «allinea a»: opzione (a), decisa dal coordinatore.
+  - La riga select.key (T15, «livelli») resta «da fare» con la nota «aspetta
+    T15»: l'oggetto chiave non c'è nel Completo finché T15 non la porta.
+- 2026-11-22 · K6 T13 · Il Riflesso (flare) torna «da fare», strumento e comando.
+  - Il suo alone è un g senza id: la scena del client non lo applica, e la
+    prova dei casi del client (casi.test.ts) lo ha trovato, non il banco Rust.
+    Aspetta T27, come le griglie: il gruppo con sfumature è un costrutto ricco.
+
+- 2026-11-21 · K6 T28 · Il motore senza disco, scelte del coder.
+  - Le radici vuote si chiamano `AutomationRoots::deny_all()`, non
+    `nessuna()`: è un nome dell'API del motore, in inglese come il resto. La
+    patch 0008 aggiunge anche `set_system_fonts(false)` (D12: nessuna
+    scansione dei caratteri del sistema) e il registro
+    `vectorcraft_engine::tables` delle otto tabelle che crescono con l'uso.
+  - `user_profiles` (profili di colore caricati) e `font_faces` (caratteri)
+    non si svuotano: i documenti aperti li usano per nome, e svuotarli
+    cambierebbe i colori e il testo sotto i piedi della persona. Il loro
+    peso entra lo stesso nei conti.
+  - Restano fuori dal registro, perché non crescono con l'uso o hanno già un
+    tetto: le tabelle di grandezza fissa (cataloghi), le cache di glifi e
+    contorni, le impostazioni, le cache per thread, il MEMO dei documenti
+    collocati (spento quando ci sono radici), i nomi dei blob del recupero e
+    l'intern dei plug-in (feature spenta).
+  - `come` di `disco.tsv` ha due valori in più: `ambiente` (legge thread,
+    memoria o data dall'ambiente, non un file) e `nessuno` (nessun comando
+    di Fub ci arriva); entrambi vogliono «—» e una nota.
+  - La guardia rifiuta i comandi delle righe `fub` dell'elenco (salvataggio,
+    recupero, `file.saveAsTemplate`), non ogni comando di famiglia `fub`
+    della mappa: `prefs.*` serve a T11. `file.saveAsTemplate` è `fub`
+    perché senza percorso il motore creerebbe la cartella dei modelli sotto
+    `HOME`, e i modelli sono di Fub.
+  - `text.addFontFiles` e `text.findFontFiles` sono esclusi per D12: i
+    caratteri vengono dal vault, il motore non li cerca né li copia.
+  - Il test della memoria fa crescere soltanto le tabelle che Fub raggiunge
+    oggi (`image_cache`, `font_faces`); per le altre stampa il task che le
+    apre (T14, T20, T23).
+
+- 2026-11-21 · K6 · l'utente approva il prototipo rifatto sulla cornice di
+  oggi (`PLAN-ui/disegno-completo.html` a `6462d5b0e`) e sceglie D9 (a):
+  «Formati del disegno» acceso di serie, lo script del motore compilato
+  dentro, i plug-in WebAssembly del motore fuori finché un'ADR non li
+  ammette. Ogni dipendenza nuova chiede ancora il suo sì. Dal 2026-11-21
+  lavorano al più due agenti insieme, coder o pianificatori · sbloccati
+  T6–T26 per la parte del prototipo, T23 e T26 per D9.
+- 2026-11-21 · K6 · D9 (formati, script e plug-in del motore) resta aperta:
+  è una scelta di dipendenze e di porte verso codice di terzi, che
+  `CLAUDE.md` lascia al manutentore. Raccomandazione (a): «Formati del
+  disegno» come sottocomponente acceso di serie, lo script compilato dentro,
+  i plug-in WebAssembly fuori finché un'ADR non li ammette. T23 e T26 la
+  aspettano · nessuna decisione presa.
+- 2026-11-21 · K6 · D12 decisa dall'orchestratore il 2026-11-21: (a), perché
+  i caratteri aggiunti stanno nel vault, in
+  `.fub/plugins/fub.draw/librerie/caratteri/`, e si ritrovano su un altro
+  computer; il motore non scandisce mai le cartelle del sistema
+  (`fornisci_caratteri` c'è già, e il motore non tocca il disco, T28).
+- 2026-11-21 · K6 · D11 decisa dall'orchestratore il 2026-11-21: (a), perché
+  le librerie dell'utente stanno in `.fub/plugins/fub.draw/librerie/`, nella
+  cartella del plug-in che `docs/reference/on-disk-layout.md` prevede e che
+  `HostApi` (`data_*`) già serve; il vault resta intero e il motore non
+  tocca il disco.
+- 2026-11-21 · K6 · D10 decisa dall'orchestratore il 2026-11-21: (b), perché
+  la ricetta in `<metadata>` (spazio dei nomi del motore, con l'impronta
+  dell'elemento) lascia un solo file, un SVG che si vede ovunque, e un
+  elemento cambiato fuori da Fub perde solo la sua ricetta, dicendolo. La
+  scrive la patch 0009 `ricetta-per-elemento` (T27; nel piano del
+  2026-11-05 era la 0005, ma 0003–0007 sono già prese).
+- 2026-11-21 · K6 · D8 decisa dall'orchestratore il 2026-11-21: (a), perché
+  la parità chiede raster e 3D, e da famiglie pigre non occupano memoria
+  finché non si usano (il `Budget` di K3 li libera).
+- 2026-11-21 · K6 · D7 decisa dall'orchestratore il 2026-11-21: (a), perché
+  gli insiemi di tasti del motore da scegliere in Impostazioni › Scorciatoie
+  costano poco e chiudono una riga della mappa (`shortcutSet.read`).
+- 2026-11-21 · K6 · D6 decisa dall'orchestratore il 2026-11-21: (a), perché
+  le 12 righe escluse (5 link dell'Aiuto del motore, 2 voci della barra
+  contestuale mobile, 5 dell'aggancio libero dei pannelli) non portano
+  funzioni del disegno, e farle vorrebbe dire un'interfaccia che non è
+  quella di Fub; ognuna resta nella mappa col suo perché.
+- 2026-11-21 · K6 · D5 decisa dall'orchestratore il 2026-11-21: (a), perché
+  «Penna» è il nome che ogni editor vettoriale dà alla penna di Bézier; la
+  penna a mano libera di Fub (oggi `draw.tool.pen`, «Penna») diventa
+  «Inchiostro», nello stesso gruppo. «Penna e dita» (lo stilo) non cambia
+  nome.
+- 2026-11-21 · K6 · D4 decisa dall'orchestratore il 2026-11-21: (a), perché
+  lo spazio di lavoro nella banda, accanto a `#status-mode`, è lo stesso
+  gesto della modalità che Scrittoio 2 ha già messo lì
+  (`status-mode-name`, `status-mode-arrow`); resta anche in ≡.
+- 2026-11-21 · K6 · D3 decisa dall'orchestratore il 2026-11-21: (a), perché
+  uno spazio in più confonde: con il componente acceso il Completo è quello
+  del motore, con il componente spento resta il Completo nativo di oggi
+  (`draw.workspace` = `full`, di serie). La superficie compatta dentro una
+  nota (ADR 0248) resta nel Semplice e non carica il Completo.
+- 2026-11-21 · K6 · D2 decisa dall'orchestratore il 2026-11-21: (a), perché
+  i 43 pannelli diventano sezioni delle schede dell'ispettore, più
+  «Pannelli ›» in ≡: è il disegno di Scrittoio 2, e a 264 px
+  (`--inspector-w`) le schede non possono essere 43.
+- 2026-11-21 · K6 · D1 decisa dall'orchestratore il 2026-11-21: (a), perché
+  nel Completo chi viene dal motore ritrova i suoi tasti, e i tasti globali
+  di Fub (Ctrl+P, Ctrl+K, Ctrl+W, Ctrl+Tab) vincono sempre, così Fub non
+  perde i suoi tasti di finestra.
 - 2026-11-15 · manutenzione · La revisione del merge: `erase_along` su un
   tratto di pagina o di cella non taglia (la pagina che la scheda mostra e il
   riquadro della cella li sa solo la resa) e scrive la nota `ink_kept` con la
@@ -2927,3 +3064,98 @@ La più recente in cima: data · piano · decisione · perché.
 - 2026-11-15 · T24 · Un gruppo oltre `MAX_MOVED` (1000) si trascina con una `move` sugli id espliciti senza `contents`; una passata di gomma oltre `MAX_ERASE_POINTS` o il lavoro si divide in pezzi consecutivi in una lista sola (un passo d'annulla). Resta per T26: l'anteprima della gomma «Solo il pezzo» ricalcola il taglio su tutto il cammino a ogni movimento (costo quadratico, già prima di T24: ~12 ms a movimento oltre 10 000 punti).
 
 - 2026-11-15 · LIC T25 · «Incolla codice» di una lista con schede già presenti (il giro copia → assistente → incolla): la finestra offre «Aggiorna le schede» (proposta: aggiornamento al posto, archi e altre schede intatti, nessuna cancellazione) e «Aggiungi come copie» (id nuovi, riferimenti rimappati), un solo annulla; traduzione fuori dal nucleo se le operazioni bastano. Il testo degli appunti si legge una volta in TS e `canvas_check` perde `{text}` (ABI interno). · Perché: senza, il «Perché» del piano non funziona mai sulla stessa lavagna; aggiornare senza cancellare non perde dati.
+- 2026-11-21 · K6 coder · Scelta dell'utente, con le sue parole: «gradirei che tu ti spostassi sull'editor SVG, però mantieni lo stesso workflow con i coder Haiku perché voglio vedere come si comportano»; prima, sullo stesso giro: «prova a far partire anche 5 agenti haiku max. Va bene opus medio per quei task» e sessioni lunghe permesse agli Haiku. Quindi in K6 i task grafici e d'interfaccia (T6–T10 e le righe delle famiglie copiate dal prototipo) li fanno coder Haiku a sforzo max, anche lunghi; motore, ricetta, contratti e disco restano a coder Opus medio. La regola generale «coder Haiku solo per task brevi» per questi task non vale. L'orchestratore rivede ogni consegna a campione prima dell'unione.
+- 2026-11-21 · K6 T8 · Deciso dall'orchestratore (non dall'utente): la fila delle opzioni nella testata (il punto 4 di T8) passa a T11, il primo strumento del motore, con l'opzione a): il Completo passa i testi della famiglia all'editor quando la famiglia è pronta, e solo allora la fila si monta, con i controlli del kit al posto di quelli nativi di `costruisciFila`. La prova della colonna a 44×550 px passa a quando le caselle sono più di 6. Riga scritta dal coder di T8 su richiesta dell'orchestratore · fonte: orchestratore, giro finale di T8.
+- 2026-11-21 · K6 coder · Scelta dell'utente, dopo tre lavori lunghi Haiku chiusi a metà (T7, T10, T8): «Va bene, procedi con questo workflow. Comunque voglio puntare il più possibile sugli agenti Haiku, perché comunque se sono abbastanza bravi per me possiamo sfruttarli bene, perché costano veramente poco.» Da qui: Haiku max è il coder di serie ovunque possa farcela; ogni lavoro va a giri di 2–4 punti con una fine che si verifica, lo stesso coder per i giri dello stesso lavoro, e l'orchestratore guarda le foto a ogni giro prima di mandarlo avanti. Opus medio resta per motore, contratti, disco e logica che può perdere dati. Più Haiku insieme quando i lavori non toccano gli stessi file. Per questo T9 si divide in T9a (≡ e Ctrl+/, Haiku), T9b (le regole dei tasti del Completo, Haiku) e T9c (`draw.keys`, Impostazioni › Scorciatoie e gli insiemi di tasti attraverso il kernel, Opus).
+- 2026-11-22 · K6 T15 giro 3 · I livelli: rinomina e livello nuovo non cambiano il formato (il `<g fub:layer>` con id `l…` c'è già, scene-format §3), li impara `differenza.rs`; il colore del livello non è nel formato e resta spento (unsupported); `visible` e `locked` entrano nel lessico di fub-motori, solo additivi; scelto corrente e trascinamento al giro dopo, senza toccare `vendor/vectorcraft`. Motore e disco a un coder Opus, la scheda all'Haiku in parallelo · Perché: il formato pubblicato ha già nome, blocco e visibilità; estenderlo per il colore non vale la base, e la patch al motore vendorizzato aspetta il giro del trascinamento.
+- 2026-11-22 · K6 T15 giro 3 · Deciso dall'orchestratore: la scheda Livelli del Completo non sostituisce l'albero nativo finché non lo eguaglia (filtro, trascinamento, miniature, oggetti dentro i livelli, tastiera). La prima versione (ramo `feat/k6-t15-livelli`, Haiku) era una lista piatta con due pulsanti e toglieva funzioni che oggi vanno: non entra. Il giro dopo (Opus) parte da quell'albero, con occhio, lucchetto, rinomina e livello nuovo dai comandi del motore, e riusa dal ramo Haiku solo le parti sane (nome da `fub:layer`, `document.inspect` nel banco, il gancio del cambio di scena).
+- 2026-11-22 · K6 T12 giro 5 · Deciso dall'orchestratore: Elaborazione tracciati (le dieci `object.pathfinder.*` senza finestra, il menu e la sezione in Design) entra nella base invece che dopo, perché un editor SVG decente unisce, sottrae e interseca forme. Trapping, Opzioni e le maschere di ritaglio (T27) restano fuori.
+- 2026-11-22 · K6 T11 · Deciso dall'orchestratore: «Tutta la grafica soprastante», «Altri livelli» (blocca e nascondi) e «Sposta sul livello corrente» restano «da fare» e fuori dalla base. Nel motore i livelli di Fub sono sottolivelli dell'unico livello radice (`promote_sublayers`), e questi comandi guardano solo i livelli radice e i loro figli diretti: con livelli veri rispondono 0. La via scelta per dopo è una famiglia di Fub che calcola «sopra» e «altri livelli» sui livelli di Fub, a un coder Opus, senza toccare `vendor/vectorcraft`. Riseleziona aspetta uno stato fra le richieste (contratto) · Perché: cambiare il motore vendorizzato costa la sincronia con upstream, e togliere le voci dal menu nasconderebbe un buco che la mappa già spiega.
+- 2026-11-23 · K6 T14 librerie · Deciso dall'orchestratore: `swatch.library.add` copia i campioni di una libreria come campioni globali del documento, e i gruppi della libreria si appiattiscono in campioni senza gruppo, nell'ordine della libreria (opzione a del coder) · Perché: il formato scrive già campioni globali senza gruppo; i gruppi dei campioni non hanno un posto nella scena, e aggiungerlo vale un giro sul disco che la base non chiede.
+- 2026-11-23 · K6 T15 stili · Deciso dall'orchestratore: gli stili grafici passano da un giro Opus sul ponte (importare le defs di stile all'apertura, scrivere defs e `fub:style` nella differenza, togliere `StileGrafico` dalla ricetta) prima di `graphicStyle.list/apply/breakLink`; il formato pubblicato (scene-format-styles §3–4) non cambia. Viene dopo il modello dei livelli · Perché: è scrittura su disco, e senza ponte `apply` lascerebbe un legame senza lo stile nel file.
+- 2026-11-23 · K6 coder · Rinforzo dell'utente: «orchestrali bene questi haiku che visto che si fermano solitamente prima di finire i task hanno bisogno di fare pochi lavori per volta con un piano pregresso ben congegnato, sennò rischiano di perdersi molti scenari di utilizzo/dettagli importanti». Da qui ogni giro Haiku è un solo gruppo di 1–4 righe, con l'elenco degli scenari scritto dall'orchestratore (quelli comuni più quelli della riga), un giro di sola ricerca quando il formato è in dubbio, e nel rapporto la tabella scenario → test, controllata leggendo i test all'unione.
+- 2026-11-23 · K6 T14 librerie · Deciso dall'orchestratore: la finestra delle librerie entra senza risposte nuove nel banco (opzione b del coder); la finestra con una libreria scelta si guarda nell'app vera, alla prova per l'utente. «Altra libreria…» resta «da fare» · Perché: il banco è comune a tutti i coder, e allargarlo per una foto vale meno di una prova sull'app vera.
+- 2026-11-23 · K6 T14 Ricolora · Deciso dall'orchestratore: un oggetto legato a un campione globale si stacca dal campione quando lo si ricolora; il campione e gli altri oggetti restano com'erano (opzione a del coder, scritta in drawing-colors.md). Entra solo il commit di Ricolora: la guida colori parcheggiata riparte in un giro suo · Perché: cambiare il campione cambierebbe oggetti che l'utente non ha scelto.
+- 2026-11-23 · K6 T15 · Deciso dall'orchestratore: i difetti delle ricette trovati dai giri Haiku (nascondi e blocca senza ricetta aggiornata, ricetta riscritta su un oggetto con maschera, sfumatura privata «@1», oggetto nascosto con id esplicito) vanno al giro Opus sulle ricette, prima del modello dei livelli. Nel modello dei livelli entra anche la carta: con il rect `fub-paper` figlio della radice il motore importa un solo livello (`import.rs` `layer_mode`), e «gli altri livelli» si contano sul livello corrente, non sulla scelta; Nascondi e Blocca altri restano «da fare» fino ad allora · Perché: sono scritture su disco e strutture di ogni disegno, non giri da Haiku.
+- 2026-11-23 · K6 T14 temi · Deciso dall'orchestratore: i temi del colore si salvano nelle preferenze del motore (`draw.motore`, come gli altri preset senza codice loro), non nel disegno (opzione b del coder); salvare un tema non scrive il file. `addToSwatches` resta «da fare» finché il formato non ha i gruppi di colori.
+- 2026-11-23 · K6 T15 nascondi e blocca altri · Deciso dall'orchestratore: Nascondi altri e Blocca altri restano «da fare» fino al modello dei livelli (opzione b del coder): con la carta il motore conta «gli altri» sul livello corrente, non sulla scelta.
+- 2026-11-23 · K6 T13 Sposta leggermente · Deciso dall'orchestratore: Sposta leggermente su un oggetto nascosto scelto a mano lo sposta, come le altre trasformazioni con una scelta esplicita; fissato nei casi.
+- 2026-11-23 · K6 T12 angoli · Deciso dall'orchestratore: il difetto visto con Imposta angoli era del banco di prova (metadata della ricetta prima della carta), non del comando; il banco Rust si allinea al client in un giro a parte.
+- 2026-11-23 · K6 T12 tagli · Deciso dall'orchestratore: i tagli rifiutano un `rect` primitivo (`unsupported`), un taglio col rettangolo tutto fuori toglie l'oggetto come fa il motore, e una ricetta con due riempimenti si taglia in copie per riempimento; accettati e fissati nei casi, la forma della ricetta tagliata si rivede col modello dei livelli.
+- 2026-11-23 · K6 T13 testo · Deciso dall'orchestratore: sul testo in area Ruota, Inclina e Rifletti si rifiutano con la frase prima del motore (il riquadro di `fub:wrap` resta dritto); Scala e Sposta lo riscrivono. Sul testo di punto e su tracciato il `transform` va sul `<text>`.
+- 2026-11-23 · K6 T15 seleziona per carattere · Deciso dall'orchestratore: `select.font` e `select.globalEditOptions` sono «fatto» senza la finestra, che è lavoro del client; `select.globalEdit` resta «da fare» perché lo stato della modifica globale vive nella sessione del motore e si azzera a ogni ripristino: si ripensa col livello corrente.
+- 2026-11-23 · K6 modello dei livelli · Deciso dall'orchestratore: sì alla proposta dell'Opus (punti 1–7): la carta esce dall'import quando gli altri figli della radice sono livelli di Fub e rientra con `after: fub-paper`; gli id dei livelli scendono di uno; Nascondi altri e Blocca altri usano i livelli di primo livello della scelta. Il livello corrente (punto 8) si decide dopo, su una proposta a parte.
+- 2026-11-23 · K6 T13 · Deciso dall'orchestratore: lo strumento Shaper resta fuori dalla base; la Marionetta rifiuta un oggetto nascosto con la frase prima del motore; «Fai scorrere» su un tracciato chiuso scrive una matrice, come il motore.
+- 2026-11-23 · K6 T12 gomma · Deciso dall'orchestratore: `addon.pathtools.erase` è «fatto» col gesto della gomma dei punti (casi in `motore/gomma-punti*.test.ts`); il segno del gesto ha per ora un colore fisso, difetto d'aspetto annotato e non bloccante.
+- 2026-11-23 · K6 T12 Semplifica e Smussa · Deciso dall'orchestratore: le frasi italiane di Semplifica e Smussa entrano con il gancio `rifiuto_prima_dei_nodi` di `famiglie/mod.rs` (chiamato in `esegui` prima di `nodi_scelti`), così il rifiuto arriva con la sua frase anche quando nessun nodo è scelto; «Altre opzioni» resta «da fare».
+- 2026-11-23 · K6 T13 testo in area · Deciso dall'orchestratore: la perdita del testo in area dentro un gruppo o un livello è ritratta (il markup della prova non era conforme; il test resta attivo). Difetto vero: Scala su un testo in area scala il `dy` delle righe (`differenza_righe.rs`) ma non il corpo, e con s = 0,5 l'importatore del motore non vede più la riga nuova, quindi alla riapertura il testo diventa di punto. Correzione all'Opus: Scala scala anche il corpo; `vendor/` non si tocca.
+- 2026-11-23 · K6 T14 regola di riempimento · Deciso dall'orchestratore: il formato della scena non cambia ora per `fill-rule`; `path.setFillRule` resta «da fare». Un tracciato con `fill-rule` scritto da un altro programma resta al byte: i comandi che lo cambierebbero sono rifiutati (`unmapped`), gli altri non toccano la sua riga (`tests/regola_di_riempimento_straniera.rs`). Limite d'uso da dire all'utente alla prova.
+- 2026-11-23 · K6 T15 voci dell'aspetto · Deciso dall'orchestratore: le tre voci dell'aspetto tornano indietro con un revert (opzione a del coder) e restano «da fare» (opzione b) finché non c'è il pannello Aspetto nel client e una lettura della pila nel motore; il pannello non è d'uso quotidiano, quindi non entra nella base.
+- 2026-11-23 · K6 T14 campioni · Deciso dall'orchestratore: `swatch.sortByKind` è «fatto» come comando onesto che dà sempre un passo vuoto (l'ordine dei campioni non è nel formato); `swatch.setSpot`, `swatch.resetDefaults` e `swatch.spotOptions` restano «da fare» con la causa del formato.
+- 2026-11-23 · K6 T14 librerie · Deciso dall'orchestratore: le letture `swatch.library.save` e `load` del motore sono pronte e provate (`librerie_colore.rs`), ma le righe restano «da fare» finché la finestra non c'è; lo schema dei dati (percorso o contenuto) non si sceglie ora. La libreria dell'utente vivrà in `.fub/plugins/fub.draw/librerie/` (D11).
+- 2026-11-23 · K6 livello corrente · Deciso dall'orchestratore: il livello corrente vive nella sessione del documento nel client, per id del livello di Fub, e si rimette dopo una riapertura o una risincronizzazione; se il livello sparisce torna quello in cima. `object.arrange.sendToCurrentLayer` viene dopo, sullo stesso giro dell'Opus.
+- 2026-11-23 · K6 T14 filtro colore · Deciso dall'orchestratore: `addon.color.filter` resta «da fare» finché non c'è la finestra degli effetti di T18 (`effect.dialog`); nessuna finestra provvisoria solo per questa riga.
+- 2026-11-23 · K6 T11 modello della pagina · Deciso dall'orchestratore: `view.template` tocca il formato su disco (un livello modello va scritto e riaperto), quindi va all'Opus dopo i gruppi di colori; nessun livello modello solo nella sessione del client.
+- 2026-11-23 · K6 T11 widget d'angolo · Deciso dall'orchestratore: `view.cornerWidget` resta «da fare» finché il motore non dà una lettura del raggio per vertice; il trascinamento usa poi `cornerSet`. Una preferenza senza il widget non conta come fatta.
+- 2026-11-23 · K6 T11 ruota sulla selezione · Deciso dall'orchestratore: `view.rotateToSelection` aspetta un giro del motore che legga la rotazione condivisa della selezione; Ruota vista (`view.rotate`) è fatta da sola.
+- 2026-11-23 · K6 voci senza posto nel menu · Deciso dall'orchestratore: i comandi che non hanno ancora un posto nei menu del Completo si raggiungono dalla ricerca (Ctrl+/); per la base basta questo, i menu si riprogettano con la grafica nuova.
+- 2026-11-23 · K6 doppio clic · Deciso dall'orchestratore: `lancia` del Completo ignora una voce uguale (stesso id, stessa chiamata, stessa selezione) mentre la prima è ancora in volo, così un doppio clic manda un solo comando e lascia un solo passo di Annulla.
+- 2026-11-23 · K6 T11 modo di disegno · Deciso dall'orchestratore: nessuna fonte nuova di voci e vendor intatto; `view.drawMode` è una sola voce del menu Visualizza del client che offre Normale, Dietro e Dentro, con le parole nelle stringhe del client. La riga è «fatto» solo se i tre modi funzionano; un modo che il motore non sa fare resta spento con il perché.
+- 2026-11-23 · K6 T12 Unisci (gesto) · Deciso dall'orchestratore: `path.joinScrub` chiede una selezione di tracciati, come Smussa (senza selezione è spento con `no_selection`); come nel motore lega solo le estremità e non taglia i pezzi sporgenti.
+- 2026-11-23 · K6 prove · Deciso dall'orchestratore: un `apriFinestra` finto nei test deve consumare la promessa `pronto`, perché col motore assente si rifiuta; la prova completa ora cerca anche «Unhandled Rejection» ed «Errors» nell'uscita di vitest.
+- 2026-11-23 · K6 T11 modo di disegno (seconda scelta) · Deciso dall'orchestratore, supera la voce precedente sul modo di disegno: `view.drawMode` è «fatto» con Normale e Dietro; Dentro resta spenta con la sua frase, perché il motore crea un gruppo di ritaglio che la differenza del file rifiuta (`unsupported`, test `tests/modo_di_disegno.rs`). Il segno nel menu viene dal valore accettato dal motore; la scelta vive in `completo/modo-disegno.ts`.
+- 2026-11-23 · K6 T14 gruppi di colori · Deciso dall'orchestratore: sì alla proposta dell'Opus. Il gruppo è l'attributo `fub:group` sui campioni (`campioni.rs`), senza versione né migrazione; un gruppo vuoto si rifiuta con la frase (1a); `swatch.resetDefaults` entra (2a) a tre condizioni: gli oggetti tengono il colore, le perdite sono dichiarate in `losses`, i nomi italiani si fanno come le altre parole del motore. La finestra `ui.newColorGroup` resta «da fare» per un giro dopo.
+- 2026-11-23 · K6 T11 aggancio al pixel · Deciso dall'orchestratore: il pixel viaggia come passo 1 nello stesso campo di aggancio del gesto e la griglia vince, come nel motore; nel Semplice l'aggancio al pixel non agisce (il valore resta salvato). Le guide intelligenti restano come sono (scelta a del coder): nessun contratto cambia. Da dire nella prova dell'utente: con la griglia accesa la voce è spuntata ma non fa nulla; le frecce vanno di 1 px, con Maiusc di 5.
+- 2026-11-23 · K6 T11 zoom sulla selezione · Deciso dall'orchestratore: la voce passa per `chrome/status.ts` (`ctx.comandoVista`), la stessa strada degli altri zoom del Completo; la prova in due pezzi (spia sulla strada e calcolo della vista) basta, e la riga sta in T11/vista.
+- 2026-11-23 · K6 T12 Pennello tondo · Deciso dall'orchestratore: lo strumento `blobBrush` si sceglie dalla colonna «Matita», con Maiusc+B e dalla ricerca; dei 25 strumenti del motore con un tasto solo Maiusc+B arriva al Completo (scelta a del coder): gli altri tasti restano spenti finché non sono approvati. Le due voci della ricerca per lo stesso strumento (`path.blob` e `blobBrush`) restano per ora. La riga dello strumento ha il suo caso in `tests/famiglie/pennelli.json`.
+- 2026-11-23 · K6 T14 Selettore colore · Deciso dall'orchestratore: «Selettore colore…» sta in Modifica › Colori e nella ricerca (scelta a del coder); parte dall'ultimo colore visto dalla sezione Colore, perché il motore non ha una lettura dei colori della selezione; senza selezione la voce è spenta come il pozzo.
+- 2026-11-23 · K6 T12 Aggiungi punti e Dividi in griglia · Deciso dall'orchestratore: si segue il motore. Aggiungi punti chiede solo quanti punti (il motore non ha una distanza) e rifiuta forme e testi con la frase; Dividi in griglia fa una sola griglia sul riquadro di tutti i tracciati scelti (scelta a del coder) e non chiede le guide, che il formato non scrive.
+- 2026-11-23 · K6 prove · Deciso dall'orchestratore: la prova di `carica.test.ts` che importa tutte le famiglie ha 30 s invece dei 5 di serie: da sola è sotto il secondo, ma cadeva a ogni prova completa con la macchina carica.
+- 2026-11-23 · K6 T12 Pulisci · Deciso dall'orchestratore: la finestra offre le caselle come le offre il motore (scelta a del coder) e agisce su tutto il disegno; due caselle non hanno effetto sui file aperti da Fub, limite da dire all'utente alla prova.
+- 2026-11-23 · K6 T14 Nuovo gruppo colori · Deciso dall'orchestratore: la finestra è il dialogo del kit, dalle risorse dell'ispettore e dalla ricerca; il gruppo vuoto lo ferma la finestra prima del motore. Un nome già usato diventa «Nome 2» senza dirlo: difetto annotato, non bloccante.
+- 2026-11-23 · K6 argomenti rifiutati · Deciso dall'orchestratore: un `bad_args` a un gesto o a un comando non spegne la sessione del motore; la risposta è `{ kind: "argomenti", message }` e la frase arriva all'utente. Restano un guasto il `bad_args` di un `sync` o della chiusura di un tracciato aperto e `permission_denied`. Alcune frasi del motore sono ancora in inglese o cominciano con un id: limite annotato.
+- 2026-11-23 · K6 build · Deciso dall'orchestratore: la build del client era sopra la soglia dei chunk (`search` 524 KB, nessuna CI girava perché le PR del disegno e dell'editor 3 sono in conflitto con main). Le parole del motore vanno nel chunk `settings-panel` e un chunk `shell-shared` raccoglie ciò che la shell divide con le Impostazioni; `search` torna a 493 KB come nell'editor 3. La prova completa dell'orchestratore aggiunge `npm run build`.
+- 2026-11-23 · K6 avvio dell'app · Deciso dall'orchestratore: la build del 23/11 era verde ma l'app vera diceva «Fub non è partito»: le Impostazioni leggevano al caricamento tre foglie rimaste in `search`, che importa le Impostazioni (ciclo fra chunk). Le foglie vanno in `shell-shared` e la build si ferma a ogni ciclo statico fra chunk fuori dai quattro che c'erano già nell'editor 3 (`build/chunk-cycles.mjs`). Prima di dare l'app all'utente si prova l'avvio vero, non solo la build.
+- 2026-11-23 · K6 tasti degli strumenti · Deciso dall'orchestratore, su richiesta dell'utente («il funzionamento pratico … identico a quello di Artcraft»): nel Completo ogni strumento del motore pronto prende la sua lettera del catalogo di VectorCraft (V, A, P, M, L, R, O, T, H, Maiusc+B…), anche sopra lo strumento di Fub con la stessa lettera; uno non pronto la lascia a Fub (E resta la gomma). I tasti con Ctrl/Alt e Maiusc+H/Maiusc+V con una selezione restano di Fub (D1). Il Completo si apre sulla Selezione del motore e ci torna dopo Esc e dal testo; nelle caselle gli strumenti del motore vengono prima di quelli di Fub.
+- 2026-11-23 · K6 niente del vecchio editor nel Completo · Deciso dall'orchestratore, su richiesta dell'utente («non devi assolutamente lasciare niente del vecchio editor di FUB … tutto ciò che non è uguale ad Artcraft nel funzionamento»): supera in parte la voce sopra. Col motore presente (indice arrivato) la colonna ha solo gli strumenti del motore pronti; le lettere senza uno strumento del motore pronto non scelgono più uno strumento di Fub (E non fa niente), e Maiusc+H/Maiusc+V non capovolgono; il Completo parte sempre dalla Selezione del motore. Senza motore restano i tasti e gli strumenti di Fub, perché si possa disegnare. Prossimi passi: i tasti con Ctrl/Alt del motore sopra quelli dell'editor, i tasti di un solo carattere (X, D, /…), le frecce e Canc come VectorCraft.
+- 2026-11-23 · K6 tasti con Ctrl di VectorCraft · Deciso dall'orchestratore, stessa richiesta dell'utente: col motore presente i comandi del motore vincono su tutti i tasti dell'editor e della shell tranne quelli della finestra (`TASTI_DELLA_FINESTRA`: salva, chiudi, schede, tavolozza, apri, nuova nota, impostazioni, zone). L'editor tiene come VectorCraft annulla/ripeti (cronologia del disegno, da cui passano anche i comandi del motore), gli appunti (gli eventi del browser vanno già agli appunti del Completo) e i tasti della vista di VectorCraft (Ctrl+Y, Ctrl+', Ctrl+0, Ctrl+1, Ctrl+=/-, Ctrl+Maiusc+/). Perdono il tasto nel disegno: Ctrl+1…8 delle schede, Ctrl+F cerca, Ctrl+Maiusc+O apri cassaforte, perché in VectorCraft sono blocca, nascondi, incolla davanti, crea contorni. Sostituisce il punto «i tasti con Ctrl/Alt restano di Fub (D1)» per il Completo col motore.
+- 2026-11-23 · K6 tasti nudi di VectorCraft · Deciso dall'orchestratore, stessa richiesta: col motore le frecce fanno `object.nudge` del motore (Maiusc grande, Alt copia, come `nudge_and_clear`), Canc e Backspace `edit.clear`, i comandi con un tasto di un carattere dell'indice (D, X, Maiusc+X, /, `,`, `.`, Maiusc+D) partono dal montaggio; Esc e Invio vanno prima allo strumento. I tasti nudi solo di Fub (Tab fra gli oggetti, Pag, Home/Fine, Spazio, F2, ?, cifre, Maiusc+1/2, [ ], # %) non valgono. Tab per i pannelli e lo Spazio tenuto per la Mano di VectorCraft restano da fare. I tasti del motore partono solo col Completo acceso (`attivo`), non nel Semplice con il Completo caricato.
+- 2026-11-23 · K6 Tab e Spazio di VectorCraft · Deciso dall'orchestratore: dal foglio Tab fa `window.dock` (barra, colonna, pannelli; rimostra ciò che ha nascosto) e Maiusc+Tab `window.panels`; nello Scrittoio i pannelli sono l'ispettore, mostrato e nascosto con `shell.inspector.toggle`. Solo dal foglio, perché fuori Tab serve a muovere il fuoco fra i comandi (accessibilità), dove VectorCraft non ha comandi da raggiungere. Lo Spazio tenuto era già la Mano; ora lo prende il Testo mentre scrive.
+- 2026-11-23 · K6 barra in alto di VectorCraft · Deciso dall'orchestratore: col motore presente la riga delle opzioni ha solo la fila dello strumento del motore scelto (le sue opzioni, come la parte «Tool Options» della barra di controllo di VectorCraft); i gruppi di Fub (colore, spessori, modifica, livelli, vista) escono, perché in VectorCraft colore, livelli e zoom stanno nei pannelli, nel menu e nella banda. Gli altri gruppi della barra di controllo di VectorCraft (riempimento e contorno, opacità, allinea, X/Y/L/A, opzioni di punti e tavola) non ci sono ancora: vanno aggiunti uno alla volta dai comandi del motore. Restano menu ≡, Annulla, Ripeti ed Esporta, che stanno fuori dalla riga.
+
+- 2026-11-23 · K6 punti delle forme e Trasformazione libera. Con uno strumento
+  del motore un `<rect>`, `<circle>` o `<ellipse>` scelto mostra contorno e punti
+  come in VectorCraft, che all'import li legge come tracciati (usvg): gli angoli
+  del rettangolo, otto con gli angoli tondi, e i quattro punti dell'ellisse.
+  La Trasformazione libera (`E`) è nella colonna: scala, sposta e deforma un
+  tracciato; deformare con Ctrl un `<rect>` è rifiutato finché la differenza non
+  sa cambiarlo in `<path>` con lo stesso id. La sua fila (modo e Vincola) manca.
+- 2026-11-23 · K6 le forme diventano tracciati · Deciso dall'orchestratore, su
+  richiesta dell'utente («la stessa tecnica che viene usata da Vectorcraft per
+  disegnare i tracciati delle figure»): come in VectorCraft rettangoli, ellissi,
+  cerchi e poligoni si comportano da tracciati per tutti gli strumenti. Nel file
+  cambia solo l'oggetto deformato: la differenza manda un `set` con `tag: "path"`,
+  che lo riscrive `<path>` al suo posto con id, attributi e figli; l'inversa col
+  `tag` di prima lo rimette com'era, byte per byte. Una forma solo spostata,
+  scalata o ruotata resta quella che era, con una `transform`. Le linee restano
+  rifiutate (un tracciato aperto senza riempimento le cambierebbe nel Semplice);
+  un documento con `<style>` o una freccia (`marker-*`) rifiuta il cambio, perché
+  il tracciato sarebbe estraneo. Contratto: `docs/reference/scene-operations.md`
+  §2, vettore 94. Supera «deformare con Ctrl un `<rect>` è rifiutato» sopra.
+- 2026-11-23 · K6 guide sensibili e agganci di Visualizza · Deciso
+  dall'orchestratore: il motore aveva già guide sensibili, aggancio al punto e
+  ai glifi, ma il gesto non gli diceva se erano accesi. `DrawingSnap` prende
+  `guides`, `points` e `glyphs`, facoltativi (assenti = i valori di serie di
+  VectorCraft: accese, acceso, spento), così i gesti e i vettori di prima non
+  cambiano. Il client li tiene nella griglia ricordata (`smartGuidesOff`,
+  `snapPointOff`, `snapGlyph`, scritti solo se diversi da quelli di serie) e
+  le tre voci sono in ≡ › Visualizza.
+- 2026-11-25 · K6 le letture dei pannelli non chiudono il testo · Deciso da
+  solo, per la CI della #313. Il banco a 800 px mostrava il difetto: la
+  sezione Trasforma chiedeva `prefs.get` poco prima del clic del Testo, la
+  richiesta arrivava alla sessione dopo, e la sessione chiudeva il testo
+  appena aperto (ogni comando chiude il tracciato aperto). Ora `chiama`
+  (le sole letture dei pannelli) passa `{ lettura: true }` e la sessione la fa
+  aspettare finché il tracciato aperto non si chiude; un comando chiesto da
+  una persona lo chiude ancora prima di partire, come vuole il motore
+  (`prefs.get` e `col_motore` annullano un gesto a metà).

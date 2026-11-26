@@ -56,11 +56,31 @@ pub(super) fn recover_definitions<'a>(
     }
     let mut defs = Vec::new();
     let mut containers: Vec<Container> = Vec::new();
+    // L'ombra si paga solo se una riga può aprire un paragrafo con
+    // `[etichetta]:`: una nota a piè di pagina `[^1]:` o un `a[i]:` nel codice
+    // non bastano più a rifare il parse di tutta la nota (vedi
+    // [`may_hide_definitions`]).
+    let shadow_needed =
+        shadow_forced() || may_hide_definitions(source, options.extension.footnotes);
     // Gli span dei paragrafi **prima** della correzione dei misti: è contro
     // questi che l'ombra decide se un suo paragrafo è un paragrafo vero.
     let mut real_spans = Vec::new();
-    paragraph_spans(root, offsets, &mut real_spans);
+    if shadow_needed {
+        paragraph_spans(root, offsets, &mut real_spans);
+        // L'albero non è in ordine di sorgente: comrak porta in fondo al
+        // documento le note citate, e i loro paragrafi arrivano dopo quelli
+        // che nel file stanno più giù. `walk_shadow` cerca per bisezione, e
+        // su una lista fuori ordine mancava il paragrafo vero che copre il
+        // suo: la definizione, già letta dal giro vero, entrava due volte
+        // (#507). I paragrafi non si annidano, quindi in ordine di inizio
+        // sono in ordine anche di fine.
+        real_spans.sort_unstable_by_key(|s| s.start);
+    }
     walk_definitions(root, source, offsets, &mut defs, &mut containers);
+    if !shadow_needed {
+        return defs;
+    }
+    count_shadow_parse();
     // I paragrafi di **sola** definizione comrak li stacca in
     // `finalize_borrowed` (l'arm `Paragraph`): nell'albero vero non ci sono, e
     // il giro sopra non li ha visti — senza un recupero, `[rif]: nota.md` da
@@ -74,6 +94,137 @@ pub(super) fn recover_definitions<'a>(
     defs
 }
 
+/// Se l'ombra può trovare una definizione che il giro sull'albero vero non
+/// vede: un **sovrainsieme** esatto dei casi in cui il secondo parse cambia il
+/// risultato.
+///
+/// L'ombra aggiunge una definizione solo da un suo paragrafo che nessun
+/// paragrafo vero copre, e solo se la fetta vera di quel paragrafo comincia
+/// con `[etichetta]:` (`definitions_from_slice` legge in testa). Un paragrafo
+/// comincia all'inizio di una riga, dopo i marcatori dei contenitori: rientro,
+/// `>` delle citazioni, marcatori di lista (`-`, `+`, `*`, `1.`, `1)`), `:`
+/// delle definition list, e gruppi fra parentesi quadre — la casella di un
+/// task `[ ]` e l'etichetta di una nota `[^1]:`, dopo cui comincia il suo
+/// contenuto, e i `U+FEFF`. Qui il prefisso ammesso è più largo di quello di comrak (ogni
+/// combinazione di quei byte, gruppi qualsiasi sulla stessa riga): un falso sì
+/// costa solo il parse di oggi, un falso no perderebbe una definizione.
+///
+/// Con le footnote attive l'apertura di una nota (`[^1]:`, vedi
+/// [`footnote_opener`]) non è una candidata: l'ombra lascia intatto ogni `[^`,
+/// e quel blocco lo legge come il vero. `[^a b]:` invece comrak non lo prende
+/// per una nota, e resta una candidata come le altre. Se
+/// nessuna candidata c'è, gli unici `[` che l'ombra cambia stanno a metà riga
+/// (link, wikilink, codice) e non spostano nessun paragrafo che cominci con
+/// `[etichetta]:` — è ciò che `shadow_gate_agrees_with_the_shadow` prova sul
+/// corpus generato.
+fn may_hide_definitions(source: &str, footnotes: bool) -> bool {
+    const BOM_BYTES: &[u8] = "\u{feff}".as_bytes();
+    let b = source.as_bytes();
+    // `prefix`: tutto ciò che sta prima su questa riga può essere marcatore
+    // di contenitore. `depth`: dentro un gruppo fra quadre ogni byte va bene.
+    let mut prefix = true;
+    let mut depth = 0usize;
+    let mut at = 0;
+    while at < b.len() {
+        let c = b[at];
+        if matches!(c, b'\n' | b'\r') {
+            prefix = true;
+            depth = 0;
+            at += 1;
+            continue;
+        }
+        if !prefix {
+            at += 1;
+            continue;
+        }
+        // Un `U+FEFF` davanti non è testo né per noi né per comrak, che toglie
+        // il suo anche dopo il nostro: in un prefisso non chiude niente.
+        if depth == 0 && b[at..].starts_with(BOM_BYTES) {
+            at += BOM_BYTES.len();
+            continue;
+        }
+        if c == b'[' {
+            let footnote = footnotes && footnote_opener(&b[at..]);
+            if !footnote
+                && definition_text::label_at(source, at)
+                    .is_some_and(|(after, _)| b.get(after) == Some(&b':'))
+            {
+                return true;
+            }
+            depth += 1;
+        } else if depth > 0 {
+            match c {
+                b']' => depth -= 1,
+                // Un escape non chiude il gruppo: `\]` resta dentro (un
+                // terminatore di riga dopo la barra resta un terminatore).
+                b'\\' if !matches!(b.get(at + 1), Some(b'\n' | b'\r')) => at += 1,
+                _ => {}
+            }
+        } else if !matches!(
+            c,
+            b' ' | b'\t' | b'>' | b'-' | b'+' | b'*' | b'.' | b')' | b':' | b'0'..=b'9'
+        ) {
+            prefix = false;
+        }
+        at += 1;
+    }
+    false
+}
+
+/// Se `b` comincia con l'apertura di una nota come la riconosce comrak
+/// (`scanners::footnote_definition`): `[^`, un'etichetta senza `]`, spazi,
+/// tab o terminatori, `]:`. `[^a b]:` non lo è, e per comrak può essere una
+/// definizione di riferimento con etichetta `^a b`.
+///
+/// Lo scorrimento si ferma anche al `[` dopo: comrak accetterebbe `[^a[b]:`
+/// come nota, ma qui un no in più vuol dire solo provare la candidata, e
+/// fermarsi lì tiene lineare una riga di `[^[^[^…`.
+fn footnote_opener(b: &[u8]) -> bool {
+    let Some(rest) = b.strip_prefix(b"[^") else {
+        return false;
+    };
+    let label = rest
+        .iter()
+        .take_while(|&&c| !matches!(c, b']' | b'[' | b' ' | b'\t' | b'\r' | b'\n'))
+        .count();
+    label > 0 && rest[label..].starts_with(b"]:")
+}
+
+#[cfg(test)]
+thread_local! {
+    /// Quante volte questo thread ha rifatto il parse dell'ombra.
+    static SHADOW_PARSES: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    /// Forza l'ombra a ogni parse, per confrontare il filtro con il recupero
+    /// senza filtro.
+    static FORCE_SHADOW: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+#[cfg(test)]
+fn shadow_forced() -> bool {
+    FORCE_SHADOW.with(std::cell::Cell::get)
+}
+
+#[cfg(not(test))]
+fn shadow_forced() -> bool {
+    false
+}
+
+#[cfg(test)]
+fn count_shadow_parse() {
+    SHADOW_PARSES.with(|n| n.set(n.get() + 1));
+}
+
+#[cfg(not(test))]
+fn count_shadow_parse() {}
+
+/// Quanto `walk_definitions` deve sapere di un nodo.
+enum WalkKind {
+    Paragraph,
+    BlockQuote,
+    List,
+    Other,
+}
+
 fn walk_definitions<'a>(
     node: &'a AstNode<'a>,
     source: &str,
@@ -81,10 +232,18 @@ fn walk_definitions<'a>(
     defs: &mut Vec<Definition>,
     containers: &mut Vec<Container>,
 ) {
-    let value = node.data.borrow().value.clone();
+    // Solo il genere del nodo, senza clonare il suo valore (testo, codice):
+    // il prestito si rilascia subito, perché il ramo del paragrafo misto
+    // riscrive il sourcepos con `borrow_mut`.
+    let kind = match &node.data.borrow().value {
+        NodeValue::Paragraph => WalkKind::Paragraph,
+        NodeValue::BlockQuote => WalkKind::BlockQuote,
+        NodeValue::List(_) => WalkKind::List,
+        _ => WalkKind::Other,
+    };
     let span = span_of(node, offsets);
-    match value {
-        NodeValue::Paragraph => {
+    match kind {
+        WalkKind::Paragraph => {
             let Some(slice) = source.get(span.start..span.end) else {
                 return;
             };
@@ -124,7 +283,7 @@ fn walk_definitions<'a>(
             };
             shift_descendants(node, n, &delta);
         }
-        NodeValue::BlockQuote => {
+        WalkKind::BlockQuote => {
             let width = blockquote_width(source, span.start);
             containers.push(Container::BlockQuote(width));
             for child in node.children() {
@@ -132,7 +291,7 @@ fn walk_definitions<'a>(
             }
             containers.pop();
         }
-        NodeValue::List(_) => {
+        WalkKind::List => {
             for item in node.children() {
                 let width = marker_width(source, offsets, item);
                 let item_start = item.data.borrow().sourcepos.start;
@@ -152,7 +311,7 @@ fn walk_definitions<'a>(
                 containers.pop();
             }
         }
-        _ => {
+        WalkKind::Other => {
             // Gli altri contenitori (footnote, definition list, html…) non
             // aggiungono marcatori di riga propri; i figli si visitano uguale.
             for child in node.children() {
@@ -166,8 +325,7 @@ fn walk_definitions<'a>(
 /// misti li sposti: è contro questi che l'ombra decide se un suo paragrafo è
 /// un paragrafo vero (già letto dal giro principale) o uno staccato da comrak.
 fn paragraph_spans<'a>(node: &'a AstNode<'a>, offsets: &Offsets<'_>, spans: &mut Vec<Span>) {
-    let value = node.data.borrow().value.clone();
-    if matches!(value, NodeValue::Paragraph) {
+    if matches!(node.data.borrow().value, NodeValue::Paragraph) {
         spans.push(span_of(node, offsets));
         return;
     }
@@ -213,11 +371,10 @@ fn walk_shadow<'a>(
     real_spans: &[Span],
     defs: &mut Vec<Definition>,
 ) {
-    let value = node.data.borrow().value.clone();
-    if matches!(value, NodeValue::Paragraph) {
+    if matches!(node.data.borrow().value, NodeValue::Paragraph) {
         let span = span_of(node, offsets);
-        // `reali` è ordinato per inizio e disgiunto (pre-order di
-        // `span_dei_paragrafi`): il solo candidato a contenere `span` è il
+        // `real_spans` è ordinato per inizio e disgiunto (ordinato in
+        // `recover_definitions`): il solo candidato a contenere `span` è il
         // primo che non finisce prima di lui.
         let idx = real_spans.partition_point(|r| r.end <= span.start);
         if real_spans.get(idx).is_some_and(|r| contains_span(*r, span)) {
@@ -482,5 +639,280 @@ fn shift_node<'a>(node: &'a AstNode<'a>, n: usize, delta: &dyn Fn(usize) -> isiz
     node.data.borrow_mut().sourcepos = sp;
     for child in node.children() {
         shift_node(child, n, delta);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{FORCE_SHADOW, SHADOW_PARSES};
+    use fub_abi::format::ParseContext;
+    use fub_abi::model::Block;
+
+    /// Il parse di una nota e quante ombre ha rifatto.
+    fn parse_counting(source: &str) -> (String, usize) {
+        SHADOW_PARSES.with(|n| n.set(0));
+        let model = super::super::parse_markdown(source, &ParseContext::obsidian("nota.md"));
+        (
+            format!("{model:?}"),
+            SHADOW_PARSES.with(std::cell::Cell::get),
+        )
+    }
+
+    /// Lo stesso parse con l'ombra rifatta sempre, come prima del filtro.
+    fn parse_forced(source: &str) -> String {
+        FORCE_SHADOW.with(|f| f.set(true));
+        let model = super::super::parse_markdown(source, &ParseContext::obsidian("nota.md"));
+        FORCE_SHADOW.with(|f| f.set(false));
+        format!("{model:?}")
+    }
+
+    #[test]
+    fn a_footnote_alone_does_not_pay_the_shadow() {
+        let src = "# Nota\n\nTesto con richiamo[^1] e un [link](altra.md).\n\n[^1]: La nota.\n";
+        let (model, parses) = parse_counting(src);
+        assert_eq!(parses, 0, "una nota a piè di pagina non è una definizione");
+        assert_eq!(model, parse_forced(src));
+    }
+
+    #[test]
+    fn brackets_in_code_do_not_pay_the_shadow() {
+        let src = "```ts\nconst a = b[i]: number;\ntype T = { x[k]: string };\n```\n\n    arr[1]: x\n\nIn riga `a[i]: b` e [[wiki]] e [l](u).\n";
+        let (model, parses) = parse_counting(src);
+        assert_eq!(parses, 0, "`a[i]:` non può aprire un paragrafo");
+        assert_eq!(model, parse_forced(src));
+    }
+
+    #[test]
+    fn a_lone_definition_still_pays_the_shadow_and_is_kept() {
+        for src in [
+            "[rif]: nota.md\n",
+            "> [rif]: nota.md\n",
+            "- [rif]: nota.md\n",
+            "1. > [rif]: nota.md\n",
+            "  * [ ] [rif]: nota.md\n",
+            "[^1]: [rif]: nota.md\n",
+            "\u{feff}[rif]: nota.md\n",
+            "Termine\n\n: [rif]: nota.md\n",
+            "[rif\n]: nota.md\n",
+        ] {
+            let (model, parses) = parse_counting(src);
+            assert_eq!(parses, 1, "{src:?}: una definizione da sola chiede l'ombra");
+            assert!(
+                model.contains("nota.md"),
+                "{src:?}: la definizione resta nel modello"
+            );
+            assert_eq!(model, parse_forced(src), "{src:?}");
+        }
+    }
+
+    /// Gli span di tutte le definizioni del modello, a ogni profondità.
+    fn definition_spans(source: &str) -> Vec<fub_abi::model::Span> {
+        fn walk(blocks: &[Block], out: &mut Vec<fub_abi::model::Span>) {
+            for block in blocks {
+                match block {
+                    Block::ReferenceDefinition { span, .. } => out.push(*span),
+                    Block::Quote { blocks, .. } | Block::Custom { blocks, .. } => walk(blocks, out),
+                    Block::List { items, .. } => {
+                        for item in items {
+                            walk(&item.blocks, out);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+        let model = super::super::parse_markdown(source, &ParseContext::obsidian("nota.md"))
+            .expect("il parse non fallisce");
+        let mut out = Vec::new();
+        walk(&model.body, &mut out);
+        out
+    }
+
+    /// #507: una nota citata, che comrak porta in fondo all'albero, metteva
+    /// fuori ordine i paragrafi veri; l'ombra non trovava quello che copre il
+    /// suo e rileggeva una definizione già letta.
+    #[test]
+    fn a_definition_after_a_cited_footnote_enters_once() {
+        for src in [
+            "\r\n[^1]: [!\r> # ```\n    *e*---\n[^a b]: >\n| - |[^1][[w]]^[^1]: [![!a",
+            "[^1]: nota\n\n[rif]: u\ntesto[^1]\n",
+        ] {
+            let spans = definition_spans(src);
+            assert_eq!(spans.len(), 1, "{src:?}: {spans:?}");
+        }
+    }
+
+    #[test]
+    fn the_gate_is_linear_on_a_line_of_openers() {
+        for line in [
+            "[^".repeat(200_000),
+            "[".repeat(200_000),
+            "- [^a".repeat(100_000),
+        ] {
+            let started = std::time::Instant::now();
+            assert!(!super::may_hide_definitions(&line, true));
+            assert!(
+                started.elapsed() < std::time::Duration::from_secs(1),
+                "{:?} per {} byte",
+                started.elapsed(),
+                line.len()
+            );
+        }
+    }
+
+    /// Il filtro contro il recupero senza filtro, su sorgenti generate dai
+    /// pezzi che contano: quadre, due punti, marcatori di contenitore, note,
+    /// codice, escape, terminatori. Il filtro può dire sì a vuoto, mai no
+    /// quando l'ombra cambia il risultato. `FUB_FUZZ_CASI` ne alza il numero,
+    /// come per i fuzzer del corpus.
+    #[test]
+    fn shadow_gate_agrees_with_the_shadow() {
+        const PIECES: &[&str] = &[
+            "[",
+            "]",
+            ":",
+            "^",
+            "[^1]",
+            "[^1]: ",
+            "[a]",
+            "[a]: ",
+            "[a]: u",
+            " \"t\"",
+            "[b]:\n",
+            ": ",
+            "> ",
+            ">",
+            "- ",
+            "* ",
+            "+ ",
+            "1. ",
+            "2) ",
+            "- [ ] ",
+            "[x] ",
+            "  ",
+            "    ",
+            "\t",
+            "a",
+            "x",
+            "a[i]: ",
+            "(u)",
+            "[[w]]",
+            "`",
+            "```\n",
+            "\\",
+            "\\[",
+            "|",
+            "| - |",
+            "\n",
+            "\n",
+            "\n\n",
+            "\r\n",
+            "\r",
+            "<u>",
+            "'t'",
+            "# ",
+            "---\n",
+            "> [!NOTE]\n",
+            "\u{feff}",
+            "é",
+            "$",
+            "*e*",
+            "<div>\n",
+            "===\n",
+            "~~~\n",
+            "$$\n",
+            "[!",
+            "]]",
+            "-# ",
+            ">>> ",
+            "   [a]: <u v>",
+            "[a]:\n  u\n",
+            "[^a b]: ",
+        ];
+        let cases = std::env::var("FUB_FUZZ_CASI")
+            .ok()
+            .and_then(|v| v.parse::<usize>().ok())
+            .unwrap_or(2000)
+            .max(2000)
+            * 2;
+        let mut state: u64 = std::env::var("FUB_FUZZ_SEME")
+            .ok()
+            .and_then(|v| v.parse::<u64>().ok())
+            .unwrap_or(0x9e37_79b9_7f4a_7c15)
+            | 1;
+        let mut next = move || {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            state
+        };
+        let mut gated_off = 0;
+        for case in 0..cases {
+            let len = 1 + (next() % 24) as usize;
+            let src: String = (0..len)
+                .map(|_| PIECES[(next() % PIECES.len() as u64) as usize])
+                .collect();
+            let (model, parses) = parse_counting(&src);
+            if parses == 0 {
+                gated_off += 1;
+            }
+            assert_eq!(
+                model,
+                parse_forced(&src),
+                "caso {case}: il filtro ha tolto un'ombra che serviva per {src:?}"
+            );
+            let mut spans = definition_spans(&src);
+            let all = spans.len();
+            spans.sort_unstable_by_key(|s| (s.start, s.end));
+            spans.dedup();
+            assert_eq!(
+                spans.len(),
+                all,
+                "caso {case}: una definizione due volte nel modello per {src:?}"
+            );
+        }
+        // Il confronto ha senso solo se il filtro ha davvero detto no spesso.
+        assert!(
+            gated_off * 4 > cases,
+            "il filtro ha detto no solo {gated_off} volte su {cases}"
+        );
+    }
+
+    /// La misura: una nota lunga con le note a piè di pagina, col filtro e
+    /// con l'ombra rifatta sempre (com'era prima). Non è un controllo: si
+    /// lancia a mano, in release, con
+    /// `cargo test --release -p fub-format-markdown --lib -- --ignored --nocapture misura`.
+    #[test]
+    #[ignore = "misura a mano, non un controllo"]
+    fn misura_il_parse_di_una_nota_con_le_note() {
+        const GIRI: u32 = 30;
+        let mut src = String::from("# Diario\n\n");
+        for i in 0..2_000 {
+            src.push_str(&format!(
+                "Paragrafo {i} con un [link](nota{i}.md), [[wiki {i}]] e un richiamo[^{i}].\n\n"
+            ));
+        }
+        src.push_str("```ts\nconst a = b[i]: number;\n```\n\n");
+        for i in 0..2_000 {
+            src.push_str(&format!("[^{i}]: La nota {i}.\n"));
+        }
+        let ctx = ParseContext::obsidian("nota.md");
+        let (_, parses) = parse_counting(&src);
+        assert_eq!(parses, 0);
+        let time = |forced: bool| {
+            FORCE_SHADOW.with(|f| f.set(forced));
+            let started = std::time::Instant::now();
+            for _ in 0..GIRI {
+                std::hint::black_box(super::super::parse_markdown(&src, &ctx).unwrap());
+            }
+            FORCE_SHADOW.with(|f| f.set(false));
+            started.elapsed() / GIRI
+        };
+        let before = time(true);
+        let after = time(false);
+        println!(
+            "MISURA parse: {} KB, con l'ombra {before:?}, col filtro {after:?}",
+            src.len() / 1024
+        );
     }
 }

@@ -39,7 +39,8 @@ use fub_abi::model::{
     Frontmatter, Heading, Link, LinkTarget, PropertyTypes,
 };
 use fub_abi::query::{
-    in_folder, parent_folder, within_folder, Matches, QueryEvaluator, QueryPredicate,
+    in_folder, parent_folder, within_folder, Matches, PropertyLinkPredicate, QueryEvaluator,
+    QueryPredicate, PROPERTY_LINK_PREDICATE_NS,
 };
 use fub_abi::rules::properties;
 use fub_abi::settings::SettingValue;
@@ -124,6 +125,10 @@ impl GraphSource for DocMeta {
     fn graph_links(&self) -> &[Link] {
         &self.links
     }
+
+    fn graph_property_links(&self) -> Vec<(String, LinkTarget)> {
+        crate::graph::property_links_of(&self.frontmatter)
+    }
 }
 
 pub(crate) struct CoreIndex {
@@ -154,26 +159,28 @@ pub(crate) struct CoreIndex {
     /// [`remove_entry`](CoreIndex::remove_entry) — che è la ragione per cui un
     /// conto ricavato qui non può divergere da ciò da cui è ricavato.
     pub(crate) names: EntryNames,
-    /// Le voci di `entries` **che non si scrivono in anagrafe**: quelle la cui
-    /// data non era nel passato nel momento in cui la si è letta (difetto
-    /// 0187).
+    /// **Quando si è guardato il file** di ogni voce di `entries`: l'orologio
+    /// letto prima di guardarlo, in millisecondi UNIX.
     ///
-    /// Quasi sempre vuoto, e non è una terza anagrafe: è la stessa risposta
-    /// che la regola *racily clean* dava a `load` guardando un numero in testa
-    /// alla tabella, presa però dove la domanda ha senso — al momento
+    /// Non è una terza anagrafe: è la risposta che la regola *racily clean*
+    /// (difetto 0187) e la grana del timbro di cambiamento
+    /// ([`crate::transfer::change_stamp_settled`]) chiedono a chi scrive
+    /// l'anagrafe, presa dove la domanda ha senso — al momento
     /// dell'osservazione — e tenuta da parte fino a quando serve, cioè quando
     /// qualcuno scrive. Ci si passa dalle stesse due porte di `nomi`.
-    observed_in_the_own_instant: BTreeSet<DocId>,
+    observed_at: BTreeMap<DocId, u64>,
     /// Vero da quando una scansione ha installato l'anagrafe intera: prima
     /// `entries` non dice quali file ci sono, e chi chiede «c'è già un file
     /// con questi byte?» non può rispondere «no» (T101).
     scanned: bool,
-    /// Per le voci la cui impronta l'ha imparata una domanda sul contenuto
-    /// (T101), **il file su cui l'ha imparata**: segno del cambio e identità.
+    /// Per le voci di cui si sa da quale file viene l'impronta (una lettura
+    /// della seconda fase, una riga certificata alla riapertura, una domanda
+    /// sul contenuto, T101), **quel file**: segno del cambio e identità.
     /// La voce porta solo misura, data e impronta, e una sostituzione senza
     /// evento con la stessa misura e la stessa data la lascerebbe uguale: chi
-    /// usa l'impronta (la domanda dopo, l'anagrafe che la scrive) la confronta
-    /// con questo testimone. Se ne va con la voce, o quando la voce cambia.
+    /// usa l'impronta (la domanda dopo, l'anagrafe che la scrive col suo
+    /// timbro) la confronta con questo testimone. Se ne va con la voce, o
+    /// quando la voce cambia.
     learned_on: BTreeMap<DocId, crate::same_content::FileWitness>,
     /// **Le cartelle** (§14.3), come la camminata le ha viste.
     ///
@@ -333,6 +340,14 @@ impl QueryEvaluator for CoreIndex {
                     .into_iter()
                     .filter(|id| self.metas.contains_key(id)),
             )),
+            // I link del frontmatter, che il grafo non conosce: il kernel ha
+            // il frontmatter e chi risolve, e nessun altro li ha tutti e due.
+            QueryPredicate::Custom { ns, predicate } if ns == PROPERTY_LINK_PREDICATE_NS => {
+                let leaf = PropertyLinkPredicate::from_payload(predicate)?;
+                Ok(Matches::of_docs(
+                    self.property_linked(&leaf.targets, leaf.key.as_deref()),
+                ))
+            }
             // Ciò che il pianificatore ha già risolto per conto di qualcun
             // altro: si prende per buono, ristretto a ciò che esiste.
             QueryPredicate::Docs { docs } => Ok(Matches::of_docs(

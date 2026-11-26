@@ -21,7 +21,7 @@
 // «Si scrive», lo stato normale del documento a fuoco, lo dice la banda a voce
 // bassa, subito prima della modalità; premuto apre la spiegazione del chip
 // della testata (`panels/standing.ts`). Gli altri stati restano nel chip.
-import type { SurfaceCellSelectionSource, SurfaceMode, SurfacePaperFit, SurfaceStanding, SurfaceStatus } from "../../../editors/core/registry";
+import type { SurfaceCellSelectionSource, SurfaceMode, SurfacePaperFit, SurfaceStanding, SurfaceStatus, SurfaceWorkspace } from "../../../editors/core/registry";
 import { settings, vaultStatus } from "../../../host/query";
 import { onLanguage, t } from "../../../i18n/strings";
 import { paneOf, selectedMode } from "../../../state/document-controller";
@@ -31,15 +31,17 @@ import { activeTab, layout } from "../../../state/layout";
 import { modeIcon, openModeMenu } from "../../../state/mode-menu";
 import { emit, on, state } from "../../../state/store";
 import { zoomBy } from "../../../state/zoom";
+import { keepFocusOnPress } from "../../../kit/keep-focus";
 import { iconEl } from "../../../ui/icons";
 import type { Lifetime } from "../../../ui/lifetime";
-import { closeContextMenu } from "../../../ui/menu";
+import { closeContextMenu, showContextMenu } from "../../../ui/menu";
 import { Race } from "../../../ui/race";
 import { setTooltip } from "../../../ui/tooltip";
 import { animate, DURATION, prepareExit } from "../../../moto";
 import { byId, follow } from "./dom";
 import { mountHintsRow } from "./hints-row";
 import { BandSum, summarizeSelection } from "./selection-sum";
+import { drawWorkspaceButton, workspaceMenuItems } from "./workspace-button";
 
 /// Da quanto piccolo entra un segno che si accende: la molla elastica lo porta
 /// oltre la misura, una volta, e lo posa.
@@ -201,8 +203,60 @@ export function mountStatusBand(lifetime: Lifetime): void {
     standing.setAttribute("aria-label", t("document.standing.label", { state: now.text }));
     setTooltip(standing, now.title);
   }
+  // Lo spazio di lavoro del disegno a fuoco (T7). Il bottone si apre col clic e
+  // con la freccia su, come la modalità; chi ascolta lo spazio si ridisegna da
+  // sé, e cambiando superficie si smette di ascoltare la vecchia.
+  const workspaceButton = byId<HTMLButtonElement>("status-workspace");
+  let workspaceMenuFor: string | null = null;
+  let heardWorkspace: SurfaceWorkspace | null = null;
+  let stopHearingWorkspace: (() => void) | null = null;
+  lifetime.add(() => stopHearingWorkspace?.());
+  const focusedWorkspace = (): SurfaceWorkspace | null => {
+    const tab = state.vaultRoot ? activeTab() : null;
+    return tab?.k === "doc" ? paneOf(layout.focus)?.surface?.workspace ?? null : null;
+  };
+  function drawWorkspaceItem(): void {
+    const source = focusedWorkspace();
+    if (source !== heardWorkspace) {
+      stopHearingWorkspace?.();
+      heardWorkspace = source;
+      stopHearingWorkspace = source?.subscribe(drawWorkspaceItem) ?? null;
+    }
+    if (workspaceButton) drawWorkspaceButton(workspaceButton, source);
+    if (workspaceMenuFor !== null && !paneOf(workspaceMenuFor)) closeContextMenu();
+  }
+  const openWorkspaceMenu = (): void => {
+    const source = focusedWorkspace();
+    if (!workspaceButton || !source || workspaceButton.hidden) return;
+    const paneId = layout.focus;
+    workspaceMenuFor = paneId;
+    workspaceButton.setAttribute("aria-expanded", "true");
+    showContextMenu(workspaceButton, workspaceMenuItems(source), {
+      label: t("frame.workspace.open"),
+      onClose: () => {
+        workspaceMenuFor = null;
+        workspaceButton.setAttribute("aria-expanded", "false");
+        // Come la modalità: il fuoco torna al bottone, anche dove il clic non
+        // glielo aveva dato.
+        if (!lifetime.closed && workspaceButton.isConnected && !workspaceButton.hidden) workspaceButton.focus({ preventScroll: true });
+      },
+    });
+  };
+  if (workspaceButton) {
+    lifetime.listen(workspaceButton, "click", openWorkspaceMenu);
+    lifetime.listen(workspaceButton, "keydown", (event) => {
+      if (event.key !== "ArrowUp" || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+      event.preventDefault();
+      openWorkspaceMenu();
+    });
+    lifetime.add(() => {
+      if (workspaceMenuFor !== null) closeContextMenu();
+    });
+  }
+
   const drawMode = (): void => {
     drawModeItem();
+    drawWorkspaceItem();
     drawStanding();
     // Il riquadro si è chiuso col suo menu aperto: il menu non sceglie più
     // niente, e si chiude con lui.
@@ -259,6 +313,9 @@ export function mountStatusBand(lifetime: Lifetime): void {
   // registra quando si monta (il documento, `rc-mode-page`).
   function onStatus(): void {
     drawModeItem();
+    // Lo spazio di lavoro arriva con la superficie: se la superficie si monta
+    // dopo l'ultimo giro della banda, il bottone si accende qui.
+    drawWorkspaceItem();
     drawSurface();
   }
   function drawSurface(): void {
@@ -297,6 +354,9 @@ export function mountStatusBand(lifetime: Lifetime): void {
           el.type = "button";
           const id = item.id;
           el.addEventListener("click", () => statusOf()?.items().find((each) => each.id === id)?.open?.());
+          // Una voce che agisce sul posto (lo zoom al 100%) lascia il fuoco al
+          // documento; una che apre qualcosa lo dà a ciò che apre.
+          keepFocusOnPress(el, { when: () => statusOf()?.items().find((each) => each.id === id)?.inPlace === true });
         }
         items.set(item.id, el);
         if (item.beat && same) beats.push(el);
@@ -377,6 +437,8 @@ export function mountStatusBand(lifetime: Lifetime): void {
   };
   for (const { fit, button } of fits) {
     if (!button) continue;
+    // Adattare la carta è un comando sul posto: il fuoco resta al documento.
+    keepFocusOnPress(button, { lifetime });
     lifetime.listen(button, "click", () => {
       const paper = fitOf();
       if (!paper) return;
@@ -423,7 +485,11 @@ export function mountStatusBand(lifetime: Lifetime): void {
   lifetime.add(onEvent("setting_changed", ({ key }) => {
     if (key === "appearance.zoom") readZoom();
   }));
-  if (zoom) lifetime.listen(zoom, "click", () => void zoomBy(0));
+  if (zoom) {
+    lifetime.listen(zoom, "click", () => void zoomBy(0));
+    // Lo zoom torna al 100% sul posto: chi scriveva continua a scrivere.
+    keepFocusOnPress(zoom, { lifetime });
+  }
 
   lifetime.add(
     onLanguage(() => {

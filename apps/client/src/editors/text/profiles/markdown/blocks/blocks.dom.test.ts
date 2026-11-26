@@ -1,10 +1,9 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { markdown } from "@codemirror/lang-markdown";
-import { ensureSyntaxTree } from "@codemirror/language";
 import { history, undo } from "@codemirror/commands";
 import { EditorSelection, EditorState, Prec, Transaction } from "@codemirror/state";
-import { EditorView, runScopeHandlers } from "@codemirror/view";
+import { Decoration, EditorView, runScopeHandlers, WidgetType } from "@codemirror/view";
 import { type Extension } from "@codemirror/state";
 import { getCM, Vim, vim } from "@replit/codemirror-vim";
 import { markdownGrammar } from "../grammar";
@@ -13,15 +12,16 @@ import { liveReveal } from "../../../live-reveal";
 import { blockIdMarks } from "../block-id";
 import { blocksMode, plainMode, type BlocksOptions } from "./index";
 import { blockSelection, selectCursorBlock } from "./selection";
-import { addBelow, colorRanges, gripLabel, handlesView } from "./handles";
+import { addBelow, colorRanges, gripLabel, handleSpan, handlesView, visibleLeft } from "./handles";
 import { setContentColor } from "../color";
 import { blockModel } from "./model";
-import { dragPose, LIFT_SCALE } from "./motion";
+import { dragPose, LIFT_SCALE, selectedMarkers } from "./motion";
 import { closeContextMenu } from "../../../../../ui/menu";
 import { createManualDriver, liveState, setMotionDriver } from "../../../../../moto";
 import { openSlashMenu, slashMenuExtension, type SlashMenuSource } from "../slash";
 import { propertiesDisplay } from "../../../properties-display";
 import { dropOffersChanged, offerDropTargets } from "../../../../core/registry";
+import { parsedView } from "../test-support";
 
 // I Blocchi nell'editor vero: maniglie, menu, selezione di blocchi, tasti.
 
@@ -48,8 +48,7 @@ function mount(doc: string, anchor = 0, notify = vi.fn(), extra: Extension = [],
       ],
     }),
   });
-  ensureSyntaxTree(view.state, view.state.doc.length, 1000);
-  view.dispatch({});
+  parsedView(view);
   views.push(view);
   return view;
 }
@@ -104,6 +103,38 @@ describe("la selezione di blocchi", () => {
     expect(view.state.doc.toString()).toBe("Due\n\nTre\n\nUno");
     expect(view.state.field(blockSelection)).not.toBeNull();
     expect(view.state.sliceDoc(view.state.selection.main.from, view.state.selection.main.to)).toBe("Due\n\nTre");
+  });
+
+  it("Esc sceglie soltanto il blocco del cursore, mai il frontmatter, e Canc toglie solo lui (IMP-6106)", () => {
+    const doc = "---\ntags: [a]\n---\nParagrafo uno.\n\nParagrafo due da cancellare.";
+    const view = mount(doc, doc.length);
+    expect(press(view, "Escape")).toBe(true);
+    expect(view.state.sliceDoc(view.state.selection.main.from, view.state.selection.main.to)).toBe("Paragrafo due da cancellare.");
+    press(view, "Backspace");
+    expect(view.state.doc.toString()).toBe("---\ntags: [a]\n---\nParagrafo uno.");
+    // Nel frontmatter, o su una riga vuota, Esc non sceglie niente.
+    for (const at of [5, doc.indexOf("\n\n") + 1]) {
+      const other = mount(doc, at);
+      expect(press(other, "Escape")).toBe(false);
+      expect(other.state.field(blockSelection)).toBeNull();
+      expect(other.state.selection.main.empty).toBe(true);
+    }
+  });
+
+  it("il velo della selezione copre la riga del blocco, non la testata attaccata sopra (IMP-6106)", () => {
+    class Tall extends WidgetType {
+      override get estimatedHeight() { return 300; }
+      toDOM() { return document.createElement("div"); }
+    }
+    const header = EditorView.decorations.of(Decoration.set([Decoration.widget({ widget: new Tall(), block: true, side: -1 }).range(0)]));
+    const view = mount("Paragrafo uno.\nParagrafo due da cancellare.", 30, vi.fn(), header);
+    press(view, "Escape");
+    const markers = selectedMarkers(view) as unknown as readonly { top: number; height: number }[];
+    expect(markers).toHaveLength(1);
+    const text = view.lineBlockAt(0);
+    expect(markers[0]!.top).toBeGreaterThanOrEqual(300);
+    expect(markers[0]!.top + markers[0]!.height).toBeCloseTo(view.lineBlockAt(view.state.doc.length).bottom, 5);
+    expect(markers[0]!.height).toBeLessThan(text.bottom);
   });
 
   it("con più cursori Esc non fa una selezione di blocchi da uno solo", () => {
@@ -167,6 +198,29 @@ describe("le maniglie", () => {
       setContentColor("fill", "yellow", range)({ state: view.state, dispatch: (tr) => view.dispatch(tr) });
     }
     expect(view.state.doc.toString()).toContain('<mark class="fub-bg-yellow">una\nriga</mark>');
+  });
+
+  it("stanno a sinistra del riquadro di una citazione, di un riquadro e del codice, non del loro testo rientrato", () => {
+    // La riga comincia a 412 px; il testo, rientrato dal filo o dal fondo, a 430.
+    const row = (className: string) => {
+      const el = document.createElement("div");
+      el.className = className;
+      vi.spyOn(el, "getBoundingClientRect").mockReturnValue({ left: 412, right: 900, top: 0, bottom: 30, width: 488, height: 30, x: 412, y: 0, toJSON: () => ({}) });
+      return el;
+    };
+    expect(visibleLeft(row("cm-line cm-fub-quote"), 430), "il filo della citazione").toBe(412);
+    expect(visibleLeft(row("cm-line cm-fub-codeblock"), 428), "il fondo del codice").toBe(412);
+    expect(visibleLeft(row("cm-line cm-fub-callout-line"), 428), "il fondo del riquadro").toBe(412);
+    expect(visibleLeft(row("cm-line"), 436), "una voce rientrata resta accanto al suo segno").toBe(436);
+    expect(visibleLeft(null, 412)).toBe(412);
+  });
+
+  it("su un blocco alto stanno in testa, non a metà altezza", () => {
+    expect(handleSpan(150, 150, true), "una tabella alta 150 px: conta la testa").toBe(36);
+    expect(handleSpan(0, 150, true), "un widget senza un carattere da misurare").toBe(36);
+    expect(handleSpan(24, 24, true), "un widget basso resta centrato").toBe(24);
+    expect(handleSpan(18, 30, false), "il testo: la prima riga").toBe(18);
+    expect(handleSpan(0, 30, false), "una riga senza carattere: il blocco di riga").toBe(30);
   });
 
   it("smontare l'editor toglie le maniglie", () => {
@@ -1660,8 +1714,7 @@ describe("i gesti ai bordi (E2): due riquadri sulla stessa nota", () => {
       },
     });
     views.push(view);
-    ensureSyntaxTree(view.state, view.state.doc.length, 1000);
-    view.dispatch({});
+    parsedView(view);
     rowsOf20(view);
     const hand = grab(view, 0, 10);
     hand.move(60);
@@ -1725,6 +1778,46 @@ describe("i gesti ai bordi (E2): il posto interrotto a metà corsa", () => {
     hand.move(14);
     expect(slot.style.top, "il posto è cambiato").not.toBe(top);
     expect(Math.abs(seen() - before), "il posto prosegue da dov'era").toBeLessThan(0.5);
+    hand.handles.endDrag(false);
+  });
+
+  it("a posto fermo la corsa del posto non riparte, anche se il browser arrotonda la sua posizione", () => {
+    const driver = createManualDriver();
+    setMotionDriver(driver);
+    // Righe di 20 px che partono da 1000,3125: posizioni con più di sei cifre,
+    // come quelle di una nota vera. Uno (1000–1020), Due (1040–1060), …
+    const view = mount("Uno\n\nDue\n\nTre\n\nQuattro", 0);
+    vi.spyOn(view, "lineBlockAt").mockImplementation((pos: number) => {
+      const top = 1000.3125 + (view.state.doc.lineAt(pos).number - 1) * 20;
+      return { from: 0, to: 0, top, bottom: top + 20, height: 20, type: 0, widget: null, widgetLineBreaks: 0 } as ReturnType<EditorView["lineBlockAt"]>;
+    });
+    const hand = grab(view, 0, 1010);
+    hand.move(1014);
+    const slot = hand.slot()!;
+    // Chromium scrive le lunghezze dello stile in linea con sei cifre
+    // significative (1080.3125 diventa «1080.31px»); happy-dom no.
+    const style = slot.style;
+    Object.defineProperty(slot, "style", {
+      configurable: true,
+      value: new Proxy(style, {
+        get: (target, key) => {
+          const value: unknown = Reflect.get(target, key);
+          return typeof value === "function" ? value.bind(target) : value;
+        },
+        set: (target, key, value: string) => Reflect.set(target, key, key === "top" ? `${Number(parseFloat(value).toPrecision(6))}px` : value),
+      }),
+    });
+    // Oltre Due e Tre: il posto scivola giù, una volta.
+    hand.move(1095);
+    expect(parseFloat(slot.style.top), "la posizione riletta è arrotondata").toBe(1080.31);
+    driver.advance(150);
+    expect(liveState(slot), "a metà corsa").not.toBeNull();
+    // Il puntatore si muove ancora, il posto no: la corsa non deve ripartire.
+    hand.move(1096);
+    hand.move(1097);
+    hand.move(1098);
+    driver.advance(160);
+    expect(liveState(slot), "310 ms dopo il cambio di posto la corsa di 300 ms è finita").toBeNull();
     hand.handles.endDrag(false);
   });
 

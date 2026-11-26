@@ -3,15 +3,47 @@
 > **Per chi:** chi disegna su misura, in millimetri per la stampa o in pixel
 > per lo schermo, e chi apre un disegno con le guide.
 > **Risultato:** sapere come l'unità del documento cambia ciò che si legge e
-> si scrive, e che cosa succede alle guide che un disegno porta.
+> si scrive, che cosa succede alle guide che un disegno porta, e come si
+> misura e si quota.
 
 Il [disegno](drawing.md) ha la sua unità di misura, che vale per i campi e
 per ciò che l'editor dice. Le **guide del documento**, linee orizzontali e
 verticali scritte nel file, restano dove sono quando un disegno le porta,
-scritte da un altro programma o da una versione precedente, ma Fub non le
-mostra, non le crea e non le cambia: i righelli e le guide se ne sono andati
-con lo Standard (decisione 0231). Le unità sono in
+scritte da un altro programma o da una versione precedente. Lo Standard non
+le mostra, non le crea e non le cambia: i righelli e le guide se ne sono
+andati con lui (decisione 0231). Le unità sono in
 `apps/client/src/editors/spatial/tools/rulers.ts`.
+
+Il **Completo** col motore le riporta come in VectorCraft
+(`apps/client/src/editors/spatial/tools/editor/guide-linee.ts`):
+
+- si vedono sopra il disegno, in ciano; una guida di tavola corre solo
+  sulla sua tavola, una bloccata nel file è tratteggiata, e la guida di un
+  livello nascosto non si vede;
+- una guida nuova si tira dal righello in alto (orizzontale) o a sinistra
+  (verticale), con qualunque strumento; con Alt cambia asse, con Maiusc si
+  aggancia alle tacche del righello; con lo strumento Tavola è della tavola
+  sotto il puntatore; lasciata sopra un righello non nasce;
+- con gli strumenti di selezione una guida si prende e si sposta (il
+  cursore lo dice), con Alt se ne lascia una copia, e lasciata sopra un
+  righello si toglie;
+- un clic su una guida la sceglie (si colora come la selezione e toglie gli
+  oggetti scelti), Maiusc+clic ne aggiunge un'altra o la toglie, un clic
+  fuori dalle guide le lascia; trascinarne una sposta tutte le scelte, Canc
+  le toglie dal disegno e le frecce le spostano del passo della tastiera
+  (Maiusc dieci passi, Alt una copia che resta scelta). La scelta vale per
+  la vista, non per il file: una guida aggiunta o tolta, un oggetto scelto,
+  **Guide** o **Blocca guide** la svuotano. Guide e oggetti non si scelgono
+  insieme, e il riquadro di selezione non prende le guide;
+- in Visualizza, **Guide** le nasconde e le rimostra, e **Blocca guide** le
+  lascia vedere senza che si prendano; tutte e due valgono per la sessione,
+  non per il file;
+- **Crea guide** (Visualizza, Ctrl+5) fa dei tracciati e delle forme scelti
+  delle guide: spariscono dal disegno e si vedono in ciano, con la loro
+  forma, come le altre guide; senza niente di scelto non fa nulla.
+  **Rilascia guide** le riporta oggetti; senza niente di scelto rilascia
+  tutti i tracciati-guida del disegno. Un tracciato-guida non si prende
+  ancora sul foglio, e non si esporta.
 
 ## L'unità del documento
 
@@ -20,7 +52,9 @@ campo **Unità** della sezione «Documento» delle
 [proprietà](drawing-properties.md). Un pollice vale 96 pixel, 25,4 millimetri e 72 punti, come nei fogli di stile. Cambiarla
 è un passo di annulla, si annuncia, «Il documento ora misura in
 millimetri.», e il disegno resta com'è: cambia soltanto come si leggono e si
-scrivono le misure.
+scrivono le misure. Col Completo e il motore, `Ctrl+Alt+Maiusc+U` (Cambia
+unità, come in VectorCraft) passa all'unità successiva, nell'ordine punti,
+pollici, millimetri, centimetri, pixel, e dai pixel torna ai punti.
 
 Nell'unità del documento ci sono:
 
@@ -36,6 +70,55 @@ Nell'unità del documento ci sono:
 
 Lo spessore del contorno, la dimensione del testo e gli angoli restano nelle
 loro unità.
+
+## Lo strumento Misura
+
+Nel Completo, nella casella del Contagocce, c'è la **Misura**, come in
+VectorCraft: si trascina da un punto a un altro e accanto alla fine si
+leggono la distanza, l'angolo e gli spostamenti in orizzontale e in
+verticale; con Maiusc la linea va a passi di 45°, e senza si aggancia come
+gli altri strumenti. Il disegno non cambia e non c'è un passo di annulla. La
+linea e le misure restano sul foglio fino alla misura dopo; Esc a metà
+trascinamento la annulla e riporta quella di prima, e un altro strumento le
+toglie. Con «Etichette delle misure» spenta resta solo la linea. A uno zoom
+fatto dopo, le scritte si rifanno alla scala nuova, come i segni del
+passaggio di «Misura e ispeziona».
+
+Accanto c'è **Misura e ispeziona**, che VectorCraft ha in più: il
+trascinamento misura come la Misura, e la misura resta allo stesso modo. Il
+mouse che passa sopra un tracciato, senza premere, ne legge accanto al
+puntatore se è aperto o chiuso, quanti punti ha, la lunghezza del segmento e
+del tracciato, l'area che chiude, il raggio di curvatura e la direzione in
+quel punto; sopra un punto anche il suo angolo e le maniglie. Il segmento
+sotto il mouse si illumina. Il disegno non cambia.
+
+## Lo strumento Quota
+
+Nella stessa casella c'è la **Quota**, come in VectorCraft: lascia nel
+disegno la misura di un lato, di un angolo o di un cerchio, con le linee di
+estensione, le frecce e il numero.
+
+- **Col trascinamento.** Sopra un lato (lineare), un angolo (angolare) o un
+  cerchio o un arco (radiale) si trascina verso l'esterno; il rilascio posa
+  la quota.
+- **Coi clic.** Due punti (lineare) o due lati diritti (angolare), poi un
+  clic posa la quota; un clic su un cerchio ne dà il raggio. Esc annulla
+  senza lasciare niente.
+- **La fila dello strumento** sceglie il tipo (Lineare, Angolare, Radiale) e
+  apre «Opzioni quota…», lo stile delle quote nuove: unità, decimali, scala
+  «disegno:reale» (1:10 scrive 10 per ogni unità del foglio), linea, frecce,
+  linee di estensione e testo. La finestra non manda un valore fuori dai
+  limiti e spegne OK con una scala sbagliata.
+- **La sezione «Quota» del Design** c'è quando ogni oggetto scelto è una
+  quota: cambia la distanza della linea dall'oggetto misurato, apre le
+  opzioni della prima quota (OK le manda a tutte le scelte) e «Applica a
+  tutti» copia lo stile della prima su ogni quota del disegno. Ogni cambio è
+  un passo di annulla.
+
+Nel file una quota è un gruppo di linee, tracciati e testo, con la sua
+ricetta nei metadati: si riapre come quota, con le sue opzioni. Il legame
+con l'oggetto misurato non si scrive nel file: una quota riaperta non segue
+l'oggetto quando cambia.
 
 ## Nel file
 

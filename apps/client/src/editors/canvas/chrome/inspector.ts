@@ -45,6 +45,7 @@ import { readingOrder, type ReadingEntry } from "../reading-order";
 import { boardSources, sourceBar, sourceNeeds, type BoardSource, type SourceFacts, type SourcePiece } from "../sources";
 import { rawFields, setRawField, type RawProblem } from "./raw-node";
 import { ensureCanvasIcons } from "./icons";
+import { composingKey } from "../../../kit/ime";
 
 /** L'id della linguetta «Schede»: l'ispettore lo ricorda. */
 export const CARDS_PANEL_ID = "canvas.cards";
@@ -152,7 +153,15 @@ function nodeSpans(text: string): [number, number][] | null {
     if (text[at] !== "\"") return null;
     const keyEnd = stringEnd(text, at);
     if (keyEnd < 0) return null;
-    const key: unknown = JSON.parse(text.slice(at, keyEnd));
+    // `stringEnd` trova soltanto le virgolette che chiudono: un escape che
+    // JSON non conosce (`\x`) o un carattere di controllo restano dentro, e
+    // la chiave non si legge. Il testo allora non è una lavagna.
+    let key: unknown;
+    try {
+      key = JSON.parse(text.slice(at, keyEnd));
+    } catch {
+      return null;
+    }
     at = skipBlank(text, keyEnd);
     if (text[at] !== ":") return null;
     at = skipBlank(text, at + 1);
@@ -1747,6 +1756,7 @@ function rawTable(dom: Document, life: Lifetime, edit: CanvasEditPort, node: Can
         const key = field.key;
         life.listen(input, "change", () => commit(key, input));
         life.listen(input, "keydown", (event) => {
+          if (composingKey(event)) return;
           if (event.key === "Enter") {
             event.preventDefault();
             commit(key, input);

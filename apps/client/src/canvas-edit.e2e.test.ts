@@ -352,6 +352,12 @@ describe("scrivere nelle celle di una scheda di foglio (T42)", () => {
     expect(formula?.querySelector(".canvas-formula-text")?.textContent).toBe("800");
 
     const before = host.atGate("openGridBytes").length;
+    // Il salvataggio automatico (400 ms dopo la scrittura) si tiene in volo
+    // finché il riquadro non mostra 900: il finto, salvando, non innesta il
+    // giornale nei byte, e il riquadro riaperto sui byte nuovi mostrerebbe
+    // di nuovo 800. Con la macchina carica la riapertura col giornale durava
+    // più di quei 400 ms e la prova cadeva (#477).
+    const releaseSave = host.throttle("writeDocument");
     const editor = findTextEditorOrThrow(cardWriter()!.querySelector<HTMLElement>(".grid-cell-editor")!);
     editor.dispatch({ changes: { from: 0, to: editor.state.doc.length, insert: "900" }, userEvent: "input" });
     editor.contentDOM.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, cancelable: true, key: "Enter" }));
@@ -368,6 +374,7 @@ describe("scrivere nelle celle di una scheda di foglio (T42)", () => {
       host.atGate("openGridBytes").slice(before).some((call) => call.args[2] === JOURNAL_900));
     expect(host.atGate("openDocument").filter((call) => call.args[0] === SHEET), "nessuna rilettura dal disco").toHaveLength(1);
     await waitFor("il riquadro mostra 900", () => cellIn(paneGrid(), 1, 1)?.textContent === "900");
+    releaseSave();
 
     // Il secondo Esc (non c'è una cella aperta) esce dalla scrittura, e il giornale va al file.
     cardWriter()!.querySelector<HTMLElement>(".grid-viewport")!
@@ -435,6 +442,150 @@ describe("il conflitto di un foglio nel riquadro (IMP-141)", () => {
     expect(notices()).not.toContain("overwritten");
     expect(notices()).not.toContain("changed_on_disk");
     expect(choiceToasts()).toEqual([]);
+  });
+});
+
+// Tornare a un foglio aperto in un'altra scheda non lo riapre: la sua
+// superficie resta da parte come quella di una nota, con la sessione
+// dell'host ancora aperta, la selezione e lo scorrimento (SCHEDA-FOGLIO).
+describe("tornare a un foglio già aperto", () => {
+  const panes = () => [...document.querySelectorAll<HTMLElement>(".pane")];
+  const tabOf = (pane: HTMLElement, name: string) =>
+    [...pane.querySelectorAll<HTMLElement>(".tab")].find((tab) => tab.textContent?.includes(name))!;
+  const parkedIn = (pane: HTMLElement) => pane.querySelectorAll<HTMLElement>(".pane-editor-riposo");
+  const shownGrid = (pane: HTMLElement) => pane.querySelector<HTMLElement>(".pane-editor .grid-surface");
+  const noteShown = (pane: HTMLElement) =>
+    pane.querySelector<HTMLElement>(".pane-editor .cm-content")?.textContent?.includes("Un paragrafo") === true;
+
+  /// Il foglio nel primo riquadro con B2 scelta, poi la nota davanti: dà la
+  /// superficie del foglio, rimasta da parte.
+  async function parkSheet(): Promise<HTMLElement> {
+    const { openDocument } = await import("./panels/document");
+    await openDocument(SHEET);
+    await waitFor("il foglio si apre nel riquadro", () => cellIn(paneGrid(), 1, 1)?.textContent === "800", 15_000);
+    const grid = paneGrid()!;
+    cellIn(grid, 1, 1)!.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+    await waitFor("B2 è scelta", () => cellIn(grid, 1, 1)?.getAttribute("aria-selected") === "true");
+    await openDocument(NOTE);
+    await waitFor("la nota è davanti", () => noteShown(panes()[0]!), 15_000);
+    await waitFor("il foglio va da parte", () => parkedIn(panes()[0]!).length === 1);
+    return grid;
+  }
+
+  async function startWithNoteAndSheet(): Promise<FakeHost> {
+    const host = await startWithSheet();
+    host.writeFromOutside(NOTE, TEXT);
+    await settle();
+    return host;
+  }
+
+  it("ritrova la stessa griglia, con la sessione dell'host aperta e la stessa cella scelta", async () => {
+    const host = await startWithNoteAndSheet();
+    const grid = await parkSheet();
+    const opened = host.atGate("openGridBytes").length;
+    expect(parkedIn(panes()[0]!)[0]!.contains(grid)).toBe(true);
+    expect(parkedIn(panes()[0]!)[0]!.hidden).toBe(true);
+    expect(host.atGate("closeGridBytes"), "da parte la sessione resta aperta").toHaveLength(0);
+
+    tabOf(panes()[0]!, "Conti").click();
+    await waitFor("il foglio torna davanti", () => shownGrid(panes()[0]!) === grid);
+    await settle();
+    expect(host.atGate("openGridBytes"), "tornare non riapre la cartella").toHaveLength(opened);
+    expect(host.atGate("closeGridBytes")).toHaveLength(0);
+    expect(cellIn(grid, 1, 1)?.getAttribute("aria-selected")).toBe("true");
+    expect(cellIn(grid, 1, 1)?.textContent).toBe("800");
+  });
+
+  it("chiudere la scheda del foglio da parte chiude la sua sessione dell'host", async () => {
+    const host = await startWithNoteAndSheet();
+    await parkSheet();
+    const close = tabOf(panes()[0]!, "Conti").parentElement!.querySelector<HTMLElement>(".tab-close");
+    expect(close).not.toBeNull();
+    close!.click();
+    await waitFor("la superficie da parte se ne va", () => parkedIn(panes()[0]!).length === 0);
+    await settle();
+    await waitFor("la sessione dell'host si chiude", () => host.atGate("closeGridBytes").length === 1);
+  });
+
+  it("il valore confermato mentre il foglio va da parte arriva al foglio, non alla nota", async () => {
+    const host = await startWithNoteAndSheet();
+    const { openDocument } = await import("./panels/document");
+    await openDocument(SHEET);
+    await waitFor("il foglio si apre nel riquadro", () => cellIn(paneGrid(), 1, 1)?.textContent === "800", 15_000);
+    const grid = paneGrid()!;
+    cellIn(grid, 1, 1)!.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+    grid.querySelector<HTMLElement>(".grid-viewport")!.dispatchEvent(new KeyboardEvent("keydown", { key: "9", bubbles: true }));
+    await waitFor("B2 si apre", () => grid.querySelector<HTMLElement>(".grid-cell-editor")?.hidden === false);
+    const editor = findTextEditorOrThrow(grid.querySelector<HTMLElement>(".grid-cell-editor")!);
+    editor.dispatch({ changes: { from: 0, to: editor.state.doc.length, insert: "900" }, userEvent: "input" });
+    // La nota si chiede mentre il provider conferma ancora B2: il cambio
+    // aspetta la conferma (`commitPending`), e il giornale va al foglio.
+    const releaseApply = host.throttle("applyGridBytes");
+    editor.contentDOM.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, cancelable: true, key: "Enter" }));
+    await waitFor("la scrittura arriva al provider", () => host.atGate("applyGridBytes").length === 1);
+    const switching = openDocument(NOTE);
+    await settle();
+    releaseApply();
+    await switching;
+    await waitFor("la nota è davanti", () => noteShown(panes()[0]!), 15_000);
+    await waitFor("il foglio va da parte", () => parkedIn(panes()[0]!).length === 1);
+    const { documentSessions } = await import("./state/document-session");
+    // Il giornale arriva al file del foglio (poi la sessione riparte vuota
+    // sui byte salvati); la nota non riceve niente.
+    await waitFor("il giornale arriva al file", () =>
+      host.atGate("writeDocument").some((call) => call.args[0] === SHEET && call.args[1] === JOURNAL_900), 10_000);
+    expect(documentSessions.text(NOTE)).toBe(TEXT);
+    expect(host.atGate("writeDocument").filter((call) => call.args[0] === NOTE)).toHaveLength(0);
+  });
+
+  it("il valore scritto nello stesso foglio in un altro riquadro arriva al ritorno", async () => {
+    const host = await startWithNoteAndSheet();
+    const grid = await parkSheet();
+    const { allCommands } = await import("./ui/commands");
+    await allCommands().find((entry) => entry.id === "shell.pane.split.right")!.run!();
+    await settle();
+    const { openDocument } = await import("./panels/document");
+    await openDocument(SHEET);
+    const right = () => shownGrid(panes()[1]!);
+    await waitFor("il foglio si apre a destra", () => cellIn(right(), 1, 1)?.textContent === "800", 15_000);
+    const other = right()!;
+    cellIn(other, 1, 1)!.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+    other.querySelector<HTMLElement>(".grid-viewport")!.dispatchEvent(new KeyboardEvent("keydown", { key: "9", bubbles: true }));
+    await waitFor("B2 si apre a destra", () => other.querySelector<HTMLElement>(".grid-cell-editor")?.hidden === false);
+    const editor = findTextEditorOrThrow(other.querySelector<HTMLElement>(".grid-cell-editor")!);
+    editor.dispatch({ changes: { from: 0, to: editor.state.doc.length, insert: "900" }, userEvent: "input" });
+    const releaseSave = host.throttle("writeDocument");
+    editor.contentDOM.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, cancelable: true, key: "Enter" }));
+    const { documentSessions } = await import("./state/document-session");
+    await waitFor("il giornale va al foglio", () => documentSessions.text(SHEET) === JOURNAL_900);
+
+    panes()[0]!.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    const before = host.atGate("openGridBytes").length;
+    tabOf(panes()[0]!, "Conti").click();
+    await waitFor("il foglio torna davanti a sinistra", () => shownGrid(panes()[0]!) === grid);
+    // La stessa griglia riapre la sua sessione col giornale nuovo. (Che cosa
+    // mostra dopo dipende dal finto, che apre sempre la revisione della
+    // fixture.)
+    await waitFor("la griglia da parte riceve il giornale", () =>
+      host.atGate("openGridBytes").slice(before).some((call) => call.args[2] === JOURNAL_900), 15_000);
+    releaseSave();
+  });
+
+  it("un foglio pesa due fra le superfici da parte: tre note dopo di lui lo smontano", async () => {
+    const host = await startWithNoteAndSheet();
+    for (const name of ["A", "B", "C"]) host.writeFromOutside(`${name}.md`, `# ${name}\n\nTesto ${name}.\n`);
+    await settle();
+    await parkSheet();
+    const { openDocument } = await import("./panels/document");
+    // Da parte: il foglio (2) e Nota, A, B (1 ciascuna) pesano 5 su 4.
+    for (const name of ["A", "B", "C"]) {
+      await openDocument(`${name}.md`);
+      await waitFor(`${name} è davanti`, () =>
+        panes()[0]!.querySelector(".pane-editor .cm-content")?.textContent?.includes(`Testo ${name}`) === true, 15_000);
+    }
+    await waitFor("il foglio se ne va", () => [...parkedIn(panes()[0]!)].every((host) => !host.querySelector(".grid-surface")));
+    await waitFor("la sessione dell'host si chiude", () => host.atGate("closeGridBytes").length === 1);
+    expect(parkedIn(panes()[0]!)).toHaveLength(3);
   });
 });
 

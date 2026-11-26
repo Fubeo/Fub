@@ -151,8 +151,11 @@ giornale. `crates/fub-format-xlsx/src/grid.rs` legge la cartella con il
 codec di GridCraft e dà le finestre che la shell mostra: per ogni cella
 l'input, il valore già scritto nel formato numerico del file, l'aspetto, il
 blocco e lo stato. I valori sono quelli salvati nel file, comprese le celle
-versate dalle matrici, e niente si ricalcola: una formula che legge una cella
-cambiata tiene il valore del file, segnato come vecchio.
+versate dalle matrici. Una formula che legge una cella cambiata, e una che il
+file ha salvato senza valore, prende il valore che le dà il motore di GridCraft
+(`crates/fub-format-xlsx/src/ricalcolo.rs`), e l'innesto lo salva come valore
+della formula; una formula che il motore non sa calcolare tiene il valore del
+file, segnato come vecchio.
 
 `apps/client/src/editors/grid/workbook.ts` controlla sessioni e finestre
 campo per campo e le trasforma nel modello che
@@ -161,7 +164,9 @@ e un avviso per ciò che la griglia non mostra o non ricalcola. La griglia
 disegna lo stile risolto di ogni cella (carattere, bordi, allineamento,
 rotazione, barre e icone della formattazione condizionale), le celle unite, i
 commenti, il testo che passa nelle celle vuote accanto e la vista del foglio
-(riquadri bloccati, zoom, griglia e intestazioni). Modificare una costante
+(riquadri bloccati, zoom, griglia e intestazioni). Il testo che passa accanto
+non prende i gesti: un clic, un doppio clic o il tasto destro su una cella
+vuota coperta da lui valgono per la cella sotto il puntatore. Modificare una costante
 scrive una voce del giornale; le celle bloccate (matrici, formule condivise,
 tabelle, celle unite, pivot, fogli protetti) lo dicono già nella finestra.
 Una formula, un comando del catalogo (anche dalle scorciatoie di Excel,
@@ -311,6 +316,46 @@ mostrano. Ciò che succede a quel testo quando un gesto tocca la sessione:
   `state/document-bridge.ts`), e la finestra scarta soltanto dopo `kept`; un
   `keep-failed`, o nessuna risposta, non scarta niente e la finestra dice
   perché.
+- **Una finestra del documento morta da sola, o rimasta senza nota.** Una
+  finestra a parte che muore senza passare dalla chiusura di Fub (crash,
+  chiusa dal sistema, anche mentre si apre) non dice più se l'ultima battuta
+  era partita: `state/document-windows.ts` salva dalla sessione della
+  finestra principale ciò che la finestra aveva confermato (o lo mette in
+  bozza), la lascia e avvisa che le ultime modifiche non confermate possono
+  mancare. Cambio di vault e chiusura dell'app aspettano quel salvataggio e
+  non si fermano per sempre. La finestra di una nota cancellata (la sessione
+  si è chiusa e ha messo in bozza il testo) non ha niente da salvare: si
+  chiude senza congelarla né salvarla, con un avviso. Il ponte
+  (`state/document-bridge.ts`) tiene un'autorità per sessione, non per nome:
+  una nota nuova con il nome di una sparita o di una rinominata apre la sua
+  finestra, e il rilascio della finestra vecchia non tocca la sessione nuova.
+  Anche il prestito della finestra è della sessione
+  (`documentSessions.retainSession`): dopo una rinomina chiudere la scheda col
+  nome nuovo non chiude la sessione che la finestra mostra, e il nome di
+  prima non resta prestato.
+- **Una finestra del documento che non risponde più.** Una finestra viva ma
+  muta (nessun evento di chiusura, nessuna risposta al congelamento) non
+  dice che la sua coda è vuota. Il ponte chiama il silenzio col suo nome
+  (`DocumentWindowSilent`, dopo 5 s per richiesta) e `document-windows.ts`
+  riprova fino a 15 s in tutto, avvisando alla prima richiesta mancata: una
+  finestra occupata per qualche secondo risponde e si chiude come sempre.
+  Oltre, la finestra si distrugge (la distruzione non chiede niente alla sua
+  pagina), si salva dalla sessione della finestra principale, o in bozza, e
+  l'avviso dice che le ultime modifiche non confermate possono mancare. Vale
+  per la chiusura dell'app, il cambio di vault e la X della finestra; un
+  rifiuto vero (sessione cambiata, salvataggio fallito di una finestra che
+  risponde) tiene la finestra aperta come prima, e la guardia di chiusura
+  decide poi sul buffer rimasto come per ogni altro.
+  Il silenzio vuol dire soltanto «non risponde». Una finestra che ha testo
+  suo che la sessione non ha (un conflitto, la sorgente sostituita, oppure
+  il testo di «tengo il mio» in attesa della fotografia nuova) risponde al
+  congelamento di no, con la ragione (`freeze-refused`,
+  `DocumentWindowRefused`): è un rifiuto vero, la finestra resta aperta col
+  suo testo. Può tacere ed essere distrutta solo una finestra che non ha
+  ancora ricevuto nessuna fotografia, e quindi non ha mostrato né scritto
+  niente, o una davvero muta. Una conferma (o un rifiuto) che arriva dopo il
+  tempo limite ma prima della distruzione vale ancora: la coda svuotata
+  chiude la finestra come sempre, senza avviso; il rifiuto la tiene aperta.
 
 ## Invarianti
 

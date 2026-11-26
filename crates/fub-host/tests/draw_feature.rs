@@ -218,6 +218,7 @@ fn the_drawing_settings_exist_only_with_the_draw_feature() {
     {
         for key in [
             "draw.workspace",
+            "draw.workspaces",
             "draw.toolbar",
             "draw.templates",
             "draw.suggestions",
@@ -249,19 +250,24 @@ fn the_drawing_settings_exist_only_with_the_draw_feature() {
             keys,
             [
                 "draw.workspace",
+                "draw.workspaces",
                 "draw.toolbar",
                 "draw.templates",
-                "draw.suggestions"
+                "draw.suggestions",
+                "draw.keys",
+                "draw.motore"
             ]
         );
         let entry = |key: &str| entries.iter().find(|entry| entry.spec.key == key).unwrap();
         // I valori di serie.
         assert_eq!(entry("draw.workspace").value, text("full"));
+        assert_eq!(entry("draw.workspaces").value, SettingValue::List(vec![]));
         assert_eq!(entry("draw.toolbar").value, SettingValue::List(vec![]));
         assert_eq!(entry("draw.templates").value, text("Templates"));
         assert_eq!(entry("draw.suggestions").value, SettingValue::Toggle(true));
         // Il vault le porta con sé, la macchina i suggerimenti.
         assert_eq!(entry("draw.workspace").spec.scope, SettingScope::Vault);
+        assert_eq!(entry("draw.workspaces").spec.scope, SettingScope::Vault);
         assert_eq!(entry("draw.toolbar").spec.scope, SettingScope::Vault);
         assert_eq!(entry("draw.templates").spec.scope, SettingScope::Vault);
         assert_eq!(entry("draw.suggestions").spec.scope, SettingScope::Machine);
@@ -281,11 +287,22 @@ fn the_drawing_settings_exist_only_with_the_draw_feature() {
         );
         assert!(ws.set_setting("draw.suggestions", text("no")).is_err());
 
-        // Lo spazio di lavoro ha i due nomi dell'editor, e nessun altro; la
-        // colonna è un elenco.
+        // Lo spazio di lavoro è un id di testo: uno di serie, uno del Completo
+        // o uno salvato. Un id che nessuno conosce si scrive lo stesso (lo legge
+        // il client, che lo tratta come Completo), perché uno spazio salvato non
+        // è una scelta che lo schema conosce.
         ws.set_setting("draw.workspace", text("simple")).unwrap();
         assert_eq!(ws.setting("draw.workspace").unwrap(), text("simple"));
-        assert!(ws.set_setting("draw.workspace", text("expert")).is_err());
+        ws.set_setting("draw.workspace", text("automazione"))
+            .unwrap();
+        assert_eq!(ws.setting("draw.workspace").unwrap(), text("automazione"));
+        ws.set_setting("draw.workspace", text("full")).unwrap();
+        // Gli spazi salvati sono un elenco di voci JSON, ciascuna con la sua
+        // versione: il vault le porta come sono.
+        let saved = SettingValue::List(vec![r#"{"v":1,"id":"mio","nome":"Mio"}"#.into()]);
+        ws.set_setting("draw.workspaces", saved.clone()).unwrap();
+        assert_eq!(ws.setting("draw.workspaces").unwrap(), saved);
+        // La colonna è un elenco.
         let column = SettingValue::List(vec!["pen".into(), "select".into()]);
         ws.set_setting("draw.toolbar", column.clone()).unwrap();
         assert_eq!(ws.setting("draw.toolbar").unwrap(), column);
@@ -295,7 +312,12 @@ fn the_drawing_settings_exist_only_with_the_draw_feature() {
         assert_eq!(ws.setting("draw.templates").unwrap(), text("Modelli"));
 
         let written = std::fs::read_to_string(root.join(".fub").join("settings.json")).unwrap();
-        for key in ["draw.workspace", "draw.toolbar", "draw.templates"] {
+        for key in [
+            "draw.workspace",
+            "draw.workspaces",
+            "draw.toolbar",
+            "draw.templates",
+        ] {
             assert!(written.contains(&format!("\"{key}\"")), "{key}: {written}");
         }
         // I suggerimenti sono della macchina: non entrano nel file del vault.

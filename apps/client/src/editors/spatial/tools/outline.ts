@@ -28,6 +28,7 @@ import { keyword, nonNegativeLength } from "../scene/values";
 import { spineOf } from "../scene/varwidth";
 import { nodeOf, plainAttributes, Plan, type Arranged } from "./arrange";
 import type { NewIds } from "./edit";
+import { lockedAbove } from "./follow";
 import type { Unit } from "./hit";
 import { widthAttrs } from "./profile";
 
@@ -210,6 +211,35 @@ export function lookOf(outlines: readonly Outline[], widths: readonly ElementPar
     custom,
     cap: shared([...outlines.map((outline) => outline.cap), ...lines.map((line) => line.cap)]),
     join: shared([...outlines.map((outline) => outline.join), ...lines.map((line) => line.join)]),
+  };
+}
+
+/// Il tratteggio e il lucchetto dei contorni scelti, come li vuole la sezione Contorno del Completo
+/// (K6 T15, giro 5), che scrive i trattini e gli spazi uno per uno invece di sceglierli da un menu.
+export interface OutlineDetails {
+  /// Le lunghezze di `stroke-dasharray`, uguali per tutti, in unità della scena: vuote per un contorno
+  /// pieno (anche un tratteggio che non disegna trattini, come per SVG); `null` se i contorni scelti
+  /// non hanno lo stesso tratteggio.
+  readonly lengths: readonly number[] | null;
+  /// Vero se un contorno scelto è bloccato, lui o un contenitore: il motore non lo scrive.
+  readonly locked: boolean;
+}
+
+/// Le lunghezze di `value` (`stroke-dasharray`): vuote per `none`, per un valore che non si legge e per
+/// uno tutto a zero, che SVG disegna pieno.
+function dashLengths(value: string): number[] {
+  const written = writtenDashes(value);
+  if (written === null || written === "none") return [];
+  const lengths = written.split(" ").map(Number);
+  return lengths.some((length) => length > 0) ? lengths : [];
+}
+
+export function detailsOf(outlines: readonly Outline[]): OutlineDetails {
+  const each = outlines.map((outline) => dashLengths(outline.dashes).join(" "));
+  const same = shared(each);
+  return {
+    lengths: same === null ? null : same === "" ? [] : same.split(" ").map(Number),
+    locked: outlines.some((outline) => outline.node.details?.locked === true || lockedAbove(outline.node)),
   };
 }
 

@@ -149,6 +149,13 @@ Anche quando la tabella si incolonna di nuovo, il testo cambia soltanto dove
 cambia: le righe uguali restano intatte, e il cursore e la selezione degli
 altri riquadri sulla stessa nota restano al loro posto.
 
+Ciò che si scrive in una cella aperta entra nel testo della nota a ogni
+battuta, come nel resto della nota: la bozza e il salvataggio lo portano sul
+disco anche se la cella resta aperta, e «Salvato» vuol dire che il file ha
+anche quel testo. Le battute di una cella fanno un solo passo d'annullamento,
+registrato quando la cella si conferma; Escape rimette la tabella com'era,
+byte per byte.
+
 Le celle mostrano la resa in riga (grassetto, codice, link, formule); Mod+clic
 segue un link o un tag. Con la griglia a fuoco la barra di formattazione agisce
 sulle celle selezionate: formattazione in riga e operazioni sulla tabella;

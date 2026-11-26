@@ -1461,6 +1461,82 @@ describe("rinomina e cestino dal registro dei comandi", () => {
     await settle();
     expect(document.activeElement).toBe(noteItem("note/Spesa.md"));
   });
+
+  // IMP-6500: con una nota della cartella aperta, F2 sulla riga arrivata con le
+  // frecce (dopo Tab) o col clic apre il campo, per la nota e per la cartella.
+  // Ogni tasto va all'elemento col fuoco in quel momento, come da tastiera.
+  it("F2 sulla riga raggiunta con le frecce o col clic apre il campo, con una nota della cartella aperta", async () => {
+    const host = await start({ ...VAULT, "note/Altra.md": "x\n" });
+    const { openDocument } = await import("./panels/document");
+    await openDocument("note/Spesa.md");
+    await settle();
+    const key = (name: string): KeyboardEvent => {
+      const event = new KeyboardEvent("keydown", { key: name, bubbles: true, cancelable: true });
+      (document.activeElement ?? document.body).dispatchEvent(event);
+      return event;
+    };
+    const focusedPath = () => (document.activeElement as HTMLElement | null)?.closest<HTMLElement>("li[role=treeitem]")?.dataset.path;
+    const field = () => document.activeElement instanceof HTMLInputElement ? document.activeElement : null;
+    const renames = () => withoutTypeReads(host.atGate("invokeCommand")).filter((c) => /\.rename$/.test(String(c.args[0])));
+    const walk = async (path: string, step: "ArrowDown" | "ArrowUp") => {
+      for (let i = 0; i < 12 && focusedPath() !== path; i += 1) {
+        key(step);
+        await settle(2);
+      }
+      expect(focusedPath()).toBe(path);
+    };
+
+    // Tab porta il fuoco sulla voce dell'albero che lo tiene (tabindex 0).
+    document.querySelector<HTMLElement>('#file-list li[role="treeitem"][tabindex="0"]')!.focus();
+    await walk("note", "ArrowUp");
+    if (noteItem("note")!.getAttribute("aria-expanded") === "false") key("ArrowRight");
+    await waitFor("la cartella è aperta", () => !!noteItem("note/Riunione.md"));
+    await walk("note/Riunione.md", "ArrowDown");
+
+    // Riga-nota: F2, Esc lascia tutto com'era; F2, Invio col nome invariato pure.
+    expect(key("F2").defaultPrevented).toBe(true);
+    expect(field()?.value).toBe("Riunione");
+    key("Escape");
+    await settle();
+    expect(focusedPath()).toBe("note/Riunione.md");
+    key("F2");
+    expect(field()?.value).toBe("Riunione");
+    key("Enter");
+    await settle();
+    expect(focusedPath()).toBe("note/Riunione.md");
+    expect(renames()).toEqual([]);
+
+    // Un nome già usato da una sorella: il campo resta col perché accanto.
+    key("F2");
+    field()!.value = "Altra";
+    key("Enter");
+    await waitFor("il nome occupato è detto accanto al campo", () => !!noteItem("note/Riunione.md")?.querySelector(".tree-rename-problem"));
+    expect(Object.keys(host.files())).toEqual(expect.arrayContaining(["note/Riunione.md", "note/Altra.md"]));
+    key("Escape");
+    await settle();
+
+    // Un nome con «/»: la nota scende nella sottocartella, col nome dopo «/».
+    noteItem("note/Riunione.md")!.focus();
+    key("F2");
+    field()!.value = "2026/Riunione";
+    key("Enter");
+    await waitFor("la nota è nella sottocartella", () => "note/2026/Riunione.md" in host.files());
+
+    // Riga-cartella col clic: il fuoco è sulla riga, F2 apre il campo e la nota
+    // aperta segue la cartella al nome nuovo.
+    noteItem("note")!.focus();
+    noteItem("note")!.querySelector<HTMLElement>(".tree-row")!.click();
+    await settle();
+    expect(focusedPath()).toBe("note");
+    expect(key("F2").defaultPrevented).toBe(true);
+    expect(field()?.value).toBe("note");
+    field()!.value = "Lavoro nuovo";
+    key("Enter");
+    await waitFor("la cartella ha il nome nuovo", () => "Lavoro nuovo/Spesa.md" in host.files());
+    expect(Object.keys(host.files()).some((path) => path.startsWith("note/"))).toBe(false);
+    await waitFor("la scheda aperta segue", () =>
+      [...document.querySelectorAll<HTMLElement>(".pane .tab")].some((tab) => tab.textContent?.includes("Spesa")));
+  });
 });
 
 describe("una conferma sola", () => {
@@ -2741,6 +2817,32 @@ describe("trascinare nell'albero e da e verso gli altri programmi", () => {
     expect(editorTexts().join("\n")).not.toContain("[[");
   });
 
+  it("una nota lasciata che l'editor non riesce a scrivere lo dice, senza un rifiuto muto", async () => {
+    await start(VAULT);
+    const { setMode } = await import("./panels/document");
+    await setMode("source");
+    await settle();
+    const { layout } = await import("./state/layout");
+    const { paneOf } = await import("./state/document-controller");
+    const surface = paneOf(layout.focus)!.surface!;
+    vi.spyOn(surface, "insertReferences").mockImplementation(() => {
+      throw new Error("editor guasto");
+    });
+    for (const [kind, value] of [
+      ["application/x-fub-note", "note/Spesa.md"],
+      ["application/x-fub-entries", JSON.stringify([{ id: "note/Spesa.md", note: true }])],
+    ] as const) {
+      const drop = new Event("drop", { bubbles: true, cancelable: true });
+      Object.defineProperty(drop, "dataTransfer", {
+        value: { types: [kind], files: [], getData: (asked: string) => (asked === kind ? value : "") },
+      });
+      document.querySelector(".pane-editor .cm-content")!.dispatchEvent(drop);
+      expect(drop.defaultPrevented).toBe(true);
+    }
+    await waitFor("l'avviso del collegamento non scritto", () =>
+      [...document.querySelectorAll(".toast")].filter((each) => each.textContent?.includes("editor guasto")).length >= 1);
+  });
+
   it("un collegamento web lasciato in una nota diventa un link, il resto un allegato", async () => {
     const host = await start(VAULT);
     const { setMode } = await import("./panels/document");
@@ -3838,7 +3940,7 @@ describe("spostare un file col testo non ancora sul disco", () => {
     ).toEqual([]);
     expect(Object.keys(host.files())).toContain("Benvenuto.md");
     // E chi guarda lo sa: il rifiuto è una frase, non un gesto che non fa niente.
-    expect(document.body.textContent).toContain("Benvenuto.md non è sul disco");
+    expect(document.body.textContent).toContain("Le ultime modifiche di Benvenuto.md non sono ancora salvate");
 
     repair();
   });

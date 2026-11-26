@@ -2,7 +2,7 @@
 // createDrawEditor (`../editor.ts`): lavora sul contesto che i pezzi
 // condividono.
 
-import type { Lifetime } from "../../../../ui/lifetime";
+import type { Lifetime, Teardown } from "../../../../ui/lifetime";
 import type { Bounds } from "../../scene/geometry";
 import type { Point } from "../../scene/matrix";
 import { pathOf, tagName, type ContainerNode, type DocumentModel, type ElementPart, type LeafNode } from "../../scene/model";
@@ -19,6 +19,11 @@ import { SceneIndex, SceneIndexer } from "../hit";
 import type { DrawImages } from "../editor";
 import { INK_KEY, inkCopyKey, PAGE_SHEET } from "./constants";
 import { inlineChrome, type DrawChrome, type DrawPanelId, type DrawPanelPiece } from "./chrome/hosts";
+import { pannelliTab } from "./chrome/pannelli-tab";
+// La scheda Risorse (T10): il pannello, e i tipi del registro del Completo.
+import { createResourcesPanel, type PannelloRisorse } from "../resources-panel";
+import type { Selezione, Sezioni, TavoleDocumento } from "../../completo/sezioni";
+import type { MotoreDelDisegno } from "../../motore/gesti";
 import type { EditorContext } from "./context";
 import { nodeAtPath } from "./helpers";
 import type { Entered, Sheet } from "./types";
@@ -47,6 +52,15 @@ export interface StageContext {
   /// Ciò che chiede il pulsante di un pannello: aprirlo se è chiuso; con le
   /// schede, sempre mostrarlo.
   toggles: (element: HTMLElement) => boolean;
+  /// La scheda Risorse (T10): il Completo aperto e acceso le dà le sue
+  /// sezioni (`null` la toglie); `showResources` la apre o la chiude.
+  collegaCompleto: (sezioni: Sezioni | null, motore: MotoreDelDisegno | null) => void;
+  showResources: (open: boolean, focus?: boolean) => void;
+  /// Tab e Maiusc+Tab di VectorCraft (`window.dock`, `window.panels`): Tab nasconde la
+  /// barra, la colonna e i pannelli che si vedono, o rimostra quelli che l'ultimo Tab ha
+  /// nascosto (tutti e tre se nessuno si vede); `soloPannelli` mostra o nasconde i soli
+  /// pannelli. `null` rimostra tutto, uscendo dal Completo.
+  pannelliTab: (soloPannelli: boolean | null) => void;
   /// Il tipo del prossimo connettore: l'ultimo scelto nel pannello.
   connectorKind: ConnectorKind;
   /// I capi dei connettori che si possono prendere, per l'indice `index`.
@@ -119,7 +133,33 @@ export function installStage(ctx: EditorContext): void {
   ctx.dock = dock;
   dock.className = "draw-dock";
   dock.hidden = true;
-  dock.append(tree.element, panel.element, historyPanel.element, accessPanel.element);
+  // La scheda Risorse (T10): i campioni del documento e le sezioni del
+  // registro, solo col Completo aperto (`collegaCompleto`).
+  // La selezione che le sezioni del registro vedono: gli oggetti scelti, e i punti
+  // scelti con lo strumento del motore di adesso, dal suo stato (T12, giro 4).
+  const selezioneSezioni = (): Selezione => {
+    const id = ctx.motoreTool;
+    const punti = id === null ? undefined : ctx.statoStrumento(id)?.anchors;
+    return { numero: ctx.selectedUnits().length, punti: Array.isArray(punti) ? punti : [] };
+  };
+  /// Le tavole per la sezione «Tavole» del Design: quelle del disegno, la tavola dove sta la vista.
+  const tavoleSezioni = (): TavoleDocumento => ({
+    elenco: ctx.boardsNow().map((b) => ({ id: b.id, nome: b.name, rect: b.rect })),
+    attuale: ctx.currentBoard()?.id ?? null,
+    // Come Vai alla tavola di VectorCraft: la sceglie e la inquadra nella finestra.
+    visita: (indice) => void ctx.visitBoard(indice, true),
+  });
+  const rileggiStrumento = (): void => {
+    const id = ctx.motoreTool;
+    if (id !== null && !ctx.disposed) ctx.rileggiStato(id);
+  };
+  const resources: PannelloRisorse = createResourcesPanel(life, {
+    modello: () => ctx.engine.model,
+    selezione: selezioneSezioni,
+  });
+  resources.element.hidden = true;
+  let completoAperto = false;
+  dock.append(tree.element, panel.element, historyPanel.element, accessPanel.element, resources.element);
   header.append(ctx.topStart, toolbar);
   if (folio?.controls) header.append(folio.controls);
   header.append(ctx.topEnd);
@@ -163,11 +203,71 @@ export function installStage(ctx: EditorContext): void {
         ],
       },
       { id: "layers", title: () => t("draw.chrome.tab.layers"), icon: "draw-layers", pieces: [piece(tree.element, () => true, (open) => ctx.showObjects(open, false))] },
+      // Risorse (T10): solo col Completo aperto, fra Livelli e Cronologia.
+      { id: "resources", title: () => t("draw.chrome.tab.resources"), icon: "draw-resources", pieces: [piece(resources.element, () => completoAperto, (open) => ctx.showResources(open, false))] },
       { id: "history", title: () => t("draw.chrome.tab.history"), icon: "draw-history", pieces: [piece(historyPanel.element, () => has("history"), (open) => ctx.showHistory(open, false))] },
       { id: "accessibility", title: () => t("draw.chrome.tab.accessibility"), icon: "draw-access", pieces: [piece(accessPanel.element, () => has("accessibility"), (open) => ctx.showAccess(open, false))] },
     ],
     tail: [suggestions.element, surfaceHint, live],
   });
+
+  // Tab e Maiusc+Tab come VectorCraft. Il dock si nasconde con lo stile: `hidden` lo
+  // tiene `syncDock` (il dock c'è se un pannello è aperto). Con i pannelli
+  // nell'ispettore dello Scrittoio li mostra e li nasconde l'ispettore.
+  const tab = pannelliTab(header, ctx.railColumn, {
+    siVedono: () => chrome.panelsShown?.() ?? (!dock.hidden && dock.style.display !== "none"),
+    mostra(si) {
+      if (chrome.panelsShown !== undefined) {
+        if (chrome.panelsShown() !== si) ctx.options.onToggleInspector?.();
+      } else dock.style.display = si ? "" : "none";
+    },
+  });
+  ctx.pannelliTab = (soloPannelli) => {
+    tab(soloPannelli);
+    ctx.syncDock();
+  };
+
+  // Risorse (T10): si apre solo col Completo. Senza, la sua scheda non c'è,
+  // e il pannello, se era aperto nel dock, si chiude.
+  // Lo strumento del motore scelto o il suo stato cambiano (i punti scelti): le sezioni
+  // del Design si rifanno. Si ascolta solo col Completo aperto.
+  let stopStati: Teardown | null = null;
+  life.add(() => {
+    stopStati?.();
+    stopStati = null;
+  });
+  ctx.collegaCompleto = (sezioni, motore) => {
+    completoAperto = sezioni !== null;
+    resources.collega(sezioni, motore);
+    // Il Design prende le sue sezioni dallo stesso registro.
+    panel.collegaSezioni(sezioni, motore, selezioneSezioni, rileggiStrumento, tavoleSezioni);
+    stopStati?.();
+    stopStati = null;
+    if (sezioni !== null) {
+      const spegniStati = ctx.ascoltaStati((id) => {
+        if (id === ctx.motoreTool) panel.aggiornaSezioni();
+      });
+      const spegniStrumento = ctx.ascoltaStrumentoMotore(() => panel.aggiornaSezioni());
+      stopStati = () => {
+        spegniStati();
+        spegniStrumento();
+      };
+    }
+    if (!completoAperto && !resources.element.hidden) ctx.showResources(false, false);
+    ctx.chrome.refresh?.();
+  };
+  ctx.showResources = (open, focus = true) => {
+    if (open && !completoAperto) return;
+    // Nell'ispettore: la sua scheda, e il fuoco ci va.
+    if (ctx.routed("resources", open)) {
+      if (open && focus && !resources.element.hidden) resources.element.focus({ preventScroll: true });
+      return;
+    }
+    if (!open && resources.element.contains(document.activeElement)) surface.focus({ preventScroll: true });
+    resources.element.hidden = !open;
+    ctx.syncDock();
+    if (open && focus) resources.element.focus({ preventScroll: true });
+  };
 
   // La carta, la griglia, il painter, poi l'anteprima delle forme, poi lo
   // strato sopra: l'ordine in cui si vedono. La carta è bianca in ogni tema:

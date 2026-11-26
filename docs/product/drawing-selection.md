@@ -11,9 +11,10 @@ isolati; e gli oggetti si bloccano e si nascondono uno per uno, non
 solo per livello. Scegliere e isolare non cambiano il file; bloccare e
 nascondere sì, e sono passi di annulla
 (`apps/client/src/editors/spatial/tools/selecting.ts`, l'indice in
-`apps/client/src/editors/spatial/tools/hit/`). Lo strumento Lazo se n'è
-andato col livello Standard (decisione 0231): il riquadro che la freccia tira
-sul vuoto sceglie ciò che racchiude per intero.
+`apps/client/src/editors/spatial/tools/hit/`). Lo strumento Lazo di Fub se
+n'è andato col livello Standard (decisione 0231): il riquadro che la freccia
+tira sul vuoto sceglie ciò che racchiude per intero. Nel Disegno completo il
+Lazo torna come strumento del motore (sotto).
 
 ## Dentro i gruppi
 
@@ -57,10 +58,73 @@ annulla e gli altri riquadri sullo stesso disegno non la vedono. Se il gruppo
 se ne va, per un annulla o per chi lavora insieme, o se lo si blocca, si esce
 da soli.
 
+## Gli strumenti del motore nel Disegno completo
+
+Nel Disegno completo la colonna ha anche gli strumenti del motore del disegno
+per scegliere e per la vista: **Selezione (Completo)**, **Selezione diretta** e
+**Selezione gruppo**, **Lazo** e **Bacchetta magica** nel gruppo «Scegli»; **Mano (Completo)**, **Zoom (Completo)** e
+**Ruota vista** nel gruppo della vista. Ognuno ha il suo nome nella lingua
+dell'interfaccia e la sua icona, dopo gli strumenti di Fub della stessa
+casella. Il Semplice tiene solo gli strumenti di Fub.
+
+Scegliere uno di questi strumenti prepara la sua famiglia («nucleo»): finché
+si prepara la casella dice «Selezione diretta: si prepara…», e lo strumento di
+prima resta in mano. Se la famiglia non si prepara la casella lo dice
+(«non si è preparato. Sceglilo di nuovo per riprovare.»): sceglierlo di nuovo
+ci riprova, e intanto si disegna con lo strumento di prima. Appena la famiglia
+è pronta compare in testata la fila delle opzioni dello strumento, senza
+bisogno di un gesto sul foglio. Gli strumenti di scelta del nucleo non hanno
+opzioni da mostrare, e la fila resta vuota; le coordinate del punto scelto con
+la Selezione diretta non ci sono ancora, perché il motore non le dà.
+
+Mano, Zoom e Ruota vista del motore spostano, ingrandiscono e girano la vista
+di Fub, come la Mano e la Lente di Fub: la vista non cambia il file. Un tratto
+a mano libera (`fub:ink`) si sceglie e si sposta, ma gli strumenti del motore
+non ne cambiano i punti. Scegliere uno strumento di Fub toglie quello del
+motore. Il codice: `apps/client/src/editors/spatial/completo/colonna.ts`,
+`apps/client/src/editors/spatial/tools/editor/chrome/rail.ts`,
+`apps/client/src/editors/spatial/motore/gesti.ts`.
+
+### La Bacchetta magica
+
+La **Bacchetta magica** (`Y`), nella casella del Lazo, sceglie gli oggetti
+simili, come in VectorCraft: un clic su un oggetto sceglie tutti quelli col
+riempimento vicino al suo; con `Maiusc` li aggiunge alla selezione, con `Alt`
+li toglie; un clic nel vuoto toglie la selezione. La fila dello strumento, in
+testata, dice che cosa conta: colore del riempimento, colore del contorno,
+spessore del contorno (in punti), opacità (in percentuale) e metodo di fusione,
+ognuno con la sua casella e, tranne il metodo di fusione, con la sua
+tolleranza (da 0 a 255 per i colori, fino a 1000 per lo spessore, fino a 100
+per l'opacità). Di serie conta solo il riempimento, con tolleranza 32.
+
+Le opzioni non vanno nel file e non sono un passo di annulla: valgono finché
+l'app resta aperta, uguali in ogni disegno, e alla riapertura tornano quelle
+di serie. Il codice:
+`apps/client/src/editors/spatial/completo/famiglie/livelli/fila-bacchetta.ts`.
+
+L'isolamento di un gruppo è di Fub anche nel Disegno completo: «Isola il
+gruppo» ed «Esci dal gruppo» stanno nel menu del tasto destro, `Esc` esce
+dall'isolamento prima di svuotare la selezione, e riaprendo il disegno non si
+è più dentro il gruppo.
+
 ## Il menu della selezione
 
 «Selezione avanzata», nella barra dopo «Elimina», apre il menu della
 selezione, con tutte le voci che seguono.
+
+Oggetto › «Oggetti testo per punti» e «Oggetti testo in area» scelgono tutti i testi del
+tipo sul disegno, anche dentro un gruppo: sono solo una scelta, senza passo
+nella cronologia. Un testo nascosto, bloccato, o su un livello nascosto o
+bloccato, resta fuori. Senza testi di quel tipo la voce è spenta e dice perché
+(K6 T15 seleziona tipo). Le maniglie di direzione e i pennelli non ci sono
+ancora: il file non porta i punti scelti, né i pennelli del motore.
+
+**Riseleziona** ripete l'ultimo comando di selezione (per esempio Uguale ›
+Colore riempimento): dopo Deseleziona riparte dalla selezione di prima. Il
+ricordo sta nella sessione del disegno aperto: si perde chiudendo il disegno
+o cambiando il testo dall'esterno. Senza un comando di selezione prima, la
+voce è spenta e dice che cosa fare. Le selezioni salvate e la bacchetta magica
+non ci sono ancora: il formato del disegno non ha ancora un posto per loro.
 
 Il tasto destro del mouse sul foglio, con ogni strumento, il tocco lungo con
 la freccia in mano e, dalla tastiera, `Maiusc+F10` o il tasto del menu, sotto
@@ -101,6 +165,46 @@ selezione, Rinomina, Sblocca tutto e Mostra tutto, si trova scrivendo, come dice
 Una voce che adesso non serve resta nel menu, sbiadita, e dice perché: «Scegli
 prima degli oggetti.», o «Gli oggetti scelti non hanno questa proprietà.».
 
+### Nel menu ≡ › Selezione del Disegno completo
+
+Nel Disegno completo il menu ≡ › Selezione ha le voci del motore che scelgono
+gli oggetti. Scegliere non cambia il file e non passa da Annulla.
+
+- **Tutto nella tavola attiva** (`Ctrl+Alt+A`) sceglie tutti gli oggetti della
+  tavola attiva.
+- **Uguale** sceglie gli oggetti che hanno lo stesso valore di quello scelto,
+  con il confronto del motore: **Aspetto**, **Metodo di fusione**, **Riempimento
+  e tratto**, **Colore riempimento**, **Opacità**, **Forma** (il tipo di forma),
+  **Colore tratto**, **Spessore tratto** e **Istanza di simbolo**, che sceglie
+  le istanze dello stesso simbolo. Gli oggetti senza tratto sono uguali fra
+  loro: con un oggetto senza tratto, **Colore tratto** sceglie tutti quelli
+  senza tratto. **Famiglia di font**, **Famiglia e stile font**, **Famiglia,
+  stile e dimensione font**, **Dimensione font**, **Colore riempimento testo** e
+  **Colore tratto testo** confrontano il testo scelto: sceglie gli oggetti che
+  hanno un testo con lo stesso valore, anche dentro i gruppi.
+- **Oggetto** ha **Tutto sugli stessi livelli**, che sceglie gli oggetti dei
+  livelli dell'oggetto scelto, e **Tutti gli oggetti di testo**, che sceglie
+  tutti gli oggetti di testo del disegno. **Punti isolati** sceglie i tracciati
+  di un solo punto, e **Tracciati aperti** quelli che non sono chiusi.
+- **Tutto**, **Inversa**, **Oggetto successivo sopra** e **sotto**, e
+  **Deseleziona** scelgono o tolgono la selezione, senza cambiare il file.
+
+Una voce che non vale per ciò che è scelto resta nel menu, sbiadita, con il
+perché del motore: «Scegli un oggetto.» senza scelta, «Scegli un testo.» sulle
+voci del testo quando la scelta non ha testo, sulla voce Istanza di simbolo
+«Non è un'istanza.» quando la scelta non è un'istanza, e «Nel disegno non ci
+sono punti isolati.» (o tracciati aperti) quando il disegno non ne ha.
+
+Non sono ancora nel menu: **Riseleziona**, le selezioni salvate (**Salva
+selezione…**, **Aggiorna selezione**, **Richiama** e **Modifica selezione…**),
+**Seleziona testo per font**, **Avvia modifica globale** e la bacchetta
+magica. Dentro **Oggetto** mancano **Maschere di ritaglio**, **Maniglie di
+direzione**, **Pennellate**, **Sezioni**, **Oggetti testo per punti** e
+**Oggetti testo in area**: il motore non distingue il testo con la larghezza di
+Fub da quello di punto, perché il suo importatore legge il testo in area solo
+dai `flowRoot`. **Punti**, **segmenti** e **colore** non sono voci del menu: il
+motore le vuole con un punto o un colore già scelti, e restano nell'ispettore.
+
 ## Bloccare e nascondere
 
 Un oggetto bloccato si vede e non si sceglie, né sul foglio né con
@@ -127,6 +231,28 @@ senza cambiare la selezione, e coi «Livelli» anche quella di un livello. Dalla
 stesso `Ctrl+Maiusc+L` e `Ctrl+Maiusc+H` sulla riga attiva, e il cambio si
 dice: «Gruppo, 2 oggetti: nascosto.». Ciò che sta in un livello o in un
 gruppo bloccato si sblocca da lui, e il suo segno non si tocca.
+
+### Nel menu ≡ › Oggetto del Disegno completo
+
+Nel Disegno completo il menu ≡ › Oggetto ha anche i comandi del motore del
+disegno, e ognuno è un passo solo di Annulla e di Ripristina:
+
+- **Raggruppa** mette gli oggetti scelti in un gruppo nuovo, con un id nuovo,
+  nel livello e al posto che il motore sceglie; gli oggetti tengono id,
+  ordine e testo, e il resto del file non cambia.
+- **Blocca** e **Nascondi** scrivono `fub:locked="true"` e `display="none"`
+  sugli oggetti scelti, come sopra; **Blocca tutto ciò che non è scelto** e
+  **Nascondi tutto ciò che non è scelto** fanno lo stesso con gli altri
+  oggetti dei livelli che si vedono.
+- **Sblocca tutto** e **Mostra tutto** sono quelli di Fub, con la regola di
+  «Bloccare e nascondere»: un livello bloccato o nascosto resta com'è, con ciò
+  che contiene.
+
+Un oggetto nascosto da uno stile (`style="display:none"`) non si mostra da
+qui: il motore lo rifiuta, e il file non cambia. In un documento in sola
+lettura questi comandi sono spenti. Non ci sono ancora «Tutta la grafica
+soprastante» e «Altri livelli» di Blocca e Nascondi, «Invia al livello
+corrente» e «Riseleziona».
 
 ## Spazi e tasti
 

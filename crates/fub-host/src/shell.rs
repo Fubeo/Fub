@@ -297,6 +297,20 @@ pub const SETTINGS_WITH_THEIR_OWN_GESTURE: &[&str] = &[
     // «Collega una cartella…» e «Scollega», in Aspetto: il percorso lo dà
     // solo la finestra nativa.
     crate::settings::DEVELOPER_THEME_FOLDER,
+    // Lo spazio di lavoro del disegno e gli spazi salvati: si scelgono e si
+    // gestiscono dalla banda del disegno (T7). Sono le chiavi di
+    // `fub_features::DRAW_WORKSPACE_KEY` e `DRAW_WORKSPACES_KEY`; il test
+    // `shell_ids_mirror` controlla che restino uguali.
+    "draw.workspace",
+    "draw.workspaces",
+    // I tasti del Disegno completo: si cambiano nella sezione «Disegno
+    // completo» di Impostazioni › Scorciatoie, non come un testo JSON nel
+    // form (`fub_features::DRAW_KEYS_KEY`, stesso test).
+    "draw.keys",
+    // Le preferenze del motore del disegno: si cambiano nella sezione
+    // «Motore del disegno» di Impostazioni › Disegni, costruita dal motore
+    // (`fub_features::DRAW_ENGINE_PREFS_KEY`, stesso test).
+    "draw.motore",
 ];
 
 /// Il job il cui esito, quando riesce, può portare gli artefatti di un export

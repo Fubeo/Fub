@@ -33,6 +33,30 @@ si apre mostra la sua nota d'errore e nella banda non dice nessuna pagina. La
 riga di stato del visore resta per il caricamento, gli errori e la ricerca, e
 per il lettore di schermo.
 
+Le pagine del visore si disegnano fuori dal thread principale (#525): un
+worker (`pdf-render-worker.ts`, la regola in `pdf-render-serve.ts`) apre lo
+stesso PDF con il suo pdf.js, disegna la pagina in un `OffscreenCanvas` e la
+manda come `ImageBitmap`, che il visore mette in un canvas `bitmaprenderer`;
+la pagina di prima resta finché la nuova non c'è. Il worker nasce alla prima
+pagina chiesta, e quella pagina, finché il worker apre il PDF, si disegna nel
+thread principale. Una pagina che il worker non disegna si disegna nel thread
+principale; una WebView senza `OffscreenCanvas` o `bitmaprenderer`, un worker
+senza font, che non apre il PDF entro 20 secondi, che tiene una pagina più di
+10 secondi o che cade lasciano tutto al thread principale, come prima. Una
+WebView che non sa disegnare nel worker lo scopre una volta: fino al riavvio
+gli altri PDF non aprono il worker. Chiuso il PDF, il worker si chiude subito,
+anche a metà apertura, e una pagina arrivata tardi si butta.
+
+Il worker costa memoria: tiene una sua copia dei byte e un secondo pdf.js che
+li analizza, da due a due volte e mezza il file in più (126 MB diventano 451
+MB invece di 180). Per questo un PDF oltre 64 MiB non apre il worker e si
+disegna nel thread principale: lì il prezzo sarebbe di centinaia di MB, mentre
+fino a quella misura resta intorno ai 170 MB e compra la fluidità delle pagine,
+che serve soprattutto alle scansioni. Le misure sono in
+[La pagina del PDF disegnata in un worker](../misure/2026-11-20-linux-pdf-pagina-worker.md#la-memoria).
+Miniature, schede vive, lavagna, stampa ed esportazione disegnano ancora nel
+thread principale.
+
 ### Le annotazioni nel visore
 
 Con la feature `draw`, il visore cerca accanto al PDF le sue annotazioni,
@@ -135,6 +159,16 @@ La copertura non toglie niente dal PDF: il contenuto sotto resta nel file e si
 copia, si cerca e si stampa. Non è una redazione, e non si chiama così: toglie
 il contenuto soltanto il [PDF redatto](#esportare).
 
+Si scrive solo sulla pagina. Un tratto, una forma o una nota che comincia nel
+margine fuori dalla pagina non crea niente, e lì gli strumenti che scrivono
+hanno il cursore normale invece della mira; un tratto o una forma che comincia
+sulla pagina ed esce si ferma al bordo, e una forma tenuta diritta con
+`Maiusc` si accorcia restando quadrata o sul suo angolo. Gomma e Selezione
+lavorano anche fuori. Le annotazioni già scritte fuori dalla pagina, da
+versioni precedenti o da un altro programma, si aprono e si vedono come
+sono: niente le sposta o le toglie da sé. Il disegno libero non ha questo
+limite: lì la pagina si allarga.
+
 Con la tastiera, Invio sul foglio aggiunge un oggetto dello strumento al
 centro della vista, dentro la pagina, e lo lascia scelto: le frecce lo
 spostano. Evidenziatore e copertura ricordano ciascuno il proprio colore,
@@ -166,6 +200,18 @@ All'apertura l'editor confronta e non scrive niente.
   stesso. Il legame non cambia.
 - **Il file non nomina un PDF del vault**, per esempio un URL esterno: le
   pagine sono bianche, come sopra.
+
+Si scrive solo su una pagina di cui si sa la misura vera: quella del PDF
+letto, o quella che il file ha scritto per quella pagina. Una pagina che
+nessuno dei due misura si vede, bianca, con la misura di un'altra pagina del
+file o A4, ma non si scrive: gli strumenti sono spenti e l'avviso dice
+perché. Anche mentre il PDF si sta leggendo non si scrive, senza avviso. Un
+segno nato su una misura di ripiego cadrebbe fuori dalla pagina quando poi il
+PDF si legge, più piccolo. Le annotazioni già scritte così da versioni
+precedenti si aprono come sono: niente le riporta sulla pagina.
+
+Ogni messaggio dell'avviso sta su una riga, accorciato coi puntini; il testo
+intero è nel suggerimento e lo legge il lettore di schermo.
 
 Un elemento fuori dalle pagine, scritto a mano o da un altro programma, non si
 vede sul foglio: un avviso li conta, e la sorgente li mostra.

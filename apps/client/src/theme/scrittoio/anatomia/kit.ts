@@ -30,6 +30,14 @@ export const KIT: PartAnatomy = {
         "kit-dialog-actions",
       ],
     },
+    // Il modulo della domanda con più campi (`kit/form.ts`): le righe, la scelta
+    // a segmenti (il pozzetto con il foglietto acceso) e la casella, la nota e
+    // l'errore. La casella nativa non ha regole sue, quindi non è un hook.
+    {
+      name: "kit-form",
+      states: SELECTABLE,
+      hooks: ["kit-form", "kit-form-row", "kit-form-label", "kit-form-choice", "kit-form-option", "kit-form-check", "kit-form-note", "kit-form-error"],
+    },
     // `selected` è l'interruttore: un pulsante a icona con `aria-pressed`.
     { name: "kit-button", states: SELECTABLE, hooks: ["kit-button", "kit-button--icon"] },
     {
@@ -42,6 +50,8 @@ export const KIT: PartAnatomy = {
       states: [S("rest"), S("hover"), S("focused"), S("disabled")],
       hooks: ["kit-number", "kit-number-label", "kit-number-box", "kit-number-input", "kit-number-unit", "kit-number-error", "scrubbing"],
     },
+    // Il punto di riferimento: nove quadratini, `selected` è quello scelto (`aria-checked`).
+    { name: "kit-reference-point", states: SELECTABLE, hooks: ["kit-reference-point", "kit-reference-point-cell"] },
     {
       name: "kit-color",
       states: [S("rest"), S("hover"), S("focused"), S("selected")],

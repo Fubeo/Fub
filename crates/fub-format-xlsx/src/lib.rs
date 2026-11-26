@@ -17,12 +17,13 @@
 //! Il codec di GridCraft non scrive mai il file: lo riscriverebbe dal suo
 //! modello, e ciò che quel modello non conosce andrebbe perso.
 //!
-//! I valori sono quelli che il file ha salvato, e niente si ricalcola: aprire
-//! una cartella costa la sua lettura, qualunque formula contenga, e un valore
-//! casuale o di oggi resta quello del file. Le celle versate dalle matrici
-//! hanno il valore che il file ha salvato (la patch `0003` di
-//! `vendor/gridcraft`); una formula salvata senza valore resta vuota, e la
-//! sessione della griglia lo dice.
+//! I valori sono quelli che il file ha salvato: aprire una cartella costa la sua
+//! lettura, e un valore casuale o di oggi resta quello del file. Le celle
+//! versate dalle matrici hanno il valore che il file ha salvato (la patch
+//! `0003` di `vendor/gridcraft`). La sessione della griglia ricalcola
+//! (`ricalcolo.rs`) soltanto le formule che leggono una cella cambiata e quelle
+//! che il file ha salvato senza valore; una che il motore non sa calcolare
+//! resta col valore del file, e la sessione lo dice.
 //!
 //! Il codec gira in un thread suo con uno stack grande, e un suo panic diventa
 //! un errore: una formula annidata a fondo non abbatte l'host.
@@ -57,6 +58,7 @@ pub mod motore;
 mod objects;
 mod package;
 pub mod parts;
+mod ricalcolo;
 mod sheet_xml;
 pub mod values;
 

@@ -1,0 +1,12 @@
+{
+  "$nota": "Le risposte della famiglia dinamici del banco. Le Opzioni fusione senza una fusione scelta: quelle delle fusioni nuove, coi valori di VectorCraft. La sezione Fusione le legge appena qualcosa è scelto, e un comando senza risposta renderebbe `unserved`, che ferma la sessione come motore spento.",
+  "risposte": [
+    {
+      "comando": "disegno.object.blend.info",
+      "argomenti": {},
+      "esito": {
+        "reading": { "target": "defaults", "spacing": "smooth", "steps": 5, "distance": 10, "orientation": "page", "easingType": "easeIn", "ramp": 0, "colorShift": 0 }
+      }
+    }
+  ]
+}

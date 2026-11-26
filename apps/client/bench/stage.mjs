@@ -1,9 +1,10 @@
 // Il palco: il server, il browser, e **le otto cose che il banco tiene ferme**.
 //
-// Le usano in due — il fotografo (`foto.mjs`) e il controllo di accessibilità
-// (`a11y.mjs`) — e stanno qui perché una stabilità dichiarata in due posti è
-// una stabilità che divergerà: basterebbe che uno dei due scattasse in un altro
-// fuso, e metà delle sue misure smetterebbe di parlare delle stesse immagini.
+// Le usano tutti i banchi che aprono la pagina — il fotografo (`photos.mjs`),
+// il controllo di accessibilità (`a11y.mjs`), le misure di moto, di interazione
+// e gli altri — e stanno qui perché una stabilità dichiarata in più posti è una
+// stabilità che divergerà: basterebbe che uno scattasse in un altro fuso, e
+// metà delle sue misure smetterebbe di parlare delle stesse immagini.
 //
 // # La stabilità è una decisione, non un'impostazione (§31.1)
 //
@@ -28,12 +29,13 @@
 //    è successo alla prima corsa di questo file.
 // 6. **La finestra è una.** Viewport fisso e `deviceScaleFactor: 1`: la
 //    baseline è per una misura, non per lo schermo di chi passa.
-// 7. **Il caso è seminato.** `Math.random` è un generatore a seme fisso.
-//    CodeMirror lo usa nella ricerca di una posizione sotto un punto
-//    (`InlineCoordsScan.scan`), e la selezione la cerca ai due bordi della
-//    riga a capo: col caso vero, in una corsa su due i due bordi differivano
-//    di un carattere e tre lettere scelte si dipingevano come una riga intera
-//    (`riga-dei-suggerimenti`).
+// 7. **Il caso è seminato.** `Math.random` è un generatore a seme fisso: chi
+//    lo usa (gli id di un diagramma, un pareggio da spezzare) dà la stessa
+//    foto a ogni corsa. Un difetto che dipende dal caso, però, il seme lo
+//    nasconde: CodeMirror fino alla 6.43.7 cercava col caso la posizione sotto
+//    un punto, e tre lettere vicino a un a capo si dipingevano a volte come
+//    una riga intera nell'app vera ma mai qui (#399, corretto a monte nella
+//    6.43.8 e tenuto da `src/editors/text/codemirror-upstream.test.ts`).
 // 8. **Ciò che cambierà da sé lo dice.** Un elemento che sta per riscriversi
 //    senza che nessuno lo tocchi (la riga dei suggerimenti durante la sua
 //    pausa) porta `data-pending`; prima dello scatto si aspetta che nella
@@ -41,7 +43,7 @@
 //    sulla macchina di chi l'ha scelto e sbagliato sul runner.
 //
 // La nona non sta qui perché non è del palco: le baseline sono **solo
-// Linux**. Il perché sta in `foto.mjs`, accanto alla soglia.
+// Linux**. Il perché sta in `photos.mjs`, accanto alla soglia.
 import { createServer } from "vite";
 import { chromium } from "playwright";
 import { fileURLToPath } from "node:url";
@@ -100,6 +102,21 @@ export const BASELINE = here("./baseline");
 /// il termine di paragone.
 export const OUTPUT = here("./.output");
 
+/// Il plugin che spegne il guardiano dei file di Vite. Non basta
+/// `server: { watch: null }` nella configurazione in linea: `mergeConfig` salta
+/// i `null` e il server guarderebbe lo stesso tutta la cartella (152 cartelle
+/// del client, con `CHOKIDAR_USEPOLLING` interrogate di continuo, o osservatori
+/// di inotify che altri server di Vite possono avere esaurito: ENOSPC). Il
+/// `null` lo mette quindi un plugin, a configurazione risolta, prima che il
+/// server crei il guardiano. Un plugin nuovo per ogni server: nessuno stato
+/// condiviso fra due palchi aperti nello stesso processo.
+export function unwatched() {
+  return {
+    name: "bench:no-watch",
+    configResolved: (config) => void (config.server.watch = null),
+  };
+}
+
 /// Apre il palco: server di Vite e browser. Restituisce anche come si chiude,
 /// perché un banco che lascia in giro un server è un banco che alla seconda
 /// corsa non parte.
@@ -110,21 +127,31 @@ export const OUTPUT = here("./.output");
 /// `browserArgs` aggiunge opzioni di Chromium a quelle di tutti i banchi, per
 /// il banco che ne ha bisogno e per lui solo (il moto: `BROWSER_ARGS` di
 /// `motion-rules.mjs`).
+///
+/// `watch: false` apre un server che non guarda il disco e non manda
+/// aggiornamenti (vedi `unwatched`): per i banchi che misurano per minuti, a
+/// cui un file salvato intanto ricaricherebbe la pagina sotto la misura.
 export async function openStage({
   quiet = true,
   port,
   strictPort = true,
   browserArgs = [],
+  watch = true,
   createServer: createServerImpl = createServer,
   chromium: chromiumImpl = chromium,
 } = {}) {
   let server;
   let browser;
   try {
+    const serverOptions = {
+      ...(port === undefined ? {} : { port, strictPort }),
+      ...(watch ? {} : { hmr: false }),
+    };
     server = await createServerImpl({
       configFile: here("../vite.bench.config.ts"),
       logLevel: quiet ? "warn" : "info",
-      ...(port === undefined ? {} : { server: { port, strictPort } }),
+      ...(Object.keys(serverOptions).length === 0 ? {} : { server: serverOptions }),
+      ...(watch ? {} : { plugins: [unwatched()] }),
     });
     await server.listen();
     // Il riscaldamento della config (`server.warmup`, #395) parte con
@@ -324,6 +351,10 @@ export async function assertCsp(page) {
 /// chiedere un peso che non era servito prima), la quiete per ultima perché è
 /// l'unica cosa che tocca la pagina e deve toccarla il meno possibile.
 export async function prepareScene(page, scene, light, base, url) {
+  // Una scena può bloccare una richiesta per fotografare un guasto (il
+  // Completo che non si carica): il blocco è della pagina, e la pagina passa
+  // alla scena dopo. Si toglie prima di ogni scena.
+  await page.unrouteAll({ behavior: "ignoreErrors" });
   await page.goto(url(base, scene, light), { waitUntil: "load" });
   // Di solito si arriva quando l'avvio è finito. Una scena che fotografa
   // l'avvio stesso (lo strato in attesa, il guasto) non lo vedrà mai finire:
@@ -356,6 +387,29 @@ export async function prepareScene(page, scene, light, base, url) {
   // Ciò che sta per cambiare da sé si aspetta dopo l'ultimo gesto: è il gesto
   // ad armare la pausa della riga dei suggerimenti.
   await waitUntilSettled(page);
+  // Il lavoro a riposo (`ui/warmup.ts`, come in `motion.mjs`): la coda parte due
+  // secondi dopo la consegna e fa un passo dopo ogni pausa senza ingressi, cioè
+  // proprio fra i due scatti di una scena lenta. Il grafo d'esercizio montato
+  // fuori vista fa ridipingere la pagina, e qualche bordo cambia di un'unità:
+  // la scena «non sta ferma» per la storia del riscaldamento, non per sé.
+  // Una pagina senza la shell non fa partire la coda e non aspetta.
+  await page
+    .evaluate(async (limit) => {
+      const { warmups } = await import("/src/ui/warmup.ts");
+      const start = performance.now();
+      while (warmups.pending() && performance.now() - start < limit) {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+    }, 15_000)
+    .catch(() => undefined);
+  // Un disegno che la scena ha cambiato si salva dopo una pausa: su un runner
+  // lento il salvataggio cade fra i due scatti («Da salvare: 1», poi «Tutto
+  // salvato», e il pallino della scheda se ne va). Si aspetta che finisca.
+  if (await page.$(".draw-editor")) {
+    await page
+      .waitForFunction(() => document.querySelector("#status-saving")?.dataset.tone !== "busy", null, { timeout: 10_000 })
+      .catch(() => undefined);
+  }
   // Un foglio costruito e non `addStyleTag`: un `<style>` senza il nonce della
   // pagina la CSP lo rifiuta, come rifiuterebbe quello di un modulo dell'app.
   await page.evaluate((css) => {

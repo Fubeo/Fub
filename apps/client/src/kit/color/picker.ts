@@ -23,6 +23,7 @@ import { identifier } from "../../ui/a11y";
 import { icon, iconEl, registerIcon } from "../../ui/icons";
 import type { Lifetime } from "../../ui/lifetime";
 import { COLOR_FORMATS, formatColor, hsvToRgb, parseColor, parseHex, rgbToHsv, toHexText, type ColorFormat, type Hsva } from "./model";
+import { composingKey } from "../ime";
 
 /// Un colore da scegliere con un clic, col suo nome.
 export interface ColorChoice {
@@ -369,7 +370,7 @@ export function createColorPicker(options: ColorPickerOptions): ColorPicker {
     choose(color);
   };
   lifetime.listen(input, "keydown", (event) => {
-    if (event.key !== "Enter" || event.isComposing) return;
+    if (event.key !== "Enter" || composingKey(event)) return;
     event.preventDefault();
     commitInput();
   });

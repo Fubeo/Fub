@@ -1,0 +1,1164 @@
+{
+  "casi": [
+    {
+      "id": "paintbrush",
+      "fonte": "strumento",
+      "disegno": "../tracciati/base.svg",
+      "gesto": [
+        {
+          "phase": "commit",
+          "events": [
+            {
+              "kind": "down",
+              "x": 20,
+              "y": 150,
+              "pressure": 1,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 40,
+              "y": 170,
+              "pressure": 1,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 70,
+              "y": 180,
+              "pressure": 1,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 100,
+              "y": 190,
+              "pressure": 1,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "up",
+              "x": 100,
+              "y": 190,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ]
+        }
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "add",
+            "parent": "l1a2b3c4d",
+            "pos": {
+              "last": true
+            },
+            "elem": {
+              "tag": "path",
+              "attrs": {
+                "d": "M20 150 C41.99 178.28 67.38 179.13 100 190",
+                "fill": "none",
+                "stroke": "#000000",
+                "stroke-width": "2",
+                "stroke-miterlimit": "10",
+                "id": "opcljsb48"
+              }
+            }
+          }
+        ]
+      },
+      "dopo": "pennello-libero.svg"
+    },
+    {
+      "id": "paintbrush",
+      "fonte": "strumento",
+      "disegno": "../tracciati/base.svg",
+      "gesto": [
+        {
+          "phase": "commit",
+          "events": [
+            {
+              "kind": "down",
+              "x": 20,
+              "y": 150,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 40,
+              "y": 170,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 70,
+              "y": 180,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 100,
+              "y": 190,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "up",
+              "x": 100,
+              "y": 190,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ]
+        }
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "last": true
+                },
+                "raw": "<path id=\"ontrckj21\" d=\"M20 150 C41.993 178.277 67.381 179.127 100 190\" fill=\"none\" stroke=\"#000000\" stroke-width=\"2\" stroke-miterlimit=\"10\"/>"
+              },
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<metadata><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"ontrckj21\" hash=\"d5827bd3f4853132\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjo5LCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJub25lIn19LHsia2luZCI6InN0cm9rZSIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MC4wLCJnIjowLjAsImIiOjAuMH19LCJ3aWR0aCI6Mi4wLCJwcmVzc3VyZSI6eyJwb2ludHMiOltbMC4wLDAuNV0sWzEuMCwwLjVdXX19XX0sImtpbmQiOnsidHlwZSI6InBhdGgiLCJwYXRoIjp7InN1YnBhdGhzIjpbeyJhbmNob3JzIjpbeyJwIjpbMjAuMCwxNTAuMF0sIm91dCI6WzQxLjk5MzE1ODI5NTE0NzksMTc4LjI3NjkxNzgwODA0NzNdfSx7InAiOlsxMDAuMCwxOTAuMF0sImluIjpbNjcuMzgwNjAyOTIyMzk2MzYsMTc5LjEyNjg2NzY0MDc5ODhdfV0sImNsb3NlZCI6ZmFsc2V9XX19fX0=</vectorcraft:recipe></metadata>"
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "pennello-penna.svg"
+    },
+    {
+      "id": "blobBrush",
+      "fonte": "strumento",
+      "disegno": "../pennello/vuota.svg",
+      "gesto": [
+        {
+          "phase": "preview",
+          "events": [
+            {
+              "kind": "down",
+              "x": 60,
+              "y": 60,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 90,
+              "y": 62,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 120,
+              "y": 60,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ]
+        },
+        {
+          "phase": "commit",
+          "events": [
+            {
+              "kind": "up",
+              "x": 120,
+              "y": 60,
+              "pressure": 0.0,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ],
+          "inputs": []
+        }
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "add",
+            "parent": "l1a2b3c4d",
+            "pos": {
+              "last": true
+            },
+            "elem": {
+              "tag": "path",
+              "attrs": {
+                "d": "M55.02 59.5 C55.3 56.75 57.75 54.75 60.5 55.02 C81.77 57.15 98.23 57.15 119.5 55.02 C122.25 54.75 124.7 56.75 124.98 59.5 C125.25 62.25 123.25 64.7 120.5 64.98 C98.56 67.17 81.44 67.17 59.5 64.98 C56.75 64.7 54.75 62.25 55.02 59.5 Z",
+                "fill": "#000000",
+                "id": "oblob0001"
+              }
+            }
+          }
+        ]
+      },
+      "dopo": "pennello-gesto.svg"
+    },
+    {
+      "id": "blobBrush",
+      "fonte": "strumento",
+      "disegno": "../pennello/livello-bloccato.svg",
+      "gesto": [
+        {
+          "phase": "preview",
+          "events": [
+            {
+              "kind": "down",
+              "x": 60,
+              "y": 60,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 120,
+              "y": 60,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ]
+        },
+        {
+          "phase": "commit",
+          "events": [
+            {
+              "kind": "up",
+              "x": 120,
+              "y": 60,
+              "pressure": 0.0,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ],
+          "inputs": []
+        }
+      ],
+      "atteso": {
+        "rifiuto": "locked"
+      }
+    },
+    {
+      "id": "object.liquify",
+      "disegno": "../trasforma/base.svg",
+      "selezione": [
+        "op7a7a7a7"
+      ],
+      "argomenti": {
+        "tool": "warp",
+        "points": [
+          [
+            330,
+            200
+          ],
+          [
+            330,
+            185
+          ]
+        ],
+        "diameter": 60,
+        "intensity": 1
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "op7a7a7a7",
+            "attrs": {
+              "d": "M300 200 C302 199.95 304 199.68 306 199.05 C308 198.07 310 196.82 312 195.38 C314 193.86 316 192.35 318 190.93 C320 189.57 322 188.37 324 187.38 C326 186.75 328 186.39 330 186.31 C332 186.39 334 186.75 336 187.38 C338 188.37 340 189.57 342 190.93 C344 192.35 346 193.86 348 195.38 C350 196.79 352 197.99 354 198.88 C356 199.54 358 199.87 360 200 C355 210 350 220 345 230 C343.33 233.33 341.67 236.67 340 240 C338.33 243.33 336.67 246.67 335 250 C333.33 253.33 331.67 256.67 330 260 C328.33 256.67 326.67 253.33 325 250 C323.33 246.67 321.67 243.33 320 240 C318.33 236.67 316.67 233.33 315 230 C310 220 305 210 300 200 Z"
+            }
+          }
+        ]
+      },
+      "dopo": "liquefa-warp.svg"
+    },
+    {
+      "id": "object.liquify",
+      "disegno": "../trasforma/base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {
+        "tool": "twirl",
+        "points": [
+          [
+            150,
+            125
+          ]
+        ],
+        "diameter": 80,
+        "intensity": 1
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oa1a1a1a1",
+            "tag": "path",
+            "attrs": {
+              "x": null,
+              "y": null,
+              "width": null,
+              "height": null,
+              "rx": null,
+              "ry": null,
+              "d": "M100 100 C104.76 100 109.52 100 114.29 100 C119.05 100 123.95 99.85 129.03 99.62 C134.17 99.46 139.29 99.46 144.32 99.63 C149.22 99.9 153.98 100.2 158.59 100.46 C163.07 100.59 167.49 100.57 171.88 100.39 C176.33 100.15 180.95 100 185.71 100 C190.48 100 195.24 100 200 100 L200 150 C195.24 150 190.48 150 185.71 150 C180.95 150 176.05 150.15 170.97 150.38 C165.83 150.54 160.71 150.54 155.68 150.37 C150.78 150.1 146.02 149.8 141.41 149.54 C136.93 149.41 132.51 149.43 128.12 149.61 C123.67 149.85 119.05 150 114.29 150 C109.52 150 104.76 150 100 150 Z"
+            }
+          }
+        ]
+      },
+      "dopo": "liquefa-twirl.svg"
+    },
+    {
+      "id": "object.liquify",
+      "disegno": "../trasforma/base.svg",
+      "selezione": [
+        "op7a7a7a7"
+      ],
+      "argomenti": {
+        "tool": "bloat",
+        "points": [
+          [
+            20,
+            280
+          ]
+        ],
+        "diameter": 40
+      },
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "object.liquify",
+      "disegno": "../trasforma/base.svg",
+      "selezione": [
+        "op7a7a7a7"
+      ],
+      "argomenti": {
+        "tool": "warp",
+        "points": []
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "object.liquify",
+      "disegno": "../trasforma/base.svg",
+      "selezione": [
+        "op7a7a7a7"
+      ],
+      "argomenti": {
+        "tool": "nessuno",
+        "points": [
+          [
+            330,
+            200
+          ]
+        ]
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "object.liquify",
+      "disegno": "../trasforma/t13-solo-inchiostro.svg",
+      "selezione": [
+        "oi8b8b8b8"
+      ],
+      "argomenti": {
+        "tool": "pucker",
+        "points": [
+          [
+            140,
+            230
+          ]
+        ],
+        "diameter": 60
+      },
+      "atteso": {
+        "rifiuto": "unmapped"
+      }
+    },
+    {
+      "id": "object.liquify",
+      "disegno": "../trasforma/bloccato.svg",
+      "selezione": [
+        "ob2b2b2b2"
+      ],
+      "argomenti": {
+        "tool": "pucker",
+        "points": [
+          [
+            220,
+            100
+          ]
+        ],
+        "diameter": 60
+      },
+      "atteso": {
+        "rifiuto": "locked"
+      }
+    },
+    {
+      "id": "width",
+      "fonte": "strumento",
+      "disegno": "spessore.svg",
+      "gesto": [
+        {
+          "phase": "preview",
+          "events": [
+            {
+              "kind": "down",
+              "x": 150,
+              "y": 201,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 150,
+              "y": 210,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 150,
+              "y": 220,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ]
+        },
+        {
+          "phase": "commit",
+          "events": [
+            {
+              "kind": "up",
+              "x": 150,
+              "y": 220,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ]
+        }
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "oc3c3c3c3"
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "after": "gd4d4d4d4"
+                },
+                "elem": {
+                  "tag": "path",
+                  "attrs": {
+                    "fub:shape": "width",
+                    "fub:geom": "butt miter 0 5 5 0.24 19.4 19.4 0.25 20 20 0.26 19.8 19.8 1 5 5 M100 200 L300 200",
+                    "d": "M100 205 L100 195 C116 190.2 132 185.4 148 180.6 C148.67 180.4 149.33 180 150 180 C150.67 180 151.33 180.13 152 180.2 C201.33 185.13 250.67 190.07 300 195 L300 205 C250.67 209.93 201.33 214.87 152 219.8 C151.33 219.87 150.67 220 150 220 C149.33 220 148.67 219.6 148 219.4 C132 214.6 116 209.8 100 205 Z",
+                    "fill": "#000000",
+                    "id": "oc3c3c3c3"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "spessore-allargata.svg"
+    },
+    {
+      "id": "warp",
+      "fonte": "strumento",
+      "disegno": "../trasforma/base.svg",
+      "selezione": [
+        "op7a7a7a7"
+      ],
+      "gesto": [
+        {
+          "phase": "commit",
+          "events": [
+            {
+              "kind": "down",
+              "x": 330,
+              "y": 230,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 330,
+              "y": 220,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 330,
+              "y": 210,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "up",
+              "x": 330,
+              "y": 210,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ]
+        }
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "op7a7a7a7",
+            "attrs": {
+              "d": "M300 197.11 C303.33 196.26 306.67 195.43 310 194.65 C313.33 193.94 316.67 193.33 320 192.84 C323.33 192.51 326.67 192.32 330 192.28 C333.33 192.32 336.67 192.51 340 192.84 C343.33 193.36 346.67 193.98 350 194.69 C353.33 195.45 356.67 196.26 360 197.11 C357.5 200.85 355 204.69 352.5 208.73 C350 213.08 347.5 217.82 345 222.98 C342.5 228.56 340 234.54 337.5 240.79 C335 247.17 332.5 253.44 330 259.35 C327.5 253.44 325 247.17 322.5 240.79 C320 234.54 317.5 228.56 315 222.98 C312.5 217.82 310 213.08 307.5 208.73 C305 204.69 302.5 200.85 300 197.11 Z"
+            }
+          }
+        ]
+      },
+      "dopo": "altera.svg"
+    },
+    {
+      "id": "twirl",
+      "fonte": "strumento",
+      "disegno": "../trasforma/base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "gesto": [
+        {
+          "phase": "commit",
+          "events": [
+            {
+              "kind": "down",
+              "x": 150,
+              "y": 125,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 150,
+              "y": 125,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "up",
+              "x": 150,
+              "y": 125,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ]
+        }
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oa1a1a1a1",
+            "tag": "path",
+            "attrs": {
+              "x": null,
+              "y": null,
+              "width": null,
+              "height": null,
+              "rx": null,
+              "ry": null,
+              "d": "M100 100 C106.67 100 113.43 99.86 120.33 99.6 C127.29 99.43 134.23 99.42 141.11 99.58 C147.88 99.87 154.54 100.19 161.09 100.46 C167.55 100.61 173.94 100.58 180.33 100.4 C186.76 100.14 193.33 100 200 100 L200 150 C193.33 150 186.57 150.14 179.67 150.4 C172.71 150.57 165.77 150.58 158.89 150.42 C152.12 150.13 145.46 149.81 138.91 149.54 C132.45 149.39 126.06 149.42 119.67 149.6 C113.24 149.86 106.67 150 100 150 Z"
+            }
+          }
+        ]
+      },
+      "dopo": "vortice.svg"
+    },
+    {
+      "id": "pucker",
+      "fonte": "strumento",
+      "disegno": "../trasforma/base.svg",
+      "selezione": [
+        "op7a7a7a7"
+      ],
+      "gesto": [
+        {
+          "phase": "commit",
+          "events": [
+            {
+              "kind": "down",
+              "x": 330,
+              "y": 225,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 331,
+              "y": 225,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "up",
+              "x": 331,
+              "y": 225,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ]
+        }
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "op7a7a7a7",
+            "attrs": {
+              "d": "M300.46 200.38 C307.33 200.71 314.01 201.02 320.5 201.26 C326.85 201.39 333.15 201.39 339.5 201.26 C345.99 201.02 352.67 200.71 359.54 200.38 C354.11 210.34 348.74 219.98 343.79 229.6 C339.01 239.18 334.61 248.89 330 259.09 C325.39 248.89 320.99 239.18 316.22 229.6 C311.26 219.98 305.89 210.34 300.46 200.38 Z"
+            }
+          }
+        ]
+      },
+      "dopo": "contrai.svg"
+    },
+    {
+      "id": "bloat",
+      "fonte": "strumento",
+      "disegno": "../trasforma/base.svg",
+      "selezione": [
+        "op7a7a7a7"
+      ],
+      "gesto": [
+        {
+          "phase": "commit",
+          "events": [
+            {
+              "kind": "down",
+              "x": 330,
+              "y": 225,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 331,
+              "y": 225,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "up",
+              "x": 331,
+              "y": 225,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ]
+        }
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "op7a7a7a7",
+            "attrs": {
+              "d": "M299.71 199.76 C306.18 199.48 312.77 199.15 319.53 198.83 C326.48 198.62 333.52 198.62 340.47 198.83 C347.23 199.15 353.82 199.48 360.29 199.76 C355.66 209.87 351.7 219.87 346.92 230.64 C344.07 236.26 341.05 241.57 338.09 246.56 C335.27 251.34 332.58 256.01 330 260.65 C327.42 256.01 324.73 251.34 321.91 246.56 C318.95 241.57 315.93 236.26 313.08 230.64 C308.3 219.87 304.34 209.87 299.71 199.76 Z"
+            }
+          }
+        ]
+      },
+      "dopo": "gonfia.svg"
+    },
+    {
+      "id": "scallop",
+      "fonte": "strumento",
+      "disegno": "../trasforma/base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "gesto": [
+        {
+          "phase": "commit",
+          "events": [
+            {
+              "kind": "down",
+              "x": 150,
+              "y": 125,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 152,
+              "y": 125,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "up",
+              "x": 152,
+              "y": 125,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ]
+        }
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oa1a1a1a1",
+            "tag": "path",
+            "attrs": {
+              "x": null,
+              "y": null,
+              "width": null,
+              "height": null,
+              "rx": null,
+              "ry": null,
+              "d": "M100 100 C104.17 100 108.41 100.04 112.58 100.05 C116.86 100.02 121.02 99.92 125.38 100.38 C129.92 100.93 133.47 99.09 137.85 100.71 C142.26 102.67 145.14 100.96 150 100.84 C154.31 98.6 157.73 102.63 162.15 100.71 C166.56 99.17 170.04 100.34 174.63 100.38 C178.97 99.88 183.14 100.1 187.42 100.05 C191.59 100.05 195.83 100 200 100 L200 150 C195.83 150 191.59 149.96 187.42 149.95 C183.14 149.74 179 149.41 174.63 149.63 C170.04 149.66 166.52 147.63 162.15 149.29 C157.33 149.42 154.32 146.94 150 149.16 C145.38 150.65 142.24 151.28 137.85 149.29 C133.37 150.63 129.94 150.01 125.38 149.63 C121.01 149.97 116.85 150.21 112.58 149.95 C108.41 149.95 104.17 150 100 150 Z"
+            }
+          }
+        ]
+      },
+      "dopo": "smerla.svg"
+    },
+    {
+      "id": "crystallize",
+      "fonte": "strumento",
+      "disegno": "../trasforma/base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "gesto": [
+        {
+          "phase": "commit",
+          "events": [
+            {
+              "kind": "down",
+              "x": 150,
+              "y": 125,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 152,
+              "y": 125,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "up",
+              "x": 152,
+              "y": 125,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ]
+        }
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oa1a1a1a1",
+            "tag": "path",
+            "attrs": {
+              "x": null,
+              "y": null,
+              "width": null,
+              "height": null,
+              "rx": null,
+              "ry": null,
+              "d": "M100 100 C104.17 100 108.3 99.97 112.46 99.97 C116.51 99.97 120.71 99.67 124.67 99.67 C128.42 99.67 133.33 98.97 136.98 98.97 C140.5 98.97 146.52 99.25 150 99.25 C153.48 99.25 159.36 99.24 162.88 99.24 C166.53 99.24 171.58 99.67 175.33 99.67 C179.28 99.67 183.5 99.96 187.55 99.96 C191.72 99.96 195.83 100 200 100 L200 150 C195.83 150 191.72 150.04 187.56 150.04 C183.51 150.04 179.34 150.38 175.38 150.38 C171.63 150.38 166.43 150.55 162.78 150.55 C159.26 150.55 153.48 150.72 150 150.72 C146.52 150.72 140.74 150.54 137.23 150.54 C133.57 150.54 128.33 150.43 124.57 150.43 C120.62 150.43 116.5 150.03 112.45 150.03 C108.29 150.03 104.17 150 100 150 Z"
+            }
+          }
+        ]
+      },
+      "dopo": "cristallizza.svg"
+    },
+    {
+      "id": "wrinkle",
+      "fonte": "strumento",
+      "disegno": "../trasforma/base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "gesto": [
+        {
+          "phase": "commit",
+          "events": [
+            {
+              "kind": "down",
+              "x": 150,
+              "y": 125,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 152,
+              "y": 125,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "up",
+              "x": 152,
+              "y": 125,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ]
+        }
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oa1a1a1a1",
+            "tag": "path",
+            "attrs": {
+              "x": null,
+              "y": null,
+              "width": null,
+              "height": null,
+              "rx": null,
+              "ry": null,
+              "d": "M100 100 C104.17 100 108.33 100 112.5 99.95 C116.67 100.04 120.83 100.22 125 99.6 C129.17 99.49 133.33 99.4 137.5 99.58 C141.67 100.79 145.83 100.74 150 99.3 C154.17 99.45 158.33 100.08 162.5 100.48 C166.67 100.15 170.83 99.56 175 100.01 C179.17 99.94 183.33 99.89 187.5 100.02 C191.67 100 195.83 100 200 100 L200 150 C195.83 150 191.67 150 187.5 149.97 C183.33 150.08 179.17 150.19 175 150.25 C170.83 149.51 166.67 150.15 162.5 149.91 C158.33 150.07 154.17 149.14 150 149.55 C145.83 149.13 141.67 149.27 137.5 149.29 C133.33 150.18 129.17 149.93 125 149.66 C120.83 149.77 116.67 150.15 112.5 149.97 C108.33 150 104.17 150 100 150 Z"
+            }
+          }
+        ]
+      },
+      "dopo": "raggrinzisci.svg"
+    },
+    {
+      "id": "warp",
+      "fonte": "strumento",
+      "disegno": "../trasforma/t13-solo-inchiostro.svg",
+      "selezione": [
+        "oi8b8b8b8"
+      ],
+      "gesto": [
+        {
+          "phase": "commit",
+          "events": [
+            {
+              "kind": "down",
+              "x": 140,
+              "y": 230,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 140,
+              "y": 215,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "up",
+              "x": 140,
+              "y": 215,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ]
+        }
+      ],
+      "atteso": {
+        "rifiuto": "unmapped"
+      }
+    },
+    {
+      "id": "warp",
+      "fonte": "strumento",
+      "disegno": "../trasforma/base.svg",
+      "selezione": [
+        "op7a7a7a7"
+      ],
+      "gesto": [
+        {
+          "phase": "commit",
+          "events": [
+            {
+              "kind": "down",
+              "x": 20,
+              "y": 280,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 30,
+              "y": 280,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "up",
+              "x": 30,
+              "y": 280,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ]
+        }
+      ],
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "warp",
+      "fonte": "strumento",
+      "disegno": "../trasforma/base.svg",
+      "selezione": [],
+      "gesto": [
+        {
+          "phase": "commit",
+          "events": [
+            {
+              "kind": "down",
+              "x": 330,
+              "y": 230,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 330,
+              "y": 220,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 330,
+              "y": 210,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "up",
+              "x": 330,
+              "y": 210,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ]
+        }
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "op7a7a7a7",
+            "attrs": {
+              "d": "M300 197.11 C303.33 196.26 306.67 195.43 310 194.65 C313.33 193.94 316.67 193.33 320 192.84 C323.33 192.51 326.67 192.32 330 192.28 C333.33 192.32 336.67 192.51 340 192.84 C343.33 193.36 346.67 193.98 350 194.69 C353.33 195.45 356.67 196.26 360 197.11 C357.5 200.85 355 204.69 352.5 208.73 C350 213.08 347.5 217.82 345 222.98 C342.5 228.56 340 234.54 337.5 240.79 C335 247.17 332.5 253.44 330 259.35 C327.5 253.44 325 247.17 322.5 240.79 C320 234.54 317.5 228.56 315 222.98 C312.5 217.82 310 213.08 307.5 208.73 C305 204.69 302.5 200.85 300 197.11 Z"
+            }
+          }
+        ]
+      },
+      "dopo": "altera-senza-scelta.svg"
+    },
+    {
+      "id": "warp",
+      "fonte": "strumento",
+      "disegno": "../trasforma/t13-solo-inchiostro.svg",
+      "selezione": [],
+      "gesto": [
+        {
+          "phase": "commit",
+          "events": [
+            {
+              "kind": "down",
+              "x": 140,
+              "y": 230,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 140,
+              "y": 215,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "up",
+              "x": 140,
+              "y": 215,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ]
+        }
+      ],
+      "atteso": {
+        "rifiuto": "unmapped"
+      }
+    },
+    {
+      "id": "object.liquify",
+      "disegno": "../trasforma/t13-solo-inchiostro.svg",
+      "selezione": [],
+      "argomenti": {
+        "tool": "pucker",
+        "points": [
+          [
+            140,
+            230
+          ]
+        ],
+        "diameter": 60
+      },
+      "atteso": {
+        "rifiuto": "unmapped"
+      }
+    }
+  ]
+}

@@ -104,6 +104,14 @@ export interface SurfaceMountContext {
    * subpages — and shows the body alone. Absent means `false`.
    */
   readonly pageless?: boolean;
+  /**
+   * The surface lives inside a card of another document's pane (a board
+   * card): the shell's current document is the host's, not this surface's.
+   * The surface still answers its own editor gestures (the slash menu with
+   * the editor's actions), but never hands the shell a command that acts on
+   * "the current document": it would reach the host. Absent means `false`.
+   */
+  readonly hosted?: boolean;
 }
 
 /** A selected range, in UTF-8 bytes of the document source, with its text. */
@@ -433,6 +441,12 @@ export interface SurfaceStatusItem {
   /** A click opens more about it: the band draws a button. */
   readonly open?: () => void;
   /**
+   * With `open`: the click acts in place (resets the zoom, frames the copies)
+   * and opens nothing, so the band's button leaves the focus in the document.
+   * Without it the click opens something, which takes the focus.
+   */
+  readonly inPlace?: boolean;
+  /**
    * A sign that switches on, as Track changes: when it appears while the
    * document keeps the focus, it enters with one beat. Never on a redraw.
    */
@@ -559,6 +573,49 @@ export interface SurfaceStanding {
   subscribe(listener: () => void): () => void;
 }
 
+/** Uno spazio di lavoro del disegno, come lo mostra il menu della banda. */
+export interface SurfaceWorkspaceChoice {
+  /** L'id che la scelta scrive nelle impostazioni (`draw.workspace`). */
+  readonly id: string;
+  /** Il nome, già tradotto. */
+  readonly name: string;
+  /** Una riga che dice che cos'è, a destra del nome, già tradotta. */
+  readonly description?: string;
+  /** Lo spazio base, i preset del Disegno completo o quelli salvati: il menu separa i gruppi. */
+  readonly group: "base" | "completo" | "salvato";
+  /** Vero se lo spazio si può scegliere adesso. */
+  readonly enabled: boolean;
+  /** Perché non si può scegliere, già tradotto: il menu lo dice. */
+  readonly reason?: string;
+}
+
+/** Una voce in fondo al menu dello spazio: ripristina, salva, gestisci. */
+export interface SurfaceWorkspaceAction {
+  readonly id: string;
+  readonly label: string;
+  readonly description?: string;
+  readonly enabled: boolean;
+  run(): void;
+}
+
+/**
+ * Lo spazio di lavoro del disegno: la banda mostra quello in uso accanto alla
+ * modalità, e il menu offre gli spazi e le azioni. Scegliere uno spazio lo
+ * scrive nel vault, e chi lo mostra lo rilegge con `subscribe`.
+ */
+export interface SurfaceWorkspace {
+  /** Lo spazio in uso adesso, quello che la banda scrive. */
+  current(): SurfaceWorkspaceChoice;
+  /** Gli spazi del menu, nell'ordine in cui si mostrano. */
+  choices(): readonly SurfaceWorkspaceChoice[];
+  /** Le voci in fondo al menu, nell'ordine in cui si mostrano. */
+  actions(): readonly SurfaceWorkspaceAction[];
+  /** Sceglie lo spazio `id`; uno spento o sconosciuto non fa niente. */
+  choose(id: string): void;
+  /** Chiamata quando lo spazio, gli spazi o le azioni possono essere cambiati. */
+  subscribe(listener: () => void): () => void;
+}
+
 /** A tab the document brings to the side panel, next to the declared views. */
 export interface SurfacePanel {
   /** Stable within the surface: the panel keeps its tab across rebuilds. */
@@ -621,6 +678,19 @@ export interface EditorSurface {
    * document session follows without it.
    */
   followRename?(documentId: string): void;
+  /**
+   * The pane may keep this surface aside while another tab is shown, hidden
+   * and detached from the document session, and show it again as it was
+   * (selection, scroll, local undo): what changed meanwhile arrives with
+   * `buffer.syncDoc`. Opt-in, for a surface that listens to nothing outside
+   * its own element while hidden and that names its document in every
+   * change it emits (`SurfaceBootstrapOptions.onChange`), so a change that
+   * lands after the pane moved on still reaches its own document. `weight`
+   * counts against the pane's budget of kept surfaces: 1 for a surface that
+   * is only DOM, more for one that also holds a session in the host. The
+   * Markdown and plain-text surfaces are kept without declaring it.
+   */
+  readonly parking?: { readonly weight: number };
   focus?(): void;
   /**
    * Opens the surface's own find bar, the one its editor offers inside the
@@ -671,6 +741,8 @@ export interface EditorSurface {
   readonly cellSelection?: SurfaceCellSelectionSource;
   /** How far the document can be written, by its path. */
   readonly standing?: SurfaceStanding;
+  /** The drawing's workspace: the band shows it next to the mode (T7). */
+  readonly workspace?: SurfaceWorkspace;
   /**
    * Brings the view to a place in the document. `false` when this surface
    * cannot get there, so that the shell says it instead of doing nothing.
@@ -704,6 +776,12 @@ export interface EditorSurface {
    * write now (read-only, closed).
    */
   insertReferences?(references: readonly SurfaceReference[], at?: SurfacePoint): boolean;
+  /**
+   * Puts the cursor under `at` (client coordinates), as a click in the text
+   * would, without focusing. `false`, changing nothing, when the point is not
+   * on the editable text (outside the editor, or in a reading mode).
+   */
+  caretAt?(at: SurfacePoint): boolean;
   /** Mounts the document rendered for a presentation into `host`; returns its teardown. */
   mountPresentation?(host: HTMLElement): () => void;
   /**
@@ -1254,7 +1332,10 @@ export class DocumentSurfaceRegistry {
 }
 
 export interface SurfaceCallbacks {
-  onChange(paneId: string, change: EditorChange): void;
+  /// `documentId`: the document of the surface that wrote, from a surface
+  /// that may be kept aside (`EditorSurface.parking`): its change belongs to
+  /// that document even when the pane already shows another one.
+  onChange(paneId: string, change: EditorChange, documentId?: string): void;
   onSelectionChange(paneId: string): void;
   /// Una superficie montata che scopre dopo, da sola, di non poter tenere il
   /// testo (una lavagna rotta che arriva mentre il nucleo si carica): il

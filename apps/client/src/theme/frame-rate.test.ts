@@ -1,5 +1,13 @@
-import { describe, expect, it } from "vitest";
-import { createFramePacer, frameRateCapOf } from "./frame-rate";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import {
+  REFERENCE_PERIOD_MS,
+  createFramePacer,
+  frameRateCapOf,
+  probeScreenPeriod,
+  resetScreenPeriod,
+  screenPeriodMs,
+  type FrameSource,
+} from "./frame-rate";
 
 /// I callback di uno schermo a `hz` per `ms`, a partire da `from`.
 function vsyncs(hz: number, ms: number, from = 0): number[] {
@@ -18,6 +26,7 @@ describe("frameRateCapOf", () => {
   it("riconosce solo i tetti offerti; il resto è il massimo dello schermo", () => {
     expect(frameRateCapOf("")).toBe(0);
     expect(frameRateCapOf("144")).toBe(144);
+    expect(frameRateCapOf("180")).toBe(180);
     expect(frameRateCapOf("30")).toBe(30);
     expect(frameRateCapOf("59")).toBe(0);
     expect(frameRateCapOf(120)).toBe(0);
@@ -81,4 +90,109 @@ describe("createFramePacer", () => {
     expect(pacer.periodMs()).toBeCloseTo(1000 / 30, 6);
     expect(pacer.capPeriodMs()).toBeCloseTo(1000 / 30, 6);
   });
+
+  it("il budget è il periodo dello schermo e non si allunga sotto carico", () => {
+    const pacer = createFramePacer(() => 0);
+    // finché la finestra non è piena il budget è largo
+    expect(pacer.budgetMs()).toBeCloseTo(1000 / 60, 6);
+    let t = 0;
+    for (let k = 0; k < 20; k++) pacer.admit((t += 1000 / 180));
+    expect(pacer.budgetMs()).toBeCloseTo(1000 / 180, 6);
+    // ogni fotogramma ne perde uno: la stima va a 90 Hz, il budget resta
+    for (let k = 0; k < 40; k++) pacer.admit((t += 2000 / 180));
+    expect(pacer.displayPeriodMs()).toBeCloseTo(2000 / 180, 6);
+    expect(pacer.budgetMs()).toBeCloseTo(1000 / 180, 6);
+  });
+
+  it("un loop che parte già carico non ha un budget più stretto del suo ritmo", () => {
+    const pacer = createFramePacer(() => 0);
+    let t = 0;
+    for (let k = 0; k < 20; k++) pacer.admit((t += 2000 / 180));
+    expect(pacer.budgetMs()).toBeCloseTo(2000 / 180, 6);
+  });
+
+  it("col tetto il budget è il suo periodo, se è più lento dello schermo", () => {
+    let cap = 30;
+    const pacer = createFramePacer(() => cap);
+    for (const t of vsyncs(180, 200)) pacer.admit(t);
+    expect(pacer.budgetMs()).toBeCloseTo(1000 / 30, 6);
+    cap = 240;
+    expect(pacer.budgetMs()).toBeCloseTo(1000 / 180, 6);
+  });
+
+  it("al risveglio il periodo dello schermo si rimpara", () => {
+    const pacer = createFramePacer(() => 0);
+    for (const t of vsyncs(180, 200)) pacer.admit(t);
+    expect(pacer.budgetMs()).toBeCloseTo(1000 / 180, 6);
+    pacer.pause();
+    // la finestra passa su un monitor a 60 Hz mentre il loop dorme
+    for (const t of vsyncs(60, 300, 5000)) pacer.admit(t);
+    expect(pacer.budgetMs()).toBeCloseTo(1000 / 60, 6);
+  });
 });
+
+/// Uno schermo finto: i fotogrammi chiesti partono con `run`, a `hz`.
+function fakeScreen(hz: number): FrameSource & { requests: number; run(): void; clock: number } {
+  let queue: ((time: number) => void)[] = [];
+  const screen = {
+    requests: 0,
+    clock: 0,
+    now: () => screen.clock,
+    requestFrame(callback: (time: number) => void): number {
+      screen.requests++;
+      queue.push(callback);
+      return screen.requests;
+    },
+    run() {
+      while (queue.length > 0) {
+        const due = queue;
+        queue = [];
+        screen.clock += 1000 / hz;
+        for (const callback of due) callback(screen.clock);
+      }
+    },
+  };
+  return screen;
+}
+
+describe("il periodo dello schermo per chi non ha un loop", () => {
+  beforeEach(() => resetScreenPeriod());
+  afterEach(() => resetScreenPeriod());
+
+  it("vale 60 Hz finché nessuno l'ha misurato, poi il più corto visto", () => {
+    expect(screenPeriodMs()).toBe(REFERENCE_PERIOD_MS);
+    const pacer = createFramePacer(() => 0);
+    for (const t of vsyncs(180, 200)) pacer.admit(t);
+    expect(screenPeriodMs()).toBeCloseTo(1000 / 180, 6);
+    // un altro loop sotto carico non lo allunga
+    const loaded = createFramePacer(() => 0);
+    for (const t of vsyncs(90, 200)) loaded.admit(t);
+    expect(screenPeriodMs()).toBeCloseTo(1000 / 180, 6);
+  });
+
+  it("una sonda di pochi fotogrammi lo misura e si ferma da sé", () => {
+    const screen = fakeScreen(180);
+    probeScreenPeriod(screen);
+    screen.run();
+    expect(screen.requests).toBeLessThan(15);
+    expect(screenPeriodMs()).toBeCloseTo(1000 / 180, 6);
+    // uno schermo veloce noto non si misura più
+    probeScreenPeriod(screen);
+    expect(screen.requests).toBeLessThan(15);
+  });
+
+  it("a 60 Hz la sonda si ripete, ma non prima di trenta secondi", () => {
+    const screen = fakeScreen(60);
+    probeScreenPeriod(screen);
+    screen.run();
+    const first = screen.requests;
+    expect(screenPeriodMs()).toBeCloseTo(1000 / 60, 6);
+    probeScreenPeriod(screen);
+    expect(screen.requests).toBe(first);
+    screen.clock += 30_000;
+    probeScreenPeriod(screen);
+    screen.run();
+    expect(screen.requests).toBe(2 * first);
+  });
+});
+

@@ -110,7 +110,24 @@ export function checkedGrid(next: Grid, before: Grid): Grid {
     ...(isBarrelAction(next.barrel) ? { barrel: next.barrel } : before.barrel === undefined ? {} : { barrel: before.barrel }),
     ...(isPenOutput(next.output) ? { output: next.output } : before.output === undefined ? {} : { output: before.output }),
     ...(isFidelity(next.fidelity) ? { fidelity: next.fidelity } : before.fidelity === undefined ? {} : { fidelity: before.fidelity }),
+    // Gli interruttori della vista (K6 T11): assenti se spenti, come la gomma.
+    ...(vistaAccesa(next.transparencyGrid, before.transparencyGrid) ? { transparencyGrid: true } : {}),
+    ...(vistaAccesa(next.hideEdges, before.hideEdges) ? { hideEdges: true } : {}),
+    ...(vistaAccesa(next.hideBoundingBox, before.hideBoundingBox) ? { hideBoundingBox: true } : {}),
+    ...(vistaAccesa(next.hideArtboards, before.hideArtboards) ? { hideArtboards: true } : {}),
+    ...(vistaAccesa(next.snapPixel, before.snapPixel) ? { snapPixel: true } : {}),
+    ...(vistaAccesa(next.smartGuidesOff, before.smartGuidesOff) ? { smartGuidesOff: true } : {}),
+    ...(vistaAccesa(next.snapPointOff, before.snapPointOff) ? { snapPointOff: true } : {}),
+    ...(vistaAccesa(next.snapGlyph, before.snapGlyph) ? { snapGlyph: true } : {}),
+    ...(vistaAccesa(next.livePaintGaps, before.livePaintGaps) ? { livePaintGaps: true } : {}),
   };
+}
+
+/// Un interruttore della vista: assente vale spento (la griglia di serie non lo ha),
+/// un booleano vale com'è, e un valore che non è né l'uno né l'altro lascia quello di prima.
+function vistaAccesa(value: unknown, before: boolean | undefined): boolean {
+  if (value === undefined) return false;
+  return typeof value === "boolean" ? value : before === true;
 }
 
 /// La gomma come campo della griglia: assente se non è mai stata scelta.

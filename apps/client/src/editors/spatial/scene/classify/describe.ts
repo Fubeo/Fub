@@ -32,6 +32,9 @@ export interface Details {
   /// `fub:locked="true"` e `display="none"`, anche fuori dai livelli (§3).
   readonly locked?: true;
   readonly hidden?: true;
+  /// `fub:guide="true"` su una forma: un tracciato-guida (formato della
+  /// scena, guide).
+  readonly guide?: true;
   readonly stroke?: Stroke;
   readonly arrow?: readonly [number, number, number, number];
   readonly connector?: ConnectorFacts;
@@ -137,6 +140,9 @@ export function followedKind(role: Role): StyleFacts["kind"] | null {
   return role === "text" ? "text" : "graphic";
 }
 
+/// Le forme che possono essere un tracciato-guida.
+const GUIDE_TAGS: ReadonlySet<Tag> = new Set<Tag>(["path", "rect", "ellipse", "circle", "line", "polyline", "polygon"]);
+
 /// I dettagli di un elemento modificabile di ruolo `role`, coi problemi del
 /// suo tratto se è un tratto.
 export function describe(doc: XmlDocument, id: NodeId, tag: Tag, role: Role): { details: Details; problems: StrokeProblem[] } {
@@ -196,6 +202,7 @@ export function describe(doc: XmlDocument, id: NodeId, tag: Tag, role: Role): { 
     if (valueOf(element, NS_FUB, "locked") === "true") details.locked = true;
     const display = valueOf(element, NS_NONE, "display");
     if (display !== undefined && trim(display) === "none") details.hidden = true;
+    if (GUIDE_TAGS.has(tag) && valueOf(element, NS_FUB, "guide") === "true") details.guide = true;
     const title = isContainer(role) ? null : firstTitle(doc, element);
     if (title !== null) details.title = title;
   }
@@ -280,6 +287,7 @@ export function elementItem(details: Details, path: readonly number[], span: Spa
   if (details.layer !== undefined) item.layer = details.layer;
   if (details.locked !== undefined) item.locked = details.locked;
   if (details.hidden !== undefined) item.hidden = details.hidden;
+  if (details.guide !== undefined) item.guide = details.guide;
   if (details.stroke !== undefined) item.stroke = details.stroke;
   if (details.arrow !== undefined) item.arrow = details.arrow;
   if (details.connector !== undefined) item.connector = details.connector;

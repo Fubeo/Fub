@@ -26,7 +26,7 @@ import { baseInsertion, revealEmbed, trackSlashRange } from "../slash";
 import { liveStrings } from "../strings";
 import { blockAnchor } from "./anchor";
 import { blockBytes, type MoveNote } from "./move-to";
-import { buildBlocks, kindName, type Block } from "./model";
+import { buildBlocks, kindName, WHOLE_TREE_MS, type Block } from "./model";
 
 /// Il blocco da sincronizzare in `to`, detto in byte del file.
 export interface SyncRequest {
@@ -110,14 +110,19 @@ export interface SyncCandidate {
   readonly detail: string;
 }
 
-/// Il modello dei blocchi di un testo, come lo leggono i Blocchi.
+/// Lo stato di un testo letto dal disco, con l'albero intero, come lo leggono
+/// i Blocchi. Lo stato nasce con l'albero di quanto il parser ha fatto in
+/// pochi millesimi (su una nota lunga, o un PC carico, a metà);
+/// `ensureSyntaxTree` finisce l'analisi ma non cambia quello stato: la
+/// transazione vuota ne fa uno con l'albero intero, che vale per chiunque lo
+/// legga (il modello, l'id del blocco).
 export function stateOfSource(text: string): EditorState {
   const state = EditorState.create({
     doc: text,
     extensions: [markdown({ base: markdownGrammar }), ...(text.includes("\r\n") ? [EditorState.lineSeparator.of("\r\n")] : [])],
   });
-  ensureSyntaxTree(state, state.doc.length, 5000);
-  return state;
+  ensureSyntaxTree(state, state.doc.length, WHOLE_TREE_MS);
+  return state.update({}).state;
 }
 
 /// I blocchi di una nota che si possono sincronizzare: quelli di primo

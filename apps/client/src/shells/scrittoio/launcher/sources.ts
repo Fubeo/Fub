@@ -15,6 +15,7 @@ import { api } from "../../../host/ipc";
 import {
   SearchSyntaxError,
   WITHOUT_PAGE,
+  documentsByFileName,
   matchingDocuments,
   notesByName,
   searchExpression,
@@ -25,7 +26,7 @@ import {
 import { t } from "../../../i18n/strings";
 import { childName, pageName } from "../../../rules/mirrored";
 import { charToByteIndex } from "../../../rules/offsets";
-import { searchedName } from "../../../rules/searched-name";
+import { searchedName, searchedPath } from "../../../rules/searched-name";
 import type { SlashSection } from "../../../editors/core/editor-menu";
 import { slashCatalog } from "../../../panels/slash/entries";
 import { canShowFile, paneOf } from "../../../state/document-controller";
@@ -228,23 +229,34 @@ function filesNamed(all: readonly string[] | null, written: string): string[] {
 const sameList = (left: readonly string[], right: readonly string[]): boolean =>
   left.length === right.length && left.every((each, index) => each === right[index]);
 
-/// Le righe del gruppo dei nomi: i documenti nell'ordine che il kernel dà, e
-/// i file dopo. Un file che si chiama proprio come si è scritto («Stampa» per
-/// `Stampa.pdf`) sale subito dopo i documenti che si chiamano così, perché chi
-/// scrive un nome intero vuole quello.
-function namedRows(docs: readonly string[], found: readonly string[], written: string): string[] {
-  const wanted = written.toLocaleLowerCase();
+/// Le righe del gruppo dei nomi. In testa i file che si chiamano proprio come
+/// si è scritto, estensione compresa («Esami.base», «Capitolo 3.pdf», o la
+/// coda del path), di qualunque tipo: chi scrive il nome intero di un file
+/// vuole quello. Poi i documenti nell'ordine che il kernel dà, e i file dopo.
+/// Un file che si chiama come si è scritto senza estensione («Stampa» per
+/// `Stampa.pdf`) sale subito dopo i documenti che si chiamano così.
+function namedRows(docs: readonly string[], found: readonly string[], written: string, byFile: readonly string[] = []): string[] {
+  const wanted = written.replace(/^\/+/, "").toLocaleLowerCase();
+  const named = (doc: string): boolean => {
+    const id = doc.toLocaleLowerCase();
+    return id === wanted || id.endsWith(`/${wanted}`);
+  };
   const exact = (doc: string): boolean => pageName(doc).toLocaleLowerCase() === wanted;
   // Un file che l'indice dà già fra i documenti non si ripete.
   const listed = new Set(docs);
   const extra = found.filter((doc) => !listed.has(doc));
+  const files = [...new Set([...byFile, ...docs, ...extra].filter(named))];
+  const first = new Set(files);
+  const rest = docs.filter((doc) => !first.has(doc));
+  const others = extra.filter((doc) => !first.has(doc));
   let leading = 0;
-  while (leading < docs.length && exact(docs[leading]!)) leading += 1;
+  while (leading < rest.length && exact(rest[leading]!)) leading += 1;
   return [
-    ...docs.slice(0, leading),
-    ...extra.filter(exact),
-    ...docs.slice(leading),
-    ...extra.filter((doc) => !exact(doc)),
+    ...files,
+    ...rest.slice(0, leading),
+    ...others.filter(exact),
+    ...rest.slice(leading),
+    ...others.filter((doc) => !exact(doc)),
   ];
 }
 
@@ -283,8 +295,14 @@ async function everything(text: string): Promise<Listing> {
   // una lettura è in corso arrivano dopo (`more`) senza trattenere le note.
   // Se l'anagrafe non risponde, le note restano, come per i titoli.
   const list = fileList(vault);
-  const docs = await notesByName(written);
-  const docNames = new Set(docs);
+  // Un nome di file intero («Esami.base») l'indice dei nomi non lo trova da
+  // solo: lo cerca `documentsByFileName`. Se quella domanda cade, le note per
+  // nome restano.
+  const [docs, byFile] = await Promise.all([
+    notesByName(written),
+    documentsByFileName(written).catch((): string[] => []),
+  ]);
+  const docNames = new Set([...docs, ...byFile]);
   let syntax: string | null = null;
   const inText: Row[] = [];
   try {
@@ -308,7 +326,7 @@ async function everything(text: string): Promise<Listing> {
   const headings = doc ? await headingRows(doc, written).catch(() => []) : [];
 
   const assemble = (found: readonly string[]): Row[] => {
-    const names = namedRows(docs, found, written);
+    const names = namedRows(docs, found, written, byFile);
     const rows: Row[] = [];
     if (names.length > 0) {
       rows.push(group("files", t("launcher.group.files")));
@@ -344,7 +362,7 @@ async function everything(text: string): Promise<Listing> {
     if (status.indexing === "running") return nothing(t("launcher.note.all.indexing"));
     // Il testo che può essere un nome di nota si offre da creare: è l'unico
     // caso in cui Maiusc-Invio e «Crea la nota» creano.
-    const name = searchedName(written);
+    const name = searchedPath(written);
     if (name === null) return nothing(t("launcher.note.all.none", { query: written }));
     return { ...nothing(t("launcher.note.all.create", { query: written, name })), create: name };
   };

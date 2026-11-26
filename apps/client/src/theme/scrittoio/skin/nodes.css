@@ -391,6 +391,27 @@ h6.ui-heading {
 .ui-table .ui-empty-cell {
   color: var(--muted);
 }
+/* Una tabella di bottoni è una griglia di giorni: le colonne sono uguali (lo
+   dice la struttura) e strette, quindi la cella cede il suo rientro e il
+   bottone sta nella cella invece di allargarla. Una testata più lunga della
+   colonna si tronca con i puntini invece di sovrapporsi alla vicina. */
+.ui-table:has(td > .ui-button) th,
+.ui-table:has(td > .ui-button) td {
+  padding: var(--space-2) var(--space-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ui-table td:has(> .ui-button) {
+  text-align: center;
+}
+.ui-table td > .ui-button {
+  /* Tondo quando la colonna ha posto, più stretto quando non ne ha. */
+  min-width: min(2.5em, 100%);
+  max-width: 100%;
+  padding-right: var(--space-1);
+  padding-left: var(--space-1);
+}
 
 /* ── Schede ──────────────────────────────────────────────────────────────── */
 
@@ -822,9 +843,23 @@ h6.ui-heading {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* La cartella sta su una riga, come il titolo: intera finché non passa metà
+   dello spazio del testo, oltre si accorcia coi puntini e al titolo resta
+   almeno l'altra metà. Lo spazio del testo è la voce meno l'icona da 15 px
+   (qui sotto) e i due spazi fra icona, titolo e cartella. Niente scatola a
+   righe contate della voce comune: qui la riga è una. */
 .ui-section[data-key="outline-incoming"] .ui-list-item-subtitle {
-  flex: none;
+  display: block;
+  flex: 0 0 auto;
+  min-width: 0;
+  max-width: calc((100% - 15px) / 2 - var(--space-4));
+  max-height: none;
   margin: 0;
+  overflow: hidden;
+  overflow-wrap: normal;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  -webkit-line-clamp: none;
   /* grafite e non più chiaro: la cartella è testo, e sotto 4,5:1 non si legge */
   color: var(--muted);
   font-size: var(--text-sm);

@@ -36,6 +36,7 @@ import {
   type RoleLooks,
 } from "./projection";
 import { FONT_SIZES, lookCommands, markActive, MAX_FONT_SIZE, MIN_FONT_SIZE, type LookState } from "../../scrittura/look";
+import { jsonEqual } from "../../kit/json-equal";
 import { safeHref } from "./paste";
 import { cellAt, cellBoxes, selectedCells } from "./cell-selection";
 import { canComment } from "./comments";
@@ -61,7 +62,7 @@ function selectedParas(state: EditorState): { node: PmNode; pos: number }[] {
 }
 
 function sameRole(a: Role, b: Role): boolean {
-  return JSON.stringify(a) === JSON.stringify(b);
+  return jsonEqual(a, b);
 }
 
 /// Il ruolo comune ai paragrafi selezionati, o `null` se sono diversi.
@@ -905,7 +906,7 @@ function updateParas(change: (node: PmNode) => Record<string, unknown> | null, a
     const edits: { pos: number; attrs: Record<string, unknown> }[] = [];
     for (const { node, pos } of selectedParas(state)) {
       const attrs = change(node);
-      if (attrs && Object.entries(attrs).some(([key, value]) => JSON.stringify(node.attrs[key]) !== JSON.stringify(value))) {
+      if (attrs && Object.entries(attrs).some(([key, value]) => !jsonEqual(node.attrs[key], value))) {
         edits.push({ pos, attrs: { ...node.attrs, ...attrs } });
       }
     }
@@ -926,8 +927,8 @@ function updateParas(change: (node: PmNode) => Record<string, unknown> | null, a
 function common<T>(state: EditorState, pick: (node: PmNode) => T): T | null {
   const paras = selectedParas(state);
   if (paras.length === 0) return null;
-  const first = JSON.stringify(pick(paras[0].node));
-  return paras.every(({ node }) => JSON.stringify(pick(node)) === first) ? pick(paras[0].node) : null;
+  const first = pick(paras[0].node);
+  return paras.every(({ node }) => jsonEqual(pick(node), first)) ? first : null;
 }
 
 /// L'allineamento comune ai paragrafi selezionati; senza, è a sinistra.

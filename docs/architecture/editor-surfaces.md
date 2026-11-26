@@ -382,11 +382,11 @@ foglio di calcolo.
 
 Un editor non scrive un ruolo del tema sull'elemento: sull'elemento vanno i
 valori del file. `.github/scripts/check-inline-theme.mjs` lo controlla in
-`apps/client/src/editors/`, con l'elenco delle righe che lo fanno ancora. Il
-tema di CodeMirror (`editors/text/theme.ts`) dà solo la luce e le classi
-`fub-syn-*`; colori e carattere stanno nella pelle sotto `.cm-*`, con gli
-hook nel contratto. CodeMirror mette i suoi stili prima della pelle, che vince
-a parità di peso: ogni regola pesa quanto quella del tema che sostituisce.
+`editors/`, con l'elenco delle righe che lo fanno ancora. Il tema di
+CodeMirror (`editors/text/theme.ts`) dà la luce e le classi `fub-syn-*`,
+quelli dei profili Markdown solo misure; colori e caratteri stanno nella pelle
+sotto `.cm-*` (i profili in testa a `skin/document.css` e `skin/tabella.css`),
+con gli hook nel contratto. La pelle vince a parità di peso.
 
 La finestra documento a parte (`apps/client/src/shells/scrittoio/document/`) non ha IPC:
 riceve dalla finestra principale il profilo di testo che il registro ha risolto

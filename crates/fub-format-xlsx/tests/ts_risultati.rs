@@ -570,6 +570,7 @@ fn valore(campo: &Campo) -> Value {
         Tipo::Cella => json!("C2"),
         Tipo::Intervallo => json!("A1:C5"),
         Tipo::Foglio => json!("Foglio1"),
+        Tipo::Colore => json!("#336699"),
         Tipo::Scelta { valori, .. } => json!(valori[0]),
         Tipo::Json => json!([]),
     }

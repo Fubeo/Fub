@@ -9,8 +9,8 @@ description = "Official features as native trait implementations: backlink, sear
 # Una cargo feature per bundle, e i nomi sono gli stessi dell'inventario
 # (`src/inventory.rs`): una riga che sparisce dietro un `#[cfg]` sparisce da lì,
 # quindi non è mai il documento a dire cosa esiste. Il default è **tutto**, cioè
-# l'app che spediamo, con le eccezioni dichiarate (`draw` e `engine-drawing`,
-# che lo accende, più sotto):
+# l'app che spediamo, con le eccezioni dichiarate (`draw`, `engine-drawing`
+# e `drawing-complete`, che la accendono, più sotto):
 # spegnere è una scelta di chi compila, non un difetto da ricordarsi di
 # correggere.
 #
@@ -47,7 +47,7 @@ default = [
     "lavagna",
     "craft",
 ]
-search = ["dep:tantivy", "dep:regex"]
+search = ["dep:tantivy", "dep:regex", "dep:regex-syntax"]
 versioning = []
 backlinks = []
 outline = []
@@ -85,7 +85,10 @@ base = ["dep:fub-format-base", "properties"]
 # la vista non può leggere senza `search`: è una dipendenza di funzionamento,
 # come quella di `trash` da `commands`. Nel manifest non è un `requires` perché
 # `search` non offre un servizio; se il vault spegne la ricerca, la vista lo dice.
-tasks = ["search"]
+# La domanda del compito successivo (`tasks/reminders.rs`) applica la regola
+# della ricorrenza di `note.task.toggle`, che sta in `commands::recurrence`:
+# dipendenza di compilazione.
+tasks = ["search", "commands"]
 # La barra dichiara i pulsanti; la modifica la esegue la shell. Nessuna
 # dipendenza, di compilazione o di funzionamento.
 formatting = []
@@ -129,6 +132,10 @@ draw = [
 # disegna con gli strumenti semplici. Fuori dal default come `draw`, che
 # accende.
 engine-drawing = ["draw"]
+# Il Disegno completo: la riga della mappa dei componenti che richiede il
+# motore. Un marcatore, come `engine-drawing`, e fuori dal default per la
+# stessa ragione: lo porta `fub-host/drawing-complete`, nel default dell'host.
+drawing-complete = ["engine-drawing"]
 # La lavagna: il comando `canvas.apply`, che porta in un `.canvas` le
 # operazioni del suo nucleo. Il nucleo è puro (`serde`, `serde_json`,
 # `thiserror`) e nessun'altra feature lo tira dentro.
@@ -192,6 +199,7 @@ tantivy = { version = "0.26", optional = true, default-features = false, feature
     "stemmer",
 ] }
 regex = { workspace = true, optional = true }
+regex-syntax = { workspace = true, optional = true }
 # Dietro `draw`, e solo lì. `resvg` senza i default (lo dice la radice), che sono `system-fonts` e
 # `memmap-fonts`: i caratteri sono quelli di Fub, incorporati, e nient'altro.
 # Restano il testo e la decodifica delle immagini raster, incorporate come

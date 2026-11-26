@@ -25,6 +25,7 @@ import { drawPickerText } from "../color-text";
 import { customColor, DEFAULT_COLOR, PALETTE, swatchOf, WIDTHS } from "../palette";
 import type { Feature, ToolId } from "../registry";
 import { BAR_FEATURES, IMAGE_BINDING, ZOOM_STEP } from "./constants";
+import { azioniVoci } from "./chrome/commands";
 import { installPenOptions } from "./chrome/pen-options";
 import { installRail } from "./chrome/rail";
 import type { EditorContext } from "./context";
@@ -63,6 +64,8 @@ export interface ToolbarContext {
   showWidthLabels: () => void;
   /// La riga delle opzioni, che è la barra.
   optionsBar: OptionsBar;
+  /// Le voci di sempre della riga delle opzioni (la fila del motore vi si aggiunge).
+  toolbarGroups: OptionItem[];
   /// La barra in alto, ai due capi della riga delle opzioni.
   topStart: HTMLDivElement;
   topEnd: HTMLDivElement;
@@ -78,6 +81,9 @@ export interface ToolbarContext {
   propertiesButton: HTMLButtonElement;
   layerGroup: HTMLElement;
   layersButton: HTMLButtonElement;
+  /// Il menu dei livelli in cima alla scheda Livelli, come il menu del pannello Livelli di
+  /// VectorCraft: nel Completo la riga delle opzioni non ha il pulsante dei livelli.
+  layersMenuButton: HTMLButtonElement;
   layerText: HTMLSpanElement;
   layerStateText: HTMLSpanElement;
   tree: ObjectTree;
@@ -154,6 +160,9 @@ export function installToolbar(ctx: EditorContext): void {
   toolbar.classList.add("draw-toolbar");
   for (const name of ["role", "aria-orientation", "aria-label"]) toolbar.removeAttribute(name);
   const toolbarGroups: OptionItem[] = [];
+  // Le voci della riga delle opzioni di sempre: la fila dello strumento del motore
+  // (`chrome/fila-motore.ts`) si aggiunge a loro, e le ritrova quando si toglie.
+  ctx.toolbarGroups = toolbarGroups;
   const surface = document.createElement("div");
   ctx.surface = surface;
   surface.className = "draw-surface";
@@ -173,10 +182,19 @@ export function installToolbar(ctx: EditorContext): void {
   /// Il suggerimento del foglio dice anche come si arriva ai comandi della
   /// selezione, quando il livello ne ha; sul foglio delle annotazioni, i
   /// tasti che solo lui ha.
+  /// Col motore del Completo i tasti sono quelli di VectorCraft, e il suggerimento
+  /// lo dice (anche come si esce dal foglio); si rilegge a ogni fuoco del foglio.
   const showSurfaceHint = (): void => {
-    surfaceHint.textContent = t(folio !== undefined ? "draw.sheet.keys" : BAR_FEATURES.some(has) ? "draw.surface.hint.arrange" : "draw.surface.hint");
+    surfaceHint.textContent = t(
+      folio !== undefined
+        ? "draw.sheet.keys"
+        : ctx.completoMotore?.()?.conMotore?.() === true
+          ? "draw.surface.hint.completo"
+          : BAR_FEATURES.some(has) ? "draw.surface.hint.arrange" : "draw.surface.hint",
+    );
   };
   ctx.showSurfaceHint = showSurfaceHint;
+  life.listen(surface, "focus", showSurfaceHint);
   /// Il nome del foglio; quello delle annotazioni dice la pagina e il
   /// documento.
   const labelSurface = (): void => surface.setAttribute("aria-label", folio === undefined ? t("draw.surface") : folio.label());
@@ -344,7 +362,22 @@ export function installToolbar(ctx: EditorContext): void {
   const topEnd = document.createElement("div");
   topEnd.className = "draw-group draw-top kit-bar-group";
   ctx.topEnd = topEnd;
-  const menuButton = button(topStart, "draw-button", () => t("draw.chrome.menu"), "draw-menu", () => ctx.openMenu(menuButton, ctx.drawMenuItems()));
+  // Il menu ≡: con il Disegno completo aperto, le sue voci vengono dall'indice
+  // (K6 T9a), e Visualizza e Selezione di Fub cedono ai sottomenu dell'indice.
+  // Senza il Completo, il menu di oggi.
+  const abriMenu = (): void => {
+    const completo = ctx.completoVoci?.() ?? null;
+    if (completo === null) {
+      ctx.openMenu(menuButton, ctx.drawMenuItems());
+      return;
+    }
+    const cedono = new Set([t("draw.view"), t("draw.selection.menu")]);
+    void completo.menu(() => [...ctx.selection], azioniVoci(ctx, abriMenu)).then((voci) => {
+      if (ctx.disposed) return;
+      ctx.openMenu(menuButton, [...voci, ...ctx.drawMenuItems().filter((voce) => !cedono.has(voce.label))]);
+    });
+  };
+  const menuButton = button(topStart, "draw-button", () => t("draw.chrome.menu"), "draw-menu", abriMenu);
   ctx.menuButton = menuButton;
   menuButton.setAttribute("aria-haspopup", "menu");
   menuButton.setAttribute("aria-expanded", "false");
@@ -412,6 +445,7 @@ export function installToolbar(ctx: EditorContext): void {
       if (unit !== null) ctx.frameBounds(unit.bounds);
     },
     onActivate: () => void ctx.properties(),
+    onCurrent: (key) => ctx.chooseLayerKey(key),
     onDelete: () => ctx.deleteSelection(),
     onLeave: () => surface.focus({ preventScroll: true }),
     onToggle: (key, what) => ctx.toggleRow(key, what === "lock" ? "locked" : "hidden"),
@@ -426,6 +460,12 @@ export function installToolbar(ctx: EditorContext): void {
   });
   ctx.tree = tree;
   tree.element.hidden = true;
+  const layersMenuButton = button(tree.header, "draw-button draw-objects-menu", () => t("draw.livelli.menu"), "draw-more", () => ctx.openMenu(layersMenuButton, ctx.layerItems()));
+  ctx.layersMenuButton = layersMenuButton;
+  layersMenuButton.tabIndex = 0;
+  layersMenuButton.hidden = true;
+  layersMenuButton.setAttribute("aria-haspopup", "menu");
+  layersMenuButton.setAttribute("aria-expanded", "false");
   relabels.push(() => tree.relabel());
 
   // La cronologia, dal livello Standard: i passi del disegno, per tornare a
@@ -500,7 +540,7 @@ export function installToolbar(ctx: EditorContext): void {
     closed: ctx.grid.closed as readonly SectionId[],
     onChange: (id, value) => ctx.changeField(id, value),
     onAction: (id) => ctx.runAction(id),
-    onExportSelection: () => options.onExport?.("selection"),
+    onExportSelection: () => options.onExport?.({ what: "selection" }),
     onSection: (id, open) => {
       const closed = ctx.grid.closed.filter((each) => each !== id);
       ctx.changeGrid({ ...ctx.grid, closed: open ? closed : [...closed, id] });
@@ -611,7 +651,10 @@ export function installToolbar(ctx: EditorContext): void {
       titleInput.focus();
       titleInput.select();
     } });
-    items.push({ label: t("draw.commands.open"), hint: displayBinding("Mod-/"), run: () => ctx.searchCommands() });
+    // Col motore Ctrl+/ è «Aggiungi nuovo riempimento», come in VectorCraft: la ricerca
+    // si apre solo da qui.
+    const conMotore = ctx.completoMotore?.()?.conMotore?.() === true;
+    items.push({ label: t("draw.commands.open"), ...(conMotore ? {} : { hint: displayBinding("Mod-/") }), run: () => ctx.searchCommands() });
     items.push({ label: t("draw.keys"), icon: "keyboard", hint: "?", run: () => void ctx.keys() });
     return items;
   };

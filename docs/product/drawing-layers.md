@@ -15,6 +15,57 @@ vede: in cima ciò che sta davanti, e il livello più alto. L'albero è in
 `apps/client/src/editors/spatial/tools/naming.ts` e lo spostamento in
 `apps/client/src/editors/spatial/tools/place.ts`.
 
+## Il livello corrente e i suoi comandi
+
+Un livello del disegno è un gruppo figlio della radice con `fub:layer`, che
+ne porta il nome. Nello spazio Completo la barra ha il pulsante «Livelli»: mostra
+il livello in cui si disegna, quello corrente, col suo nome e, a parole, il suo
+stato, «bloccato» o «nascosto». Il suo menu elenca i livelli dalla cima, e
+sceglierne uno lo rende corrente; lo stesso fa un clic sulla riga di un livello
+nell'albero degli oggetti (il triangolo a sinistra la apre e la chiude). Poi il
+menu ha i comandi su quello corrente:
+
+- **Nuovo livello** ne crea uno vuoto sopra quello corrente, che diventa lui,
+  col primo nome libero fra «Livello 2», «Livello 3» e così via;
+- **Rinomina…** chiede il nome, che non resta vuoto né fatto di soli spazi e
+  ha al più 80 caratteri;
+- **Nascondi** e **Mostra** scrivono e tolgono `display="none"`, che lo
+  nasconde anche negli altri programmi; **Blocca** e **Sblocca** scrivono e
+  tolgono `fub:locked="true"`. Gli oggetti di un livello nascosto o bloccato
+  non si scelgono e non si cancellano, ed escono dalla selezione;
+- **Sposta su** e **Sposta giù** lo portano sopra il livello che ha sopra, o
+  sotto quello che ha sotto; ciò che sta alla radice fra i due resta dov'era;
+- **Elimina** lo toglie con ciò che contiene, e diventa corrente il livello
+  sotto, o quello sopra. L'unico livello e uno bloccato non si eliminano, e la
+  voce spenta dice perché;
+- **Individua oggetto** apre l'albero sulla riga dell'ultimo oggetto scelto,
+  aprendo il livello e i gruppi che lo contengono, anche se erano stati chiusi
+  a mano; non cambia il disegno. Senza niente di scelto è spenta.
+
+Penna, evidenziatore, forme, testi e immagini, incollate o dal vault, vanno nel
+livello corrente. Se è nascosto o bloccato il gesto non scrive, e un annuncio
+dice perché e che cosa fare. Scegliere oggetti tutti in un livello lo rende
+corrente: la riga dell'albero degli oggetti mostra il nome («Note»), e
+per chi legge a voce il nome dice «Livello «Note», corrente».
+
+Il livello corrente è del disegno, non del riquadro: due riquadri sullo stesso
+disegno disegnano nello stesso livello, e la scelta resta quando l'editor si
+rimonta o il file si rilegge, finché il documento resta aperto. Se il livello
+corrente se ne va (cancellato da un altro riquadro, dal testo, annullato) si
+disegna nel livello più alto che si vede e non è bloccato; se torna, con
+Annulla o Ripeti, torna corrente. Nel Completo, Oggetto › Disponi › **Sposta sul
+livello corrente** porta gli oggetti scelti in cima a quel livello; un livello
+corrente nascosto o bloccato non li riceve, e l'annuncio dice perché.
+
+Nella barra «Disponi», **Sposta in un livello** porta gli oggetti scelti in cima
+a un altro livello, nell'ordine in cui stavano, dove si vedevano e con lo stile
+che ereditavano. Il menu spegne il livello che li ha già tutti e quelli nascosti
+o bloccati; senza un altro livello dove portarli il pulsante non c'è.
+
+Ogni comando è un passo di annulla, e annullarlo rende corrente il livello
+che ha toccato, se c'è ancora. Nel Semplice il pulsante non c'è, e il
+disegno va nel livello più alto che si vede e non è bloccato.
+
 ## I nomi
 
 Il nome di un oggetto è il suo primo `title`, lo stesso nome con cui lo dice
@@ -125,6 +176,44 @@ l'oggetto, ciò che lo contiene o la pagina.
   ha il segnaposto.
 - **Oltre**, o per un oggetto che il disegno non sa leggere, la riga non ha
   miniatura e ne tiene il posto vuoto, perché i nomi restino in colonna.
+
+## Disegnare dietro
+
+La modalità «Disegna dietro» mette il nuovo oggetto sotto il primo oggetto
+scelto, nello stesso livello; senza scelta va in fondo al livello. «Disegna
+normale» torna al modo di sempre, che mette il nuovo in cima. Il modo sta
+nella sessione: cambiarlo non cambia il file, e riaprendo il disegno torna
+normale. Il comando è `view.drawMode` (famiglia `vista`, K6 T11).
+
+«Disegna dentro», che crea il nuovo oggetto dentro un tracciato, non c'è
+ancora nel Completo: il file non ha ancora il gruppo di ritaglio che serve.
+Chi lo chiede riceve la frase che lo dice, e il modo resta quello di prima.
+
+## Nel Completo, la scheda Livelli
+
+Nello spazio Completo il pannello sta anche nella scheda «Livelli»
+dell'ispettore, ed è lo stesso albero, con le stesse righe, lo stesso filtro e
+le stesse miniature. L'occhio, il lucchetto, il nome di un livello, «Nuovo
+livello» ed «Elimina livello» passano dal motore di disegno del Completo
+([Il Completo](../architecture/disegno-livelli.md)); il file cambia
+negli stessi attributi di sempre, `display`, `fub:locked` e `fub:layer`, e
+ognuno è un passo di annulla.
+
+- **Un livello bloccato** non si rinomina e non si elimina: il doppio clic sul
+  nome non apre il campo e l'editor dice di sbloccarlo. Il lucchetto e
+  l'occhio restano attivi.
+- **Un livello nuovo** nasce sopra tutti gli altri, col primo nome «Livello N»
+  libero, e diventa quello in cui si disegna.
+- **Lo spostamento delle righe** resta quello di questa pagina: il motore non
+  ha ancora un comando per spostare, e un livello dentro sé stesso resta
+  rifiutato come prima.
+- **Se il motore non può**, perché non c'è o perché la sua famiglia non si è
+  caricata, l'editor scrive da sé le stesse modifiche: il file è lo stesso.
+
+Le scene del banco `disegno-fam-livelli`, `disegno-fam-livelli-stati`,
+`disegno-fam-livelli-stati-800` e `disegno-fam-livelli-filtro` mostrano la
+scheda con due livelli, con un livello rinominato, bloccato e uno nascosto, e
+col filtro.
 
 ## Spazi e tasti
 

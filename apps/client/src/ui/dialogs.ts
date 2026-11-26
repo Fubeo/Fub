@@ -14,6 +14,7 @@ import { t } from "../i18n/strings";
 import { trapFocus } from "./a11y";
 import { openLifetime, type Lifetime } from "./lifetime";
 import { enterSurface, exitSurface } from "./motion";
+import { composingKey } from "../kit/ime";
 
 /// Una finestra aperta: la `.modale` col suo titolo, il fuoco intrappolato
 /// ed Esc. Il contenuto va in `box`.
@@ -50,11 +51,24 @@ export function openFrame(title: string, onDismiss: () => void): Frame {
     closed = true;
     life.close();
   };
-  life.listen(overlay, "mousedown", (event) => {
+  // Il clic fuori si legge da `pointerdown` e non da `mousedown`: il tocco di
+  // un dito che apre la finestra al rilascio, come lo strumento Nota delle
+  // annotazioni, manda i suoi eventi del mouse di compatibilità dopo che il
+  // dito si è alzato, su ciò che sta sotto in quel momento, cioè lo sfondo
+  // appena comparso; quel `mousedown` non è un clic fuori, e la finestra si
+  // chiudeva da sola (IMP-3807). Un tocco o un clic nuovo fuori manda sempre
+  // il suo `pointerdown`.
+  life.listen(overlay, "pointerdown", (event) => {
     if (event.target === overlay) {
       close();
       onDismiss();
     }
+  });
+  // Lo stesso `mousedown` sullo sfondo non porta il fuoco sullo sfondo, che
+  // ha `tabIndex` -1: il campo che la finestra ha scelto resta col fuoco, e
+  // ciò che si scrive dopo il tocco ci entra.
+  life.listen(overlay, "mousedown", (event) => {
+    if (event.target === overlay) event.preventDefault();
   });
   document.body.append(overlay);
   enterSurface(overlay);
@@ -270,6 +284,7 @@ export function pickFromList<T>(options: PickOptions<T>): Promise<T | null> {
       render();
     });
     input.addEventListener("keydown", (event) => {
+      if (composingKey(event)) return;
       if (event.key === "ArrowDown" || event.key === "ArrowUp") {
         event.preventDefault();
         if (visible.length === 0) return;

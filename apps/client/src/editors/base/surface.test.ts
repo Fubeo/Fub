@@ -99,42 +99,108 @@ describe("Base table windows", () => {
       height.mockRestore();
     }
   });
+});
 
-  it("never fetches configured tiles before a gesture and reports blocked requests", async () => {
+describe("Base, la vista Mappa", () => {
+  const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).buffer;
+  const mapQuery = async (request: IndexQuery): Promise<IndexResult> => {
+    if (request.kind === "documents") return { kind: "documents", value: { total: 1, offset: 0, items: [{ doc: "pin.md", properties: [] }] } };
+    if (request.kind !== "custom" || typeof request.query !== "object" || !request.query) throw new Error("unexpected");
+    if (!("op" in request.query) || typeof request.query.op !== "string") throw new Error("malformed operation");
+    const op = request.query.op;
+    if (op === "parse") return { kind: "custom", value: { views: ["Map"] } };
+    if (op === "plan") return { kind: "custom", value: {
+      view: "Map", view_type: "map", columns: [], column_labels: {}, required_props: [], all_properties: false,
+      group: null, limit: null, create_defaults: {},
+      map: { lat_key: "lat", lon_key: "lon", label_key: null, color_key: null,
+        provider: { kind: "raster", network: true, url_template: "https://tiles.example.test/{z}/{x}/{y}.png", attribution: "Tiles" } },
+    } };
+    return { kind: "custom", value: { rows: [{ doc: "pin.md", values: { lat: { kind: "number", value: 0 }, lon: { kind: "number", value: 0 } } }], summaries: {} } };
+  };
+  const mount = (hosts: readonly string[], tile: (url: string, kind: "raster" | "vector") => Promise<ArrayBuffer>, openSettings?: (key: string) => void, onOpenDocument: (doc: string) => void = () => {}) => {
     const host = document.createElement("div");
     document.body.append(host);
-    const fetchTile = vi.fn(async (_url: string) => { throw new Error("blocked"); });
-    vi.stubGlobal("fetch", fetchTile);
-    const queryIndex = async (request: IndexQuery): Promise<IndexResult> => {
-      if (request.kind === "documents") return { kind: "documents", value: { total: 1, offset: 0, items: [{ doc: "pin.md", properties: [] }] } };
-      if (request.kind !== "custom" || typeof request.query !== "object" || !request.query) throw new Error("unexpected");
-      if (!("op" in request.query) || typeof request.query.op !== "string") throw new Error("malformed operation");
-      const op = request.query.op;
-      if (op === "parse") return { kind: "custom", value: { views: ["Map"] } };
-      if (op === "plan") return { kind: "custom", value: {
-        view: "Map", view_type: "map", columns: [], column_labels: {}, required_props: [], all_properties: false,
-        group: null, limit: null, create_defaults: {},
-        map: { lat_key: "lat", lon_key: "lon", label_key: null, color_key: null,
-          provider: { kind: "raster", network: true, url_template: "https://tiles.example.test/{z}/{x}/{y}.png", attribution: "Tiles" } },
-      } };
-      return { kind: "custom", value: { rows: [{ doc: "pin.md", values: { lat: { kind: "number", value: 0 }, lon: { kind: "number", value: 0 } } }], summaries: {} } };
-    };
+    const fetchSpy = vi.fn(async () => { throw new Error("la webview non scarica tessere"); });
+    vi.stubGlobal("fetch", fetchSpy);
     const surface = mountBaseSurface("base", { paneId: "base-map", documentId: "views/map.base", parent: host }, {
-      queryIndex, invokeCommand: vi.fn(async () => ({})), viewState: async () => null,
-      setViewState: async () => {}, onOpenDocument: () => {}, mapTileHosts: ["tiles.example.test"],
+      queryIndex: mapQuery, invokeCommand: vi.fn(async () => ({})), viewState: async () => null,
+      setViewState: async () => {}, onOpenDocument,
+      mapTiles: { hosts: async () => hosts, tile, ...(openSettings ? { openSettings } : {}) },
     });
+    surface.buffer.setDoc("views:\n  - {name: Map, type: map}\n");
+    return { host, fetchSpy, done: () => { surface.destroy(); host.remove(); vi.unstubAllGlobals(); } };
+  };
+
+  it("è un'applicazione coi suoi tasti, e Invio o Spazio su un segnaposto sono un clic solo che apre la nota", async () => {
+    const opened = vi.fn();
+    const { host, done } = mount([], vi.fn(async () => PNG), undefined, opened);
     try {
-      surface.buffer.setDoc("views:\n  - {name: Map, type: map}\n");
-      await vi.waitFor(() => expect(host.querySelector(".base-map")).not.toBeNull());
-      expect(fetchTile).not.toHaveBeenCalled();
-      host.querySelector<HTMLButtonElement>(".base-map button")!.click();
-      await vi.waitFor(() => expect(fetchTile).toHaveBeenCalledTimes(1));
-      expect(fetchTile.mock.calls[0]?.[0]).toBe("https://tiles.example.test/1/0/0.png");
-    } finally {
-      surface.destroy();
-      host.remove();
-      vi.unstubAllGlobals();
-    }
+      await vi.waitFor(() => expect(host.querySelector(".base-map-marker")).not.toBeNull());
+      // Un'immagine con dentro dei pulsanti non sarebbe raggiungibile: la mappa li contiene.
+      expect(host.querySelector(".base-map-atlas")!.getAttribute("role")).toBe("application");
+      const marker = host.querySelector<SVGElement>(".base-map-marker")!;
+      const clicks = vi.fn();
+      marker.addEventListener("click", clicks);
+      for (const key of ["Enter", " "]) marker.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));
+      expect(clicks).toHaveBeenCalledTimes(2);
+      expect(opened.mock.calls.map(([doc]) => doc)).toEqual(["pin.md", "pin.md"]);
+    } finally { done(); }
+  });
+
+  it("con l'elenco vuoto dice «tessere non ammesse», rimanda alle Impostazioni e non chiede niente", async () => {
+    const tile = vi.fn(async () => PNG);
+    const openSettings = vi.fn();
+    const { host, fetchSpy, done } = mount([], tile, openSettings);
+    try {
+      await vi.waitFor(() => expect(host.querySelector(".base-map-attribution")?.textContent).toContain("Tessere non ammesse"));
+      expect(host.querySelector(".base-map-attribution")!.textContent).toContain("tiles.example.test");
+      expect(host.querySelector(".base-map-enable")).toBeNull();
+      host.querySelector<HTMLButtonElement>(".base-map-settings")!.click();
+      expect(openSettings).toHaveBeenCalledWith("map.tile-hosts");
+      expect(tile).not.toHaveBeenCalled();
+      expect(fetchSpy).not.toHaveBeenCalled();
+    } finally { done(); }
+  });
+
+  it("con l'host ammesso chiede le tessere all'host solo dopo «Attiva», e le dipinge", async () => {
+    const tile = vi.fn(async (_url: string, _kind: "raster" | "vector") => PNG);
+    const { host, fetchSpy, done } = mount(["tiles.example.test"], tile);
+    try {
+      await vi.waitFor(() => expect(host.querySelector(".base-map-enable")).not.toBeNull());
+      expect(tile).not.toHaveBeenCalled();
+      host.querySelector<HTMLButtonElement>(".base-map-enable")!.click();
+      // Livello 1: quattro tessere, dall'host e non da `fetch`.
+      await vi.waitFor(() => expect(host.querySelectorAll(".base-map-tiles image").length).toBe(4));
+      expect(tile.mock.calls.map(([url]) => url).sort()).toEqual([
+        "https://tiles.example.test/1/0/0.png", "https://tiles.example.test/1/0/1.png",
+        "https://tiles.example.test/1/1/0.png", "https://tiles.example.test/1/1/1.png",
+      ]);
+      expect(tile.mock.calls.every(([, kind]) => kind === "raster")).toBe(true);
+      expect(fetchSpy).not.toHaveBeenCalled();
+      expect(host.querySelector(".base-map-attribution")!.textContent).toBe("Tiles");
+      expect(host.querySelector<HTMLImageElement>(".base-map-tiles image")!.getAttribute("href")).toMatch(/^blob:/);
+    } finally { done(); }
+  });
+
+  it("un rifiuto dell'host torna «non ammesse»; un guasto si dice e si riprova", async () => {
+    let answer: () => Promise<ArrayBuffer> = async () => { throw { kind: "permission_denied", message: "no" }; };
+    const tile = vi.fn(() => answer());
+    const { host, done } = mount(["tiles.example.test"], tile, () => {});
+    try {
+      await vi.waitFor(() => expect(host.querySelector(".base-map-enable")).not.toBeNull());
+      host.querySelector<HTMLButtonElement>(".base-map-enable")!.click();
+      await vi.waitFor(() => expect(host.querySelector(".base-map-attribution")!.textContent).toContain("Tessere non ammesse"));
+      expect(host.querySelector(".base-map-settings")).not.toBeNull();
+    } finally { done(); }
+    answer = async () => { throw { kind: "io", message: "tiles.example.test non risponde" }; };
+    const again = mount(["tiles.example.test"], tile);
+    try {
+      await vi.waitFor(() => expect(again.host.querySelector(".base-map-enable")).not.toBeNull());
+      again.host.querySelector<HTMLButtonElement>(".base-map-enable")!.click();
+      await vi.waitFor(() => expect(again.host.querySelector(".base-map-attribution")!.textContent).toContain("non risponde"));
+      expect(again.host.querySelector<HTMLButtonElement>(".base-map-enable")!.hidden).toBe(false);
+      expect(again.host.querySelectorAll(".base-map-tiles image").length).toBe(0);
+    } finally { again.done(); }
   });
 });
 
@@ -970,30 +1036,34 @@ describe("la barra della Base scrive solo la chiave toccata", () => {
   ];
   const applyButton = (pop: HTMLElement) => [...pop.querySelectorAll<HTMLButtonElement>("button")].find((each) => each.textContent === "Applica")!;
 
-  it("una proprietà che le righe lette non portano si filtra lo stesso: la barra avverte, Applica resta", async () => {
+  it("una proprietà che nessuna nota ha si filtra lo stesso: la barra avverte, Applica resta", async () => {
     const { host, invokeCommand, deliver, done } = mount({}, { rows: works, narrow: true });
     try {
       await ready(host);
       host.querySelector<HTMLButtonElement>(".base-tool-filter")!.click();
       let pop = popover("base-filter-popover");
+      // Una proprietà delle note che la vista non mostra né chiede: le righe
+      // si leggono con tutte le proprietà, quindi è fra le scelte (IMP-413).
+      expect(pop.textContent).not.toContain("non è fra le proprietà");
       const search = pop.querySelector<HTMLInputElement>(".base-filter-search")!;
       search.value = "[tecnica:olio]";
       search.dispatchEvent(new Event("input"));
-      expect(pop.textContent).toContain("«tecnica» non è fra le proprietà delle righe lette: controlla il nome prima di applicare.");
+      expect(pop.textContent).not.toContain("non è fra le proprietà");
+      // Un nome che nessuna nota ha: la barra avverte, ma non vieta.
+      search.value = "[tecnika:olio]";
+      search.dispatchEvent(new Event("input"));
+      expect(pop.textContent).toContain("«tecnika» non è fra le proprietà delle righe lette: controlla il nome prima di applicare.");
       expect(applyButton(pop).disabled).toBe(false);
+      search.value = "[tecnica:olio]";
+      search.dispatchEvent(new Event("input"));
       applyButton(pop).click();
       expect(JSON.parse(lastSet(invokeCommand)!.value as string)).toEqual({ condition: { property: "tecnica", op: "contains", value: "olio" } });
       deliver();
       await settled(host);
       await vi.waitFor(() => expect(host.querySelectorAll(".base-table tbody tr[data-doc]").length).toBe(1));
-      // Ora il piano la chiede: è fra le proprietà, e non c'è più niente da dire.
       host.querySelector<HTMLButtonElement>(".base-tool-filter")!.click();
       pop = popover("base-filter-popover");
       expect([...pop.querySelectorAll<HTMLSelectElement>(".base-filter-subject option")].map((each) => each.value)).toContain("tecnica");
-      const again = pop.querySelector<HTMLInputElement>(".base-filter-search")!;
-      again.value = "[tecnica:tempera]";
-      again.dispatchEvent(new Event("input"));
-      expect(pop.textContent).not.toContain("non è fra le proprietà");
     } finally { done(); }
   });
 

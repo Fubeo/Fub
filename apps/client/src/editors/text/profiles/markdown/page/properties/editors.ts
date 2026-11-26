@@ -23,6 +23,7 @@ import { liveStrings } from "../../strings";
 import { freeColor, KIND_ICONS, linkName, linkTo, OPTION_GROUPS, optionsOf, parseNumber, targetOf, validDate, type OptionGroup, type PropertyOption, type RelationTarget, type RowKind } from "./kind";
 import { entryStamp, longDate, optionElement, personElement, relationItems, type PropertyRowHost, type RelationNote, type WriteOutcome } from "./values";
 import { errorText } from "../../../../../../host/errors";
+import { composingKey } from "../../../../../../kit/ime";
 
 /// Un editor aperto su una chiave: l'impronta che porta alla scrittura.
 interface Session {
@@ -168,7 +169,7 @@ export function openInlineEditor(entry: PropertyEntry, kind: "text" | "number" |
     return true;
   };
   own.listen(input, "keydown", (event) => {
-    if (event.isComposing) return;
+    if (composingKey(event)) return;
     if (event.key === "Enter") {
       event.preventDefault();
       event.stopPropagation();
@@ -454,7 +455,7 @@ export function openDateEditor(entry: PropertyEntry, kind: "date" | "date_time",
     }
   });
   own.listen(input, "keydown", (event) => {
-    if (event.key !== "Enter" || event.isComposing) return;
+    if (event.key !== "Enter" || composingKey(event)) return;
     event.preventDefault();
     if (input.value.trim() === "") return;
     const parsed = understood();
@@ -572,7 +573,7 @@ export function openListEditor(entry: PropertyEntry, kind: "list" | "tags", anch
     return outcome === "written";
   };
   own.listen(input, "keydown", (event) => {
-    if (event.isComposing) return;
+    if (composingKey(event)) return;
     if (event.key === "Enter") {
       event.preventDefault();
       const added = typedItems(input.value, kind === "tags").filter((item) => !items.includes(item));

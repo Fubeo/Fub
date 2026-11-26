@@ -442,6 +442,11 @@ export interface CardTextEditor {
   /// Il fuoco nell'editor, col cursore a `at` (in unità UTF-16 del testo;
   /// assente: alla fine).
   focus(at?: number): void;
+  /// Il fuoco nell'editor, col cursore sotto `point` (coordinate della
+  /// finestra), come un clic nel testo: il doppio clic che ha aperto la
+  /// scheda (IMP-3808). `false`, senza toccare niente, se il punto non cade
+  /// sul testo dell'editor: chi chiama usa `focus`.
+  focusAtPoint?(point: { readonly x: number; readonly y: number }): boolean;
   /// Il testo che l'editor tiene adesso.
   text(): string;
   /// Smonta l'editor, una volta sola. Ciò che c'era di scritto è già arrivato

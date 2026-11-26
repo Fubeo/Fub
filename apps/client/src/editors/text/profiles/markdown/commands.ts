@@ -7,12 +7,14 @@ import {
   type Line,
   type StateCommand,
   type Text,
+  type TransactionSpec,
 } from "@codemirror/state";
 import { EditorView, keymap, type KeyBinding } from "@codemirror/view";
 import { isolateHistory } from "@codemirror/commands";
 import { indentUnit, syntaxTree } from "@codemirror/language";
 import type { SyntaxNodeRef } from "@lezer/common";
 import { taskChecked } from "../../../../rules/mirrored";
+import { dispatchTaskToggles, type TaskSymbolEdit } from "./task-toggle";
 import { nextMarker, listItem, type ListEntry } from "../../../../rules/syntax";
 import { isStrictlyInsideCode } from "./parser";
 import { textKeymap } from "../../commands";
@@ -313,6 +315,32 @@ export const closeFenceEnter: StateCommand = ({ state, dispatch }) => {
   return true;
 };
 
+/// La chiusura di un recinto scritta a mano sulla riga subito sopra la sua
+/// chiusura, quella che `closeFenceEnter` (o il «/») ha già messo: la battuta
+/// che completa ` ``` ` scavalca la chiusura che c'è, come `]` scavalca la
+/// parentesi chiusa da sé. La riga scritta se ne va e il cursore va in fondo
+/// alla chiusura: resta un recinto solo, e Invio esce dal blocco. Senza, la
+/// chiusura di prima apriva un secondo recinto vuoto (IMP-6107).
+export function fenceCloseSkip(state: EditorState, from: number, to: number, typed: string): TransactionSpec | null {
+  if (from !== to || (typed !== "`" && typed !== "~")) return null;
+  const line = state.doc.lineAt(from);
+  if (from !== line.to || line.number === 1 || line.number === state.doc.lines) return null;
+  const written = FENCE_CLOSE.exec(line.text + typed);
+  const next = state.doc.line(line.number + 1);
+  const below = FENCE_CLOSE.exec(next.text);
+  if (!written || !below || written[1] !== below[1]) return null;
+  // La riga sta nel corpo di un recinto che questa chiusura chiude, e la
+  // chiusura di sotto è la sua.
+  const open = openFenceAfter(state, 1, line.number - 1);
+  if (!open || written[1]![0] !== open.char || written[1]!.length < open.length) return null;
+  return {
+    changes: { from: line.from, to: next.from },
+    selection: { anchor: next.to - (next.from - line.from) },
+    scrollIntoView: true,
+    userEvent: "input.type",
+  };
+}
+
 /// `Enter` dentro una lista: continua la voce (il testo dopo il cursore scende
 /// sulla riga nuova), rinumera le numerate a valle, e su una voce vuota toglie
 /// il marcatore chiudendo la lista. Fuori dalle liste — o con una selezione,
@@ -519,9 +547,16 @@ export const dedentListItem: StateCommand = ({ state, dispatch }) => {
 
 /// `Mod-Enter`: spunta/s-spunta le todo delle righe selezionate; una voce di
 /// lista senza checkbox la guadagna, non spuntata. Righe che non sono voci
-export const toggleCheckbox: StateCommand = ({ state, dispatch }) => {
+///
+/// Un compito ricorrente (`🔁`) che si spunta fa nascere il successivo nella
+/// stessa transazione (`task-toggle.ts`). Il bersaglio non si destruttura:
+/// con una ricorrenza la transazione parte dopo la risposta della regola, e
+/// lo stato si rilegge allora.
+export const toggleCheckbox: StateCommand = (target) => {
+  const state = target.state;
   if (state.readOnly) return false;
-  const changes: ChangeSpec[] = [];
+  const boxes: TaskSymbolEdit[] = [];
+  const added: ChangeSpec[] = [];
   for (const l of selectedLines(state)) {
     const item = listItem(l.text);
     if (!item || item.kind === "quote") continue;
@@ -530,24 +565,27 @@ export const toggleCheckbox: StateCommand = ({ state, dispatch }) => {
       // contando all'indietro dal marcatore presupponeva che la casella fosse
       // sempre `[x] ` di quattro caratteri, che a fine riga è falso.
       const box = l.from + item.boxFrom;
-      changes.push({ from: box + 1, to: box + 2, insert: taskChecked(item.symbol) ? " " : "x" });
+      boxes.push({ symbol: box + 1, insert: taskChecked(item.symbol) ? " " : "x" });
     } else {
-      changes.push({ from: l.from + item.markerEnd, insert: "[ ] " });
+      added.push({ from: l.from + item.markerEnd, insert: "[ ] " });
     }
   }
-  if (changes.length === 0) return false;
-  dispatch(state.update({ changes, scrollIntoView: true, userEvent: "input" }));
+  if (boxes.length === 0 && added.length === 0) return false;
+  dispatchTaskToggles(target, boxes, { scrollIntoView: true, userEvent: "input" }, added);
   return true;
 };
 
 /// `Mod-Shift-8/7`: le righe selezionate diventano elenco puntato/numerato.
 /// Toggle: se lo sono già *tutte*, i marcatori si tolgono. La conversione da
 /// un tipo all'altro sostituisce solo pallino/numero e conserva la checkbox
-/// (una todo resta una todo); le righe vuote in mezzo si saltano.
+/// (una todo resta una todo); le righe vuote in mezzo si saltano. Una riga
+/// sola, anche vuota, diventa voce: dal «/» su una riga nuova l'elenco nasce
+/// lì, col cursore dopo il segno (IMP-6104).
 function setListKind(kind: "bullet" | "ordered"): StateCommand {
   return ({ state, dispatch }) => {
     if (state.readOnly) return false;
-    const lines = selectedLines(state).filter((l) => l.text.trim() !== "");
+    const selected = selectedLines(state);
+    const lines = selected.length > 1 ? selected.filter((l) => l.text.trim() !== "") : selected;
     if (lines.length === 0) return false;
     const items = lines.map((l) => listItem(l.text));
     const allSame = items.every((it) => it !== null && it.kind === kind);
@@ -573,7 +611,14 @@ function setListKind(kind: "bullet" | "ordered"): StateCommand {
         changes.push({ from: l.from + indentLen, insert: marker });
       }
     }
-    dispatch(state.update({ changes, scrollIntoView: true, userEvent: "input" }));
+    // Un cursore dove nasce il segno va dopo di lui, pronto a scrivere la
+    // voce; una selezione si sposta con le modifiche come sempre.
+    const set = state.changes(changes);
+    const selection = EditorSelection.create(
+      state.selection.ranges.map((range) => (range.empty ? EditorSelection.cursor(set.mapPos(range.head, 1)) : range.map(set))),
+      state.selection.mainIndex,
+    );
+    dispatch(state.update({ changes: set, selection, scrollIntoView: true, userEvent: "input" }));
     return true;
   };
 }
@@ -786,10 +831,13 @@ export const sortTableColumns = (direction: -1 | 1 = 1) => tableCommand({ kind: 
 
 /// Cosa fare al posto della battuta: `insert` la sostituisce (col cursore a
 /// `cursor` code unit dall'inizio dell'inserito), `skip` lascia il cursore oltre
-/// il carattere già presente, `null` lascia l'inserimento normale.
+/// il carattere già presente, `absorb` prende la battuta senza scrivere niente
+/// (il carattere c'è già, prima del cursore), `null` lascia l'inserimento
+/// normale.
 export type PairDecision =
   | { action: "insert"; text: string; cursor: number }
-  | { action: "skip" };
+  | { action: "skip" }
+  | { action: "absorb" };
 
 /// La decisione dell'auto-pair, separata dalla view così si testa a secco.
 /// Copre `[[`→`]]`, `==` e `$$`; il singolo `*` e il singolo `$` non si
@@ -818,7 +866,12 @@ export function autoPairDecision(
       return { action: "insert", text: next(1) === "]" ? "[]" : "[]]", cursor: 1 };
     case "]":
       // Davanti a una `]` già presente si scavalca invece di raddoppiare.
-      return next(1) === "]" ? { action: "skip" } : null;
+      if (next(1) === "]") return { action: "skip" };
+      // La `]` della casella appena chiusa: `- [` si chiude da sé con `]`, lo
+      // spazio fa della riga una voce da fare e il cursore esce dalla casella
+      // nascosta (`block-prefix.ts`). Chi scrive `- [ ] ` a mano batte poi la
+      // sua `]`, che è quella già scritta: non diventa `- [ ]]`.
+      return closesTaskBox(state.sliceDoc(state.doc.lineAt(from).from, from)) ? { action: "absorb" } : null;
     case "=":
       if (next(1) === "=" && (prev(1) === "=" || next(2) === "==")) return { action: "skip" };
       // `==` → chiudi con `==`, ma senza allungare corse di `=` già più lunghe.
@@ -842,10 +895,22 @@ export function autoPairDecision(
       const last = before.lastIndexOf("$");
       const open = last >= 0 && before[last - 1] !== "\\" && /\S/.test(before[last + 1] ?? " ");
       if (next(1) === "$" && open) return { action: "skip" };
+      // La seconda `$` della chiusura di un blocco scritto su una riga
+      // (`$$x$|$`): scavalca anche lei, invece di lasciarne una in più.
+      const block = /^[ \t]*\$\$/.exec(before);
+      if (next(1) === "$" && block && before.length > block[0].length + 1 && before.endsWith("$")
+        && !before.endsWith("\\$") && state.sliceDoc(from, line.to).trim() === "$") return { action: "skip" };
       return null;
     }
   }
   return null;
+}
+
+/// Il testo prima del cursore finisce con la casella di una voce: `- [ ]`,
+/// `1. [x]`, `> - [ ]`.
+function closesTaskBox(before: string): boolean {
+  const entry = listItem(before);
+  return entry !== null && entry.kind !== "quote" && entry.symbol !== null && entry.boxTo === before.length;
 }
 
 /// Le scorciatoie di Notion a inizio riga: `[]` e spazio diventano una voce da
@@ -884,10 +949,19 @@ const autoPair = EditorView.inputHandler.of((view, from, to, text) => {
     });
     return true;
   }
+  const fence = fenceCloseSkip(view.state, from, to, text);
+  if (fence) {
+    view.dispatch(fence);
+    return true;
+  }
   const decision = autoPairDecision(view.state, from, to, text);
   if (decision === null) return false;
   view.dispatch(
-    decision.action === "skip"
+    decision.action === "absorb"
+      // Una transazione anche senza modifiche: il DOM ha già la battuta, e
+      // l'aggiornamento lo riporta al documento.
+      ? { selection: { anchor: from }, scrollIntoView: true, userEvent: "input.type" }
+      : decision.action === "skip"
       ? { selection: { anchor: from + text.length }, scrollIntoView: true, userEvent: "input.type" }
       : {
           changes: { from, to, insert: decision.text },

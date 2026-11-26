@@ -361,8 +361,8 @@ comando:
   la cartella, `Legge` se chiede soltanto qualcosa al motore, `Mostra` se
   cambia soltanto la selezione, il foglio attivo o la vista;
 - i parametri diventano un `Modulo` di `Campo` tipati (testo, numero, sì/no,
-  cella, intervallo, foglio, scelta, …): i nomi nudi prendono il tipo dal
-  lessico dell'adattatore (`Adattamento::nomi`), che un comando può
+  cella, intervallo, foglio, scelta, colore `hex`/`"#rrggbb"`, …): i nomi
+  nudi prendono il tipo dal lessico dell'adattatore (`Adattamento::nomi`), che un comando può
   correggere per sé (`Adattamento::nomi_del_comando`).
 
 `importa` non si ferma al primo problema: restituisce tutte le `Mancanza`

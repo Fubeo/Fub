@@ -2,6 +2,8 @@
 // createDrawEditor (`../editor.ts`): lavora sul contesto che i pezzi
 // condividono.
 
+import { STRUMENTO_GOMMA_PUNTI } from "../../motore/gomma-punti";
+import { STRUMENTO_PENNELLO } from "../../motore/pennello-tondo";
 import type { InkPointerType } from "../../../../ink/input/pointer";
 import type { StrokeStart } from "../../../../ink/input/session";
 import { penLook } from "../../../../ink/pens";
@@ -16,6 +18,7 @@ import { touchDialog } from "../touch-dialog";
 import { HIT_PX, INK_KEY, inkCopyKey } from "./constants";
 import type { EditorContext } from "./context";
 import type { Gesture, GestureBase, InkGesture } from "./types";
+import { vistaDelMotore } from "./hand-zoom";
 
 /// Ciò che l'inizio del gesto dà agli altri pezzi dell'editor.
 export interface GestureBeginContext {
@@ -65,7 +68,11 @@ export function installGestureBegin(ctx: EditorContext): void {
   };
 
   const begin = (start: StrokeStart): Gesture => {
-    const base = { stroke: start.id, pointer: start.pointerType };
+    const base = { stroke: start.id, pointer: start.pointerType, page: null };
+    // Sul foglio delle annotazioni un segno resta sulla pagina dove il gesto
+    // comincia: la pipeline lo rifiuta se comincia fuori, e ne tiene dentro
+    // i punti (`curvature-tool.ts`).
+    const marking = { ...base, page: ctx.folio?.page() ?? null };
     // La penna girata cancella con qualunque strumento; il tasto laterale fa
     // ciò che chi disegna ha scelto in «Penna e dita». Il menu radiale lo
     // apre il suo ascolto (`curvature-tool.ts`), non il tratto.
@@ -79,6 +86,21 @@ export function installGestureBegin(ctx: EditorContext): void {
     // Il righello preso in mezzo si sposta, con ogni strumento (P13).
     const ruler = ctx.rulerStart(base);
     if (ruler !== null) return ruler;
+    // Uno strumento del motore (K6 T8) è scelto sopra a quelli di oggi: il
+    // motore fa il gesto, e se non c'è lo fanno gli strumenti di sempre.
+    // Uno strumento della vista del motore (Mano, Zoom, Ruota vista) muove la
+    // vista di Fub (`hand-zoom.ts`): come la Mano, non disegna niente.
+    if (vistaDelMotore(ctx.motoreTool) !== null) return { ...base, kind: "refused" };
+    // La Gomma dei punti (K6 T12, giro 2) non passa dal motore a ogni movimento: il
+    // tratto si raccoglie qui, e al rilascio parte un solo comando.
+    if (ctx.motoreTool === STRUMENTO_GOMMA_PUNTI) return { ...base, kind: "pathErase", path: [] };
+    // Il Pennello tondo (K6 T12, giro 2) raccoglie il colpo qui, col colore di adesso, e a rilascio manda
+    // un solo comando.
+    if (ctx.motoreTool === STRUMENTO_PENNELLO) return { ...base, kind: "brush", path: [], color: ctx.style().color };
+    if (ctx.motoreTool !== null) {
+      const motore = ctx.motoreBegin(base);
+      if (motore !== null) return motore;
+    }
     switch (ctx.tool) {
       // La Mano e la Lente muovono la vista prima della pipeline
       // (`hand-zoom.ts`): il cursore da tastiera non disegna niente.
@@ -99,7 +121,7 @@ export function installGestureBegin(ctx: EditorContext): void {
         const brush = tool.brush(width, { pressure: start.pressure, continued: start.continued }, ctx.penId);
         const edge = ctx.rulerEdgeAt(base.pointer, brush, to);
         return {
-          ...base,
+          ...marking,
           kind: "ink",
           tool: ctx.tool,
           color,
@@ -133,7 +155,7 @@ export function installGestureBegin(ctx: EditorContext): void {
         const to = target(ids);
         if (to === null) return { ...base, kind: "refused" };
         const { color, width } = style();
-        return { ...base, kind: "shape", tool: ctx.tool, color, width, to, ids, from: null, end: null };
+        return { ...marking, kind: "shape", tool: ctx.tool, color, width, to, ids, from: null, end: null };
       }
       case "text": {
         // Con il motore del disegno, il testo lo scrive lui; senza, la
@@ -142,12 +164,12 @@ export function installGestureBegin(ctx: EditorContext): void {
         if (motore !== null) return motore;
         // Un livello che non lo riceve rifiuta il clic subito, come le forme.
         if (target(newIds()) === null) return { ...base, kind: "refused" };
-        return { ...base, kind: "text", at: null };
+        return { ...marking, kind: "text", at: null };
       }
       case "eraser":
         return eraseGesture(base);
       case "note":
-        return { ...base, kind: "note", at: null };
+        return { ...marking, kind: "note", at: null };
       case "select": {
         const motore = ctx.motoreBegin(base);
         if (motore !== null) return motore;

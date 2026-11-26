@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:fub="https://fubeo.github.io/ns/scene/1" fub:version="1" viewBox="0 0 400 300" width="400" height="300">
+  <defs id="fub-defs">
+    <clipPath id="rkcu808lm" fub:role="private" clipPathUnits="userSpaceOnUse">
+      <path id="rf0rma001" d="M50 50 L150 50 L150 150 L50 150 Z" fill="#000000"/>
+    </clipPath>
+  </defs>
+  <rect id="fub-paper" fub:role="paper" x="0" y="0" width="400" height="300" fill="#ffffff"/>
+  <g id="l1a2b3c4d" fub:layer="Livello 1" clip-path="url(#rkcu808lm)">
+    <rect id="oa1a1a1a1" x="0" y="0" width="200" height="200" fill="#ff0000"/>
+  </g>
+  <g id="l2b2b2b2b" fub:layer="Livello 2">
+    <rect id="oc3c3c3c3" x="220" y="100" width="60" height="50" fill="#0000ff"/>
+  </g>
+</svg>

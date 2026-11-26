@@ -10,11 +10,14 @@ mostrano tante volte quante servono. Ogni volta che un simbolo compare è
 un'**istanza**, che lo mostra dov'è, girata e grande come lei; cambiare il
 simbolo cambia tutte le istanze. Fub mostra, sceglie e modifica i simboli che
 un disegno porta, scritti da una versione precedente o da un altro programma,
-ma non ne crea di nuovi e non li scollega: «Crea simbolo», «Scollega dal
+ma lo Standard non ne crea di nuovi e non li scollega: «Crea simbolo», «Scollega dal
 simbolo», la riga «Simbolo», il pannello «Simboli» e le librerie del vault se
 ne sono andati col livello Esperto (decisione 0231). Le operazioni che
 restano sono in `apps/client/src/editors/spatial/tools/symbols.ts`; il file
 in [formato della scena, simboli](../reference/scene-format-symbols.md).
+
+Il [Disegno completo](drawing.md) invece li crea e li cambia, come
+VectorCraft: vedi [Nel Disegno completo](#nel-disegno-completo).
 
 ## Simboli e istanze
 
@@ -54,6 +57,58 @@ solo qui dentro; Esc esce.».
 Un'operazione che farebbe contenere sé stesso a un simbolo, come incollarvi
 una sua istanza, non si fa: «Modifica non applicata: un simbolo conterrebbe
 sé stesso.».
+
+## Nel Disegno completo
+
+Il Completo ha i comandi dei simboli di VectorCraft, nella sezione
+**Simboli** della scheda Risorse dell'ispettore e nella ricerca dei comandi
+(`Ctrl+/`). La sezione ha la lista dei simboli del disegno, ognuno con
+quante istanze ha; il simbolo scelto nella lista (Ctrl ne sceglie altri) è
+quello su cui lavorano i pulsanti, ed è il simbolo che Spruzzo e Simbolismo
+spargono. Un pulsante che ha bisogno di un simbolo scelto o di oggetti
+scelti nel disegno è spento finché non li ha, e lo dice. Il campo **Nome**
+dà il nome al simbolo nuovo e a quello da rinominare.
+
+- **Nuovo simbolo** fa un simbolo degli oggetti scelti e li sostituisce
+  con un'istanza; **Ridefinisci simbolo** gli dà come arte gli oggetti
+  scelti, e tutte le istanze cambiano.
+- **Inserisci istanza simbolo** mette un'istanza al centro;
+  **Interrompi collegamento al simbolo** fa dell'istanza scelta oggetti
+  semplici; **Sostituisci simbolo** dà alle istanze scelte un altro
+  simbolo.
+- **Duplica simbolo**, **Opzioni simbolo** (il nome) ed **Elimina
+  simbolo**, che scollega o toglie le istanze che lo usano.
+- **Modifica simbolo** apre il simbolo come in [Modificare un
+  simbolo](#modificare-un-simbolo): dalle istanze del simbolo scelto nella
+  lista, o senza scelta dalle istanze scelte nel disegno (di un solo
+  simbolo); anche due clic su un simbolo della lista lo aprono. Uno senza
+  istanze non si apre: il pulsante è spento e lo dice. **Esci dalla
+  modalità modifica simbolo**, nella ricerca dei comandi, esce dal
+  simbolo anche da un suo gruppo isolato.
+- **Seleziona tutte le istanze** e **Seleziona tutti gli elementi non
+  usati**, che sceglie nella lista i simboli che niente usa; le
+  **librerie** di VectorCraft, aperte da «Librerie di simboli…», da cui un
+  clic su un simbolo lo copia nel disegno.
+- Gli **strumenti dei simboli** stanno nel riquadro del Generatore forme
+  della colonna. **Spruzzo simboli** sparge istanze del simbolo lungo il
+  tratto, in un gruppo nuovo; la sua fila ha il **Simbolo** (lo stesso
+  scelto nella sezione: cambiarlo da una parte lo cambia dall'altra; senza
+  scelta, il primo del disegno), il **Diametro** del pennello e la
+  **Densità**. **Spostamento**, **Compressione**, **Ridimensionamento**,
+  **Rotazione** e **Trasparenza** cambiano le istanze sotto il pennello
+  (Alt fa il contrario: allarga, rimpicciolisce, rende opache); la loro
+  fila ha il Diametro e l'**Intensità**. Ogni tratto è un passo di
+  annulla. **Colorazione** e **Stile** non ci sono ancora: danno
+  all'istanza un riempimento suo, che il file non sa ancora scrivere.
+
+Ogni comando è un passo di annulla. Ciò che il file non sa ancora dire non
+si fa e lo si dice: colorare un'istanza col Coloratore, cambiarne l'aspetto,
+la maschera, la fusione o il blocco, opzioni del simbolo diverse da quelle
+di serie, un simbolo dentro un altro. Un'istanza girata, scalata o
+deformata in un modo che un `use` disegnerebbe diverso, per esempio
+ingrandita con un contorno, va nel file con la sua copia dell'arte e torna
+istanza alla riapertura
+([formato](../reference/scene-format-symbols.md#10-la-scrittura-del-disegno-completo)).
 
 ## Appunti e duplica
 

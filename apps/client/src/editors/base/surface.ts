@@ -16,10 +16,9 @@ import type { Cell, Range } from "../../tabella/navigation";
 import { rangeBetween, selectedCells, selectsSeveral, touches } from "../../tabella/selection";
 import type { SurfaceMenu, SurfaceMenuItem } from "../core/editor-menu";
 import { uniformRowRange } from "../core/row-window";
-import { LOCAL_FETCH } from "../core/local-fetch";
 import {
-  BASE_FORMAT, BASE_MAP_ATTRIBUTION_FALLBACK, BASE_RENDERER_NS, NEW_VIEW_KINDS,
-  addBaseView, allowedBaseTileUrl, baseRowsToCsv, baseSurfaceModes, cellText, choiceLanes, deriveBaseRows, expectedProperty, groupBaseRows,
+  BASE_FORMAT, BASE_RENDERER_NS, MAP_TILE_HOSTS_KEY, NEW_VIEW_KINDS,
+  addBaseView, allowedBaseTileUrl, baseRowsToCsv, baseTileUrl, baseSurfaceModes, cellText, choiceLanes, deriveBaseRows, expectedProperty, groupBaseRows,
   fetchAllDocuments, linkedNotes, listBaseViews, parseBaseEmbed, persistBaseView,
   planBaseView, prepareBaseMutations, removeBaseView, restoreBaseView, sameExpected, setBaseViewKey, writtenLines,
   type BaseCellValue, type BaseDocumentWrites, type BaseExpected, type BaseGroupOrder, type BaseMutation, type BasePlan, type BaseRow, type BaseRowInput, type BaseSurfaceDeps, type BaseViewKey, type BaseViewKind, type BaseViewWrite,
@@ -30,19 +29,48 @@ import { NOTE_COLUMN, columnKind, columnMenu, columnMenuItems, columnProperty, c
 import { listFooter, shownText, tableFooter } from "./footer";
 import { columnIcon, viewIcon } from "./icons";
 import { calendarState, firstWeekday, localDay, movedDateValue, renderCalendar, type CalendarState, type IsoDay } from "./calendar";
+import { byDatedRows, defaultDateKey, defaultLaneKey, viewKeyPicker } from "./view-keys";
 import { renderTimeline, timelineState, type TimelineRow, type TimelineState } from "./timeline";
 import { readOnlyColumn, sameKey, sortedBy } from "./sort";
-import { freeColor, NO_TYPES, optionsOf, parsePropertyTypes, sameTypes, type PropertyOption, type PropertyTypes } from "../text/profiles/markdown/page/properties/kind";
+import { declaredType, freeColor, NO_TYPES, optionsOf, parsePropertyTypes, sameTypes, type PropertyOption, type PropertyTypes } from "../text/profiles/markdown/page/properties/kind";
 import { closeContextMenu, showContextMenu, type MenuItem } from "../../ui/menu";
 import { notify } from "../../ui/notify";
 import { keyboardPlatform } from "../../ui/commands";
 import { TEXT_INPUT_TYPES, fieldHistoryStep, isPlainTextField } from "../../ui/field-history";
 import { writeClipboardText } from "../../platform/clipboard";
+import { composingKey } from "../../kit/ime";
+
+/// Le tessere della vista Mappa. Le scarica l'host (`map_tile`), soltanto da
+/// un host che `map.tile-hosts` ammette su questa macchina: il file `.base`
+/// non può darlo.
+export interface BaseMapTiles {
+  /// Gli host ammessi (`map.tile-hosts`): servono a non chiedere ciò che
+  /// l'host rifiuterebbe e a dire perché; l'autorità resta l'host.
+  hosts(): Promise<readonly string[]>;
+  /// I byte di una tessera, già controllati dall'host.
+  tile(url: string, kind: "raster" | "vector"): Promise<ArrayBuffer>;
+  /// Apre le Impostazioni sulla riga `key`.
+  readonly openSettings?: (key: string) => void;
+}
+
+/// Quante tessere una vista chiede insieme.
+const TILES_PER_VIEW = 2;
+
+/// Il tipo con cui una tessera diventa un blob. L'host ha già controllato tipo
+/// dichiarato e primi byte: qui si sceglie soltanto l'etichetta.
+function tileMime(kind: "raster" | "vector", bytes: ArrayBuffer): string {
+  if (kind === "vector") return "image/svg+xml";
+  const head = new Uint8Array(bytes, 0, Math.min(4, bytes.byteLength));
+  if (head[0] === 0x89 && head[1] === 0x50) return "image/png";
+  if (head[0] === 0xff && head[1] === 0xd8) return "image/jpeg";
+  return "image/webp";
+}
 
 export interface BaseMountDeps extends BaseSurfaceDeps {
   readonly onOpenDocument: (doc: string) => void | Promise<void>;
-  /** Trusted host-supplied exact-host allowlist; .base YAML cannot grant it. */
-  readonly mapTileHosts?: readonly string[];
+  /// Le tessere della vista Mappa, dall'host. Assente (una prova), la mappa
+  /// resta offline.
+  readonly mapTiles?: BaseMapTiles;
   /// La revisione del file `.base` che la superficie mostra: i gesti della
   /// barra la passano a `base.view.set`, che scrive solo se il file è ancora
   /// quello. Assente, il comando scrive senza confronto.
@@ -126,6 +154,19 @@ const NOTE_NAME = "file.name";
 /// aperto: la dipendenza `propertyTypes` della Base nell'app.
 export async function vaultPropertyTypes(): Promise<unknown> {
   return (await settings()).find((entry) => entry.spec.key === PROPERTY_TYPES_KEY)?.value;
+}
+
+/// Le tessere della Mappa nell'app: gli host dalla riga di macchina
+/// `map.tile-hosts`, i byte dal comando `map_tile` dell'host.
+export function appMapTiles(openSettings?: (key: string) => void): BaseMapTiles {
+  return {
+    hosts: async () => {
+      const value = (await settings()).find((entry) => entry.spec.key === MAP_TILE_HOSTS_KEY)?.value;
+      return Array.isArray(value) ? value.filter((host): host is string => typeof host === "string") : [];
+    },
+    tile: (url, kind) => api.mapTile(url, kind),
+    ...(openSettings ? { openSettings } : {}),
+  };
 }
 
 export function noteTitle(doc: string): string {
@@ -581,16 +622,28 @@ export function mountBaseSurface(
       }
       const nextPlan = plan;
       if (!nextPlan) throw new Error("base: piano assente");
-      const found = await fetchAllDocuments(deps, EVERY_DOCUMENT, nextPlan.allProperties ? { kind: "all" } : { kind: "keys", keys: nextPlan.requiredProps }, { offset: 0, limit: 256 }, request.signal);
+      // Le note si leggono con tutte le loro proprietà, anche quando la vista
+      // non ne chiede ancora nessuna (una Base nuova): Proprietà, Filtro, le
+      // corsie della Bacheca e la data del Calendario propongono quelle che
+      // le note hanno (IMP-147, IMP-413, IMP-616). A `derive` vanno solo
+      // quelle che il piano chiede.
+      const found = await fetchAllDocuments(deps, EVERY_DOCUMENT, { kind: "all" }, { offset: 0, limit: 256 }, request.signal);
       if (!valid(ticket)) return;
       // Le note legate dai riepiloghi di Relazione (T35): nessuna domanda in
-      // più se la vista non ne ha.
+      // più se la vista non ne ha. Si risolvono per tutte le note e non per
+      // quelle che il filtro tiene, e a `derive` vanno tutte le righe: il
+      // filtro gira in `derive` (fub-features) e può leggere una formula che
+      // fa un `rollup` su quelle note, quindi qui non si sa ancora quali
+      // righe restano (#520).
       const linked = await linkedNotes(deps, nextPlan, found.rows, request.signal);
       if (!valid(ticket)) return;
-      const result = await deriveBaseRows(deps, definition, nextPlan.view, found.rows, Date.now(), container, linked);
+      const result = await deriveBaseRows(deps, definition, nextPlan.view, found.rows, Date.now(), container, linked, nextPlan.allProperties ? null : nextPlan.requiredProps);
       if (!valid(ticket)) return;
       rows = result.rows;
-      read = readProperties(found.rows);
+      // Prima le note della Base, poi le altre del vault: sotto il tetto di
+      // `PROPERTY_LIMIT` nomi, quelli delle sue note entrano per primi.
+      const shown = new Set(result.rows.map((row) => row.doc));
+      read = readProperties([...found.rows.filter((row) => shown.has(row.doc)), ...found.rows.filter((row) => !shown.has(row.doc))]);
       kindCache = new Map();
       summaries = result.summaries;
       displayed = VISIBLE_STEP;
@@ -830,7 +883,7 @@ export function mountBaseSurface(
   // disfare. Ctrl+Maiusc+Z e Ctrl+Y non passano di qui: il vault non ha un
   // «rifai» da chiamare.
   const undoKey = (event: KeyboardEvent): void => {
-    if (readOnly || event.defaultPrevented || event.isComposing) return;
+    if (readOnly || event.defaultPrevented || composingKey(event)) return;
     if (fieldHistoryStep(event, keyboardPlatform(navigator.platform)) !== "undo") return;
     const untouched = event.target instanceof HTMLElement && event.target.dataset.untouched === "true";
     if (isPlainTextField(event.target, TEXT_INPUT_TYPES) && !untouched) return;
@@ -979,14 +1032,25 @@ export function mountBaseSurface(
     const lat = find(LATITUDE_KEYS), lon = find(LONGITUDE_KEYS);
     return lat && lon ? { lat_key: lat, lon_key: lon } : null;
   };
-  // Le corsie di una bacheca nuova: il gruppo della vista aperta, o la prima
-  // colonna che è una proprietà.
-  const lanes = (): string | null => grouping() ?? plan?.group ?? plan?.columns.find((column) => columnProperty(column) !== null) ?? null;
-  // Le proprietà delle righe i cui valori sono date: la data di un calendario.
-  const dateProperties = (): string[] => rowProperties().filter((key) => kinds(key) === "date");
-  // La data di un calendario nuovo: quella della vista aperta, o la prima
-  // proprietà data delle righe.
-  const calendarDate = (): string | null => plan?.dateKey ?? dateProperties()[0] ?? null;
+  // Le corsie di una bacheca nuova: il gruppo della vista aperta, la prima
+  // proprietà delle note dichiarata stato e poi scelta (come lo «Status» di
+  // Notion) o, fra le colonne e poi le proprietà delle note, la prima di
+  // testo con pochi valori: mai una data (IMP-3809).
+  const declaredLane = (kind: "status" | "select"): string | undefined => rowProperties().find((key) => declaredType(propertyTypes, key) === kind);
+  const laneChoices = (): string[] => {
+    const keys: string[] = [];
+    const add = (key: string) => { if (kinds(key) !== "date" && !keys.some((each) => sameKey(each, key))) keys.push(key); };
+    for (const column of plan?.columns ?? []) { const key = columnProperty(column); if (key !== null) add(key); }
+    for (const key of rowProperties()) add(key);
+    return keys;
+  };
+  const lanes = (): string | null => grouping() ?? plan?.group ?? declaredLane("status") ?? declaredLane("select") ?? defaultLaneKey(laneChoices(), rows);
+  // Le proprietà delle righe i cui valori sono date: la data di un
+  // calendario, dalla più presente nelle note della vista.
+  const dateProperties = (): string[] => byDatedRows(rowProperties().filter((key) => kinds(key) === "date"), rows);
+  // La data di un calendario nuovo: quella della vista aperta, o la
+  // proprietà data che più note della vista hanno (IMP-3810).
+  const calendarDate = (): string | null => plan?.dateKey ?? defaultDateKey(dateProperties(), rows);
   // Inizio e fine di una linea del tempo nuova: quelli della vista aperta, o
   // le prime due proprietà data delle righe (con una sola, ogni nota è un
   // punto).
@@ -1259,7 +1323,7 @@ export function mountBaseSurface(
       // pagina, e Ctrl+Z arriva alla Base (IMP-124). Esc lascia il testo
       // scritto e torna al valore del disco.
       control.addEventListener("keydown", (event) => {
-        if (event.isComposing) return;
+        if (composingKey(event)) return;
         if (event.key === "Enter") control.closest<HTMLElement>(".base-table-viewport")?.focus({ preventScroll: true });
         else if (event.key === "Escape") {
           const left = cellDrafts.get(key);
@@ -1549,7 +1613,7 @@ export function mountBaseSurface(
     viewport.addEventListener("focus", paint);
     viewport.addEventListener("blur", paint);
     viewport.addEventListener("keydown", (event) => {
-      if (!picked || event.altKey || event.ctrlKey || event.metaKey) return;
+      if (!picked || event.altKey || event.ctrlKey || event.metaKey || composingKey(event)) return;
       const several = selectsSeveral(pickedRanges());
       const field = event.target instanceof HTMLInputElement && event.target.type === "text" ? event.target : null;
       if (event.key === "Escape" && field) {
@@ -1640,7 +1704,27 @@ export function mountBaseSurface(
   };
   const drawKanban = (page: BaseRow[]): void => {
     const key = plan?.group, view = plan?.view;
-    if (!key || !view) throw new Error("base: board senza gruppo");
+    if (!view) throw new Error("base: board senza vista");
+    // La testa: la proprietà delle corsie, che si cambia da qui e si scrive
+    // in `group` (IMP-3809). Le corsie aggiunte a mano erano della proprietà
+    // di prima: non restano sulla nuova.
+    const head = document.createElement("div");
+    head.className = "base-kanban-head";
+    head.append(viewKeyPicker({
+      className: "base-kanban-lanes", label: t("base.kanban.lanes_by"),
+      choices: laneChoices(), current: key ?? null,
+      labelOf: (each) => plan?.columnLabels[each] ?? each, same: sameKey,
+      disabled: lock() !== null || busy || sequencing > 0,
+      choose: (next) => { localLanes.set(view, new Set()); saveLanes(view); void writeView("group", { key: next }); },
+    }));
+    body.append(head);
+    if (!key) {
+      const empty = document.createElement("p");
+      empty.className = "base-kanban-empty";
+      empty.textContent = t(lock() === null ? "base.kanban.no_lanes" : "base.kanban.no_lanes_locked");
+      body.append(empty);
+      return;
+    }
     const groups = new Map<string, BaseRow[]>();
     for (const row of page) {
       const name = cellText(row.values[key]);
@@ -1735,7 +1819,7 @@ export function mountBaseSurface(
               }
             })();
           };
-          input.addEventListener("keydown", (event) => { if (event.key === "Enter") commit(); else if (event.key === "Escape") { finished = true; draw(); } });
+          input.addEventListener("keydown", (event) => { if (composingKey(event)) return; if (event.key === "Enter") commit(); else if (event.key === "Escape") { finished = true; draw(); } });
           input.addEventListener("blur", () => { if (input.isConnected) commit(); });
         }));
       }
@@ -1817,13 +1901,28 @@ export function mountBaseSurface(
     propertyTypes = next;
     if (plan?.viewType === "kanban") draw();
   };
+  // Gli host delle tessere ammessi su questa macchina, riletti quando la
+  // riga cambia: una mappa aperta passa da «non ammesse» al consenso.
+  let tileHosts: readonly string[] = [];
+  let hostsRead = 0;
+  const readTileHosts = async (): Promise<void> => {
+    if (!deps.mapTiles) return;
+    const mine = ++hostsRead;
+    const next = await deps.mapTiles.hosts().catch((): readonly string[] => []);
+    if (destroyed || mine !== hostsRead) return;
+    if (next.length === tileHosts.length && next.every((host, index) => host === tileHosts[index])) return;
+    tileHosts = next;
+    if (plan?.viewType === "map") draw();
+  };
   const drawMap = (page: BaseRow[]): void => {
     const config = plan?.map;
     if (!config) throw new Error("base: coordinate non configurate");
     const wrapper = document.createElement("div");
     wrapper.className = "base-map";
     wrapper.dataset.provider = "offline";
-    const atlas = svg("svg", { viewBox: "0 0 720 360", role: "img", "aria-label": t("base.map.label"), tabindex: "0" });
+    // Un'applicazione, non un'immagine: tiene i suoi tasti (frecce, + e -) e
+    // contiene i segnaposto, che sono pulsanti raggiungibili col Tab.
+    const atlas = svg("svg", { viewBox: "0 0 720 360", role: "application", "aria-label": t("base.map.label"), tabindex: "0" });
     atlas.classList.add("base-map-atlas");
     const world = svg("g", {});
     const tiles = svg("g", { class: "base-map-tiles" });
@@ -1846,17 +1945,23 @@ export function mountBaseSurface(
       marker.append(svg("title", {}));
       marker.querySelector("title")!.textContent = name;
       marker.addEventListener("click", () => open(row.doc));
-      marker.addEventListener("keydown", (event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); open(row.doc); } });
+      // Invio e Spazio sono il clic del pulsante, come per un `button`: uno solo.
+      marker.addEventListener("keydown", (event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); marker.dispatchEvent(new MouseEvent("click", { bubbles: true })); } });
       world.append(marker);
     }
     atlas.append(world);
     let zoom = 1, x = 0, y = 0;
     const update = () => { world.setAttribute("transform", `translate(${x} ${y}) scale(${zoom})`); };
     const provider = config.provider;
-    const allowedHosts = deps.mapTileHosts ?? [];
+    const tileSource = deps.mapTiles;
     const template = provider?.url_template;
-    const firstTile = provider?.network && provider.kind !== "offline" && template
-      ? allowedBaseTileUrl(template, provider.kind, allowedHosts, 1, 0, 0) : null;
+    const kind = provider && provider.kind !== "offline" ? provider.kind : null;
+    // Il sito del modello, se la Base chiede la rete con un indirizzo che
+    // l'host accetterebbe; poi se questa macchina lo ammette.
+    const site = provider?.network && kind && template && tileSource ? baseTileUrl(template, kind, 1, 0, 0)?.hostname ?? null : null;
+    const tileUrlAt = (level: number, col: number, row: number): string | null =>
+      kind && template ? allowedBaseTileUrl(template, kind, tileHosts, level, col, row) : null;
+    const firstTile = site ? tileUrlAt(1, 0, 0) : null;
     const attribution = document.createElement("p");
     attribution.className = "base-map-attribution";
     let tileRequest: AbortController | null = null;
@@ -1869,46 +1974,60 @@ export function mountBaseSurface(
       tiles.replaceChildren();
     };
     tileCleanup = releaseTiles;
+    const providerName = (): string => provider?.attribution ?? site ?? "";
+    // Tessere non ammesse su questa macchina: lo si dice, col rimando alla
+    // riga delle Impostazioni che le ammette.
+    const showNotAllowed = (name: string) => {
+      wrapper.dataset.provider = "offline";
+      wrapper.querySelector(".base-map-enable")?.remove();
+      attribution.replaceChildren(t("base.map.tiles_not_allowed", { site: name }));
+      const open = tileSource?.openSettings;
+      if (open) {
+        const link = button(t("base.map.open_settings"), () => open(MAP_TILE_HOSTS_KEY));
+        link.className = "link-button base-map-settings";
+        attribution.append(" ", link);
+      }
+    };
     const paintTiles = async () => {
-      if (!provider || provider.kind === "offline" || !template || !firstTile || wrapper.dataset.provider === "offline") return;
+      if (!tileSource || !kind || !firstTile || wrapper.dataset.provider === "offline") return;
       releaseTiles();
       const request = new AbortController();
       tileRequest = request;
       const level = Math.min(3, Math.floor(Math.log2(zoom)) + 1), count = 2 ** level;
-      try {
-        const images = document.createDocumentFragment();
-        // Browser <image href=https:> follows redirects past the allowlist.
-        // Fetch without redirects/credentials, bound bytes, then paint local blobs.
-        for (let col = 0; col < count; col++) for (let row = 0; row < count; row++) {
-          const url = allowedBaseTileUrl(template, provider.kind, allowedHosts, level, col, row);
-          if (!url) throw new Error("tile endpoint outside allowlist");
-          const response = await fetch(url, { ...LOCAL_FETCH, signal: request.signal });
-          const mime = response.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase();
-          const types = provider.kind === "vector" ? ["image/svg+xml"] : ["image/png", "image/jpeg", "image/webp"];
-          if (!response.ok || !mime || !types.includes(mime) || !response.body || Number(response.headers.get("content-length") ?? 0) > 1024 * 1024) throw new Error("tile response unavailable or unsupported");
-          const reader = response.body.getReader();
-          const chunks: ArrayBuffer[] = [];
-          let size = 0;
-          try {
-            for (;;) {
-              const { done, value } = await reader.read();
-              if (done) break;
-              size += value.byteLength;
-              if (size > 1024 * 1024) throw new Error("tile exceeds 1 MiB");
-              chunks.push(new Uint8Array(value).buffer as ArrayBuffer);
-            }
-          } finally { reader.releaseLock(); }
+      const cells: { col: number; row: number }[] = [];
+      for (let col = 0; col < count; col++) for (let row = 0; row < count; row++) cells.push({ col, row });
+      const images: (SVGElement | undefined)[] = [];
+      let next = 0;
+      // Le tessere le scarica l'host (`map_tile`), che fa rispettare host
+      // ammessi, redirect, peso e tipo; qui al più TILES_PER_VIEW insieme.
+      const worker = async (): Promise<void> => {
+        while (next < cells.length && !request.signal.aborted) {
+          const index = next++;
+          const { col, row } = cells[index]!;
+          const url = tileUrlAt(level, col, row);
+          if (!url) throw { kind: "permission_denied", message: "" };
+          const bytes = await tileSource.tile(url, kind);
           if (request.signal.aborted || !wrapper.isConnected) return;
-          const blobUrl = URL.createObjectURL(new Blob(chunks, { type: mime }));
+          const blobUrl = URL.createObjectURL(new Blob([bytes], { type: tileMime(kind, bytes) }));
           tileUrls.add(blobUrl);
-          images.append(svg("image", { x: String(col * 720 / count), y: String(row * 360 / count), width: String(720 / count), height: String(360 / count), href: blobUrl }));
+          images[index] = svg("image", { x: String(col * 720 / count), y: String(row * 360 / count), width: String(720 / count), height: String(360 / count), preserveAspectRatio: "none", href: blobUrl });
         }
-        if (!request.signal.aborted && wrapper.isConnected) tiles.replaceChildren(images);
+      };
+      try {
+        await Promise.all(Array.from({ length: TILES_PER_VIEW }, worker));
+        if (request.signal.aborted || !wrapper.isConnected) return;
+        tiles.replaceChildren(...images.filter((image): image is SVGElement => image !== undefined));
+        attribution.textContent = providerName();
       } catch (reason) {
         if (request.signal.aborted) return;
-        wrapper.dataset.provider = "offline";
+        request.abort();
         releaseTiles();
+        if (isErrorKind(reason, "permission_denied")) { showNotAllowed(site ?? ""); return; }
+        wrapper.dataset.provider = "offline";
         attribution.textContent = t("base.map.tiles_failed", { reason: errorText(reason) });
+        // Il consenso resta: un altro clic riprova.
+        const retry = wrapper.querySelector<HTMLButtonElement>(".base-map-enable");
+        if (retry) retry.hidden = false;
       }
     };
     const zoomBy = (factor: number) => { zoom = Math.max(1, Math.min(8, zoom * factor)); update(); if (wrapper.dataset.provider !== "offline") void paintTiles(); };
@@ -1929,17 +2048,22 @@ export function mountBaseSurface(
       else return;
       event.preventDefault(); update();
     });
-    if (firstTile && provider) {
-      attribution.textContent = t("base.map.offline", { provider: provider.attribution ?? new URL(firstTile).hostname });
-      wrapper.append(button(t("base.map.enable"), () => {
-        wrapper.dataset.provider = provider.kind;
+    if (firstTile && kind) {
+      // Il sito è ammesso: il pulsante è il consenso per questa vista.
+      attribution.textContent = t("base.map.offline", { provider: providerName() });
+      const enable = button(t("base.map.enable"), () => {
+        enable.hidden = true;
+        atlas.focus();
+        wrapper.dataset.provider = kind;
+        attribution.textContent = t("base.map.tiles_loading", { provider: providerName() });
         void paintTiles();
-        attribution.textContent = provider.attribution ?? new URL(firstTile).hostname;
-      }));
+      });
+      enable.classList.add("base-map-enable");
+      wrapper.append(enable);
+    } else if (site) {
+      showNotAllowed(site);
     } else {
-      attribution.textContent = provider?.kind && provider.kind !== "offline"
-        ? t("base.map.tiles_denied")
-        : BASE_MAP_ATTRIBUTION_FALLBACK;
+      attribution.textContent = kind ? t("base.map.tiles_denied") : t("base.map.offline_only");
     }
     const zoomIn = button("+", () => zoomBy(1.2));
     zoomIn.setAttribute("aria-label", t("base.map.zoom_in"));
@@ -2021,6 +2145,7 @@ export function mountBaseSurface(
       movable: (row) => writableKey && !readOnly && /\.md$/i.test(row.doc) && movedDateValue(row.properties[key!], row.day ?? today) !== null,
       busy: moving || busy,
       dateChoices: lock() === null ? dateProperties() : null,
+      labelOf: (key) => plan?.columnLabels[key] ?? key,
       chooseDateKey: (date) => void writeView("date", date),
       open,
       move: (row, day) => void moveNote(row, day),
@@ -2224,23 +2349,52 @@ export function mountBaseSurface(
   // every open view, including embeds. Coalesce one event burst and let the
   // generation/AbortController discard stale in-flight derivations.
   let refreshQueued = false;
-  const memberChanged = () => {
+  let refreshes = 0;
+  const refresh = () => {
     if (destroyed || !source || refreshQueued) return;
     refreshQueued = true;
     queueMicrotask(() => {
       refreshQueued = false;
-      if (!destroyed) void reload(false);
+      if (destroyed) return;
+      const mine = ++refreshes;
+      void reload(false).finally(() => { if (mine === refreshes) indexOwed = false; });
     });
   };
+  // Un salvataggio è una ricarica sola (#520). Il kernel scrive la nota
+  // nell'indice e poi annuncia `document_changed` e subito dopo
+  // `index_updated` (`announce_file_change`): i due arrivano qui in due giri
+  // separati, che `queueMicrotask` non unisce. La ricarica partita dal primo
+  // legge già la nota scritta, quindi il primo `index_updated` dopo un fatto
+  // di una nota non dice niente di nuovo e si lascia cadere. Se fra i due il
+  // ponte ha fuso un altro `index_updated`, il suo cambiamento era già scritto
+  // prima che il fatto arrivasse, e la stessa ricarica lo legge. Un host che
+  // non manda `index_updated` (il finto del banco) non lascia il debito
+  // aperto: lo chiude la ricarica finita, e da lì un `index_updated` ricarica
+  // di nuovo. `batch_ended` e `overflow` ricaricano sempre: possono portare
+  // cambiamenti dell'indice senza un fatto di nota.
+  let indexOwed = false;
+  const memberChanged = () => {
+    if (destroyed || !source) return;
+    indexOwed = true;
+    refresh();
+  };
+  const indexUpdated = () => {
+    if (indexOwed) { indexOwed = false; return; }
+    refresh();
+  };
   void readPropertyTypes();
+  void readTileHosts();
   const stopEvents = [
-    onEvent("setting_changed", (event) => { if (event.key === PROPERTY_TYPES_KEY) void readPropertyTypes(); }),
+    onEvent("setting_changed", (event) => {
+      if (event.key === PROPERTY_TYPES_KEY) void readPropertyTypes();
+      else if (event.key === MAP_TILE_HOSTS_KEY) void readTileHosts();
+    }),
     onEvent("document_changed", (event) => { if (!event.changes || event.changes.aspects.length) memberChanged(); }),
     onEvent("document_removed", memberChanged),
     onEvent("document_renamed", memberChanged),
-    onEvent("index_updated", memberChanged),
-    onEvent("batch_ended", memberChanged),
-    onEvent("overflow", memberChanged),
+    onEvent("index_updated", indexUpdated),
+    onEvent("batch_ended", refresh),
+    onEvent("overflow", refresh),
   ];
   const relabel = () => {
     groupBy.setAttribute("aria-label", t("base.group.by"));
@@ -2429,6 +2583,7 @@ export function mountBaseEmbed(host: HTMLElement, payload: unknown, context: Cus
     revision: () => revision,
     documentWrites,
     propertyTypes: vaultPropertyTypes,
+    mapTiles: appMapTiles(),
   }, { view: embed.view, persistSelection: false, container: embed.container ?? embed.base ?? null, sourceInNote: embed.source !== undefined });
   // La scatola della Base dentro una nota sta in colonna col testo (la pelle).
   host.querySelector<HTMLElement>(":scope > .base-surface")?.setAttribute("data-embedded", "true");

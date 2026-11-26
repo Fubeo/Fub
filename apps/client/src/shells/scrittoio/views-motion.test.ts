@@ -530,6 +530,33 @@ describe("la sagoma della voce scelta", () => {
     expect(String(play.keyframes[0].transform)).toContain(`scale(${Math.round((WIDTH / (WIDTH - 20)) * 1e4) / 1e4}, 1)`);
   });
 
+  it("una sagoma che non copre la voce si misura dal suo ::after: la tacca della Struttura scende dritta", async () => {
+    const tree = (selected: string): UiNode =>
+      ({ node: "tree", roots: [branch("uno", selected === "uno", [branch("due", selected === "due")])] }) as UiNode;
+    const host = view(tree("uno"));
+    const label = (key: string): HTMLElement => host.querySelector<HTMLElement>(`[data-key="${key}"] > .ui-tree-label`)!;
+    place(label("uno"), 0, 0, WIDTH, ROW);
+    place(label("due"), 20, ROW, WIDTH - 20, ROW);
+    // Come in nodes.css: 2 px sul filo, e al livello sotto il filo resta dov'era.
+    const tacca = new Map([[label("uno"), 0], [label("due"), -20]]);
+    const real = window.getComputedStyle.bind(window);
+    const spy = vi.spyOn(window, "getComputedStyle").mockImplementation((el, pseudo) => {
+      const shift = pseudo === "::after" ? tacca.get(el as HTMLElement) : undefined;
+      if (shift === undefined) return real(el, pseudo);
+      return { position: "absolute", left: `${shift - 1.5}px`, top: "6px", width: "2px", height: "18px" } as CSSStyleDeclaration;
+    });
+    try {
+      draw(host, tree("due"));
+      await settled();
+    } finally {
+      spy.mockRestore();
+    }
+    const play = playOn(label("due"), "::after")!;
+    // Le tacche stanno nella stessa colonna e sono uguali: solo una riga più giù.
+    expect(shift(play.keyframes[0])).toEqual([0, -ROW]);
+    expect(String(play.keyframes[0].transform)).not.toContain("scale");
+  });
+
   it("una patch a metà scivolata riparte da dove la sagoma si vede", async () => {
     const host = view(choice("a"));
     draw(host, choice("c"));

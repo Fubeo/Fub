@@ -30,6 +30,7 @@ fn richiesta(id: &str, selezione: &[&str], valore: Value) -> DrawingCommandReque
         id: id.into(),
         selection: selezione.iter().map(|s| s.to_string()).collect(),
         value: valore,
+        preview: false,
     }
 }
 
@@ -220,10 +221,217 @@ fn una_selezione_con_un_elemento_non_mappato_non_cambia_niente() {
         ),
         DrawingRefusal::Unmapped
     );
-    assert!(d
-        .comandi(&["oa1a1a1a1".into(), "onessuno1".into()])
+    // Scegliere tutto, l'inversa e nessuno non toccano ciò che è scelto, e
+    // il lato attivo del colore (K6 T14) è della sessione, non degli oggetti:
+    // il resto (anche l'ordine del nucleo, K6 T11) è spento. Tutto nella
+    // tavola e gli oggetti di testo non leggono ciò che è scelto, come Tutto
+    // (K6 T15). I campioni del documento (K6 T14) non sono gli oggetti scelti.
+    // Il punto scelto della sfumatura (K6 T15, giro 5) è della sessione, come
+    // il lato attivo: una lettura che non cambia il file. Le sfumature
+    // preimpostate (K6 T15, giro 6) si elencano, si salvano e si tolgono
+    // nelle preferenze del motore: il file non cambia. Le opzioni del
+    // Contagocce (K6 T14, giro 6) sono una preferenza del motore: non leggono
+    // né cambiano ciò che è scelto. La griglia di trasparenza (K6 T11, giro H)
+    // è della vista: il motore la dà accesa con ogni selezione, e il client la
+    // chiama da sé. I comandi su un punto solo (K6 T12, punti) nominano il
+    // tracciato con `element` nel valore, non con ciò che è scelto: un
+    // `element` non mappato lo rifiutano all'esecuzione.
+    let sempre = [
+        // Il modo di disegno (K6 T11) è della sessione: normale e dietro non leggono la scelta.
+        "disegno.view.drawMode",
+        // La modalità di modifica dei simboli è del client: il motore li dà accesi, e il client
+        // entra ed esce da sé guardando ciò che è scelto.
+        "disegno.symbol.edit",
+        "disegno.symbol.exitEditing",
+        // Le guide del righello sono della radice e dei livelli: nominano la guida per numero
+        // nel valore, e Libera, Blocca e Cancella guide valgono per tutte.
+        "disegno.view.guides.release",
+        "disegno.view.guides.lock",
+        "disegno.view.guides.clear",
+        "disegno.guide.add",
+        "disegno.guide.list",
+        "disegno.guide.remove",
+        "disegno.guide.move",
+        "disegno.guide.setLayer",
+        "disegno.eyedropper.setOptions",
+        "disegno.path.moveAnchor",
+        "disegno.path.setHandle",
+        "disegno.path.insertAnchor",
+        "disegno.path.removeAnchor",
+        "disegno.path.convertAnchor",
+        "disegno.path.close",
+        "disegno.path.appendAnchor",
+        "disegno.path.split",
+        // La Curvatura e la penna a passi (T12 curvatura) nominano il tracciato con `element`
+        // nel valore, e la Curvatura crea un tracciato nuovo: nessuno guarda la scelta.
+        "disegno.path.reshape",
+        "disegno.path.reshapeSegment",
+        "disegno.path.curvatureEdit",
+        "disegno.path.curvature",
+        "disegno.path.setAnchors",
+        "disegno.addon.pen.append",
+        "disegno.addon.pen.close",
+        "disegno.addon.pen.segment",
+        "disegno.addon.pen.removePoint",
+        "disegno.addon.pen.togglePoint",
+        "disegno.addon.pen.reshape",
+        // Allunga e Fai scorrere (K6 T12, strumenti dei punti) prendono il tratto dal valore (`element`).
+        "disegno.addon.pathtools.extend",
+        "disegno.addon.pathtools.slideAnchor",
+        // Il Pennello tondo (K6 T12, giro 2) dipinge un tratto nuovo: prende i punti e il colore dal valore, non dalla scelta.
+        "disegno.path.blob",
+        // Mostra tutti e Sblocca tutti (K6 T15, livelli altri) guardano tutti i livelli, non la scelta.
+        "disegno.layer.showAll",
+        "disegno.layer.unlockAll",
+        // I colori recenti e i proxy di riempimento e tratto (K6 T14) sono letture della sessione:
+        // non guardano la scelta.
+        "disegno.paint.recent",
+        "disegno.paint.proxies",
+        // La Matita (K6 T12, giro 9) fa un tracciato nuovo: non guarda la scelta.
+        "disegno.path.freehand",
+        "disegno.swatch.new",
+        "disegno.swatch.edit",
+        "disegno.swatch.delete",
+        "disegno.swatch.list",
+        "disegno.swatch.unused",
+        "disegno.swatch.addUsedColors",
+        // I campioni del documento (K6 T14) non guardano ciò che è scelto: duplica, unisci e riordina.
+        "disegno.swatch.duplicate",
+        "disegno.swatch.merge",
+        "disegno.swatch.sortByName",
+        "disegno.swatch.move",
+        // L'ordine per specie guarda i campioni del documento, non la scelta (K6 T14, campioni).
+        "disegno.swatch.sortByKind",
+        // La Bacchetta magica sceglie dal punto del clic, e le sue opzioni sono della sessione.
+        "disegno.select.magicWand",
+        "disegno.magicWand.set",
+        "disegno.magicWand.options",
+        "disegno.select.all",
+        "disegno.select.inverse",
+        "disegno.select.none",
+        "disegno.select.allOnArtboard",
+        "disegno.select.object.textObjects",
+        // Le specie di Oggetto (K6 T15, giro 6) guardano il disegno, non la scelta.
+        "disegno.select.object.strayPoints",
+        "disegno.select.object.openPaths",
+        // Seleziona per colore cerca il colore negli argomenti, in tutto il disegno.
+        "disegno.select.color",
+        "disegno.paint.toggleActive",
+        "disegno.gradient.selectStop",
+        "disegno.gradient.presets.list",
+        "disegno.gradient.presets.save",
+        "disegno.gradient.presets.delete",
+        "disegno.view.transparencyGrid",
+        // Seleziona grafica (K6 T15, giro 2) prende il livello dal valore (`id`), non dalla scelta.
+        "disegno.layer.selectAll",
+        // Le librerie di campioni (K6 T14) si leggono dal motore, senza guardare la scelta.
+        "disegno.swatch.library.list",
+        "disegno.swatch.library.get",
+        // Aggiungi una libreria (K6 T14) copia i suoi campioni, senza guardare la scelta.
+        "disegno.swatch.library.add",
+        // Le letture della Trasparenza (K6 T15, giro maschere) non cambiano il disegno: con un
+        // elemento non mappato danno il vuoto, come le altre letture.
+        "disegno.transparency.info",
+        "disegno.transparency.opacityMaskInfo",
+        // Trova e sostituisci e Trova successivo (K6 T16) cercano in tutto il
+        // disegno; Modifica testo nomina il suo testo nel valore (`element`).
+        "disegno.edit.findReplace",
+        "disegno.edit.findNext",
+        "disegno.text.editRange",
+        // Pulisci (K6 T12) vale su tutto il disegno, non sulla scelta: il motore non legge la selezione.
+        "disegno.object.path.cleanUp",
+        // Seleziona per tipo di colore (K6 T14 giro 9) sceglie fra tutti gli oggetti, non guarda la scelta.
+        "disegno.addon.color.select",
+        // La Guida colori e la conversione (K6 T14, letture) prendono il colore dal valore, non dalla scelta.
+        "disegno.color.harmony",
+        "disegno.color.convert",
+        // Le lastre (K6 T14, temi) guardano il documento, e la libreria dei temi le preferenze: non la scelta.
+        "disegno.color.plates",
+        "disegno.colorTheme.list",
+        // Salvare e togliere un tema prendono il nome o i colori dal valore, non dalla scelta (K6 T14, temi).
+        "disegno.colorTheme.save",
+        "disegno.colorTheme.delete",
+        // I gruppi di colori e i campioni predefiniti (K6 T14, gruppi) lavorano sui campioni nominati
+        // nel valore, non sulla scelta.
+        "disegno.colorTheme.addToSwatches",
+        "disegno.swatch.newGroup",
+        "disegno.swatch.ungroup",
+        "disegno.swatch.editGroup",
+        "disegno.swatch.resetDefaults",
+        // I simboli (K6) che non leggono la scelta: prendono il simbolo o i punti dal valore,
+        // o leggono il documento. Nuovo, scollega, aggiorna, sostituisci e regola la leggono.
+        "disegno.symbol.list",
+        "disegno.symbol.options",
+        "disegno.symbol.place",
+        "disegno.symbol.delete",
+        "disegno.symbol.duplicate",
+        "disegno.symbol.unused",
+        "disegno.symbol.selectInstances",
+        "disegno.symbol.spray",
+        "disegno.symbol.libraries",
+        "disegno.symbol.library",
+        "disegno.symbol.addFromLibrary",
+        // Crea grafico prende il rettangolo dal valore.
+        "disegno.graph.create",
+        // Le tavole (K6) prendono la tavola dal valore, non dalla scelta; Adatta al disegno
+        // guarda la scelta solo per sapere quale tavola, e senza va sulla prima.
+        "disegno.artboard.new",
+        "disegno.artboard.delete",
+        "disegno.artboard.deleteEmpty",
+        "disegno.artboard.setProps",
+        "disegno.artboard.fitToArt",
+        "disegno.artboard.rearrange",
+        "disegno.artboard.reorder",
+        "disegno.artboard.duplicate",
+        "disegno.artboard.copy",
+        "disegno.artboard.cut",
+        "disegno.artboard.move",
+        // Cambia unità è del documento, non degli oggetti scelti.
+        "disegno.document.switchUnits",
+        // La lettura della pila degli effetti non cambia il disegno.
+        "disegno.effect.list",
+        // Le letture del Testo (caratteri del disegno, famiglie, catene, tabulazioni) e le
+        // opzioni dell'aggancio ai glifi non cambiano il disegno: con un elemento non
+        // mappato danno il vuoto, come le altre letture.
+        "disegno.text.missingFonts",
+        "disegno.text.fonts",
+        "disegno.text.fontList",
+        "disegno.text.thread.info",
+        "disegno.text.tabs.get",
+        "disegno.view.snapToGlyph.options",
+        // Sostituisci carattere nomina i caratteri nel valore, e senza `selectionOnly` vale su tutto il disegno.
+        "disegno.text.replaceFont",
+        // Crea tracciato aggiunge un tracciato nuovo dai suoi argomenti, senza usare la selezione.
+        "disegno.path.create",
+        // Inserisci… mette un'immagine nuova del vault, senza usare la selezione (lo fa il client).
+        "disegno.file.place",
+        // Gli strumenti del Testo come in VectorCraft: Testo crea dai suoi argomenti; gli altri
+        // nominano il loro oggetto nel valore (senza, prendono il primo scelto che fa al caso), e
+        // un elemento non mappato lo ferma la guardia delle perdite.
+        "disegno.text.create",
+        "disegno.text.createInPath",
+        "disegno.text.discardEmpty",
+        "disegno.text.reshapeArea",
+        "disegno.text.reshapePath",
+    ];
+    let comandi = d.comandi(&["oa1a1a1a1".into(), "onessuno1".into()]);
+    let accesi: Vec<&str> = comandi
         .iter()
-        .all(|c| !c.enabled));
+        .filter(|c| !sempre.contains(&c.id.as_str()) && c.enabled)
+        .map(|c| c.id.as_str())
+        .collect();
+    assert!(
+        accesi.is_empty(),
+        "accesi con un elemento non mappato: {accesi:?}"
+    );
+    let ordine = comandi
+        .iter()
+        .find(|c| c.id == "disegno.object.arrange.bringToFront")
+        .expect("l'ordine è una riga fatta");
+    assert_eq!(
+        ordine.disabled_reason,
+        Some(fub_abi::DrawingDisabledReason::Unmapped)
+    );
     if aperto.unmapped > 0 {
         // L'immagine, se il motore non la sa modificare.
         assert_eq!(
@@ -342,13 +550,61 @@ fn il_tratto_di_una_penna_e_il_suo_riempimento() {
 #[test]
 fn i_comandi_sono_accesi_su_una_selezione_mappata() {
     let (d, _) = apri(&disegno(RETTANGOLO));
+    // Prima i comandi del nucleo di Fub, poi le righe «fatto» del Completo.
     let accesi = d.comandi(&["oa1a1a1a1".into()]);
     assert_eq!(
-        accesi.iter().map(|c| c.id.as_str()).collect::<Vec<_>>(),
+        accesi
+            .iter()
+            .take(DRAWING_COMMANDS.len())
+            .map(|c| c.id.as_str())
+            .collect::<Vec<_>>(),
         DRAWING_COMMANDS.to_vec()
     );
-    assert!(accesi.iter().all(|c| c.enabled), "{accesi:?}");
-    assert!(d.comandi(&[]).iter().all(|c| !c.enabled));
+    let stato = |comandi: &[fub_abi::DrawingCommandInfo], id: &str| {
+        let c = comandi
+            .iter()
+            .find(|c| c.id == id)
+            .unwrap_or_else(|| panic!("manca {id}"));
+        (c.enabled, c.disabled_reason.clone())
+    };
+    assert!(
+        accesi
+            .iter()
+            .take(DRAWING_COMMANDS.len())
+            .all(|c| c.enabled),
+        "{accesi:?}"
+    );
+    // Il nucleo del Completo (K6 T11): un rettangolo si ordina e si sceglie
+    // sopra o sotto, ma non si separa.
+    assert_eq!(
+        stato(&accesi, "disegno.object.arrange.bringToFront"),
+        (true, None)
+    );
+    assert_eq!(stato(&accesi, "disegno.select.nextAbove"), (true, None));
+    assert_eq!(
+        stato(&accesi, "disegno.object.ungroup"),
+        (false, Some(fub_abi::DrawingDisabledReason::NeedsGroup))
+    );
+    // Senza selezione: spenti, tranne Seleziona tutto e l'Inversa.
+    let vuota = d.comandi(&[]);
+    assert!(vuota
+        .iter()
+        .take(DRAWING_COMMANDS.len())
+        .all(|c| !c.enabled));
+    assert_eq!(stato(&vuota, "disegno.select.all"), (true, None));
+    assert_eq!(stato(&vuota, "disegno.select.inverse"), (true, None));
+    for id in [
+        "disegno.select.none",
+        "disegno.select.nextBelow",
+        "disegno.object.arrange.sendToBack",
+        "disegno.object.ungroup",
+    ] {
+        assert_eq!(
+            stato(&vuota, id),
+            (false, Some(fub_abi::DrawingDisabledReason::NoSelection)),
+            "{id}"
+        );
+    }
 }
 
 #[test]
@@ -395,7 +651,11 @@ fn un_tratto_o_un_riempimento_che_non_c_era() {
             &["oa1a1a1a1"],
             json!("#ff0000")
         ),
-        set("oa1a1a1a1", json!({ "stroke": "#ff0000" }))
+        // Il motore scrive anche il suo limite dell'angolo (10, SVG ne ha 4).
+        set(
+            "oa1a1a1a1",
+            json!({ "stroke": "#ff0000", "stroke-miterlimit": "10" })
+        )
     );
     assert!(d
         .comandi(&["ob2b2b2b2".into()])
@@ -618,5 +878,78 @@ fn lo_spessore_di_una_linea_variabile_insieme_a_una_forma() {
         confronta_ops(&attese, &ottenute, None),
         Confronto::Uguali,
         "{ottenute}"
+    );
+}
+
+/// Un testo di punto, senza tracciati; e un tracciato aperto e un punto isolato (`M x y Z`: un `M x y`
+/// nudo lo scarta l'importatore).
+const TESTO: &str = "    <text id=\"ot1a1a1a1\" x=\"20\" y=\"40\" fill=\"#000000\" font-family=\"Inter, sans-serif\" font-size=\"16\"><tspan x=\"20\" dy=\"0\">Primo</tspan></text>\n";
+const TRACCIATI: &str = "    <path id=\"op1a1a1a1\" d=\"M20 20 L120 20 L120 80\" fill=\"none\" stroke=\"#000000\"/>\n    <path id=\"ps3c3c3c3\" d=\"M60 200 Z\"/>\n";
+
+/// K6 T15, giro 6: le voci di ≡ › Selezione per il testo e per le specie. Il confronto del testo vuole
+/// un testo scelto, e senza lo dice «Serve un testo.»; le specie di Oggetto stanno accese solo se il
+/// disegno ne ha, e altrimenti dicono che cosa manca.
+#[test]
+fn le_voci_di_testo_e_di_specie_della_selezione_dicono_perche_sono_spente() {
+    const UGUALI: [&str; 6] = [
+        "disegno.select.same.fontFamily",
+        "disegno.select.same.fontFamilyStyle",
+        "disegno.select.same.fontFamilyStyleSize",
+        "disegno.select.same.fontSize",
+        "disegno.select.same.textFillColor",
+        "disegno.select.same.textStrokeColor",
+    ];
+    let stato = |comandi: &[fub_abi::DrawingCommandInfo], id: &str| {
+        let c = comandi
+            .iter()
+            .find(|c| c.id == id)
+            .unwrap_or_else(|| panic!("manca {id}"));
+        (c.enabled, c.disabled_reason.clone())
+    };
+    let altro = |testo: &str| Some(fub_abi::DrawingDisabledReason::Other { text: testo.into() });
+    let senza_testo = Some(fub_abi::DrawingDisabledReason::NeedsText);
+
+    // Un rettangolo: niente testo fra gli oggetti scelti, e nel disegno niente di quelle specie.
+    let (rettangolo, _) = apri(&disegno(RETTANGOLO));
+    let scelto = rettangolo.comandi(&["oa1a1a1a1".into()]);
+    for id in UGUALI {
+        assert_eq!(stato(&scelto, id), (false, senza_testo.clone()), "{id}");
+    }
+    assert_eq!(
+        stato(&scelto, "disegno.select.object.strayPoints"),
+        (false, altro("Nel disegno non ci sono punti isolati."))
+    );
+    assert_eq!(
+        stato(&scelto, "disegno.select.object.openPaths"),
+        (false, altro("Nel disegno non ci sono tracciati aperti."))
+    );
+    // Senza scelta, Uguale dice di scegliere un oggetto, prima di dire del testo.
+    let vuota = rettangolo.comandi(&[]);
+    assert_eq!(
+        stato(&vuota, "disegno.select.same.fontSize"),
+        (false, Some(fub_abi::DrawingDisabledReason::NoSelection))
+    );
+
+    // Un testo scelto: il confronto è acceso; senza tracciati, le specie di tracciato dicono che non ce ne sono.
+    let (testo, _) = apri(&disegno(TESTO));
+    let con_testo = testo.comandi(&["ot1a1a1a1".into()]);
+    for id in UGUALI {
+        assert_eq!(stato(&con_testo, id), (true, None), "{id}");
+    }
+    assert_eq!(
+        stato(&con_testo, "disegno.select.object.openPaths"),
+        (false, altro("Nel disegno non ci sono tracciati aperti."))
+    );
+
+    // Un tracciato aperto e un punto isolato, senza testo: le due specie sono accese.
+    let (tracciati, _) = apri(&disegno(TRACCIATI));
+    let senza_scelta = tracciati.comandi(&[]);
+    assert_eq!(
+        stato(&senza_scelta, "disegno.select.object.openPaths"),
+        (true, None)
+    );
+    assert_eq!(
+        stato(&senza_scelta, "disegno.select.object.strayPoints"),
+        (true, None)
     );
 }

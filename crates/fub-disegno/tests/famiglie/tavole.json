@@ -1,0 +1,1686 @@
+{
+  "casi": [
+    {
+      "id": "measure",
+      "fonte": "strumento",
+      "disegno": "base.svg",
+      "selezione": [
+        "ob2b2b2b2"
+      ],
+      "gesto": [
+        {
+          "phase": "preview",
+          "events": [
+            {
+              "kind": "down",
+              "x": 100,
+              "y": 100,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 130,
+              "y": 140,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ]
+        },
+        {
+          "phase": "commit",
+          "events": [
+            {
+              "kind": "up",
+              "x": 130,
+              "y": 140,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ]
+        }
+      ],
+      "atteso": {
+        "selezione": [
+          "ob2b2b2b2"
+        ]
+      }
+    },
+    {
+      "id": "measureInspect",
+      "fonte": "strumento",
+      "disegno": "base.svg",
+      "selezione": [
+        "ob2b2b2b2"
+      ],
+      "gesto": [
+        {
+          "phase": "preview",
+          "events": [
+            {
+              "kind": "move",
+              "x": 150,
+              "y": 150,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "down",
+              "x": 100,
+              "y": 100,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 130,
+              "y": 140,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ]
+        },
+        {
+          "phase": "commit",
+          "events": [
+            {
+              "kind": "up",
+              "x": 130,
+              "y": 140,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ]
+        }
+      ],
+      "atteso": {
+        "selezione": [
+          "ob2b2b2b2"
+        ]
+      }
+    },
+    {
+      "id": "dimension",
+      "fonte": "strumento",
+      "disegno": "base.svg",
+      "selezione": [],
+      "gesto": [
+        {
+          "phase": "preview",
+          "events": [
+            {
+              "kind": "move",
+              "x": 150,
+              "y": 150,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "down",
+              "x": 150,
+              "y": 150,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 150,
+              "y": 170,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 150,
+              "y": 185,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ]
+        },
+        {
+          "phase": "commit",
+          "events": [
+            {
+              "kind": "up",
+              "x": 150,
+              "y": 185,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ]
+        }
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "last": true
+                },
+                "raw": "<g id=\"oqutax11s\"><line id=\"oyie0xyhz\" x1=\"200\" y1=\"154\" x2=\"200\" y2=\"191\" fill=\"none\" stroke=\"#000000\" stroke-width=\"0.5\" stroke-miterlimit=\"10\"/><line id=\"o80mfecde\" x1=\"100\" y1=\"154\" x2=\"100\" y2=\"191\" fill=\"none\" stroke=\"#000000\" stroke-width=\"0.5\" stroke-miterlimit=\"10\"/><g id=\"om45xwxdr\"><g id=\"ovcz8yhde\"><path id=\"omahsy6ty\" d=\"M199 185.25 L101 185.25 L101 184.75 L199 184.75 Z\" fill=\"#000000\"/><path id=\"o51lofm7k\" d=\"M200 185 L198 186 L198 184 Z\" fill=\"#000000\"/><path id=\"oyn0j2hyn\" d=\"M100 185 L102 184 L102 186 Z\" fill=\"#000000\"/></g></g><g id=\"ovqsbdgj1\"><g id=\"opbxzbjei\"></g><path id=\"oi9njg2n4\" d=\"\" fill=\"#000000\"/></g></g>"
+              },
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<metadata><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"oqutax11s\" hash=\"f4ac77b2069c30a7\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjoxMSwia2luZCI6eyJ0eXBlIjoiZ3JvdXAiLCJjaGlsZHJlbiI6W3siaWQiOjEyLCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJub25lIn19LHsia2luZCI6InN0cm9rZSIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MC4wLCJnIjowLjAsImIiOjAuMH19LCJ3aWR0aCI6MC41fV19LCJraW5kIjp7InR5cGUiOiJwYXRoIiwicGF0aCI6eyJzdWJwYXRocyI6W3siYW5jaG9ycyI6W3sicCI6WzIwMC4wLDE1NC4wXX0seyJwIjpbMjAwLjAsMTkxLjBdfV0sImNsb3NlZCI6ZmFsc2V9XX19fSx7ImlkIjoxMywiYXBwZWFyYW5jZSI6eyJpdGVtcyI6W3sia2luZCI6ImZpbGwiLCJwYWludCI6eyJ0eXBlIjoibm9uZSJ9fSx7ImtpbmQiOiJzdHJva2UiLCJwYWludCI6eyJ0eXBlIjoic29saWQiLCJjb2xvciI6eyJtb2RlbCI6InJnYiIsInIiOjAuMCwiZyI6MC4wLCJiIjowLjB9fSwid2lkdGgiOjAuNX1dfSwia2luZCI6eyJ0eXBlIjoicGF0aCIsInBhdGgiOnsic3VicGF0aHMiOlt7ImFuY2hvcnMiOlt7InAiOlsxMDAuMCwxNTQuMF19LHsicCI6WzEwMC4wLDE5MS4wXX1dLCJjbG9zZWQiOmZhbHNlfV19fX0seyJpZCI6MTQsImFwcGVhcmFuY2UiOnsiaXRlbXMiOlt7ImtpbmQiOiJmaWxsIiwicGFpbnQiOnsidHlwZSI6Im5vbmUifX0seyJraW5kIjoic3Ryb2tlIiwicGFpbnQiOnsidHlwZSI6InNvbGlkIiwiY29sb3IiOnsibW9kZWwiOiJyZ2IiLCJyIjowLjAsImciOjAuMCwiYiI6MC4wfX0sIndpZHRoIjowLjUsInN0YXJ0X2Fycm93IjoiVHJpYW5nbGUiLCJlbmRfYXJyb3ciOiJUcmlhbmdsZSIsImFycm93X2FsaWduIjoiVGlwIn1dfSwia2luZCI6eyJ0eXBlIjoicGF0aCIsInBhdGgiOnsic3VicGF0aHMiOlt7ImFuY2hvcnMiOlt7InAiOlsyMDAuMCwxODUuMF19LHsicCI6WzEwMC4wLDE4NS4wXX1dLCJjbG9zZWQiOmZhbHNlfV19fX0seyJpZCI6MTUsImFwcGVhcmFuY2UiOnsiaXRlbXMiOlt7ImtpbmQiOiJmaWxsIiwicGFpbnQiOnsidHlwZSI6InNvbGlkIiwiY29sb3IiOnsibW9kZWwiOiJyZ2IiLCJyIjowLjAsImciOjAuMCwiYiI6MC4wfX19LHsia2luZCI6InN0cm9rZSIsInBhaW50Ijp7InR5cGUiOiJub25lIn0sIndpZHRoIjowLjB9XX0sImtpbmQiOnsidHlwZSI6InRleHQiLCJraW5kIjp7ImtpbmQiOiJwb2ludCJ9LCJ4ZiI6WzEuMCwtMi40NDkyOTM1OTgyOTQ3MDY0ZS0xNiwyLjQ0OTI5MzU5ODI5NDcwNjRlLTE2LDEuMCwxNTAuMCwxOTguNl0sInJ1bnMiOlt7InRleHQiOiIxMDAuMDAgcHQiLCJzdHlsZSI6eyJmb250X2ZhbWlseSI6IlNvdXJjZSBTYW5zIDMiLCJmb250X3N0eWxlIjoiUmVndWxhciIsInNpemUiOjEyLjAsInRyYWNraW5nIjowLjAsImJhc2VsaW5lX3NoaWZ0IjowLjAsImhfc2NhbGUiOjEwMC4wLCJ2X3NjYWxlIjoxMDAuMCwicm90YXRpb24iOjAuMCwiZmlsbCI6eyJ0eXBlIjoic29saWQiLCJjb2xvciI6eyJtb2RlbCI6InJnYiIsInIiOjAuMCwiZyI6MC4wLCJiIjowLjB9fSwic3Ryb2tlIjp7InR5cGUiOiJub25lIn0sInN0cm9rZV93aWR0aCI6MC4wLCJ1bmRlcmxpbmUiOmZhbHNlLCJzdHJpa2V0aHJvdWdoIjpmYWxzZSwiYWxsX2NhcHMiOmZhbHNlfX1dLCJwYXJhIjp7Imp1c3RpZnkiOiJDZW50ZXIiLCJsZWZ0X2luZGVudCI6MC4wLCJyaWdodF9pbmRlbnQiOjAuMCwiZmlyc3RfbGluZV9pbmRlbnQiOjAuMCwic3BhY2VfYmVmb3JlIjowLjAsInNwYWNlX2FmdGVyIjowLjAsImh5cGhlbmF0ZSI6ZmFsc2V9fX1dLCJjbGlwIjpmYWxzZX0sImRpbWVuc2lvbiI6eyJtb2RlIjoibGluZWFyIiwiYSI6eyJ4IjoyMDAuMCwieSI6MTUwLjB9LCJiIjp7IngiOjEwMC4wLCJ5IjoxNTAuMH0sInZlcnRleCI6eyJ4IjowLjAsInkiOjAuMH0sIm9mZnNldCI6LTM1LjAsImxlbmd0aCI6MTAwLjAsIm9wdGlvbnMiOnsidW5pdHMiOiJwdCIsInByZWNpc2lvbiI6Miwic2NhbGUiOiIxOjEiLCJoaWRlVW5pdHMiOmZhbHNlLCJsaW5lV2VpZ2h0IjowLjUsImxpbmVUeXBlIjoic29saWQiLCJsaW5lQ29sb3IiOlswLDAsMF0sImFycm93U3R5bGUiOiJmaWxsZWQiLCJhcnJvd1NjYWxlIjoxMDAuMCwiZXh0ZW5zaW9uV2VpZ2h0IjowLjUsImV4dGVuc2lvblR5cGUiOiJzb2xpZCIsImV4dGVuc2lvbkNvbG9yIjpbMCwwLDBdLCJleHRlbnNpb25PZmZzZXQiOjQuMCwiZXh0ZW5zaW9uTGVuZ3RoIjo2LjAsImhpZGVFeHRlbnNpb25zIjpmYWxzZSwiZm9udEZhbWlseSI6IlNvdXJjZSBTYW5zIDMiLCJmb250U3R5bGUiOiJSZWd1bGFyIiwiZm9udFNpemUiOjEyLjAsInRleHRDb2xvciI6WzAsMCwwXSwidGV4dFBvc2l0aW9uIjoiYXdheSIsInRleHRBbGlnbm1lbnQiOiJjZW50ZXIiLCJ0ZXh0T2Zmc2V0Ijo0LjB9LCJzb3VyY2UiOm51bGx9fX0=</vectorcraft:recipe></metadata>"
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "quota-strumento.svg"
+    },
+    {
+      "id": "artboard",
+      "fonte": "strumento",
+      "disegno": "base.svg",
+      "selezione": [],
+      "gesto": [
+        {
+          "phase": "preview",
+          "events": [
+            {
+              "kind": "down",
+              "x": 500,
+              "y": 50,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 600,
+              "y": 150,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ]
+        },
+        {
+          "phase": "commit",
+          "events": [
+            {
+              "kind": "up",
+              "x": 600,
+              "y": 150,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ]
+        }
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "first": true
+                },
+                "elem": {
+                  "tag": "view",
+                  "attrs": {
+                    "id": "b00000001",
+                    "fub:role": "board",
+                    "viewBox": "0 0 400 300"
+                  },
+                  "children": [
+                    {
+                      "tag": "title",
+                      "attrs": {},
+                      "text": "Tavola 1"
+                    }
+                  ]
+                }
+              },
+              {
+                "op": "set",
+                "id": "fub-paper",
+                "attrs": {
+                  "fub:board": "b00000001"
+                }
+              },
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "after": "b00000001"
+                },
+                "elem": {
+                  "tag": "view",
+                  "attrs": {
+                    "id": "b00000002",
+                    "fub:role": "board",
+                    "viewBox": "500 50 100 100"
+                  },
+                  "children": [
+                    {
+                      "tag": "title",
+                      "attrs": {},
+                      "text": "Tavola 2"
+                    }
+                  ]
+                }
+              },
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "after": "fub-paper"
+                },
+                "elem": {
+                  "tag": "rect",
+                  "attrs": {
+                    "id": "c00000003",
+                    "fub:role": "paper",
+                    "fub:board": "b00000002",
+                    "x": "500",
+                    "y": "50",
+                    "width": "100",
+                    "height": "100",
+                    "fill": "#ffffff"
+                  }
+                }
+              },
+              {
+                "op": "page",
+                "viewBox": "0 0 656 300"
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "artboard.svg"
+    },
+    {
+      "id": "artboard",
+      "fonte": "strumento",
+      "disegno": "due.svg",
+      "selezione": [],
+      "gesto": [
+        {
+          "phase": "preview",
+          "events": [
+            {
+              "kind": "down",
+              "x": 580,
+              "y": 180,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 620,
+              "y": 200,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ]
+        },
+        {
+          "phase": "commit",
+          "events": [
+            {
+              "kind": "up",
+              "x": 620,
+              "y": 200,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ]
+        }
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "set",
+                "id": "ob2b2b2b2",
+                "attrs": {
+                  "transform": "matrix(1 0 0 1 40 20)"
+                }
+              },
+              {
+                "op": "set",
+                "id": "b3c3c3c3c",
+                "attrs": {
+                  "viewBox": "440 20 200 200"
+                }
+              },
+              {
+                "op": "set",
+                "id": "c2b2b2b2b",
+                "attrs": {
+                  "x": "440",
+                  "y": "20",
+                  "width": "200",
+                  "height": "200"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "artboard-sposta.svg"
+    },
+    {
+      "id": "dimension.create",
+      "disegno": "quota-base.svg",
+      "selezione": [],
+      "argomenti": {
+        "a": [
+          50,
+          50
+        ],
+        "b": [
+          150,
+          50
+        ],
+        "offset": 20
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "last": true
+                },
+                "raw": "<g id=\"ocpnrgg1f\"><line id=\"o3de3fz6h\" x1=\"50\" y1=\"54\" x2=\"50\" y2=\"76\" fill=\"none\" stroke=\"#000000\" stroke-width=\"0.5\" stroke-miterlimit=\"10\"/><line id=\"ouh3i17vn\" x1=\"150\" y1=\"54\" x2=\"150\" y2=\"76\" fill=\"none\" stroke=\"#000000\" stroke-width=\"0.5\" stroke-miterlimit=\"10\"/><g id=\"oao3abou1\"><g id=\"o8uhvpmcp\"><path id=\"obq3zr582\" d=\"M51 69.75 L149 69.75 L149 70.25 L51 70.25 Z\" fill=\"#000000\"/><path id=\"okk9rqyr0\" d=\"M50 70 L52 69 L52 71 Z\" fill=\"#000000\"/><path id=\"ofbarpa2w\" d=\"M150 70 L148 71 L148 69 Z\" fill=\"#000000\"/></g></g><g id=\"od8fvvkhz\"><g id=\"og9mlkx5f\"></g><path id=\"oz0vdliis\" d=\"\" fill=\"#000000\"/></g></g>"
+              },
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<metadata><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"ocpnrgg1f\" hash=\"9ce1633384fd3fc1\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjo2LCJraW5kIjp7InR5cGUiOiJncm91cCIsImNoaWxkcmVuIjpbeyJpZCI6NywiYXBwZWFyYW5jZSI6eyJpdGVtcyI6W3sia2luZCI6ImZpbGwiLCJwYWludCI6eyJ0eXBlIjoibm9uZSJ9fSx7ImtpbmQiOiJzdHJva2UiLCJwYWludCI6eyJ0eXBlIjoic29saWQiLCJjb2xvciI6eyJtb2RlbCI6InJnYiIsInIiOjAuMCwiZyI6MC4wLCJiIjowLjB9fSwid2lkdGgiOjAuNX1dfSwia2luZCI6eyJ0eXBlIjoicGF0aCIsInBhdGgiOnsic3VicGF0aHMiOlt7ImFuY2hvcnMiOlt7InAiOls1MC4wLDU0LjBdfSx7InAiOls1MC4wLDc2LjBdfV0sImNsb3NlZCI6ZmFsc2V9XX19fSx7ImlkIjo4LCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJub25lIn19LHsia2luZCI6InN0cm9rZSIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MC4wLCJnIjowLjAsImIiOjAuMH19LCJ3aWR0aCI6MC41fV19LCJraW5kIjp7InR5cGUiOiJwYXRoIiwicGF0aCI6eyJzdWJwYXRocyI6W3siYW5jaG9ycyI6W3sicCI6WzE1MC4wLDU0LjBdfSx7InAiOlsxNTAuMCw3Ni4wXX1dLCJjbG9zZWQiOmZhbHNlfV19fX0seyJpZCI6OSwiYXBwZWFyYW5jZSI6eyJpdGVtcyI6W3sia2luZCI6ImZpbGwiLCJwYWludCI6eyJ0eXBlIjoibm9uZSJ9fSx7ImtpbmQiOiJzdHJva2UiLCJwYWludCI6eyJ0eXBlIjoic29saWQiLCJjb2xvciI6eyJtb2RlbCI6InJnYiIsInIiOjAuMCwiZyI6MC4wLCJiIjowLjB9fSwid2lkdGgiOjAuNSwic3RhcnRfYXJyb3ciOiJUcmlhbmdsZSIsImVuZF9hcnJvdyI6IlRyaWFuZ2xlIiwiYXJyb3dfYWxpZ24iOiJUaXAifV19LCJraW5kIjp7InR5cGUiOiJwYXRoIiwicGF0aCI6eyJzdWJwYXRocyI6W3siYW5jaG9ycyI6W3sicCI6WzUwLjAsNzAuMF19LHsicCI6WzE1MC4wLDcwLjBdfV0sImNsb3NlZCI6ZmFsc2V9XX19fSx7ImlkIjoxMCwiYXBwZWFyYW5jZSI6eyJpdGVtcyI6W3sia2luZCI6ImZpbGwiLCJwYWludCI6eyJ0eXBlIjoic29saWQiLCJjb2xvciI6eyJtb2RlbCI6InJnYiIsInIiOjAuMCwiZyI6MC4wLCJiIjowLjB9fX0seyJraW5kIjoic3Ryb2tlIiwicGFpbnQiOnsidHlwZSI6Im5vbmUifSwid2lkdGgiOjAuMH1dfSwia2luZCI6eyJ0eXBlIjoidGV4dCIsImtpbmQiOnsia2luZCI6InBvaW50In0sInhmIjpbMS4wLDAuMCwwLjAsMS4wLDEwMC4wLDgzLjZdLCJydW5zIjpbeyJ0ZXh0IjoiMTAwLjAwIHB0Iiwic3R5bGUiOnsiZm9udF9mYW1pbHkiOiJTb3VyY2UgU2FucyAzIiwiZm9udF9zdHlsZSI6IlJlZ3VsYXIiLCJzaXplIjoxMi4wLCJ0cmFja2luZyI6MC4wLCJiYXNlbGluZV9zaGlmdCI6MC4wLCJoX3NjYWxlIjoxMDAuMCwidl9zY2FsZSI6MTAwLjAsInJvdGF0aW9uIjowLjAsImZpbGwiOnsidHlwZSI6InNvbGlkIiwiY29sb3IiOnsibW9kZWwiOiJyZ2IiLCJyIjowLjAsImciOjAuMCwiYiI6MC4wfX0sInN0cm9rZSI6eyJ0eXBlIjoibm9uZSJ9LCJzdHJva2Vfd2lkdGgiOjAuMCwidW5kZXJsaW5lIjpmYWxzZSwic3RyaWtldGhyb3VnaCI6ZmFsc2UsImFsbF9jYXBzIjpmYWxzZX19XSwicGFyYSI6eyJqdXN0aWZ5IjoiQ2VudGVyIiwibGVmdF9pbmRlbnQiOjAuMCwicmlnaHRfaW5kZW50IjowLjAsImZpcnN0X2xpbmVfaW5kZW50IjowLjAsInNwYWNlX2JlZm9yZSI6MC4wLCJzcGFjZV9hZnRlciI6MC4wLCJoeXBoZW5hdGUiOmZhbHNlfX19XSwiY2xpcCI6ZmFsc2V9LCJkaW1lbnNpb24iOnsibW9kZSI6ImxpbmVhciIsImEiOnsieCI6NTAuMCwieSI6NTAuMH0sImIiOnsieCI6MTUwLjAsInkiOjUwLjB9LCJ2ZXJ0ZXgiOnsieCI6MC4wLCJ5IjowLjB9LCJvZmZzZXQiOjIwLjAsImxlbmd0aCI6MTAwLjAsIm9wdGlvbnMiOnsidW5pdHMiOiJwdCIsInByZWNpc2lvbiI6Miwic2NhbGUiOiIxOjEiLCJoaWRlVW5pdHMiOmZhbHNlLCJsaW5lV2VpZ2h0IjowLjUsImxpbmVUeXBlIjoic29saWQiLCJsaW5lQ29sb3IiOlswLDAsMF0sImFycm93U3R5bGUiOiJmaWxsZWQiLCJhcnJvd1NjYWxlIjoxMDAuMCwiZXh0ZW5zaW9uV2VpZ2h0IjowLjUsImV4dGVuc2lvblR5cGUiOiJzb2xpZCIsImV4dGVuc2lvbkNvbG9yIjpbMCwwLDBdLCJleHRlbnNpb25PZmZzZXQiOjQuMCwiZXh0ZW5zaW9uTGVuZ3RoIjo2LjAsImhpZGVFeHRlbnNpb25zIjpmYWxzZSwiZm9udEZhbWlseSI6IlNvdXJjZSBTYW5zIDMiLCJmb250U3R5bGUiOiJSZWd1bGFyIiwiZm9udFNpemUiOjEyLjAsInRleHRDb2xvciI6WzAsMCwwXSwidGV4dFBvc2l0aW9uIjoiYXdheSIsInRleHRBbGlnbm1lbnQiOiJjZW50ZXIiLCJ0ZXh0T2Zmc2V0Ijo0LjB9LCJzb3VyY2UiOm51bGx9fX0=</vectorcraft:recipe></metadata>"
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "quota-crea.svg"
+    },
+    {
+      "id": "dimension.update",
+      "disegno": "quota-crea.svg",
+      "selezione": [
+        "ocpnrgg1f"
+      ],
+      "argomenti": {
+        "offset": 30,
+        "options": {
+          "lineColor": [
+            255,
+            0,
+            0
+          ]
+        }
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "ocpnrgg1f"
+              },
+              {
+                "op": "remove",
+                "target": {
+                  "path": [
+                    1
+                  ],
+                  "tag": "metadata"
+                }
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "last": true
+                },
+                "raw": "<g id=\"ocpnrgg1f\"><line id=\"o61n2elot\" x1=\"50\" y1=\"54\" x2=\"50\" y2=\"86\" fill=\"none\" stroke=\"#000000\" stroke-width=\"0.5\" stroke-miterlimit=\"10\"/><line id=\"ol9576nkh\" x1=\"150\" y1=\"54\" x2=\"150\" y2=\"86\" fill=\"none\" stroke=\"#000000\" stroke-width=\"0.5\" stroke-miterlimit=\"10\"/><g id=\"om1ehfuh1\"><g id=\"ootoayeis\"><path id=\"oibwpu4on\" d=\"M51 79.75 L149 79.75 L149 80.25 L51 80.25 Z\" fill=\"#ff0000\"/><path id=\"opip8knf4\" d=\"M50 80 L52 79 L52 81 Z\" fill=\"#ff0000\"/><path id=\"on8unc41i\" d=\"M150 80 L148 81 L148 79 Z\" fill=\"#ff0000\"/></g></g><g id=\"o2ikyosio\"><g id=\"oso7lp759\"></g><path id=\"o1hbsr8c8\" d=\"\" fill=\"#000000\"/></g></g>"
+              },
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<metadata><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"ocpnrgg1f\" hash=\"e8b9c5dc39665590\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjoxMiwia2luZCI6eyJ0eXBlIjoiZ3JvdXAiLCJjaGlsZHJlbiI6W3siaWQiOjE1LCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJub25lIn19LHsia2luZCI6InN0cm9rZSIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MC4wLCJnIjowLjAsImIiOjAuMH19LCJ3aWR0aCI6MC41fV19LCJraW5kIjp7InR5cGUiOiJwYXRoIiwicGF0aCI6eyJzdWJwYXRocyI6W3siYW5jaG9ycyI6W3sicCI6WzUwLjAsNTQuMF19LHsicCI6WzUwLjAsODYuMF19XSwiY2xvc2VkIjpmYWxzZX1dfX19LHsiaWQiOjE2LCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJub25lIn19LHsia2luZCI6InN0cm9rZSIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MC4wLCJnIjowLjAsImIiOjAuMH19LCJ3aWR0aCI6MC41fV19LCJraW5kIjp7InR5cGUiOiJwYXRoIiwicGF0aCI6eyJzdWJwYXRocyI6W3siYW5jaG9ycyI6W3sicCI6WzE1MC4wLDU0LjBdfSx7InAiOlsxNTAuMCw4Ni4wXX1dLCJjbG9zZWQiOmZhbHNlfV19fX0seyJpZCI6MTcsImFwcGVhcmFuY2UiOnsiaXRlbXMiOlt7ImtpbmQiOiJmaWxsIiwicGFpbnQiOnsidHlwZSI6Im5vbmUifX0seyJraW5kIjoic3Ryb2tlIiwicGFpbnQiOnsidHlwZSI6InNvbGlkIiwiY29sb3IiOnsibW9kZWwiOiJyZ2IiLCJyIjoxLjAsImciOjAuMCwiYiI6MC4wfX0sIndpZHRoIjowLjUsInN0YXJ0X2Fycm93IjoiVHJpYW5nbGUiLCJlbmRfYXJyb3ciOiJUcmlhbmdsZSIsImFycm93X2FsaWduIjoiVGlwIn1dfSwia2luZCI6eyJ0eXBlIjoicGF0aCIsInBhdGgiOnsic3VicGF0aHMiOlt7ImFuY2hvcnMiOlt7InAiOls1MC4wLDgwLjBdfSx7InAiOlsxNTAuMCw4MC4wXX1dLCJjbG9zZWQiOmZhbHNlfV19fX0seyJpZCI6MTgsImFwcGVhcmFuY2UiOnsiaXRlbXMiOlt7ImtpbmQiOiJmaWxsIiwicGFpbnQiOnsidHlwZSI6InNvbGlkIiwiY29sb3IiOnsibW9kZWwiOiJyZ2IiLCJyIjowLjAsImciOjAuMCwiYiI6MC4wfX19LHsia2luZCI6InN0cm9rZSIsInBhaW50Ijp7InR5cGUiOiJub25lIn0sIndpZHRoIjowLjB9XX0sImtpbmQiOnsidHlwZSI6InRleHQiLCJraW5kIjp7ImtpbmQiOiJwb2ludCJ9LCJ4ZiI6WzEuMCwwLjAsMC4wLDEuMCwxMDAuMCw5My42XSwicnVucyI6W3sidGV4dCI6IjEwMC4wMCBwdCIsInN0eWxlIjp7ImZvbnRfZmFtaWx5IjoiU291cmNlIFNhbnMgMyIsImZvbnRfc3R5bGUiOiJSZWd1bGFyIiwic2l6ZSI6MTIuMCwidHJhY2tpbmciOjAuMCwiYmFzZWxpbmVfc2hpZnQiOjAuMCwiaF9zY2FsZSI6MTAwLjAsInZfc2NhbGUiOjEwMC4wLCJyb3RhdGlvbiI6MC4wLCJmaWxsIjp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MC4wLCJnIjowLjAsImIiOjAuMH19LCJzdHJva2UiOnsidHlwZSI6Im5vbmUifSwic3Ryb2tlX3dpZHRoIjowLjAsInVuZGVybGluZSI6ZmFsc2UsInN0cmlrZXRocm91Z2giOmZhbHNlLCJhbGxfY2FwcyI6ZmFsc2V9fV0sInBhcmEiOnsianVzdGlmeSI6IkNlbnRlciIsImxlZnRfaW5kZW50IjowLjAsInJpZ2h0X2luZGVudCI6MC4wLCJmaXJzdF9saW5lX2luZGVudCI6MC4wLCJzcGFjZV9iZWZvcmUiOjAuMCwic3BhY2VfYWZ0ZXIiOjAuMCwiaHlwaGVuYXRlIjpmYWxzZX19fV0sImNsaXAiOmZhbHNlfSwiZGltZW5zaW9uIjp7Im1vZGUiOiJsaW5lYXIiLCJhIjp7IngiOjUwLjAsInkiOjUwLjB9LCJiIjp7IngiOjE1MC4wLCJ5Ijo1MC4wfSwidmVydGV4Ijp7IngiOjAuMCwieSI6MC4wfSwib2Zmc2V0IjozMC4wLCJsZW5ndGgiOjEwMC4wLCJvcHRpb25zIjp7InVuaXRzIjoicHQiLCJwcmVjaXNpb24iOjIsInNjYWxlIjoiMToxIiwiaGlkZVVuaXRzIjpmYWxzZSwibGluZVdlaWdodCI6MC41LCJsaW5lVHlwZSI6InNvbGlkIiwibGluZUNvbG9yIjpbMjU1LDAsMF0sImFycm93U3R5bGUiOiJmaWxsZWQiLCJhcnJvd1NjYWxlIjoxMDAuMCwiZXh0ZW5zaW9uV2VpZ2h0IjowLjUsImV4dGVuc2lvblR5cGUiOiJzb2xpZCIsImV4dGVuc2lvbkNvbG9yIjpbMCwwLDBdLCJleHRlbnNpb25PZmZzZXQiOjQuMCwiZXh0ZW5zaW9uTGVuZ3RoIjo2LjAsImhpZGVFeHRlbnNpb25zIjpmYWxzZSwiZm9udEZhbWlseSI6IlNvdXJjZSBTYW5zIDMiLCJmb250U3R5bGUiOiJSZWd1bGFyIiwiZm9udFNpemUiOjEyLjAsInRleHRDb2xvciI6WzAsMCwwXSwidGV4dFBvc2l0aW9uIjoiYXdheSIsInRleHRBbGlnbm1lbnQiOiJjZW50ZXIiLCJ0ZXh0T2Zmc2V0Ijo0LjB9LCJzb3VyY2UiOm51bGx9fX0=</vectorcraft:recipe></metadata>"
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "quota-aggiorna.svg"
+    },
+    {
+      "id": "dimension.applyToAll",
+      "disegno": "quota-due.svg",
+      "selezione": [
+        "ocpnrgg1f"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "oema0uu77"
+              },
+              {
+                "op": "remove",
+                "target": "ocpnrgg1f"
+              },
+              {
+                "op": "remove",
+                "target": {
+                  "path": [
+                    1
+                  ],
+                  "tag": "metadata"
+                }
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "after": "oc3c3c3c3"
+                },
+                "raw": "<g id=\"ocpnrgg1f\"><line id=\"o62mbr9f2\" x1=\"50\" y1=\"54\" x2=\"50\" y2=\"76\" fill=\"none\" stroke=\"#000000\" stroke-width=\"0.5\" stroke-miterlimit=\"10\"/><line id=\"oj0jklqq8\" x1=\"150\" y1=\"54\" x2=\"150\" y2=\"76\" fill=\"none\" stroke=\"#000000\" stroke-width=\"0.5\" stroke-miterlimit=\"10\"/><g id=\"orox8ft1i\"><g id=\"oe7vntezv\"><path id=\"omm4ur54p\" d=\"M51 69.75 L149 69.75 L149 70.25 L51 70.25 Z\" fill=\"#ff0000\"/><path id=\"o8xbt9g50\" d=\"M50 70 L52 69 L52 71 Z\" fill=\"#ff0000\"/><path id=\"oqywb72y9\" d=\"M150 70 L148 71 L148 69 Z\" fill=\"#ff0000\"/></g></g><g id=\"o6gfs53tb\"><g id=\"ocd5bjxcd\"></g><path id=\"oz9uhncb7\" d=\"\" fill=\"#000000\"/></g></g>"
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "last": true
+                },
+                "raw": "<g id=\"oema0uu77\"><line id=\"o7t7qqkkv\" x1=\"50\" y1=\"204\" x2=\"50\" y2=\"226\" fill=\"none\" stroke=\"#000000\" stroke-width=\"0.5\" stroke-miterlimit=\"10\"/><line id=\"oueigxsai\" x1=\"150\" y1=\"204\" x2=\"150\" y2=\"226\" fill=\"none\" stroke=\"#000000\" stroke-width=\"0.5\" stroke-miterlimit=\"10\"/><g id=\"oyrthhdj2\"><g id=\"os1oh3zrw\"><path id=\"oja5xwi4h\" d=\"M51 219.75 L149 219.75 L149 220.25 L51 220.25 Z\" fill=\"#ff0000\"/><path id=\"opqq5g3ne\" d=\"M50 220 L52 219 L52 221 Z\" fill=\"#ff0000\"/><path id=\"o382qyqo3\" d=\"M150 220 L148 221 L148 219 Z\" fill=\"#ff0000\"/></g></g><g id=\"oum37vb3m\"><g id=\"o1dx1ng8a\"></g><path id=\"o9sxfm3kv\" d=\"\" fill=\"#000000\"/></g></g>"
+              },
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<metadata><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"ocpnrgg1f\" hash=\"09eacd9c129020b0\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjoxMiwia2luZCI6eyJ0eXBlIjoiZ3JvdXAiLCJjaGlsZHJlbiI6W3siaWQiOjI4LCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJub25lIn19LHsia2luZCI6InN0cm9rZSIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MC4wLCJnIjowLjAsImIiOjAuMH19LCJ3aWR0aCI6MC41fV19LCJraW5kIjp7InR5cGUiOiJwYXRoIiwicGF0aCI6eyJzdWJwYXRocyI6W3siYW5jaG9ycyI6W3sicCI6WzUwLjAsNTQuMF19LHsicCI6WzUwLjAsNzYuMF19XSwiY2xvc2VkIjpmYWxzZX1dfX19LHsiaWQiOjI5LCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJub25lIn19LHsia2luZCI6InN0cm9rZSIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MC4wLCJnIjowLjAsImIiOjAuMH19LCJ3aWR0aCI6MC41fV19LCJraW5kIjp7InR5cGUiOiJwYXRoIiwicGF0aCI6eyJzdWJwYXRocyI6W3siYW5jaG9ycyI6W3sicCI6WzE1MC4wLDU0LjBdfSx7InAiOlsxNTAuMCw3Ni4wXX1dLCJjbG9zZWQiOmZhbHNlfV19fX0seyJpZCI6MzAsImFwcGVhcmFuY2UiOnsiaXRlbXMiOlt7ImtpbmQiOiJmaWxsIiwicGFpbnQiOnsidHlwZSI6Im5vbmUifX0seyJraW5kIjoic3Ryb2tlIiwicGFpbnQiOnsidHlwZSI6InNvbGlkIiwiY29sb3IiOnsibW9kZWwiOiJyZ2IiLCJyIjoxLjAsImciOjAuMCwiYiI6MC4wfX0sIndpZHRoIjowLjUsInN0YXJ0X2Fycm93IjoiVHJpYW5nbGUiLCJlbmRfYXJyb3ciOiJUcmlhbmdsZSIsImFycm93X2FsaWduIjoiVGlwIn1dfSwia2luZCI6eyJ0eXBlIjoicGF0aCIsInBhdGgiOnsic3VicGF0aHMiOlt7ImFuY2hvcnMiOlt7InAiOls1MC4wLDcwLjBdfSx7InAiOlsxNTAuMCw3MC4wXX1dLCJjbG9zZWQiOmZhbHNlfV19fX0seyJpZCI6MzEsImFwcGVhcmFuY2UiOnsiaXRlbXMiOlt7ImtpbmQiOiJmaWxsIiwicGFpbnQiOnsidHlwZSI6InNvbGlkIiwiY29sb3IiOnsibW9kZWwiOiJyZ2IiLCJyIjowLjAsImciOjAuMCwiYiI6MC4wfX19LHsia2luZCI6InN0cm9rZSIsInBhaW50Ijp7InR5cGUiOiJub25lIn0sIndpZHRoIjowLjB9XX0sImtpbmQiOnsidHlwZSI6InRleHQiLCJraW5kIjp7ImtpbmQiOiJwb2ludCJ9LCJ4ZiI6WzEuMCwwLjAsMC4wLDEuMCwxMDAuMCw4My42XSwicnVucyI6W3sidGV4dCI6IjEwMC4wMCBwdCIsInN0eWxlIjp7ImZvbnRfZmFtaWx5IjoiU291cmNlIFNhbnMgMyIsImZvbnRfc3R5bGUiOiJSZWd1bGFyIiwic2l6ZSI6MTIuMCwidHJhY2tpbmciOjAuMCwiYmFzZWxpbmVfc2hpZnQiOjAuMCwiaF9zY2FsZSI6MTAwLjAsInZfc2NhbGUiOjEwMC4wLCJyb3RhdGlvbiI6MC4wLCJmaWxsIjp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MC4wLCJnIjowLjAsImIiOjAuMH19LCJzdHJva2UiOnsidHlwZSI6Im5vbmUifSwic3Ryb2tlX3dpZHRoIjowLjAsInVuZGVybGluZSI6ZmFsc2UsInN0cmlrZXRocm91Z2giOmZhbHNlLCJhbGxfY2FwcyI6ZmFsc2V9fV0sInBhcmEiOnsianVzdGlmeSI6IkNlbnRlciIsImxlZnRfaW5kZW50IjowLjAsInJpZ2h0X2luZGVudCI6MC4wLCJmaXJzdF9saW5lX2luZGVudCI6MC4wLCJzcGFjZV9iZWZvcmUiOjAuMCwic3BhY2VfYWZ0ZXIiOjAuMCwiaHlwaGVuYXRlIjpmYWxzZX19fV0sImNsaXAiOmZhbHNlfSwiZGltZW5zaW9uIjp7Im1vZGUiOiJsaW5lYXIiLCJhIjp7IngiOjUwLjAsInkiOjUwLjB9LCJiIjp7IngiOjE1MC4wLCJ5Ijo1MC4wfSwidmVydGV4Ijp7IngiOjAuMCwieSI6MC4wfSwib2Zmc2V0IjoyMC4wLCJsZW5ndGgiOjEwMC4wLCJvcHRpb25zIjp7InVuaXRzIjoicHQiLCJwcmVjaXNpb24iOjIsInNjYWxlIjoiMToxIiwiaGlkZVVuaXRzIjpmYWxzZSwibGluZVdlaWdodCI6MC41LCJsaW5lVHlwZSI6InNvbGlkIiwibGluZUNvbG9yIjpbMjU1LDAsMF0sImFycm93U3R5bGUiOiJmaWxsZWQiLCJhcnJvd1NjYWxlIjoxMDAuMCwiZXh0ZW5zaW9uV2VpZ2h0IjowLjUsImV4dGVuc2lvblR5cGUiOiJzb2xpZCIsImV4dGVuc2lvbkNvbG9yIjpbMCwwLDBdLCJleHRlbnNpb25PZmZzZXQiOjQuMCwiZXh0ZW5zaW9uTGVuZ3RoIjo2LjAsImhpZGVFeHRlbnNpb25zIjpmYWxzZSwiZm9udEZhbWlseSI6IlNvdXJjZSBTYW5zIDMiLCJmb250U3R5bGUiOiJSZWd1bGFyIiwiZm9udFNpemUiOjEyLjAsInRleHRDb2xvciI6WzAsMCwwXSwidGV4dFBvc2l0aW9uIjoiYXdheSIsInRleHRBbGlnbm1lbnQiOiJjZW50ZXIiLCJ0ZXh0T2Zmc2V0Ijo0LjB9LCJzb3VyY2UiOm51bGx9fX0=</vectorcraft:recipe><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"oema0uu77\" hash=\"30e5ff034831cf66\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjoyMCwia2luZCI6eyJ0eXBlIjoiZ3JvdXAiLCJjaGlsZHJlbiI6W3siaWQiOjIzLCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJub25lIn19LHsia2luZCI6InN0cm9rZSIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MC4wLCJnIjowLjAsImIiOjAuMH19LCJ3aWR0aCI6MC41fV19LCJraW5kIjp7InR5cGUiOiJwYXRoIiwicGF0aCI6eyJzdWJwYXRocyI6W3siYW5jaG9ycyI6W3sicCI6WzUwLjAsMjA0LjBdfSx7InAiOls1MC4wLDIyNi4wXX1dLCJjbG9zZWQiOmZhbHNlfV19fX0seyJpZCI6MjQsImFwcGVhcmFuY2UiOnsiaXRlbXMiOlt7ImtpbmQiOiJmaWxsIiwicGFpbnQiOnsidHlwZSI6Im5vbmUifX0seyJraW5kIjoic3Ryb2tlIiwicGFpbnQiOnsidHlwZSI6InNvbGlkIiwiY29sb3IiOnsibW9kZWwiOiJyZ2IiLCJyIjowLjAsImciOjAuMCwiYiI6MC4wfX0sIndpZHRoIjowLjV9XX0sImtpbmQiOnsidHlwZSI6InBhdGgiLCJwYXRoIjp7InN1YnBhdGhzIjpbeyJhbmNob3JzIjpbeyJwIjpbMTUwLjAsMjA0LjBdfSx7InAiOlsxNTAuMCwyMjYuMF19XSwiY2xvc2VkIjpmYWxzZX1dfX19LHsiaWQiOjI1LCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJub25lIn19LHsia2luZCI6InN0cm9rZSIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MS4wLCJnIjowLjAsImIiOjAuMH19LCJ3aWR0aCI6MC41LCJzdGFydF9hcnJvdyI6IlRyaWFuZ2xlIiwiZW5kX2Fycm93IjoiVHJpYW5nbGUiLCJhcnJvd19hbGlnbiI6IlRpcCJ9XX0sImtpbmQiOnsidHlwZSI6InBhdGgiLCJwYXRoIjp7InN1YnBhdGhzIjpbeyJhbmNob3JzIjpbeyJwIjpbNTAuMCwyMjAuMF19LHsicCI6WzE1MC4wLDIyMC4wXX1dLCJjbG9zZWQiOmZhbHNlfV19fX0seyJpZCI6MjYsImFwcGVhcmFuY2UiOnsiaXRlbXMiOlt7ImtpbmQiOiJmaWxsIiwicGFpbnQiOnsidHlwZSI6InNvbGlkIiwiY29sb3IiOnsibW9kZWwiOiJyZ2IiLCJyIjowLjAsImciOjAuMCwiYiI6MC4wfX19LHsia2luZCI6InN0cm9rZSIsInBhaW50Ijp7InR5cGUiOiJub25lIn0sIndpZHRoIjowLjB9XX0sImtpbmQiOnsidHlwZSI6InRleHQiLCJraW5kIjp7ImtpbmQiOiJwb2ludCJ9LCJ4ZiI6WzEuMCwwLjAsMC4wLDEuMCwxMDAuMCwyMzMuNl0sInJ1bnMiOlt7InRleHQiOiIxMDAuMDAgcHQiLCJzdHlsZSI6eyJmb250X2ZhbWlseSI6IlNvdXJjZSBTYW5zIDMiLCJmb250X3N0eWxlIjoiUmVndWxhciIsInNpemUiOjEyLjAsInRyYWNraW5nIjowLjAsImJhc2VsaW5lX3NoaWZ0IjowLjAsImhfc2NhbGUiOjEwMC4wLCJ2X3NjYWxlIjoxMDAuMCwicm90YXRpb24iOjAuMCwiZmlsbCI6eyJ0eXBlIjoic29saWQiLCJjb2xvciI6eyJtb2RlbCI6InJnYiIsInIiOjAuMCwiZyI6MC4wLCJiIjowLjB9fSwic3Ryb2tlIjp7InR5cGUiOiJub25lIn0sInN0cm9rZV93aWR0aCI6MC4wLCJ1bmRlcmxpbmUiOmZhbHNlLCJzdHJpa2V0aHJvdWdoIjpmYWxzZSwiYWxsX2NhcHMiOmZhbHNlfX1dLCJwYXJhIjp7Imp1c3RpZnkiOiJDZW50ZXIiLCJsZWZ0X2luZGVudCI6MC4wLCJyaWdodF9pbmRlbnQiOjAuMCwiZmlyc3RfbGluZV9pbmRlbnQiOjAuMCwic3BhY2VfYmVmb3JlIjowLjAsInNwYWNlX2FmdGVyIjowLjAsImh5cGhlbmF0ZSI6ZmFsc2V9fX1dLCJjbGlwIjpmYWxzZX0sImRpbWVuc2lvbiI6eyJtb2RlIjoibGluZWFyIiwiYSI6eyJ4Ijo1MC4wLCJ5IjoyMDAuMH0sImIiOnsieCI6MTUwLjAsInkiOjIwMC4wfSwidmVydGV4Ijp7IngiOjAuMCwieSI6MC4wfSwib2Zmc2V0IjoyMC4wLCJsZW5ndGgiOjEwMC4wLCJvcHRpb25zIjp7InVuaXRzIjoicHQiLCJwcmVjaXNpb24iOjIsInNjYWxlIjoiMToxIiwiaGlkZVVuaXRzIjpmYWxzZSwibGluZVdlaWdodCI6MC41LCJsaW5lVHlwZSI6InNvbGlkIiwibGluZUNvbG9yIjpbMjU1LDAsMF0sImFycm93U3R5bGUiOiJmaWxsZWQiLCJhcnJvd1NjYWxlIjoxMDAuMCwiZXh0ZW5zaW9uV2VpZ2h0IjowLjUsImV4dGVuc2lvblR5cGUiOiJzb2xpZCIsImV4dGVuc2lvbkNvbG9yIjpbMCwwLDBdLCJleHRlbnNpb25PZmZzZXQiOjQuMCwiZXh0ZW5zaW9uTGVuZ3RoIjo2LjAsImhpZGVFeHRlbnNpb25zIjpmYWxzZSwiZm9udEZhbWlseSI6IlNvdXJjZSBTYW5zIDMiLCJmb250U3R5bGUiOiJSZWd1bGFyIiwiZm9udFNpemUiOjEyLjAsInRleHRDb2xvciI6WzAsMCwwXSwidGV4dFBvc2l0aW9uIjoiYXdheSIsInRleHRBbGlnbm1lbnQiOiJjZW50ZXIiLCJ0ZXh0T2Zmc2V0Ijo0LjB9LCJzb3VyY2UiOm51bGx9fX0=</vectorcraft:recipe></metadata>"
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "quota-applica.svg"
+    },
+    {
+      "$nota": "Nuova tavola: a destra dell'ultima, con la carta della pagina; la pagina si allarga.",
+      "id": "artboard.new",
+      "disegno": "due.svg",
+      "selezione": [],
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "after": "b3c3c3c3c"
+                },
+                "elem": {
+                  "tag": "view",
+                  "attrs": {
+                    "id": "bd8iis68k",
+                    "fub:role": "board",
+                    "viewBox": "620 0 200 200"
+                  },
+                  "children": [
+                    {
+                      "tag": "title",
+                      "attrs": {},
+                      "text": "Tavola 3"
+                    }
+                  ]
+                }
+              },
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "after": "c2b2b2b2b"
+                },
+                "elem": {
+                  "tag": "rect",
+                  "attrs": {
+                    "id": "cs8do7prf",
+                    "fub:role": "paper",
+                    "fub:board": "bd8iis68k",
+                    "x": "620",
+                    "y": "0",
+                    "width": "200",
+                    "height": "200",
+                    "fill": "#ffffff"
+                  }
+                }
+              },
+              {
+                "op": "page",
+                "viewBox": "0 0 956 300"
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "tavola-nuova.svg"
+    },
+    {
+      "$nota": "Nuova tavola col suo rettangolo e il suo nome.",
+      "id": "artboard.new",
+      "disegno": "due.svg",
+      "selezione": [],
+      "argomenti": {
+        "x": 0,
+        "y": 400,
+        "width": 100,
+        "height": 80,
+        "name": "Nuova"
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "after": "b3c3c3c3c"
+                },
+                "elem": {
+                  "tag": "view",
+                  "attrs": {
+                    "id": "b3qvr3wg0",
+                    "fub:role": "board",
+                    "viewBox": "0 400 100 80"
+                  },
+                  "children": [
+                    {
+                      "tag": "title",
+                      "attrs": {},
+                      "text": "Nuova"
+                    }
+                  ]
+                }
+              },
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "after": "c2b2b2b2b"
+                },
+                "elem": {
+                  "tag": "rect",
+                  "attrs": {
+                    "id": "csdszd7r9",
+                    "fub:role": "paper",
+                    "fub:board": "b3qvr3wg0",
+                    "x": "0",
+                    "y": "400",
+                    "width": "100",
+                    "height": "80",
+                    "fill": "#ffffff"
+                  }
+                }
+              },
+              {
+                "op": "page",
+                "viewBox": "0 0 700 556"
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "tavola-nuova-rettangolo.svg"
+    },
+    {
+      "$nota": "Elimina tavola: il view e la sua carta; gli oggetti restano.",
+      "id": "artboard.delete",
+      "disegno": "due.svg",
+      "selezione": [],
+      "argomenti": {
+        "index": 1
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "b3c3c3c3c"
+              },
+              {
+                "op": "remove",
+                "target": "c2b2b2b2b"
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "tavola-elimina.svg"
+    },
+    {
+      "$nota": "Elimina le tavole vuote: solo quella senza oggetti.",
+      "id": "artboard.deleteEmpty",
+      "disegno": "tre.svg",
+      "selezione": [],
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "b5e5e5e5e"
+              },
+              {
+                "op": "remove",
+                "target": "c4d4d4d4d"
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "tavola-elimina-vuote.svg"
+    },
+    {
+      "$nota": "Opzioni tavola: nome e larghezza; la carta segue.",
+      "id": "artboard.setProps",
+      "disegno": "due.svg",
+      "selezione": [],
+      "argomenti": {
+        "index": 1,
+        "name": "Dorso",
+        "width": 250
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "b3c3c3c3c"
+              },
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "after": "b1a1a1a1a"
+                },
+                "elem": {
+                  "tag": "view",
+                  "attrs": {
+                    "id": "b3c3c3c3c",
+                    "fub:role": "board",
+                    "viewBox": "400 0 250 200"
+                  },
+                  "children": [
+                    {
+                      "tag": "title",
+                      "attrs": {},
+                      "text": "Dorso"
+                    }
+                  ]
+                }
+              },
+              {
+                "op": "set",
+                "id": "c2b2b2b2b",
+                "attrs": {
+                  "x": "400",
+                  "y": "0",
+                  "width": "250",
+                  "height": "200"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "tavola-opzioni.svg"
+    },
+    {
+      "$nota": "Il colore di una tavola il file non lo tiene ancora: rifiutato.",
+      "id": "artboard.setProps",
+      "disegno": "due.svg",
+      "selezione": [],
+      "argomenti": {
+        "index": 1,
+        "color": [
+          255,
+          0,
+          0
+        ]
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "$nota": "Sposta la tavola in su: cambia l'ordine dei view.",
+      "id": "artboard.reorder",
+      "disegno": "due.svg",
+      "selezione": [],
+      "argomenti": {
+        "index": 1,
+        "to": 0
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "move",
+            "target": "b3c3c3c3c",
+            "parent": "#root",
+            "pos": {
+              "first": true
+            }
+          }
+        ]
+      },
+      "dopo": "tavola-ordine.svg"
+    },
+    {
+      "$nota": "Duplica tavola: la copia a destra dell'ultima, con i suoi oggetti, «Retro copia».",
+      "id": "artboard.duplicate",
+      "disegno": "due.svg",
+      "selezione": [],
+      "argomenti": {
+        "index": 1
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "last": true
+                },
+                "elem": {
+                  "tag": "path",
+                  "attrs": {
+                    "d": "M670 50 L730 50 L730 100 L670 100 Z",
+                    "fill": "#000000",
+                    "id": "owcnvjqlf"
+                  }
+                }
+              },
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "after": "b3c3c3c3c"
+                },
+                "elem": {
+                  "tag": "view",
+                  "attrs": {
+                    "id": "bkrmc0r3i",
+                    "fub:role": "board",
+                    "viewBox": "620 0 200 200"
+                  },
+                  "children": [
+                    {
+                      "tag": "title",
+                      "attrs": {},
+                      "text": "Retro copia"
+                    }
+                  ]
+                }
+              },
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "after": "c2b2b2b2b"
+                },
+                "elem": {
+                  "tag": "rect",
+                  "attrs": {
+                    "id": "cj9yhatgt",
+                    "fub:role": "paper",
+                    "fub:board": "bkrmc0r3i",
+                    "x": "620",
+                    "y": "0",
+                    "width": "200",
+                    "height": "200",
+                    "fill": "#ffffff"
+                  }
+                }
+              },
+              {
+                "op": "page",
+                "viewBox": "0 0 956 300"
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "tavola-duplica.svg"
+    },
+    {
+      "$nota": "Copia tavola: va negli appunti, il disegno non cambia.",
+      "id": "artboard.copy",
+      "disegno": "due.svg",
+      "selezione": [],
+      "argomenti": {
+        "index": 1
+      },
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "$nota": "Taglia tavola: la tavola, la sua carta e i suoi oggetti.",
+      "id": "artboard.cut",
+      "disegno": "due.svg",
+      "selezione": [],
+      "argomenti": {
+        "index": 1
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "ob2b2b2b2"
+              },
+              {
+                "op": "remove",
+                "target": "b3c3c3c3c"
+              },
+              {
+                "op": "remove",
+                "target": "c2b2b2b2b"
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "tavola-taglia.svg"
+    },
+    {
+      "$nota": "Sposta tavola con i suoi oggetti.",
+      "id": "artboard.move",
+      "disegno": "due.svg",
+      "selezione": [],
+      "argomenti": {
+        "index": 1,
+        "dx": 10,
+        "dy": 5,
+        "moveArt": true
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "set",
+                "id": "ob2b2b2b2",
+                "attrs": {
+                  "transform": "matrix(1 0 0 1 10 5)"
+                }
+              },
+              {
+                "op": "set",
+                "id": "b3c3c3c3c",
+                "attrs": {
+                  "viewBox": "410 5 200 200"
+                }
+              },
+              {
+                "op": "set",
+                "id": "c2b2b2b2b",
+                "attrs": {
+                  "x": "410",
+                  "y": "5",
+                  "width": "200",
+                  "height": "200"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "tavola-sposta.svg"
+    },
+    {
+      "$nota": "Adatta ai limiti del disegno.",
+      "id": "artboard.fitToArt",
+      "disegno": "due.svg",
+      "selezione": [],
+      "argomenti": {
+        "index": 1
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "set",
+                "id": "b3c3c3c3c",
+                "attrs": {
+                  "viewBox": "450 50 60 50"
+                }
+              },
+              {
+                "op": "set",
+                "id": "c2b2b2b2b",
+                "attrs": {
+                  "x": "450",
+                  "y": "50",
+                  "width": "60",
+                  "height": "50"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "tavola-adatta-disegno.svg"
+    },
+    {
+      "$nota": "Adatta ai limiti della selezione.",
+      "id": "artboard.fitToSelection",
+      "disegno": "due.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {
+        "index": 0
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "set",
+                "id": "b1a1a1a1a",
+                "attrs": {
+                  "viewBox": "50 50 100 50"
+                }
+              },
+              {
+                "op": "set",
+                "id": "fub-paper",
+                "attrs": {
+                  "x": "50",
+                  "y": "50",
+                  "width": "100",
+                  "height": "50"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "tavola-adatta-selezione.svg"
+    },
+    {
+      "$nota": "Converti in tavole: l'oggetto scelto diventa una tavola.",
+      "id": "artboard.convertToArtboards",
+      "disegno": "due.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "oa1a1a1a1"
+              },
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "after": "b3c3c3c3c"
+                },
+                "elem": {
+                  "tag": "view",
+                  "attrs": {
+                    "id": "by0b1dmd9",
+                    "fub:role": "board",
+                    "viewBox": "50 50 100 50"
+                  },
+                  "children": [
+                    {
+                      "tag": "title",
+                      "attrs": {},
+                      "text": "Tavola 3"
+                    }
+                  ]
+                }
+              },
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "after": "c2b2b2b2b"
+                },
+                "elem": {
+                  "tag": "rect",
+                  "attrs": {
+                    "id": "cb1y3n6x0",
+                    "fub:role": "paper",
+                    "fub:board": "by0b1dmd9",
+                    "x": "50",
+                    "y": "50",
+                    "width": "100",
+                    "height": "50",
+                    "fill": "#ffffff"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "tavola-converti.svg"
+    },
+    {
+      "$nota": "Ridisponi tutte le tavole: in colonna, con i loro oggetti.",
+      "id": "artboard.rearrange",
+      "disegno": "due.svg",
+      "selezione": [],
+      "argomenti": {
+        "layout": "column"
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "set",
+                "id": "ob2b2b2b2",
+                "attrs": {
+                  "transform": "matrix(1 0 0 1 -400 320)"
+                }
+              },
+              {
+                "op": "set",
+                "id": "b3c3c3c3c",
+                "attrs": {
+                  "viewBox": "0 320 200 200"
+                }
+              },
+              {
+                "op": "set",
+                "id": "c2b2b2b2b",
+                "attrs": {
+                  "x": "0",
+                  "y": "320",
+                  "width": "200",
+                  "height": "200"
+                }
+              },
+              {
+                "op": "page",
+                "viewBox": "0 0 700 556"
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "tavola-ridisponi.svg"
+    },
+    {
+      "$nota": "Adatta alla selezione dal menu, senza tavola: quella che ha il centro degli oggetti scelti (Retro), non la prima.",
+      "id": "artboard.fitToSelection",
+      "disegno": "due.svg",
+      "selezione": [
+        "ob2b2b2b2"
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "set",
+                "id": "b3c3c3c3c",
+                "attrs": {
+                  "viewBox": "450 50 60 50"
+                }
+              },
+              {
+                "op": "set",
+                "id": "c2b2b2b2b",
+                "attrs": {
+                  "x": "450",
+                  "y": "50",
+                  "width": "60",
+                  "height": "50"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "tavola-adatta-selezione-menu.svg"
+    },
+    {
+      "id": "artboards",
+      "fonte": "pannello",
+      "prova": "apps/client/src/editors/spatial/completo/famiglie/tavole/sezione.test.ts"
+    },
+    {
+      "id": "view.fitArtboard",
+      "fonte": "interfaccia",
+      "prova": "apps/client/src/editors/spatial/tools/editor/chrome/zoom-menu.test.ts"
+    },
+    {
+      "id": "view.goToArtboard",
+      "fonte": "interfaccia",
+      "prova": "apps/client/src/editors/spatial/tools/editor/chrome/visualizza.test.ts"
+    },
+    {
+      "id": "view.artboards",
+      "fonte": "interfaccia",
+      "prova": "apps/client/src/editors/spatial/tools/editor/chrome/visualizza.test.ts"
+    },
+    {
+      "id": "view.guides",
+      "fonte": "interfaccia",
+      "prova": "apps/client/src/editors/spatial/tools/editor/guide-linee.test.ts"
+    },
+    {
+      "id": "document.switchUnits",
+      "fonte": "motore",
+      "prova": "apps/client/src/editors/spatial/tools/editor/chrome/unita.test.ts"
+    },
+    {
+      "id": "ui.newArtboard",
+      "fonte": "interfaccia",
+      "prova": "apps/client/src/editors/spatial/completo/famiglie/tavole/nuova.test.ts"
+    },
+    {
+      "$nota": "Nuova guida verticale: sul livello corrente, in coda alle altre.",
+      "id": "guide.add",
+      "disegno": "guide.svg",
+      "selezione": [],
+      "argomenti": {
+        "vertical": true,
+        "pos": 200
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "#root",
+            "attrs": {
+              "fub:guides": "x 120; y 50 board=b3c3c3c3c; x 30 layer=l1a2b3c4d locked; x 200 layer=l1a2b3c4d"
+            }
+          }
+        ]
+      },
+      "dopo": "guida-aggiungi-1.svg"
+    },
+    {
+      "$nota": "Nuova guida della seconda tavola, in un disegno senza guide.",
+      "id": "guide.add",
+      "disegno": "due.svg",
+      "selezione": [],
+      "argomenti": {
+        "vertical": false,
+        "pos": 10,
+        "artboard": 1
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "#root",
+            "attrs": {
+              "fub:guides": "y 10 board=b3c3c3c3c layer=l1a2b3c4d"
+            }
+          }
+        ]
+      },
+      "dopo": "guida-aggiungi-2.svg"
+    },
+    {
+      "$nota": "Le guide con gli id del file e il blocco di ognuna.",
+      "id": "guide.list",
+      "disegno": "guide.svg",
+      "selezione": [],
+      "atteso": {
+        "lettura": [
+          {
+            "index": 0,
+            "vertical": true,
+            "pos": 120.0,
+            "selected": false,
+            "layer": "l1a2b3c4d",
+            "shown": true,
+            "editable": true,
+            "locked": false
+          },
+          {
+            "index": 1,
+            "vertical": false,
+            "pos": 50.0,
+            "selected": false,
+            "artboard": 1,
+            "layer": "l1a2b3c4d",
+            "shown": true,
+            "editable": true,
+            "board": "b3c3c3c3c",
+            "locked": false
+          },
+          {
+            "index": 2,
+            "vertical": true,
+            "pos": 30.0,
+            "selected": false,
+            "layer": "l1a2b3c4d",
+            "shown": true,
+            "editable": true,
+            "locked": true
+          }
+        ]
+      }
+    },
+    {
+      "$nota": "Sposta una guida al suo posto nuovo: una guida senza livello va sul primo livello, come in VectorCraft.",
+      "id": "guide.move",
+      "disegno": "guide.svg",
+      "selezione": [],
+      "argomenti": {
+        "index": 0,
+        "pos": 150
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "#root",
+            "attrs": {
+              "fub:guides": "x 150 layer=l1a2b3c4d; y 50 board=b3c3c3c3c; x 30 layer=l1a2b3c4d locked"
+            }
+          }
+        ]
+      },
+      "dopo": "guida-sposta-1.svg"
+    },
+    {
+      "$nota": "Una guida bloccata nel file non si sposta.",
+      "id": "guide.move",
+      "disegno": "guide.svg",
+      "selezione": [],
+      "argomenti": {
+        "index": 2,
+        "pos": 5
+      },
+      "atteso": {
+        "rifiuto": "locked"
+      }
+    },
+    {
+      "$nota": "Copia le guide scelte spostate: restano le vecchie, le copie in coda.",
+      "id": "guide.move",
+      "disegno": "guide.svg",
+      "selezione": [],
+      "argomenti": {
+        "guides": [
+          0,
+          1
+        ],
+        "dx": 10,
+        "dy": 5,
+        "copy": true
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "#root",
+            "attrs": {
+              "fub:guides": "x 120; y 50 board=b3c3c3c3c; x 30 layer=l1a2b3c4d locked; x 130 layer=l1a2b3c4d; y 55 board=b3c3c3c3c layer=l1a2b3c4d"
+            }
+          }
+        ]
+      },
+      "dopo": "guida-sposta-2.svg"
+    },
+    {
+      "$nota": "Togli una guida.",
+      "id": "guide.remove",
+      "disegno": "guide.svg",
+      "selezione": [],
+      "argomenti": {
+        "index": 1
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "#root",
+            "attrs": {
+              "fub:guides": "x 120; x 30 layer=l1a2b3c4d locked"
+            }
+          }
+        ]
+      },
+      "dopo": "guida-togli.svg"
+    },
+    {
+      "$nota": "Togli le guide scelte: una bloccata fra loro rifiuta.",
+      "id": "guide.remove",
+      "disegno": "guide.svg",
+      "selezione": [],
+      "argomenti": {
+        "guides": [
+          0,
+          2
+        ]
+      },
+      "atteso": {
+        "rifiuto": "locked"
+      }
+    },
+    {
+      "$nota": "Porta una guida su un livello.",
+      "id": "guide.setLayer",
+      "disegno": "guide.svg",
+      "selezione": [],
+      "argomenti": {
+        "index": 0,
+        "layer": "l0f0f0f0f"
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "#root",
+            "attrs": {
+              "fub:guides": "x 120 layer=l0f0f0f0f; y 50 board=b3c3c3c3c; x 30 layer=l1a2b3c4d locked"
+            }
+          }
+        ]
+      },
+      "dopo": "guida-livello.svg"
+    },
+    {
+      "$nota": "Cancella guide: tutte, anche le bloccate.",
+      "id": "view.guides.clear",
+      "disegno": "guide.svg",
+      "selezione": [],
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "#root",
+            "attrs": {
+              "fub:guides": null
+            }
+          }
+        ]
+      },
+      "dopo": "guide-cancella.svg"
+    },
+    {
+      "$nota": "Blocca guide: il blocco della sessione, il file non cambia.",
+      "id": "view.guides.lock",
+      "disegno": "guide.svg",
+      "selezione": [],
+      "argomenti": {
+        "locked": true
+      },
+      "atteso": {
+        "lettura": {
+          "locked": true
+        }
+      }
+    },
+    {
+      "$nota": "Una guida della tavola si sposta con la sua tavola.",
+      "id": "artboard.move",
+      "disegno": "guide.svg",
+      "selezione": [],
+      "argomenti": {
+        "index": 1,
+        "dx": 10,
+        "dy": 5,
+        "moveArt": false
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "set",
+                "id": "b3c3c3c3c",
+                "attrs": {
+                  "viewBox": "410 5 200 200"
+                }
+              },
+              {
+                "op": "set",
+                "id": "c2b2b2b2b",
+                "attrs": {
+                  "x": "410",
+                  "y": "5",
+                  "width": "200",
+                  "height": "200"
+                }
+              },
+              {
+                "op": "set",
+                "id": "#root",
+                "attrs": {
+                  "fub:guides": "x 120; y 55 board=b3c3c3c3c layer=l1a2b3c4d; x 30 layer=l1a2b3c4d locked"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "tavola-sposta-guide.svg"
+    },
+    {
+      "$nota": "Una guida della tavola se ne va con la sua tavola.",
+      "id": "artboard.delete",
+      "disegno": "guide.svg",
+      "selezione": [],
+      "argomenti": {
+        "index": 1
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "b3c3c3c3c"
+              },
+              {
+                "op": "remove",
+                "target": "c2b2b2b2b"
+              },
+              {
+                "op": "set",
+                "id": "#root",
+                "attrs": {
+                  "fub:guides": "x 120; x 30 layer=l1a2b3c4d locked"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "tavola-elimina-guide.svg"
+    },
+    {
+      "$nota": "Libera una guida: diventa un tracciato senza colori lungo tutte le tavole.",
+      "id": "view.guides.release",
+      "disegno": "guide.svg",
+      "selezione": [],
+      "argomenti": {
+        "index": 0
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "last": true
+                },
+                "elem": {
+                  "tag": "line",
+                  "attrs": {
+                    "x1": "120",
+                    "y1": "0",
+                    "x2": "120",
+                    "y2": "300",
+                    "id": "og1a2b3c4"
+                  }
+                }
+              },
+              {
+                "op": "set",
+                "id": "#root",
+                "attrs": {
+                  "fub:guides": "y 50 board=b3c3c3c3c; x 30 layer=l1a2b3c4d locked"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "guide-libera.svg"
+    },
+    {
+      "$nota": "Crea guide: il rettangolo scelto diventa un tracciato-guida, che chi non conosce fub:guide non disegna; la selezione si svuota.",
+      "id": "view.guides.make",
+      "disegno": "guide.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oa1a1a1a1",
+            "attrs": {
+              "fub:guide": "true",
+              "display": "none"
+            }
+          }
+        ]
+      },
+      "dopo": "guide-tracciato.svg"
+    },
+    {
+      "$nota": "Crea guide senza oggetti scelti: niente da fare.",
+      "id": "view.guides.make",
+      "disegno": "guide.svg",
+      "selezione": [],
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "$nota": "Rilascia guide senza niente di scelto: ogni tracciato-guida torna un oggetto, senza fub:guide e display.",
+      "id": "view.guides.release",
+      "disegno": "guide-tracciato.svg",
+      "selezione": [],
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oa1a1a1a1",
+            "attrs": {
+              "fub:guide": null,
+              "display": null
+            }
+          }
+        ]
+      },
+      "dopo": "guide.svg"
+    }
+  ]
+}

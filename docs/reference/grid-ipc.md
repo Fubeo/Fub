@@ -22,11 +22,30 @@ negozia famiglia, versione e formato prima di aprire; un binding sconosciuto
 o incompatibile non viene chiamato e la superficie dice che il foglio non si
 apre. `query_index` non applica patch e non possiede lifecycle.
 
+Le sei porte sui byte girano fuori dal thread principale, nella corsia del
+foglio (`crates/fub-app/src/domande.rs`), che c'è sempre e non conta fra le
+16 delle domande ([contratto IPC](ipc-contract.md)): scorrendo, la shell
+chiede una finestra a ogni blocco di righe nuove, e sul thread principale,
+quello che presenta i fotogrammi, ogni lettura li fermava. La corsia tiene
+l'ordine d'arrivo, come il thread principale: una finestra chiesta prima di
+una modifica si legge alla revisione da cui la modifica parte, e una
+chiusura arriva dopo le richieste partite prima. In parallelo non si
+guadagnerebbe niente, perché il provider di una superficie risponde a una
+chiamata per volta. Anche `list_grid_surfaces` passa dalla stessa corsia:
+legge soltanto il registro, ma con un prestito del workspace, e sul thread
+principale aspetterebbe chi lo sta scrivendo. La shell scarta comunque una
+finestra o un errore di una revisione superata.
+
 `open_grid_bytes` riceve `surface`, `doc`, `journal` e `base`: la shell non
 trasporta i byte, ma il giornale canonico delle celle cambiate (il testo
 della sessione documento) e la revisione dei byte da cui parte. L'host legge
 il documento, controlla che il formato sia quello della superficie (`BadArgs`
-altrimenti) e risponde `Conflict` se i byte non sono più quelli di `base`. La
+altrimenti) e risponde `Conflict` se i byte non sono più quelli di `base`.
+La revisione dei byte (`Revision::of_bytes`) la calcola l'host, una volta,
+e il provider la riceve già fatta (`GridBytesProvider::open`): non rifà lo
+SHA-256 della cartella. La shell tiene in memoria la risposta di
+`list_grid_surfaces` per il vault aperto finché i componenti non cambiano
+(`state/grid-surfaces.ts`). La
 sessione è un `GridBytesSession` (fogli, foglio attivo, fogli nascosti, avvisi
 `GridNotice`, celle in conflitto e il libro `GridBook`: i dodici colori del
 tema in `#RRGGBB`, i nomi definiti visibili, il modo di calcolo

@@ -74,6 +74,37 @@ export interface Grid {
   /// Quanto il tracciato segue l'inchiostro, nell'uscita e in «Inchiostro
   /// in tracciato». Assente, «media».
   readonly fidelity?: Fidelity;
+  /// Mostra griglia trasparenza (K6 T11): la carta ha uno sfondo a scacchi,
+  /// dove non ha un fondo suo. Assente, spenta. È stato della vista, come
+  /// `shown`: non entra nel file né nella cronologia.
+  readonly transparencyGrid?: boolean;
+  /// Nascondi bordi (K6 T11): niente contorni di evidenziazione attorno agli
+  /// oggetti scelti. Assente, si vedono.
+  readonly hideEdges?: boolean;
+  /// Nascondi riquadro di delimitazione (K6 T11): niente cornice della
+  /// selezione né maniglie, né misure, e nessuna maniglia si può prendere.
+  /// Assente, si vedono.
+  readonly hideBoundingBox?: boolean;
+  /// Nascondi tavole da disegno (Visualizza, K6): le carte delle tavole senza
+  /// bordo né ombra e senza nome sul foglio, come il resto del tavolo. Assente,
+  /// si vedono. È stato della vista: non entra nel file né nella cronologia.
+  readonly hideArtboards?: boolean;
+  /// Aggancio al pixel (K6 T11): i punti cadono su interi di scena, come con
+  /// una griglia di un pixel che non si vede. La griglia, se aggancia, vince
+  /// (come nel motore). Assente, spento: è stato della vista, come `shown`.
+  readonly snapPixel?: boolean;
+  /// Guide sensibili spente (Visualizza, K6): gli strumenti del motore non
+  /// allineano agli altri oggetti. Assente, accese, come in VectorCraft.
+  readonly smartGuidesOff?: boolean;
+  /// Aggancia al punto spento (Visualizza, K6): un punto preso dagli strumenti
+  /// del motore non cade sui punti vicini. Assente, acceso, come in VectorCraft.
+  readonly snapPointOff?: boolean;
+  /// Aggancia a glifo (Visualizza, K6): con le guide sensibili, gli strumenti
+  /// del motore agganciano i glifi di un testo. Assente, spento.
+  readonly snapGlyph?: boolean;
+  /// Mostra spazi vuoti pittura dinamica (Visualizza, K6): coi bordi visibili, gli
+  /// spazi dei gruppi della pittura dinamica scelti. Assente, spento, come in VectorCraft.
+  readonly livePaintGaps?: boolean;
 }
 
 /// Che cosa resta di un tratto della Penna.
@@ -215,6 +246,24 @@ export function gridStep(grid: Grid, unit: LengthUnit): number {
   return unit === "px" ? grid.step : (grid.steps[unit] ?? UNIT_STEP[unit] * UNIT_SIZE[unit]);
 }
 
+/// Un pixel del file è un'unità di scena: un px CSS, 96 per pollice. Non
+/// dipende dallo zoom, come nel motore: a 200% un pixel di scena sono due
+/// pixel dello schermo, a 50% mezzo.
+export const PIXEL_STEP = 1;
+
+/// Vero se l'aggancio porta i punti da qualche parte: la griglia se aggancia,
+/// altrimenti il pixel, se è acceso e lo spazio lo vuole (`pixel`: il Completo).
+/// Nel Semplice il valore del pixel resta nella griglia salvata, ma non agisce.
+export function snapActive(grid: Grid, pixel: boolean): boolean {
+  return grid.snap || (pixel && grid.snapPixel === true);
+}
+
+/// Il passo a cui l'aggancio porta i punti, in unità della scena: quello della
+/// griglia se aggancia, anche col pixel acceso; altrimenti un pixel.
+export function snapStepOf(grid: Grid, unit: LengthUnit): number {
+  return grid.snap ? gridStep(grid, unit) : PIXEL_STEP;
+}
+
 /// `grid` col passo `step` per i documenti in `unit`.
 export function withStep(grid: Grid, unit: LengthUnit, step: number): Grid {
   return unit === "px" ? { ...grid, step } : { ...grid, steps: { ...grid.steps, [unit]: step } };
@@ -332,4 +381,15 @@ function turnedLines(view: View, width: number, height: number, pitch: number): 
     }
   }
   return { minor: minor.join(""), major: major.join("") };
+}
+
+/// Gli interruttori di Visualizza che il gesto porta agli strumenti del motore
+/// (`DrawingSnap`): ci sono solo quelli che non valgono come in VectorCraft, dove
+/// guide sensibili e aggancio al punto sono accesi e l'aggancio ai glifi spento.
+export function agganciDelMotore(grid: Grid): { guides?: false; points?: false; glyphs?: true } {
+  return {
+    ...(grid.smartGuidesOff === true ? { guides: false as const } : {}),
+    ...(grid.snapPointOff === true ? { points: false as const } : {}),
+    ...(grid.snapGlyph === true ? { glyphs: true as const } : {}),
+  };
 }

@@ -363,7 +363,8 @@ async function installProbe(page, target) {
       const rect = node?.getBoundingClientRect();
       const zoom = [...document.querySelectorAll(".draw-editor .draw-zoom-level")].map((button) => /^(\d+)\s*%$/.exec(button.textContent.trim())).find((m) => m !== null);
       const field = (label) => {
-        const input = [...document.querySelectorAll(".draw-properties-input")].find((each) => each.offsetParent !== null && (each.getAttribute("aria-label") ?? each.labels?.[0]?.textContent?.trim()) === label);
+        // I campi della sezione Trasforma del Design (`trasforma-sezione.ts`).
+        const input = [...document.querySelectorAll(".draw-transform-grid .kit-number-input")].find((each) => each.offsetParent !== null && each.labels?.[0]?.textContent?.trim() === label);
         return input === undefined ? null : Number(input.value.replace(",", "."));
       };
       return {
@@ -373,7 +374,7 @@ async function installProbe(page, target) {
         area: [box.x + host.clientLeft, box.y + host.clientTop, host.clientWidth, host.clientHeight],
         tool: host.dataset.tool ?? null,
         focused: document.activeElement === host,
-        props: [field("X (px)"), field("Y (px)"), field("Larghezza (px)"), field("Altezza (px)")],
+        props: [field("X"), field("Y"), field("Larghezza"), field("Altezza")],
       };
     };
     /// Il fotogramma dopo `step`, quando è dipinto.
@@ -823,9 +824,12 @@ async function selectRun(page, fixture, at = null) {
     await frames(page, 2);
   }
   await page.focus(".draw-editor .draw-surface");
-  const box = fixture.target.box;
+  // X e Y sono quelli del punto di riferimento della sezione Trasforma, al
+  // centro finché non si sceglie un altro punto (come in VectorCraft).
+  const [bx, by, bw, bh] = fixture.target.box;
+  const box = [bx + bw / 2, by + bh / 2, bw, bh];
   if (!props.every((value, i) => value !== null && Math.abs(value - box[i]) < 0.01)) {
-    throw new WrongStep(`scelta: la scheda «Design» mostra ${props.map((value) => value ?? "—").join(", ")} invece del rettangolo ${box.join(", ")}`);
+    throw new WrongStep(`scelta: la scheda «Design» mostra ${props.map((value) => value ?? "—").join(", ")} invece del rettangolo col centro in ${box.join(", ")}`);
   }
   return summary;
 }

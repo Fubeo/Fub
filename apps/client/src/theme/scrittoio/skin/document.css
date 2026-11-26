@@ -4,11 +4,80 @@
    sembrare la stessa pagina. Ogni regola qui sotto ha perciò due facce — le
    classi `cm-fub-*` della Live e gli elementi dentro `.markdown-rendered` —
    con gli stessi numeri. Le regole di CodeMirror hanno specificità (0,2,0) o
-   più e arrivano dopo la pelle: quelle sulla Live portano sempre il prefisso
-   `.cm-editor .cm-content`, che le batte senza `!important`.
+   più: quelle sulla Live portano sempre il prefisso `.cm-editor .cm-content`,
+   che le batte senza `!important`.
 
    Dentro il foglio niente si muove: il pezzo del moto spegne ogni transizione
    sotto `.pane-editor`, e qui non se ne dichiarano. */
+
+/* ── Ciò che i profili Markdown davano a CodeMirror ──────────────────────── */
+
+/* Il corpo di lettura, i caratteri del codice e del frontmatter, la scala dei
+   titoli, il riquadro delle proprietà: prima stavano nel tema di CodeMirror
+   dei profili Markdown (`editors/text/profiles/markdown/`), fuori dalla pelle,
+   e un tema non li poteva vestire (issue #242). Là restano le misure fisse e
+   ciò che solo CodeMirror sa fare.
+
+   Ogni selettore pesa quanto quello che CodeMirror generava (la sua classe
+   d'ambito diventa `.cm-editor`, o `.cm-fub-markdown` per il corpo, che vale
+   solo sotto il profilo) e sta in testa al pezzo: il foglio di CodeMirror è
+   montato prima della pelle, e ogni regola che segue, qui o nei pezzi dopo,
+   lo ritocca come lo ritoccava prima. */
+.cm-fub-markdown .cm-content {
+  font-family: var(--font-reading);
+  font-size: var(--text-reading);
+  line-height: var(--leading-relaxed);
+}
+/* Il codice resta monospaziato in Sorgente e in Live; il frontmatter è YAML. */
+.cm-editor .cm-fub-code-line {
+  font-family: var(--font-mono, monospace);
+  line-height: var(--leading-normal);
+}
+.cm-editor .cm-fub-frontmatter {
+  font-family: var(--font-mono, monospace);
+  line-height: var(--leading-normal);
+  color: var(--syn-comment, var(--doc-muted));
+  background: var(--doc-fill-soft, rgba(135, 135, 135, 0.08));
+}
+.cm-editor .cm-fub-code {
+  font-family: var(--font-mono, monospace);
+}
+/* La scala dei titoli della Live, nei passi che leggono quella del tema. */
+.cm-editor .cm-fub-h1 {
+  font-size: max(1.75em, var(--text-3xl, 1.75em));
+}
+.cm-editor .cm-fub-h2 {
+  font-size: max(1.45em, var(--text-2xl, 1.45em));
+}
+.cm-editor .cm-fub-h5,
+.cm-editor .cm-fub-h6 {
+  letter-spacing: var(--tracking-caps, 0.06em);
+}
+.cm-editor .cm-fub-h1,
+.cm-editor .cm-fub-h2,
+.cm-editor .cm-fub-h3,
+.cm-editor .cm-fub-h4,
+.cm-editor .cm-fub-h5,
+.cm-editor .cm-fub-h6 {
+  line-height: var(--leading-tight, 1.2);
+}
+.cm-editor .cm-fub-image img {
+  border-radius: var(--radius-sm, 4px);
+}
+/* Le proprietà della Live (`editor.properties`): la tabella, la riga che si
+   apre, il vuoto. */
+.cm-editor .cm-fub-properties {
+  border-radius: var(--radius-sm, 4px);
+  background: var(--doc-fill-soft, rgba(135, 135, 135, 0.08));
+  line-height: var(--leading-normal, 1.5);
+}
+.cm-editor .cm-fub-properties-hidden,
+.cm-editor .cm-fub-properties-empty {
+  color: var(--doc-muted, var(--doc-gutter-fg, inherit));
+}
+.cm-editor .cm-fub-properties dt {
+  color: var(--doc-muted, var(--doc-gutter-fg, inherit));
+}
 
 /* ── La colonna ──────────────────────────────────────────────────────────── */
 
@@ -210,7 +279,7 @@
 .markdown-rendered dl,
 .markdown-rendered blockquote,
 .markdown-rendered pre,
-.markdown-rendered table,
+.markdown-rendered table:not(:where(.base-surface *)),
 .markdown-rendered .markdown-table-scroll,
 .markdown-rendered hr,
 .markdown-rendered h1,
@@ -2186,6 +2255,13 @@ button.cm-fub-page-icon:focus-visible {
   border-bottom-right-radius: var(--radius-control);
   border-bottom-left-radius: var(--radius-control);
 }
+/* Sulla carta del riquadro il verde dei segni vicini non si legge abbastanza
+   (il tipo scritto a mano, `[!tip`, resta sorgente col cursore dentro): lì i
+   segni prendono il colore dei commenti della Sorgente, il passo sotto. */
+.cm-editor .cm-content .cm-fub-callout-line .cm-fub-near,
+.cm-editor .cm-content .cm-fub-callout-line .cm-fub-near * {
+  color: var(--syn-comment);
+}
 .cm-editor .cm-content .cm-fub-callout-type,
 .cm-editor .cm-content .cm-fub-callout-title {
   color: var(--doc-heading);
@@ -2585,8 +2661,14 @@ button.cm-fub-page-icon:focus-visible {
    scrive `border-spacing`): solo così gli angoli si arrotondano. Ogni
    cella ha il filo a destra e sotto; l'ultima colonna e l'ultima riga hanno
    al loro posto la cornice. La testata ha il suo fondo fino al bordo: la
-   cornice lì è trasparente, come nel prototipo dove il fondo la copre. */
-.markdown-rendered table {
+   cornice lì è trasparente, come nel prototipo dove il fondo la copre.
+   Queste regole sono delle tabelle Markdown, non delle tabelle che un
+   componente disegna dentro la pagina: la Base incorporata in una nota sta
+   dentro `.markdown-rendered`, e la sua tabella ha la sua pelle
+   (`skin/editors.css`, `.base-table`). Per questo ogni selettore lascia
+   fuori ciò che sta in una `.base-surface`, dentro un `:where()` che non
+   alza la specificità. */
+.markdown-rendered table:not(:where(.base-surface *)) {
   display: block;
   width: fit-content;
   max-width: 100%;
@@ -2606,8 +2688,8 @@ button.cm-fub-page-icon:focus-visible {
   margin: 0;
   overflow: visible;
 }
-.markdown-rendered th,
-.markdown-rendered td {
+.markdown-rendered th:not(:where(.base-surface *)),
+.markdown-rendered td:not(:where(.base-surface *)) {
   height: 34px;
   min-width: 4ch;
   padding: 0 var(--space-5);
@@ -2620,48 +2702,48 @@ button.cm-fub-page-icon:focus-visible {
   text-align: start;
   vertical-align: middle;
 }
-.markdown-rendered th {
+.markdown-rendered th:not(:where(.base-surface *)) {
   background: var(--doc-fill-soft);
   color: var(--doc-heading);
   font-weight: var(--weight-bold);
 }
-.markdown-rendered tr > :first-child {
+.markdown-rendered tr:not(:where(.base-surface *)) > :first-child {
   border-left: 1px solid var(--doc-rule);
 }
-.markdown-rendered tr > :last-child {
+.markdown-rendered tr:not(:where(.base-surface *)) > :last-child {
   border-right: 1px solid var(--doc-rule);
 }
-.markdown-rendered table > :first-child > tr:first-child > * {
+.markdown-rendered table:not(:where(.base-surface *)) > :first-child > tr:first-child > * {
   border-top: 1px solid var(--doc-rule);
 }
-.markdown-rendered table > :last-child > tr:last-child > * {
+.markdown-rendered table:not(:where(.base-surface *)) > :last-child > tr:last-child > * {
   border-bottom: 1px solid var(--doc-rule);
 }
-.markdown-rendered tr > th:first-child {
+.markdown-rendered tr:not(:where(.base-surface *)) > th:first-child {
   border-left-color: transparent;
 }
-.markdown-rendered tr > th:last-child {
+.markdown-rendered tr:not(:where(.base-surface *)) > th:last-child {
   border-right-color: transparent;
 }
-.markdown-rendered table > :first-child > tr:first-child > th {
+.markdown-rendered table:not(:where(.base-surface *)) > :first-child > tr:first-child > th {
   border-top-color: transparent;
 }
-.markdown-rendered table > :last-child > tr:last-child > th {
+.markdown-rendered table:not(:where(.base-surface *)) > :last-child > tr:last-child > th {
   border-bottom-color: transparent;
 }
-.markdown-rendered table > :first-child > tr:first-child > :first-child {
+.markdown-rendered table:not(:where(.base-surface *)) > :first-child > tr:first-child > :first-child {
   border-top-left-radius: var(--radius-md);
 }
-.markdown-rendered table > :first-child > tr:first-child > :last-child {
+.markdown-rendered table:not(:where(.base-surface *)) > :first-child > tr:first-child > :last-child {
   border-top-right-radius: var(--radius-md);
 }
-.markdown-rendered table > :last-child > tr:last-child > :first-child {
+.markdown-rendered table:not(:where(.base-surface *)) > :last-child > tr:last-child > :first-child {
   border-bottom-left-radius: var(--radius-md);
 }
-.markdown-rendered table > :last-child > tr:last-child > :last-child {
+.markdown-rendered table:not(:where(.base-surface *)) > :last-child > tr:last-child > :last-child {
   border-bottom-right-radius: var(--radius-md);
 }
-.markdown-rendered table:focus-visible {
+.markdown-rendered table:not(:where(.base-surface *)):focus-visible {
   outline: var(--focus-ring-width) solid var(--focus-ring);
   outline-offset: 1px;
 }
@@ -3037,13 +3119,17 @@ button.cm-fub-page-icon:focus-visible {
 }
 .ui-list-item-subtitle {
   /* Due righe al massimo: il contesto di un link si legge, ma non si prende il
-     pannello. */
+     pannello, e i puntini dicono che il testo continua. */
+  display: -webkit-box;
   overflow: hidden;
   max-height: calc(2em * var(--leading-tight));
   margin-top: var(--space-1);
   color: var(--muted);
   font-size: var(--text-sm);
   line-height: var(--leading-tight);
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 /* Il cestino e la cronologia non hanno regole proprie: sono due view dichiarate
    (§1.2), e le disegnano i componenti generici dell'albero. */

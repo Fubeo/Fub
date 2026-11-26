@@ -263,9 +263,47 @@ fn json_sì_no_e_numeri() {
         "{height?: pages}",
         "{to: number}",
         "{periods?: n (default: a third of the history)}",
+        // Gli effetti di VectorCraft: un'unità da sola, o solo il valore di
+        // serie fra parentesi.
+        "{radius: pt (10)}",
+        "{amount: % (-200 pucker … 200 bloat, default 0)}",
+        "{rotate: deg (0; counter-clockwise)}",
+        "{size: (10)}",
+        "{miterLimit: (4)}",
+        "{seed: int (0)}",
+        "{h: amount (10)}",
+        "{detail: per inch 0..100 (10)}",
+        "{radius: pt 0.1..100 (3)}",
+        "{threshold: levels 0..255 (0; smaller differences are left alone)}",
+        "{horizontal: % distortion (0)}",
+        "{mixingRate?: 1..100 % (50)}",
+        // Gli effetti 3D: gradi e interi.
+        "{twist: degrees (0..360, 0; the back turned against the front)}",
+        "{bevelRepeat: integer (1..32, 1)}",
     ] {
         assert_eq!(un_tipo(numero), Tipo::Numero, "{numero}");
     }
+    // Un colore scritto `#rrggbb` (anche fra virgolette) o `hex` è un colore, non una scelta con
+    // un valore solo; il suo nome nel catalogo è `colore`.
+    assert_eq!(
+        un_tipo("{lightColor: #rrggbb (white, #ffffff; legacy directional light color)}"),
+        Tipo::Colore
+    );
+    assert_eq!(un_tipo("{color: \"#rrggbb\" (\"#000000\")}"), Tipo::Colore);
+    assert_eq!(un_tipo("{color: hex}"), Tipo::Colore);
+    assert_eq!(Tipo::Colore.nome(), "colore");
+    // Un elenco di oggetti è un valore JSON, anche con un intervallo nella frase.
+    assert_eq!(
+        un_tipo("{lights: null or array of 1..10 objects (color: #rrggbb, intensity: % 0..100)}"),
+        Tipo::Json
+    );
+    // Fra altre parole un'unità resta un valore della scelta.
+    assert_eq!(
+        un_tipo("{units: pt|mm|in}"),
+        scelta(&["pt", "mm", "in"], false)
+    );
+    // Una nota sola che non è un numero non dice il valore.
+    assert!(!errore("{size: (big)}").is_empty());
 }
 
 #[test]
@@ -310,6 +348,23 @@ fn il_lessico_affina_un_valore_vago() {
     assert_eq!(un_tipo("{sheet?: new sheet name}"), Tipo::Testo);
     assert_eq!(un_tipo("{sheet: true}"), Tipo::SiNo);
     assert_eq!(un_tipo("{chart?: id}"), Tipo::Testo);
+}
+
+#[test]
+fn il_lessico_dà_i_valori_di_una_frase() {
+    let fusione = [("mode", scelta(&["normal", "multiply"], false))];
+    let tipo = |schema: &str| {
+        Modulo::da_schema(schema, &fusione).unwrap().campi[0]
+            .tipo
+            .clone()
+    };
+    assert_eq!(
+        tipo("{mode: blend mode (\"multiply\")}"),
+        scelta(&["normal", "multiply"], false)
+    );
+    // Valori scritti nello schema o un numero restano quelli dello schema.
+    assert_eq!(tipo("{mode: \"a\"|\"b\"}"), scelta(&["a", "b"], false));
+    assert_eq!(tipo("{mode: pt (3)}"), Tipo::Numero);
 }
 
 #[test]

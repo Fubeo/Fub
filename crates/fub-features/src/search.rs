@@ -71,8 +71,10 @@
 //!
 //! La regex dell'utente cerca nei campi memorizzati in chiaro, con limiti su
 //! pattern, numero di documenti e byte letti; il testo case-sensitive usa la
-//! stessa scansione. Entrambi rifiutano la query prima di restituire un insieme
-//! parziale se superano il limite. `Task { Open | Done }` è indicizzato dai
+//! stessa verifica. I documenti da rileggere li sceglie prima l'indice
+//! invertito, con le parole intere che la domanda garantisce (`exact`); se non
+//! ne garantisce nessuna si rilegge tutto. Entrambi rifiutano la query prima di
+//! restituire un insieme parziale se superano il limite. `Task { Open | Done }` è indicizzato dai
 //! marker delle liste annidate nel modello, senza inferire uno stato dai nomi.
 //! `Path` e `File` spettano al valutatore del kernel, non a Tantivy.
 //!
@@ -104,9 +106,10 @@ use fub_abi::traits::{
 };
 use fub_abi::PluginError;
 use serde::{Deserialize, Serialize};
+use tantivy::indexer::UserOperation;
 use tantivy::query::{
     AllQuery, BooleanQuery, BoostQuery, Occur, PhrasePrefixQuery, PhraseQuery, Query, RangeQuery,
-    RegexQuery, TermQuery,
+    TermQuery,
 };
 use tantivy::schema::{Field, IndexRecordOption, Schema, Value, STORED, STRING, TEXT};
 use tantivy::snippet::SnippetGenerator;
@@ -181,6 +184,18 @@ const INDEX_DIR: &str = "index";
 
 /// Memoria del writer tantivy. Sotto i 15 MB tantivy rifiuta.
 const WRITER_HEAP: usize = 50_000_000;
+
+/// Quanto testo la coda delle scritture (#522) tiene prima di darlo a tantivy
+/// senza aspettare il commit.
+///
+/// La coda esiste perché un commit chiuda **un** segmento nuovo e non uno per
+/// worker (vedi [`index::Pending`]). Ma ciò che parte con un `run` è un lotto
+/// unico per un worker solo, e tantivy controlla il budget del worker solo a
+/// fine lotto: la soglia deve stare sotto l'arena di un worker, cioè
+/// `WRITER_HEAP` / 3 ≈ 16 MB meno il margine di 1 MB che tantivy tiene. A
+/// 4 MB c'è spazio, e a freddo i lotti sono abbastanza da tenere occupati
+/// tutti i worker.
+const PENDING_BYTES: usize = 4 << 20;
 
 /// Il `page_name` conta più del corpo: chi cerca "Rust" vuole prima la nota
 /// *intitolata* Rust, poi le mille che la nominano.
@@ -313,6 +328,7 @@ impl FieldWeights {
 
 mod catalog;
 mod engine;
+mod exact;
 mod index;
 mod provider;
 mod schema;
@@ -321,13 +337,14 @@ mod words;
 pub use catalog::{catalog, settings};
 use catalog::{
     io_err, reason, COMMENT_QUERY_SHAPE, COUNT, DOC_READ, INDEX_CLOSE, INDEX_COMMIT, INDEX_CREATE,
-    INDEX_LOCKED, INDEX_READER, INDEX_RELOAD, MANIFEST_WRITE, PATH, REASON, SCOPE_TOO_LARGE,
-    SCOPE_TOO_MANY, SEARCH, SELECT_UNSUPPORTED, SNIPPET, TOKENIZER, UNSERVED_FAMILY, UNSERVED_LEAF,
-    WHAT,
+    INDEX_LOCKED, INDEX_READER, INDEX_RELOAD, MANIFEST_WRITE, PATH, REASON, SCAN_TOO_LARGE,
+    SCAN_TOO_MANY, SCOPE_TOO_LARGE, SCOPE_TOO_MANY, SEARCH, SELECT_UNSUPPORTED, SNIPPET, TOKENIZER,
+    UNSERVED_FAMILY, UNSERVED_LEAF, WHAT,
 };
 #[cfg(test)]
 use engine::head_of;
-use engine::item_due;
+use engine::{drain, item_due, term_query};
+use index::Pending;
 pub use index::SearchIndex;
 pub use provider::SearchSettings;
 #[cfg(test)]

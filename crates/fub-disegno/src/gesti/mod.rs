@@ -24,6 +24,8 @@
 pub mod forme;
 /// Selezionare, spostare, ridimensionare e ruotare.
 pub mod selezione;
+/// Gli strumenti del motore come sono (`DrawingTool::Engine`).
+pub mod strumento;
 /// Scrivere e modificare il testo.
 pub mod testo;
 
@@ -66,6 +68,40 @@ pub(crate) struct Contesto<'a> {
     /// in ogni fase (la Selezione: il gesto che la pressione comincia, che
     /// dipende solo dal gesto, dalla copia e dalla vista).
     pub memo: OnceCell<Box<dyn Any>>,
+}
+
+impl<'a> Contesto<'a> {
+    /// Il contesto di un pezzo del gesto. Lo zoom della vista è quello del
+    /// client portato nel documento del motore (la radice lo scala).
+    pub(crate) fn nuovo(
+        gesto: &'a DrawingGesture,
+        copia: &'a Copia,
+        pressione: Option<DrawingPointer>,
+        trascinato: bool,
+    ) -> Contesto<'a> {
+        Contesto {
+            gesto,
+            copia,
+            pressione,
+            trascinato: Cell::new(trascinato),
+            cornice: gesto.frame,
+            memo: OnceCell::new(),
+            vista: ViewInfo {
+                zoom: gesto.zoom
+                    * copia
+                        .radice
+                        .determinant()
+                        .abs()
+                        .sqrt()
+                        .max(f64::MIN_POSITIVE)
+                        .recip(),
+                smart_guides: gesto.snap.guides.unwrap_or(true),
+                snap_to_point: gesto.snap.points.unwrap_or(true),
+                snap_to_glyph: gesto.snap.glyphs.unwrap_or(false),
+                ..ViewInfo::default()
+            },
+        }
+    }
 }
 
 /// Uno strumento di Fub fatto con uno strumento del motore.
@@ -118,18 +154,20 @@ pub(crate) trait Strumento: Sync {
 /// Lo strumento che fa `tool`, se c'è già. I task che li fanno aggiungono
 /// qui il loro braccio: le forme in [`forme`], la selezione in
 /// [`selezione`], il testo in [`testo`].
-pub(crate) fn strumento(tool: DrawingTool) -> Option<&'static dyn Strumento> {
+pub(crate) fn strumento(tool: &DrawingTool) -> Option<&'static dyn Strumento> {
     match tool {
         DrawingTool::Rect | DrawingTool::Ellipse | DrawingTool::Line | DrawingTool::Arrow => {
-            Some(forme::strumento(tool))
+            Some(forme::strumento(tool.clone()))
         }
         DrawingTool::Select => Some(selezione::strumento()),
         DrawingTool::Text => Some(testo::strumento()),
+        // Il ponte di [`strumento`]: non è uno strumento di Fub.
+        DrawingTool::Engine { .. } => None,
     }
 }
 
 /// Il gesto che la sessione sta facendo, fra una richiesta e l'altra.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct InCorso {
     tool: DrawingTool,
     revisione: u64,
@@ -146,6 +184,25 @@ pub(crate) struct Banco {
     pub pressione: Option<DrawingPointer>,
     /// [`Contesto::trascinato`] del gesto in corso.
     pub trascinato: bool,
+    /// Le preferenze del motore all'apertura: un gesto con uno strumento
+    /// del motore riparte da loro (gli strumenti di K5 ne cambiano alcune).
+    pub prefs: vectorcraft_engine::Prefs,
+    /// Ciò che il ponte verso gli strumenti del motore ricorda del gesto.
+    pub(crate) ponte: strumento::Ponte,
+    /// L'ultimo comando di selezione del motore con la selezione di prima
+    /// (`last_selection_cmd`, K6 T15 giro 2): `select.reselect` lo ripete. Il
+    /// motore lo tiene nel suo stato di documento, che ogni comando ricrea
+    /// (`ripristina`), quindi il ricordo sta qui fra un comando e l'altro.
+    /// [`Banco::installa`] lo toglie, perché il documento è un altro.
+    pub(crate) ultimo_di_selezione: Option<(String, serde_json::Value, Vec<NodeId>)>,
+    /// I punti che lo strumento del motore aveva scelti alla fine dell'ultimo
+    /// commit, col suo id (i punti di larghezza della Larghezza, i punti della
+    /// Maglia): `ripristina` rimette lo strumento a capo, e il gesto dopo li
+    /// sceglie di nuovo con dei clic ([`strumento::rimetti_i_scelti`]), come
+    /// i comandi che li leggono ([`strumento::scelti_per_il_comando`]). Resta
+    /// fra una revisione e l'altra, perché è il commit stesso a cambiare la
+    /// revisione.
+    pub(crate) scelti_dello_strumento: Option<strumento::Scelti>,
 }
 
 impl Banco {
@@ -153,21 +210,31 @@ impl Banco {
     /// la sessione lo tiene (con i limiti e i riquadri del testo già
     /// calcolati), perché la differenza confronti documenti dello stesso
     /// passo.
-    pub fn nuovo(copia: &mut Copia) -> Result<Banco, String> {
+    ///
+    /// La sessione prende le preferenze `prefs` (quelle di `draw.motore`)
+    /// prima del documento, così il documento nasce con la loro griglia e
+    /// la loro cronologia.
+    pub fn nuovo(copia: &mut Copia, prefs: vectorcraft_engine::Prefs) -> Result<Banco, String> {
         vectorcraft_engine::guard::catch_panic(|| {
             let mut sessione = Session::new();
+            sessione.apply_prefs(prefs);
             sessione.add_document((*copia.documento).clone(), None);
             sessione
         })
         .and_then(|sessione| {
             let doc = sessione.doc().map_err(|e| e.to_string())?.doc.clone();
             copia.documento = doc;
+            let prefs = sessione.prefs.clone();
             Ok(Banco {
                 sessione,
                 in_corso: None,
                 inizio: None,
                 pressione: None,
                 trascinato: false,
+                prefs,
+                ponte: strumento::Ponte::default(),
+                ultimo_di_selezione: None,
+                scelti_dello_strumento: None,
             })
         })
     }
@@ -179,6 +246,8 @@ impl Banco {
         self.inizio = None;
         self.pressione = None;
         self.trascinato = false;
+        self.ponte = strumento::Ponte::default();
+        self.ultimo_di_selezione = None;
         let doc = (*copia.documento).clone();
         let sessione = &mut self.sessione;
         vectorcraft_engine::guard::catch_panic(|| sessione.replace_document(0, doc))?;
@@ -192,11 +261,15 @@ impl Banco {
         self.inizio = None;
         self.pressione = None;
         self.trascinato = false;
+        self.ponte = strumento::Ponte::default();
         let doc = (*copia.documento).clone();
         let sessione = &mut self.sessione;
         if vectorcraft_engine::guard::catch_panic(|| sessione.replace_document(0, doc)).is_err() {
-            // Anche la sostituzione è andata in panico: una sessione nuova.
+            // Anche la sostituzione è andata in panico: una sessione nuova,
+            // con le preferenze del disegno e non quelle di serie (che
+            // altrimenti si salverebbero in `draw.motore` come un cambio).
             if let Ok(mut s) = vectorcraft_engine::guard::catch_panic(Session::new) {
+                s.prefs = self.prefs.clone();
                 s.add_document((*copia.documento).clone(), None);
                 self.sessione = s;
             }
@@ -223,7 +296,7 @@ impl Banco {
         };
         let mut dopo = (*doc).clone();
         f(&mut dopo);
-        let esito = differenza::differenza(copia, &dopo, None, None);
+        let esito = differenza::differenza(copia, &dopo, None, None, false);
         self.ripristina(copia);
         esito
     }
@@ -232,10 +305,26 @@ impl Banco {
     pub fn gesto(&mut self, copia: &Copia, gesto: &DrawingGesture) -> DrawingOutcome {
         let mut esito = esito_vuoto(gesto.revision);
         if gesto.phase == DrawingPhase::Cancel {
-            if self.in_corso.is_some() {
+            let del_motore = matches!(
+                self.in_corso.as_ref().map(|c| &c.tool),
+                Some(DrawingTool::Engine { .. })
+            );
+            if del_motore {
+                strumento::annulla(self, copia);
+            } else if self.in_corso.is_some() {
                 self.ripristina(copia);
             }
             return esito;
+        }
+        // Un gesto di un altro strumento dimentica i punti scelti: in
+        // VectorCraft cambiare strumento li toglie.
+        let stesso = matches!(&gesto.tool, DrawingTool::Engine { id }
+            if self.scelti_dello_strumento.as_ref().is_some_and(|s| &s.strumento == id));
+        if !stesso {
+            self.scelti_dello_strumento = None;
+        }
+        if let DrawingTool::Engine { id } = &gesto.tool {
+            return strumento::gesto(self, copia, gesto, id);
         }
         let rifiuta = |banco: &mut Banco, mut esito: DrawingOutcome, r: DrawingRefusal| {
             if banco.in_corso.is_some() {
@@ -247,14 +336,14 @@ impl Banco {
         if !copia.modificabile {
             return rifiuta(self, esito, DrawingRefusal::Unsupported);
         }
-        let Some(strumento) = strumento(gesto.tool) else {
+        let Some(strumento) = strumento(&gesto.tool) else {
             return rifiuta(self, esito, DrawingRefusal::Unsupported);
         };
         let qui = InCorso {
-            tool: gesto.tool,
+            tool: gesto.tool.clone(),
             revisione: gesto.revision,
         };
-        let ricomincia = self.in_corso != Some(qui)
+        let ricomincia = self.in_corso.as_ref() != Some(&qui)
             || gesto
                 .events
                 .first()
@@ -265,25 +354,7 @@ impl Banco {
             .find(|e| e.kind == DrawingPointerKind::Down)
             .copied()
             .or(if ricomincia { None } else { self.pressione });
-        let cx = Contesto {
-            gesto,
-            copia,
-            pressione,
-            trascinato: Cell::new(!ricomincia && self.trascinato),
-            cornice: gesto.frame,
-            memo: OnceCell::new(),
-            vista: ViewInfo {
-                zoom: gesto.zoom
-                    * copia
-                        .radice
-                        .determinant()
-                        .abs()
-                        .sqrt()
-                        .max(f64::MIN_POSITIVE)
-                        .recip(),
-                ..ViewInfo::default()
-            },
-        };
+        let cx = Contesto::nuovo(gesto, copia, pressione, !ricomincia && self.trascinato);
         let sessione_pronta = if ricomincia {
             if self.in_corso.is_some() {
                 self.ripristina(copia);
@@ -344,7 +415,7 @@ impl Banco {
         let scrittore = |n: &Node, m: Affine| strumento.elemento(n, m);
         let differenza = vectorcraft_engine::guard::catch_panic(|| {
             let unita = strumento.unita(&cx);
-            differenza::differenza(copia, &dopo, Some(&scrittore), unita.as_ref())
+            differenza::differenza(copia, &dopo, Some(&scrittore), unita.as_ref(), false)
         });
         self.ripristina(copia);
         let differenza = match differenza {
@@ -372,18 +443,42 @@ pub(crate) fn esito_vuoto(revisione: u64) -> DrawingOutcome {
         losses: Vec::new(),
         refused: None,
         frame: None,
+        state: None,
+        reading: None,
     }
 }
 
-/// Gli id di Fub della selezione del motore; un oggetto senza id resta fuori.
-fn selezione_di_fub(copia: &Copia, differenza: &Differenza, selezione: &[NodeId]) -> Vec<String> {
+/// Gli id di Fub della selezione del motore; un oggetto senza id resta fuori,
+/// e così il foglio di Fub, che non si sceglie (Sblocca tutto del motore lo
+/// sblocca e lo sceglie con gli altri). Il tracciato che ritaglia una maschera
+/// sta nel `clipPath` del file, non è un elemento: scelto, vale per la sua
+/// maschera, il `<g clip-path>` (Seleziona › Oggetto › Maschere di ritaglio).
+pub(crate) fn selezione_di_fub(
+    copia: &Copia,
+    differenza: &Differenza,
+    selezione: &[NodeId],
+) -> Vec<String> {
     let mut fuori: Vec<String> = Vec::new();
     for n in selezione {
+        // Il tracciato che ritaglia si sceglie con la forma del suo
+        // `clipPath` quando il file le dà un id (`Mappa::lega_i_ritagli`);
+        // senza, con il suo gruppo.
+        let legato = copia
+            .mappa
+            .del_nodo(*n)
+            .and_then(|i| copia.mappa.elemento(i))
+            .is_some_and(|e| e.ritaglia);
+        let n = &if legato {
+            *n
+        } else {
+            maschera_del_ritaglio(&copia.documento, *n).unwrap_or(*n)
+        };
         let id = differenza.ids.get(n).cloned().or_else(|| {
             copia
                 .mappa
                 .del_nodo(*n)
                 .and_then(|i| copia.mappa.elemento(i))
+                .filter(|e| e.ruolo != fub_scene::Role::Paper)
                 .and_then(|e| e.id.clone())
         });
         if let Some(id) = id {
@@ -393,6 +488,21 @@ fn selezione_di_fub(copia: &Copia, differenza: &Differenza, selezione: &[NodeId]
         }
     }
     fuori
+}
+
+/// La maschera di cui `n` è il tracciato che ritaglia (il primo figlio di un
+/// gruppo di ritaglio), o `None`.
+fn maschera_del_ritaglio(doc: &Document, n: NodeId) -> Option<NodeId> {
+    let nodo = doc.node(n)?;
+    if !matches!(
+        nodo.kind,
+        vectorcraft_doc::NodeKind::Path { clipping: true, .. }
+    ) {
+        return None;
+    }
+    let (genitore, indice, _) = doc.position(n)?;
+    let g = genitore?;
+    (indice == 0 && doc.node(g).is_some_and(Node::clips)).then_some(g)
 }
 
 /// Un evento della penna di Fub come lo vuole il motore: dalle coordinate

@@ -65,6 +65,7 @@
 //   una volta per comando; e il seguito guarda ciò che l'operazione ha
 //   toccato, non il disegno intero.
 
+import { outsideTree } from "./hit/unit";
 import { formatNumber } from "../number";
 import type { Role } from "../scene/analysis";
 import { parsePath } from "../scene/geometry";
@@ -422,6 +423,7 @@ export function tippable(node: ElementPart): boolean {
 function nodesOf(model: DocumentModel, units: readonly Unit[]): ElementPart[] {
   const children = new Map<ElementPart, ElementPart[]>();
   return units.map((unit) => {
+    if (outsideTree(unit)) return unit.node;
     let node: ElementPart = model.root;
     for (const at of unit.path) {
       let list = children.get(node);

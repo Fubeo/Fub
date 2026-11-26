@@ -41,6 +41,8 @@ const STATE: Readonly<Record<string, readonly string[]>> = {
   "draw-order": ["M10 14H4V4h10v6", "M10 10h10v10H10z"],
   "draw-align": ["M4 3v18", "M8 6h12v5H8z", "M8 14h7v5H8z"],
   "draw-layers": ["M12 3l9 5-9 5-9-5z", "M3 13l9 5 9-5", "M3 17.5l9 5 9-5"],
+  // La scheda Risorse (K6 T10): la figura del prototipo, la stessa di T8.
+  "draw-resources": ["M4 4h7v7H4z", "M13 4h7v7h-7z", "M4 13h7v7H4z", "M13 16.5a3.5 3.5 0 1 0 7 0a3.5 3.5 0 1 0-7 0"],
   "draw-into-layer": ["M12 11l9 5-9 5-9-5z", "M12 2v7", "M9 6l3 3 3-3"],
   "draw-page-grid": ["M3 3h18v18H3z", "M9 3v18", "M15 3v18", "M3 9h18", "M3 15h18"],
   "draw-image": ["M3 5h18v14H3z", "M3 17l5-5 5 5", "M11 15l4-4 6 6", "M14.5 8.5a1.5 1.5 0 1 0 3 0a1.5 1.5 0 1 0-3 0"],
@@ -161,6 +163,94 @@ const CHROME: Readonly<Record<string, readonly string[]>> = {
 };
 
 /// Tutte le figure, per nome.
+/// Lo spazio di lavoro nella banda (T7): la figura del prototipo, come quella
+/// della modalità di Scrittoio 2.
+const WORKSPACE: Readonly<Record<string, readonly string[]>> = {
+  "draw-workspace": ["M4 5h16v14H4z", "M9 5v14", "M9 10h11"],
+};
+
+/// Le figure della colonna e del cassetto (T8) e delle famiglie che il
+/// prototipo disegna: `PLAN-ui/disegno-completo.html`, il suo script di
+/// `editors/spatial/icons.ts`. Ogni nome che il disegno chiama sta qui.
+const COLUMN: Readonly<Record<string, readonly string[]>> = {
+  "draw-add-fill": ["M4 4h10v10H4z", "M7 7h4v4H7z", "M18 15v6", "M15 18h6"],
+  "draw-add-stroke": ["M4 18L18 4", "M17 15v6", "M14 18h6"],
+  "draw-all-tools": ["M4 4h4v4H4z", "M10 4h4v4h-4z", "M16 4h4v4h-4z", "M4 10h4v4H4z", "M10 10h4v4h-4z", "M16 10h4v4h-4z", "M4 16h4v4H4z", "M10 16h4v4h-4z", "M16 16h4v4h-4z"],
+  "draw-arc": ["M5 19C5 11 11 5 19 5"],
+  "draw-artboard": ["M7 3v18", "M17 3v18", "M3 7h18", "M3 17h18"],
+  "draw-blend": ["M3 12a4 4 0 1 0 8 0a4 4 0 1 0-8 0", "M13 12a4 4 0 1 0 8 0a4 4 0 1 0-8 0", "M11 12h2"],
+  "draw-brush": ["M20 4c-4 1-8 5-9.5 8l1.5 1.5C15 12 19 8 20 4z", "M10.5 12C8.5 12 7 13.5 7 15.5 7 17 6 18.5 4 19c3 1.5 8 1 8-3.5"],
+  "draw-direct-select": ["M8 4v13l3.4-3.3 2.4 5.4 2.1-.9-2.4-5.4H18z", "M3.5 3.5h3v3h-3z"],
+  "draw-effects": ["M5 20l3-12h5", "M4.5 13h6", "M14 11l6 8", "M20 11l-6 8"],
+  "draw-eyedropper": ["M14 4.5a2.5 2.5 0 0 1 3.5 0l2 2a2.5 2.5 0 0 1 0 3.5L17 12.5 11.5 7z", "M12.5 8l-7 7V19h4l7-7"],
+  "draw-flare": ["M9 12a3 3 0 1 0 6 0a3 3 0 1 0-6 0", "M12 3v4", "M12 17v4", "M3 12h4", "M17 12h4", "M5.6 5.6l2.8 2.8", "M15.6 15.6l2.8 2.8"],
+  "draw-puppet-warp": ["M4 17c3-6 6-9 8-9s5 3 8 9", "M12 8m-1.5 0a1.5 1.5 0 1 0 3 0a1.5 1.5 0 1 0-3 0", "M5.5 15.5h3v3h-3z", "M15.5 15.5h3v3h-3z"],
+  "draw-free-transform": ["M5 5h14v14H5z", "M3.5 3.5h3v3h-3z", "M17.5 3.5h3v3h-3z", "M3.5 17.5h3v3h-3z", "M17.5 17.5h3v3h-3z"],
+  "draw-gradient": ["M4 5h16v14H4z", "M9 5v14", "M13 5v14", "M16 5v14", "M18.5 5v14"],
+  "draw-graph": ["M4 20h16", "M6 20v-6", "M10 20V8", "M14 20v-9", "M18 20V5"],
+  "draw-grid-polar": ["M3 12a9 9 0 1 0 18 0a9 9 0 1 0-18 0", "M7 12a5 5 0 1 0 10 0a5 5 0 1 0-10 0", "M12 3v18", "M3 12h18"],
+  "draw-grid-rect": ["M4 4h16v16H4z", "M4 9.3h16", "M4 14.7h16", "M9.3 4v16", "M14.7 4v16"],
+  // La Bacchetta magica: il bastone in diagonale e le scintille in cima.
+  "draw-magic-wand": ["M4 20 14 10", "M15 4v2", "M15 12v2", "M11 8h2", "M17 8h2", "M18.5 4.5l-1 1", "M18.5 11.5l-1-1"],
+  // Il Lazo: un riquadro a tratti.
+  "draw-lasso": ["M4 7V4h3", "M10 4h4", "M17 4h3v3", "M20 10v4", "M20 17v3h-3", "M14 20h-4", "M7 20H4v-3", "M4 14v-4"],
+  "draw-live-paint": ["M6 10l6-6 7 7-6 6z", "M6 10l-1 1a2 2 0 0 0 0 2.8l.2.2", "M19 15s2 2.3 2 3.5a2 2 0 0 1-4 0c0-1.2 2-3.5 2-3.5z"],
+  "draw-measure": ["M3 17L17 3l4 4L7 21z", "M7 13l2 2", "M10 10l2 2", "M13 7l2 2"],
+  "draw-dimension": ["M4 8v10", "M20 8v10", "M4 13h16", "M7 10.5L4 13l3 2.5", "M17 10.5l3 2.5-3 2.5"],
+  "draw-measure-inspect": ["M3 17L13 7l4 4L7 21z", "M6 14l2 2", "M9 11l2 2", "M17.5 3.5a3 3 0 1 1 0 6a3 3 0 1 1 0-6", "M19.6 8.6L22 11"],
+  "draw-mesh": ["M4 4h16v16H4z", "M4 12c5-3 11 3 16 0", "M12 4c-3 5 3 11 0 16"],
+  "draw-parametric": ["M12 3l8 5v8l-8 5-8-5V8z", "M12 3v18"],
+  "draw-pen-nib": ["M12 3l5 8-2.5 5h-5L7 11z", "M12 3v7", "M9.5 20h5"],
+  "draw-paintbrush": ["M14 4l6 6-7 7-6-6z", "M7 11c-3 1-4 4-4 9 5 0 8-1 9-4"],
+  "draw-pencil": ["M15 4l5 5L9 20H4v-5z", "M12.5 6.5l5 5"],
+  "draw-perspective": ["M3 20L12 4l9 16z", "M7.5 12h9", "M12 4v16"],
+  // Elaborazione tracciati: due quadrati, il dietro in alto a sinistra e il davanti
+  // in basso a destra. La parte che resta è tratteggiata fitta (a 16 px si legge piena),
+  // la forma tolta è a tratti; Dividi e Cima staccano i pezzi. Disegnate per Fub:
+  // quadrati 2–16 e 8–22, righe a 45° ogni 3, tratti di 1.2.
+  "draw-pf-crop": ["M8 8L22 8L22 22L8 22z", "M8 9.5L9.5 8M8 12.5L12.5 8M8 15.5L15.5 8M10.5 16L16 10.5M13.5 16L16 13.5", "M2 2L3.2 2M6.27 2L7.47 2M10.53 2L11.73 2M14.8 2L16 2M16 2L16 3.2M16 6.27L16 7.47M16 10.53L16 11.73M16 14.8L16 16M16 16L14.8 16M11.73 16L10.53 16M7.47 16L6.27 16M3.2 16L2 16M2 16L2 14.8M2 11.73L2 10.53M2 7.47L2 6.27M2 3.2L2 2"],
+  "draw-pf-divide": ["M2 2L16 2L16 6.5L6.5 6.5L6.5 16L2 16z", "M9.5 9.5L14.5 9.5L14.5 14.5L9.5 14.5z", "M17.5 8L22 8L22 22L8 22L8 17.5L17.5 17.5z", "M2 3.5L3.5 2M2 6.5L6.5 2M2 9.5L9.5 2M2 12.5L6.5 8M8 6.5L12.5 2M2 15.5L6.5 11M11 6.5L15.5 2M4.5 16L6.5 14M9.5 11L11 9.5M14 6.5L16 4.5M9.5 14L14 9.5M8 18.5L9 17.5M12 14.5L14.5 12M17.5 9L18.5 8M8 21.5L12 17.5M17.5 12L21.5 8M10.5 22L15 17.5M17.5 15L22 10.5M13.5 22L22 13.5M16.5 22L22 16.5M19.5 22L22 19.5"],
+  "draw-pf-exclude": ["M2 2L16 2L16 8L22 8L22 22L8 22L8 16L2 16z", "M8 8L16 8L16 16L8 16z", "M2 3.5L3.5 2M2 6.5L6.5 2M2 9.5L9.5 2M2 12.5L12.5 2M2 15.5L8 9.5M9.5 8L15.5 2M4.5 16L8 12.5M12.5 8L16 4.5M8 18.5L10.5 16M16 10.5L18.5 8M8 21.5L13.5 16M16 13.5L21.5 8M10.5 22L22 10.5M13.5 22L22 13.5M16.5 22L22 16.5M19.5 22L22 19.5"],
+  "draw-pf-intersect": ["M8 8L16 8L16 16L8 16z", "M8 9.5L9.5 8M8 12.5L12.5 8M8 15.5L15.5 8M10.5 16L16 10.5M13.5 16L16 13.5", "M2 2L3.2 2M6.27 2L7.47 2M10.53 2L11.73 2M14.8 2L16 2M16 2L16 3.2M16 6.27L16 7.47M16 10.53L16 11.73M16 14.8L16 16M16 16L14.8 16M11.73 16L10.53 16M7.47 16L6.27 16M3.2 16L2 16M2 16L2 14.8M2 11.73L2 10.53M2 7.47L2 6.27M2 3.2L2 2", "M8 8L9.2 8M12.27 8L13.47 8M16.53 8L17.73 8M20.8 8L22 8M22 8L22 9.2M22 12.27L22 13.47M22 16.53L22 17.73M22 20.8L22 22M22 22L20.8 22M17.73 22L16.53 22M13.47 22L12.27 22M9.2 22L8 22M8 22L8 20.8M8 17.73L8 16.53M8 13.47L8 12.27M8 9.2L8 8"],
+  "draw-pf-merge": ["M2 2L16 2L16 8L22 8L22 22L8 22L8 16L2 16z", "M8 16V8H16", "M2 3.5L3.5 2M2 6.5L6.5 2M2 9.5L9.5 2M2 12.5L12.5 2M2 15.5L15.5 2M4.5 16L16 4.5M7.5 16L16 7.5M8 18.5L18.5 8M8 21.5L21.5 8M10.5 22L22 10.5M13.5 22L22 13.5M16.5 22L22 16.5M19.5 22L22 19.5"],
+  "draw-pf-minus": ["M2 2L16 2L16 8L8 8L8 16L2 16z", "M2 3.5L3.5 2M2 6.5L6.5 2M2 9.5L9.5 2M2 12.5L12.5 2M2 15.5L8 9.5M9.5 8L15.5 2M4.5 16L8 12.5M12.5 8L16 4.5", "M8 8L9.2 8M12.27 8L13.47 8M16.53 8L17.73 8M20.8 8L22 8M22 8L22 9.2M22 12.27L22 13.47M22 16.53L22 17.73M22 20.8L22 22M22 22L20.8 22M17.73 22L16.53 22M13.47 22L12.27 22M9.2 22L8 22M8 22L8 20.8M8 17.73L8 16.53M8 13.47L8 12.27M8 9.2L8 8"],
+  "draw-pf-minus-back": ["M16 8L22 8L22 22L8 22L8 16L16 16z", "M8 17.5L9.5 16M16 9.5L17.5 8M8 20.5L12.5 16M16 12.5L20.5 8M9.5 22L15.5 16M16 15.5L22 9.5M12.5 22L22 12.5M15.5 22L22 15.5M18.5 22L22 18.5", "M2 2L3.2 2M6.27 2L7.47 2M10.53 2L11.73 2M14.8 2L16 2M16 2L16 3.2M16 6.27L16 7.47M16 10.53L16 11.73M16 14.8L16 16M16 16L14.8 16M11.73 16L10.53 16M7.47 16L6.27 16M3.2 16L2 16M2 16L2 14.8M2 11.73L2 10.53M2 7.47L2 6.27M2 3.2L2 2"],
+  "draw-pf-outline": ["M16 6.5V2H2v14h4.5", "M9.5 16H16V9.5", "M14.5 8H8v6.5", "M8 17.5V22h14V8h-4.5"],
+  "draw-pf-trim": ["M2 2L16 2L16 5L5 5L5 16L2 16z", "M8 8L22 8L22 22L8 22z", "M2 3.5L3.5 2M2 6.5L6.5 2M2 9.5L5 6.5M6.5 5L9.5 2M2 12.5L5 9.5M9.5 5L12.5 2M2 15.5L5 12.5M8 9.5L9.5 8M12.5 5L15.5 2M8 12.5L12.5 8M8 15.5L15.5 8M8 18.5L18.5 8M8 21.5L21.5 8M10.5 22L22 10.5M13.5 22L22 13.5M16.5 22L22 16.5M19.5 22L22 19.5"],
+  "draw-pf-unite": ["M2 2L16 2L16 8L22 8L22 22L8 22L8 16L2 16z", "M2 3.5L3.5 2M2 6.5L6.5 2M2 9.5L9.5 2M2 12.5L12.5 2M2 15.5L15.5 2M4.5 16L16 4.5M7.5 16L16 7.5M8 18.5L18.5 8M8 21.5L21.5 8M10.5 22L22 10.5M13.5 22L22 13.5M16.5 22L22 16.5M19.5 22L22 19.5"],
+  "draw-point-corner": ["M4 18L12 7l8 11", "M10.5 5.5h3v3h-3z"],
+  "draw-point-cut": ["M4 18c1.5-5 3.5-8 6-8.6", "M14 9.4c2.5.6 4.5 3.6 6 8.6", "M10 4l4 4", "M14 4l-4 4"],
+  "draw-point-delete": ["M4 18c1.5-6 4.5-9 8-9s6.5 3 8 9", "M9 4.5h6"],
+  "draw-point-join": ["M4 18l6.5-9", "M20 18l-6.5-9", "M10.5 6h3v3h-3z"],
+  "draw-point-smooth": ["M4 18c1.5-6 4.5-9 8-9s6.5 3 8 9", "M10.5 7.5h3v3h-3z", "M6 9h12"],
+  "draw-polygon": ["M12 3l8.5 6.2-3.2 10H6.7L3.5 9.2z"],
+  "draw-rounded-rect": ["M7 6h10a3 3 0 0 1 3 3v6a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3V9a3 3 0 0 1 3-3z"],
+  "draw-warp": ["M4 16c3 0 4-8 8-8s5 8 8 8", "M12 8v-4", "M10 6l2-2 2 2"],
+  "draw-twirl": ["M12 12m-2 0a2 2 0 1 0 4 0a4 4 0 1 0-8 0a6 6 0 1 0 12 0a8 8 0 0 0-8-8"],
+  "draw-pucker": ["M4 4l5 5", "M20 4l-5 5", "M4 20l5-5", "M20 20l-5-5", "M10 12h4"],
+  "draw-bloat": ["M12 12m-7 0a7 7 0 1 0 14 0a7 7 0 1 0-14 0", "M12 9v6", "M9 12h6"],
+  "draw-scallop": ["M4 16c1-4 3-4 4 0c1-4 3-4 4 0c1-4 3-4 4 0c1-4 3-4 4 0"],
+  "draw-crystallize": ["M4 16l3-7 2 5 3-9 3 9 2-5 3 7"],
+  "draw-wrinkle": ["M4 14l2-3 2 4 2-5 2 5 2-3 2 4 2-3 2 2"],
+  "draw-reshape": ["M4 18c4 0 5-11 8-11s4 11 8 11", "M10.5 3.5h3v3h-3z"],
+  "draw-scale": ["M4 20V10h10v10z", "M10 7V4h10v10h-3", "M14 10l6-6", "M16 4h4v4"],
+  "draw-scissors": ["M3.5 6a2.5 2.5 0 1 0 5 0a2.5 2.5 0 1 0-5 0", "M3.5 18a2.5 2.5 0 1 0 5 0a2.5 2.5 0 1 0-5 0", "M8 7.5L20 18", "M8 16.5L20 6"],
+  "draw-shape-builder": ["M3 9a6 6 0 1 0 12 0a6 6 0 1 0-12 0", "M9 15a6 6 0 1 0 12 0a6 6 0 1 0-12 0", "M19 3v4", "M17 5h4"],
+  "draw-shear": ["M8 5h13l-5 14H3z"],
+  "draw-slice": ["M4 4h16v16H4z", "M4 12h16", "M12 4v16"],
+  "draw-spiral": ["M12 12a1.5 1.5 0 0 1 3 0 3 3 0 0 1-6 0 4.5 4.5 0 0 1 9 0 6 6 0 0 1-12 0 7.5 7.5 0 0 1 15 0"],
+  "draw-star": ["M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8L3.5 9.7l5.9-.9z"],
+  "draw-symbol-spray": ["M6 10h6v10H6z", "M8 10V6h2v4", "M15 6h.01", "M18 4h.01", "M18 8h.01", "M21 6h.01"],
+  "draw-area-type": ["M4 4h16v16H4z", "M8 8h8", "M12 8v8"],
+  "draw-objects-on-path": ["M3 18c4-8 14-8 18 0", "M5 10h3v3H5z", "M10.5 6h3v3h-3z", "M16 10h3v3h-3z"],
+  "draw-type-on-path": ["M3 18c4-8 14-8 18 0", "M9 6h6", "M12 6v7"],
+  "draw-type": ["M5 6V4h14v2", "M12 4v16", "M9 20h6"],
+  "draw-vertical-type": ["M18 5V3H6v2", "M12 3v8", "M4 21V9", "M2 21h4"],
+  "draw-width-tool": ["M3 12c4-6 14-6 18 0", "M3 12c4 6 14 6 18 0", "M12 7v10"],
+  "draw-live-paint-bucket": ["m19 11-8-8-8.6 8.6a2 2 0 0 0 0 2.8l5.2 5.2c.8.8 2 .8 2.8 0L19 11Z", "m5 2 5 5", "M2 13h15", "M22 20a2 2 0 1 1-4 0c0-1.6 1.7-2.4 2-4 .3 1.6 2 2.4 2 4Z"],
+  "draw-live-paint-selection": ["M12.03 12.68a.5.5 0 0 1 .65-.65l9 3.5a.5.5 0 0 1-.03.94l-3.44 1.07a1 1 0 0 0-.66.66l-1.07 3.44a.5.5 0 0 1-.94.03z", "M3 3h7v7H3z", "M3 14v4", "M14 3h4"],
+};
+
 export const DRAW_ICONS: Readonly<Record<string, readonly string[]>> = {
   ...STATE,
   ...PROPERTIES,
@@ -169,6 +259,8 @@ export const DRAW_ICONS: Readonly<Record<string, readonly string[]>> = {
   ...ACCESSIBILITY_PANEL,
   ...SUGGESTIONS,
   ...CHROME,
+  ...WORKSPACE,
+  ...COLUMN,
 };
 
 /// Registra le figure che mancano. Si chiama a ogni montaggio: costa un giro

@@ -182,7 +182,7 @@ fn an_illustrator_file_resolves_its_entities_and_stays_read_only() {
             "root",
             "[] foreign [0, 3]",
             "[3] group",
-            "[3] foreign [0, 1]",
+            "[3, 0] line",
             "[3, 1] rect",
         ]
     );

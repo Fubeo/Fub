@@ -182,6 +182,9 @@ export const SETTINGS: PartAnatomy = {
         "settings-catalog-results",
         "settings-details",
         "settings-details-body",
+        // Il modulo delle preferenze del motore del disegno (K6 T11).
+        "drawing-engine-row",
+        "drawing-engine-well",
       ],
     },
     {

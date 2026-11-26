@@ -64,6 +64,7 @@ import { ensureDrawIcons } from "../icons";
 import { openLifetime, type Lifetime } from "../../../ui/lifetime";
 import { MAX_LAYER_NAME } from "./layers";
 import { cleanName, NAME_MAX } from "./naming";
+import { composingKey } from "../../../kit/ime";
 
 /// Oltre questo numero di righe l'albero disegna solo quelle che si vedono.
 export const VIRTUAL_AFTER = 500;
@@ -159,8 +160,16 @@ export interface TreeEntry {
   /// I figli di un livello, o di un gruppo o di un collegamento che si apre,
   /// in ordine di documento.
   readonly children: readonly TreeEntry[];
-  /// Il nome a parole; si chiede per le righe disegnate e per il filtro.
+  /// Il nome a parole; si chiede per il nome accessibile della riga e per il
+  /// filtro.
   label(): string;
+  /// Il testo che la riga mostra, quando è meno di `label()`: un livello mostra
+  /// il solo nome, e a parole dice anche che è un livello (`label()`, che resta
+  /// il nome accessibile). Senza, la riga mostra `label()`.
+  shown?(): string;
+  /// Il livello corrente: un puntino nel segno, senza parole; a voce lo dice
+  /// `label()`.
+  readonly current?: boolean;
 }
 
 export interface ObjectTreeOptions {
@@ -168,6 +177,9 @@ export interface ObjectTreeOptions {
   onSelect(keys: readonly string[]): void;
   /// Invio su un oggetto: le sue proprietà.
   onActivate(): void;
+  /// Un clic sulla riga di un livello (fuori dal triangolo): il livello diventa quello corrente,
+  /// come Imposta livello corrente di VectorCraft. Senza, il clic apre e chiude la riga.
+  onCurrent?(key: string): void;
   onDelete(): void;
   /// Esc: il fuoco torna al foglio.
   onLeave(): void;
@@ -193,10 +205,15 @@ export interface ObjectTreeOptions {
 export interface ObjectTree {
   /// Il pannello: titolo, conteggio, filtro e albero.
   readonly element: HTMLElement;
+  /// L'intestazione col titolo e il conteggio, dove l'editor può aggiungere i suoi comandi.
+  readonly header: HTMLElement;
   /// Le voci e la selezione di adesso. Se il fuoco non è nell'albero, la riga
   /// attiva va al primo oggetto scelto.
   update(entries: readonly TreeEntry[], selection: readonly string[], count: number): void;
   focus(): void;
+  /// Individua oggetto: apre i livelli e i gruppi che contengono `key`, ne fa la riga attiva e la
+  /// porta in vista, senza prendere il fuoco. Falso se la voce non c'è.
+  locate(key: string): boolean;
   /// Mostra o nasconde il filtro; nascosto, si svuota.
   setFiltering(on: boolean): void;
   /// Porta in vista la voce `key` e ne apre il campo del nome. Falso se la
@@ -502,6 +519,9 @@ export function createObjectTree(life: Lifetime, options: ObjectTreeOptions): Ob
     sign.toggleAttribute("data-on", on);
   };
 
+  /// Il testo che la riga di `entry` mostra: `shown()`, o a parole.
+  const shownOf = (entry: TreeEntry): string => entry.shown?.() ?? entry.label();
+
   /// Scrive `row` nel nodo `item`, nuovo o di prima.
   const paintRow = (item: HTMLElement, row: Row, index: number, virtual: boolean): void => {
     const { entry } = row;
@@ -539,6 +559,7 @@ export function createObjectTree(life: Lifetime, options: ObjectTreeOptions): Ob
     if (!entry.layer && !entry.selectable) item.setAttribute("aria-disabled", "true");
     else item.removeAttribute("aria-disabled");
     item.toggleAttribute("data-active", entry.key === active);
+    item.toggleAttribute("data-current", entry.current === true);
     item.toggleAttribute("data-toggles", entry.toggles && options.onToggle !== undefined);
     item.toggleAttribute("data-context", row.context);
     item.toggleAttribute("data-moving", drag !== null && drag.moving.has(entry.key));
@@ -561,8 +582,11 @@ export function createObjectTree(life: Lifetime, options: ObjectTreeOptions): Ob
     if (glyphs.textContent !== glyph) glyphs.textContent = glyph;
     thumb.hidden = entry.thumbnail === undefined;
     if (entry.thumbnail !== undefined) showThumb(thumb, entry);
-    const text = entry.label();
+    const text = shownOf(entry);
     if (label.textContent !== text) label.textContent = text;
+    // Una riga che mostra meno di quanto dice dà il resto al nome accessibile.
+    if (entry.shown === undefined) item.removeAttribute("aria-label");
+    else item.setAttribute("aria-label", entry.label());
     const [lock, hide] = signs.children as unknown as [HTMLElement, HTMLElement];
     const toggles = entry.toggles && options.onToggle !== undefined;
     signTitle(lock, entry.locked, toggles, "lock");
@@ -858,7 +882,7 @@ export function createObjectTree(life: Lifetime, options: ObjectTreeOptions): Ob
   };
 
   life.listen(field, "keydown", (event) => {
-    if (event.key !== "Enter" && event.key !== "Escape") return;
+    if ((event.key !== "Enter" && event.key !== "Escape") || composingKey(event)) return;
     event.preventDefault();
     event.stopPropagation();
     finishRename(event.key === "Enter", true);
@@ -905,6 +929,7 @@ export function createObjectTree(life: Lifetime, options: ObjectTreeOptions): Ob
   life.listen(search, "input", scheduleFilter);
   life.listen(kindSelect, "change", applyFilter);
   life.listen(search, "keydown", (event) => {
+    if (composingKey(event)) return;
     if (event.key === "ArrowDown" || event.key === "Enter") {
       applyFilter();
       enterTree();
@@ -1052,6 +1077,14 @@ export function createObjectTree(life: Lifetime, options: ObjectTreeOptions): Ob
   };
 
   /// La riga in cima che contiene la riga `index`, o lei.
+  /// La riga del livello più vicino che contiene la riga `index`; la riga in
+  /// cima se nessuno la contiene.
+  const layerOf = (index: number): number => {
+    let at = rows[index]!.parent;
+    while (at >= 0 && !rows[at]!.entry.layer) at = rows[at]!.parent;
+    return at >= 0 ? at : topOf(index);
+  };
+
   const topOf = (index: number): number => {
     let at = index;
     while (rows[at]!.parent >= 0) at = rows[at]!.parent;
@@ -1111,15 +1144,20 @@ export function createObjectTree(life: Lifetime, options: ObjectTreeOptions): Ob
     const height = box.bottom - box.top;
     const part = height > 0 ? (y - box.top) / height : 0.5;
     if (current.layers) {
-      // Un livello va sopra o sotto un altro, dal lato più vicino.
-      const top = topOf(index);
+      // Sulla riga di un livello: ai bordi sopra o sotto di lui, nel mezzo
+      // dentro, dove diventa un sottolivello. Sugli oggetti, sopra o sotto il
+      // livello che li contiene, dal lato più vicino.
+      if (row.entry.layer && part >= 0.25 && part <= 0.75) return into(index, "top");
+      const top = row.entry.layer ? index : layerOf(index);
       const end = lastOf(top);
       const first = boxOf(top) ?? box;
       const last = boxOf(end) ?? box;
       const key = rows[top]!.entry.key;
-      return y < (first.top + last.bottom) / 2
-        ? offer({ key, place: "before" }, { index: top, place: "before", depth: 0 })
-        : offer({ key, place: "after" }, { index: end, place: "after", depth: 0 });
+      const depth = rows[top]!.level - 1;
+      const above = row.entry.layer ? part < 0.25 : y < (first.top + last.bottom) / 2;
+      return above
+        ? offer({ key, place: "before" }, { index: top, place: "before", depth })
+        : offer({ key, place: "after" }, { index: end, place: "after", depth });
     }
     if (row.entry.layer) {
       // Sul bordo alto di un livello, in fondo a ciò che sta sopra.
@@ -1218,7 +1256,7 @@ export function createObjectTree(life: Lifetime, options: ObjectTreeOptions): Ob
     const ghost = document.createElement("div");
     ghost.className = "draw-objects-ghost";
     ghost.setAttribute("aria-hidden", "true");
-    ghost.textContent = keys.length === 1 ? row.entry.label() : plural(keys.length, "draw.describe.parts.one", "draw.describe.parts.other");
+    ghost.textContent = keys.length === 1 ? shownOf(row.entry) : plural(keys.length, "draw.describe.parts.one", "draw.describe.parts.other");
     element.append(ghost);
     drag = { pointer: pressed.pointer, keys, moving: new Set(keys), layers: row.entry.layer, ghost, drop: null, x: pressed.x, y: pressed.y };
     tree.toggleAttribute("data-dragging", true);
@@ -1434,7 +1472,10 @@ export function createObjectTree(life: Lifetime, options: ObjectTreeOptions): Ob
     const twisty = event.target instanceof Element && event.target.closest(".draw-object-twisty") !== null;
     if (row.entry.layer || (twisty && row.branch)) {
       active = row.entry.key;
-      if (row.branch) setExpanded(row, !row.open);
+      if (row.entry.layer && !twisty && options.onCurrent !== undefined) {
+        options.onCurrent(row.entry.key);
+        render();
+      } else if (row.branch) setExpanded(row, !row.open);
       else render();
       return;
     }
@@ -1482,6 +1523,7 @@ export function createObjectTree(life: Lifetime, options: ObjectTreeOptions): Ob
 
   return {
     element,
+    header,
     update(next, selection, total) {
       entries = next;
       count = total;
@@ -1522,6 +1564,14 @@ export function createObjectTree(life: Lifetime, options: ObjectTreeOptions): Ob
     },
     focus() {
       tree.focus({ preventScroll: true });
+    },
+    locate(key) {
+      if (!unfold(key)) return false;
+      flatten();
+      active = key;
+      render();
+      reveal();
+      return true;
     },
     setFiltering(on) {
       if (filterBar.hidden === !on) return;

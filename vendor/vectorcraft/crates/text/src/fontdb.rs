@@ -38,8 +38,8 @@ pub(crate) use dirs::fonts_outside;
 #[cfg(test)]
 pub(crate) use dirs::sfnt_of;
 pub use dirs::{
-    PlatformFontFiles, app_font_dir, set_app_font_dir, set_platform_font_files, set_user_font_dirs, set_user_font_dirs_confined, system_font_dirs,
-    user_font_dirs,
+    PlatformFontFiles, app_font_dir, set_app_font_dir, set_platform_font_files, set_system_fonts, set_user_font_dirs, set_user_font_dirs_confined,
+    system_font_dirs, system_fonts, user_font_dirs,
 };
 use face::Instances;
 #[cfg(test)]

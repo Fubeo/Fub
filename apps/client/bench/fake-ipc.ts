@@ -12,7 +12,7 @@
 //
 // # Cosa è finto e cosa no
 //
-// Il cuore è `src/host/finto.ts`, che è già l'host finto degli e2e e risponde a
+// Il cuore è `src/host/fake.ts`, che è già l'host finto degli e2e e risponde a
 // **tutta** la porta col vault in memoria. Quel file ha tre regole, e la terza
 // è «ciò che non sa fare LANCIA»: è la regola giusta per un e2e, dove una
 // risposta vuota è indistinguibile da «non c'era niente» e fa passare un
@@ -47,6 +47,8 @@ import type {
   BundleInfo,
   CommandSpec,
   DocumentMatch,
+  DrawingCommandInfo,
+  DrawingCommandRequest,
   DrawingGesture,
   DrawingLoss,
   DrawingOutcome,
@@ -74,6 +76,9 @@ import { gridJournalText } from "../src/state/grid-journal";
 import { SPECS as SLASH_SPECS } from "../src/panels/slash/fixture.test-data";
 import { CONNECTORS_DOC, connectorsFixture, type ConnectorsFixture } from "./connectors-fixture";
 import { DEFS_ID } from "../src/editors/spatial/scene/ids";
+import { RISPOSTE, rispostaDiFamiglia } from "./disegno-famiglie/risposte";
+import { comandiProva, comandiSelezione, comandiTrasformazioni, INDICE_PROVA } from "./disegno-indice-prova";
+import { selezioneDelClic } from "./disegno-clic";
 import { LARGE_DOC, largeFixture, type LargeFixture } from "./large-fixture";
 import { documentEmbedHtml, LIVE_DOC, liveCase } from "./live-fixture";
 import { treeFixture, type TreeFixture } from "./vault-fixture";
@@ -95,7 +100,7 @@ import {
   treeSceneSetting,
 } from "./craft-fixture";
 import { rawSceneCase, rawSceneCraft, rawScenePreview, rawSceneResources } from "./raw-fixture";
-import { BASE_DOC, baseFixture } from "./base-fixture";
+import { BASE_DOC, baseFixture, MAP_TILE_SITE } from "./base-fixture";
 import { CRAFT_BUNDLE_NS, CRAFT_PREVIEW_COMMAND, type CraftPreview } from "../src/host/craft";
 import { CORPUS, OUTPUT, RESOURCES } from "./corpus";
 import { deskCase, deskScene } from "./desk-scene";
@@ -372,7 +377,7 @@ const BASE_IN_NOTE = BASE_PARAM === "nota";
 /// `export.run` nel kernel, che il banco di solito non ha.
 const EXPORT_MENU = params.get("esporta-menu") === "1";
 const BASE_VARIANT = BASE_IN_NOTE ? "1" : BASE_PARAM;
-const BASE = BASE_VARIANT === "1" || BASE_VARIANT === "venti" || BASE_VARIANT === "calendario" || BASE_VARIANT === "tempo"
+const BASE = BASE_VARIANT === "1" || BASE_VARIANT === "venti" || BASE_VARIANT === "calendario" || BASE_VARIANT === "tempo" || BASE_VARIANT === "mappa"
   ? baseFixture(() => ({
       revision: async (doc) => (await host.module.api.readDocument(doc)).revision,
       writeByCommand: async (doc, text) => {
@@ -921,9 +926,79 @@ function trashWithThree(asking = false): UiNode {
 /// accende la feature `draw`, come l'host col componente dei disegni.
 const LIVE_DRAWS = Object.keys(LIVE?.files ?? {}).some((id) => /\.svg$/i.test(id));
 
+// `?campioni=N` (K6 T10, la scheda Risorse): il disegno dei connettori con N
+// campioni del documento in `<defs>`, gradienti lineari con un `fub:name` e
+// un solo stop, com'è scritto un campione che `scene/classify` legge. Senza,
+// il disegno è quello di sempre.
+const CAMPIONI_PARAM = params.get("campioni");
+
+/// Il testo del disegno con `count` campioni nel primo `<defs>` aperto.
+function conCampioni(text: string, count: number): string {
+  if (!/^(0|[1-9]\d{0,3})$/.test(String(count))) throw new RangeError("campioni must be a count from 0 to 9999");
+  const campioni = Array.from({ length: count }, (_, index) => {
+    const colore = (((index + 1) * 2654435761) >>> 0) & 0xffffff;
+    const hex = colore.toString(16).padStart(6, "0");
+    return `<linearGradient id="campione-${index + 1}" fub:role="swatch" fub:name="Campione ${index + 1}"><stop stop-color="#${hex}"/></linearGradient>`;
+  }).join("");
+  return text.replace(/<defs\b[^>]*[^/]>/, (open) => `${open}${campioni}`);
+}
+
+// `?elabora=1` (K6 T12, giro 5, Elaborazione tracciati): il disegno dei connettori con
+// due forme sovrapposte in fondo al primo livello, un rettangolo dietro e un cerchio
+// davanti, nel vuoto in basso a destra. Le risposte di Unione e Meno davanti
+// (`disegno-famiglie/tracciati.json`) le tolgono e mettono il tracciato al posto del
+// cerchio, com'è il motore vero (`crates/fub-disegno/tests/famiglie/tracciati.json`).
+const ELABORA_PARAM = params.get("elabora");
+if (ELABORA_PARAM !== null && ELABORA_PARAM !== "1") throw new RangeError("elabora must be 1");
+
+/// Il testo del disegno con le due forme sovrapposte alla fine del primo livello.
+function conSovrapposte(text: string): string {
+  const forme =
+    `    <rect id="o0000001a" fub:name="Dietro" x="620" y="320" width="160" height="100" fill="#e9d8fd"/>\n` +
+    `    <ellipse id="o0000001b" fub:name="Davanti" cx="780" cy="420" rx="60" ry="60" fill="#fce7f3" stroke="#1a202c" stroke-width="2"/>\n`;
+  return text.replace(/\n  <\/g>\n<\/svg>/, (fine) => `\n${forme.trimEnd()}${fine}`);
+}
+
+// `?aspetto=contorno|sfumatura` (K6 T15, giro 5, le sezioni Contorno e Sfumatura): la prima forma del
+// disegno dei connettori con un contorno spesso e tratteggiato, o riempita da una sfumatura lineare
+// privata a tre punti, scritta come la scrive la scena. Senza, il disegno è quello di sempre.
+const ASPETTO_PARAM = params.get("aspetto");
+
+/// Il testo del disegno con l'aspetto `aspetto` sulla prima forma.
+function conAspetto(text: string, fixture: ConnectorsFixture, aspetto: string): string {
+  const forma = fixture.shapes[0];
+  if (forma === undefined) return text;
+  const apertura = new RegExp(`<(rect|ellipse|polygon)\\b[^>]*\\bid="${forma.id}"[^>]*?(/?)>`);
+  const senza = (tag: string, nomi: readonly string[]): string => nomi.reduce((t, nome) => t.replace(new RegExp(`\\s${nome}="[^"]*"`), ""), tag);
+  if (aspetto === "contorno") {
+    return text.replace(apertura, (tag) =>
+      senza(tag, ["stroke", "stroke-width", "stroke-dasharray"]).replace(/\s*(\/?)>$/, ' stroke="#1f2937" stroke-width="8" stroke-dasharray="20 8"$1>'));
+  }
+  if (aspetto !== "sfumatura") throw new RangeError("aspetto must be contorno or sfumatura");
+  const g = forma.geometry;
+  const [x1, x2, y] = forma.kind === "rect"
+    ? [g[0]!, g[0]! + g[2]!, g[1]! + g[3]! / 2]
+    : forma.kind === "ellipse"
+      ? [g[0]! - g[2]!, g[0]! + g[2]!, g[1]!]
+      : [Math.min(...g.filter((_, i) => i % 2 === 0)), Math.max(...g.filter((_, i) => i % 2 === 0)), g[1]!];
+  const sfumatura = `<linearGradient id="rbanco001" fub:role="private" gradientUnits="userSpaceOnUse" x1="${x1}" y1="${y}" x2="${x2}" y2="${y}">`
+    + '<stop offset="0" stop-color="#0072b2"/><stop offset="0.5" stop-color="#f0e442"/><stop offset="1" stop-color="#d55e00"/></linearGradient>';
+  const conDefs = /<defs\b[^>]*[^/]>/.test(text)
+    ? text.replace(/<defs\b[^>]*[^/]>/, (open) => `${open}${sfumatura}`)
+    : text.replace(/(<svg\b[^>]*>)/, `$1<defs id="fub-defs">${sfumatura}</defs>`);
+  return conDefs.replace(apertura, (tag) => senza(tag, ["fill"]).replace(/\s*(\/?)>$/, ' fill="url(#rbanco001) #a8a07a"$1>'));
+}
+
+/// Il testo del disegno dei connettori con i parametri della pagina.
+function testoDeiConnettori(fixture: ConnectorsFixture): string {
+  const conIParametri = CAMPIONI_PARAM === null ? fixture.text : conCampioni(fixture.text, Number(CAMPIONI_PARAM));
+  const conAspetti = ASPETTO_PARAM === null ? conIParametri : conAspetto(conIParametri, fixture, ASPETTO_PARAM);
+  return ELABORA_PARAM === "1" ? conSovrapposte(conAspetti) : conAspetti;
+}
+
 /// Il disegno che il banco apre dall'albero, se ne ha uno.
 const DRAWING = CONNECTORS !== null
-  ? { doc: CONNECTORS_DOC, text: CONNECTORS.text }
+  ? { doc: CONNECTORS_DOC, text: testoDeiConnettori(CONNECTORS) }
   : LARGE !== null
     ? { doc: LARGE_DOC, text: LARGE.text }
     : null;
@@ -941,11 +1016,75 @@ const DRAWING = CONNECTORS !== null
 //   (`__fixtures__/disegno-gesti/`) quando il disegno e lo strumento sono
 //   quelli di un vettore; ogni altro gesto non scrive niente (`empty`): il
 //   motore del banco sa soltanto i vettori.
+//   I comandi rispondono con `disegno-famiglie/<famiglia>.json`
+//   (`disegno-famiglie/risposte.ts`).
 // - `spento`: il motore spento nel vault, ogni porta del disegno `unserved`.
 // - `errore`: l'apertura fallisce con `internal`, il motore è fermo.
 const DRAWING_ENGINE_PARAM = params.get("drawing");
+// `?indice=prova` porta al Disegno completo l'indice di prova del menu ≡ e di
+// Ctrl+/ (K6 T9a, `disegno-indice-prova.ts`), al posto di quello generato, che
+// è vuoto finché nessuna riga è fatta.
+const INDICE_PARAM = params.get("indice");
 if (DRAWING_ENGINE_PARAM !== null && !["acceso", "spento", "errore"].includes(DRAWING_ENGINE_PARAM)) {
   throw new RangeError("drawing must be acceso, spento or errore");
+}
+/// `?motore=prova|nuovo|rotto` (K6 T11): le preferenze del motore in
+/// Impostazioni › Disegni, con il motore acceso (`?drawing=acceso`). `prova`:
+/// `draw.motore` vuoto, campi accesi; `nuovo`: scritto da un Fub più nuovo;
+/// `rotto`: non si legge. Nelle ultime due il riquadro è in sola lettura.
+const MOTORE_PARAM = params.get("motore");
+if (MOTORE_PARAM !== null && !["prova", "nuovo", "rotto"].includes(MOTORE_PARAM)) {
+  throw new RangeError("motore must be prova, nuovo or rotto");
+}
+
+/// `?punti=1` (K6 T12): con la Selezione diretta o il Punto di ancoraggio
+/// del motore, lo stato dello strumento dice un punto scelto sulla prima
+/// forma del disegno, per la fila dei punti; senza, nessun punto.
+const PUNTI_PARAM = params.get("punti");
+if (PUNTI_PARAM !== null && PUNTI_PARAM !== "1") throw new RangeError("punti must be 1");
+
+/// Lo stato dello strumento del banco con un punto scelto (`?punti=1`), o
+/// `null` per una richiesta che non lo chiede.
+function benchStatoCoiPunti(request: DrawingCommandRequest): DrawingOutcome | null {
+  if (PUNTI_PARAM !== "1" || request.id !== "disegno.strumento.stato") return null;
+  const strumento = (request.value as { strumento?: unknown } | null)?.strumento;
+  if (strumento !== "directSelection" && strumento !== "anchorPoint") return null;
+  const element = CONNECTORS?.shapes[0]?.id ?? "banco";
+  return {
+    revision: request.revision, preview: null, ops: null, selection: request.selection, losses: [], refused: null, frame: null,
+    state: {
+      busy: false, transforming: false, wants_text: false, composing: false, cursor: "arrow", options: null,
+      anchors: [{ element, subpath: 0, anchor: 0, at: [292.99, 170.14], end: false }],
+    },
+  };
+}
+
+/// Le righe di `prefs.list` del banco: un pezzo dell'elenco vero del motore
+/// (`vendor/vectorcraft/crates/engine/src/cmd/prefscmds.rs`), con ogni tipo di
+/// campo, nelle parole del motore che la sezione traduce.
+const BENCH_PREFS: readonly Record<string, unknown>[] = [
+  { key: "keyboardIncrement", category: "General", section: "", label: "Keyboard Increment", value: 1, kind: "number", min: 0.001, max: 1296, unit: "pt", measure: "General" },
+  { key: "constrainAngle", category: "General", section: "", label: "Constrain Angle", value: 0, kind: "number", min: -360, max: 360, unit: "°" },
+  { key: "cornerRadius", category: "General", section: "", label: "Corner Radius", value: 12, kind: "number", min: 0, max: 1296, unit: "pt", measure: "General" },
+  { key: "usePreciseCursors", category: "General", section: "Options", label: "Use Precise Cursors", value: false, kind: "bool" },
+  { key: "showToolTips", category: "General", section: "Options", label: "Show Tool Tips", value: true, kind: "bool" },
+  { key: "scaleStrokes", category: "General", section: "Options", label: "Scale Strokes & Effects", value: false, kind: "bool" },
+  { key: "zoomWithMouseWheel", category: "General", section: "Options", label: "Zoom with Mouse Wheel", value: false, kind: "bool" },
+  { key: "selectionTolerance", category: "Selection & Anchor Display", section: "Selection", label: "Tolerance", value: 3, kind: "number", min: 1, max: 8, unit: "px" },
+  { key: "anchorSize", category: "Selection & Anchor Display", section: "Anchor Points, Handle, and Bounding Box Display", label: "Size", value: 3, kind: "integer", min: 1, max: 7 },
+  { key: "handleStyle", category: "Selection & Anchor Display", section: "Anchor Points, Handle, and Bounding Box Display", label: "Handles", value: "solid", kind: "choice", options: ["solid", "hollow", "large"] },
+  { key: "guideColor", category: "Guides & Grid", section: "Guides", label: "Color", value: "#4affff", kind: "color" },
+  { key: "guideStyle", category: "Guides & Grid", section: "Guides", label: "Style", value: "lines", kind: "choice", options: ["lines", "dots"] },
+  { key: "gridColor", category: "Guides & Grid", section: "Grid", label: "Color", value: "#d0d0d0", kind: "color" },
+  { key: "gridlineEvery", category: "Guides & Grid", section: "Grid", label: "Gridline every", value: 72, kind: "number", min: 1, max: 16383, unit: "pt", measure: "General" },
+  { key: "gridSubdivisions", category: "Guides & Grid", section: "Grid", label: "Subdivisions", value: 8, kind: "integer", min: 1, max: 1000 },
+  { key: "hyphenationExceptions", category: "Hyphenation", section: "", label: "Exceptions (comma separated)", value: "", kind: "text" },
+];
+
+/// L'esito di un comando delle preferenze del motore del banco.
+function benchPrefsOutcome(request: DrawingCommandRequest): DrawingOutcome {
+  const outcome: DrawingOutcome = { revision: request.revision, preview: null, ops: null, selection: request.selection, losses: [], refused: null, frame: null };
+  return { ...outcome, reading: request.id === "disegno.prefs.list" ? BENCH_PREFS : null };
 }
 
 /// Un vettore dei gesti, per quel che il motore del banco ne legge.
@@ -963,12 +1102,124 @@ const GESTURE_VECTORS = Object.values(
 /// ogni rilascio.
 let benchDrawingIds = 0;
 
+/// L'istanza dell'ultimo disegno aperto dal motore del banco: la finestra del
+/// comando la usa (`window.bench.finestra`).
+let benchLastInstance: string | null = null;
+
+/// Il comando che la finestra «Sposta tracciato» del banco manda. Il banco non
+/// sposta niente: la finestra si guarda, e il suo esito è una riga tratteggiata
+/// sul foglio quando l'anteprima è accesa.
+const BENCH_WINDOW_COMMAND = "tracciato.sposta";
+
+/// L'esito del comando della finestra per il motore del banco: con `preview`
+/// un'anteprima vuota (la forma il motore vera la calcola), altrimenti un passo
+/// senza operazioni. Un comando di un altro id è una porta che il banco non
+/// conosce.
+function benchWindowOutcome(request: DrawingCommandRequest): DrawingOutcome {
+  const outcome: DrawingOutcome = { revision: request.revision, preview: null, ops: null, selection: request.selection, losses: [], refused: null, frame: null };
+  if (request.id !== BENCH_WINDOW_COMMAND) return { ...outcome, refused: "unsupported" };
+  if (request.preview === true) return { ...outcome, preview: { shape: null, matrix: null, marquee: null, overlays: [] } };
+  return { ...outcome, ops: "[]" };
+}
+
+/// La casella del Testo del motore del banco (K6 T16): dove il clic l'ha aperta e le righe scritte.
+/// Il banco non sa misurare il carattere: il cursore sta dopo l'ultima lettera a mezzo corpo per
+/// lettera, abbastanza per guardare la casella che si scrive.
+let benchTypeBox: { x: number; y: number; righe: string[] } | null = null;
+/// Il corpo e il carattere di un testo nuovo, come il ponte del motore vero (`TEXT_SIZE`, `TEXT_FAMILY`).
+const BENCH_TYPE_SIZE = 32;
+
+/// L'esito di un gesto del Testo del motore del banco: il clic apre la casella, i tasti e il testo
+/// la riempiono, e finché è aperta l'anteprima mostra le righe e il cursore. La conferma scrive il
+/// testo nel livello del gesto e lo lascia scelto, come il motore vero; una casella vuota non scrive
+/// niente.
+function benchTypeOutcome(gesture: DrawingGesture, outcome: DrawingOutcome): DrawingOutcome {
+  const stato = (busy: boolean) => ({ busy, transforming: false, wants_text: busy, composing: false, cursor: "text", options: null });
+  const primo = gesture.events[0];
+  if (benchTypeBox === null && primo !== undefined && primo.kind === "down") benchTypeBox = { x: primo.x, y: primo.y, righe: [""] };
+  const box = benchTypeBox;
+  if (box === null) return { ...outcome, state: stato(false) };
+  let preedit = "";
+  for (const ingresso of gesture.inputs ?? []) {
+    const ultima = box.righe.length - 1;
+    if (ingresso.kind === "text") box.righe[ultima] += ingresso.text;
+    else if (ingresso.kind === "ime") preedit = ingresso.preedit;
+    else if (ingresso.kind === "key" && ingresso.pressed && ingresso.key === "Enter") box.righe.push("");
+    else if (ingresso.kind === "key" && ingresso.pressed && ingresso.key === "Backspace") box.righe[ultima] = [...box.righe[ultima]!].slice(0, -1).join("");
+  }
+  const passo = BENCH_TYPE_SIZE * 1.2;
+  const shape = {
+    tag: "text",
+    attrs: { x: String(box.x), y: String(box.y), "font-family": "Inter, sans-serif", "font-size": String(BENCH_TYPE_SIZE), fill: "#1a1a1a" },
+    children: box.righe.map((riga, at) => ({
+      tag: "tspan",
+      attrs: { x: String(box.x), ...(at === 0 ? {} : { dy: String(passo) }) },
+      text: at === box.righe.length - 1 ? riga + preedit : riga,
+    })),
+  };
+  if (gesture.phase === "commit") {
+    benchTypeBox = null;
+    if (gesture.layer === null || box.righe.join("") === "") return { ...outcome, refused: "empty", state: stato(false) };
+    const id = `oz${String(++benchDrawingIds).padStart(7, "0")}`;
+    const elem = { ...shape, attrs: { id, ...shape.attrs } };
+    return { ...outcome, ops: JSON.stringify([{ op: "add", parent: gesture.layer, pos: { last: true }, elem }]), selection: [id], state: stato(false) };
+  }
+  const ultima = box.righe[box.righe.length - 1]! + preedit;
+  const cx = box.x + [...ultima].length * BENCH_TYPE_SIZE * 0.5;
+  const cy = box.y + (box.righe.length - 1) * passo;
+  const caret = { kind: "line" as const, a: [cx, cy - BENCH_TYPE_SIZE * 0.8] as [number, number], b: [cx, cy + BENCH_TYPE_SIZE * 0.2] as [number, number], role: "preview" as const, width: 1, dashed: false };
+  return { ...outcome, preview: { shape, matrix: null, marquee: null, overlays: [caret] }, state: stato(true) };
+}
+
+/// Dove è cominciato il trascinamento dello strumento Sfumatura del banco.
+let benchGradientStart: [number, number] | null = null;
+
+/// L'esito di un gesto dello strumento Sfumatura del motore del banco (K6 T15, giro 6): mentre si
+/// trascina, l'annotatore come lo disegna il motore vero (la barra dall'inizio al punto di adesso, la
+/// maniglia d'inizio e un campione per punto, qui i due della sfumatura di serie); il rilascio non
+/// scrive niente, come gli altri comandi dell'aspetto del banco.
+function benchGradientOutcome(gesture: DrawingGesture, outcome: DrawingOutcome): DrawingOutcome {
+  const primo = gesture.events[0];
+  if (benchGradientStart === null && primo !== undefined && primo.kind === "down") benchGradientStart = [primo.x, primo.y];
+  const ultimo = gesture.events[gesture.events.length - 1];
+  const inizio = benchGradientStart;
+  if (gesture.phase === "commit") {
+    benchGradientStart = null;
+    return inizio === null || gesture.selection.length === 0 ? { ...outcome, refused: "empty" } : { ...outcome, ops: "[]" };
+  }
+  if (inizio === null || ultimo === undefined) return outcome;
+  const fine: [number, number] = [ultimo.x, ultimo.y];
+  return {
+    ...outcome,
+    preview: {
+      shape: null,
+      matrix: null,
+      marquee: null,
+      overlays: [
+        { kind: "line", a: inizio, b: fine, role: "guide", dashed: false },
+        { kind: "handle", at: inizio, role: "guide" },
+        { kind: "swatch", at: inizio, color: "#ffffff", selected: false },
+        { kind: "swatch", at: fine, color: "#000000", selected: false },
+      ],
+    },
+  };
+}
+
 /// L'esito di un gesto del motore del banco sulla copia di testo `text`.
 function benchDrawingOutcome(gesture: DrawingGesture, text: string): DrawingOutcome {
   const outcome: DrawingOutcome = { revision: gesture.revision, preview: null, ops: null, selection: gesture.selection, losses: [], refused: null, frame: null };
+  if (typeof gesture.tool === "object" && gesture.tool.engine.id === "type") return benchTypeOutcome(gesture, outcome);
+  if (typeof gesture.tool === "object" && gesture.tool.engine.id === "gradient") return benchGradientOutcome(gesture, outcome);
   if (gesture.phase !== "commit") return outcome;
   const vector = GESTURE_VECTORS.find((each) => each.gesture.tool === gesture.tool && each.input === text);
-  if (vector === undefined) return { ...outcome, refused: "empty" };
+  if (vector === undefined) {
+    // Il clic di Selezione sceglie ciò che sta sotto il punto, come il motore (K6 T15, giro 2): la
+    // Selezione di Fub e quella del Completo (`selection` del motore), che la sostituisce nella
+    // colonna. Gli altri gesti senza vettore non cambiano niente.
+    const selezione = gesture.tool === "select" || (typeof gesture.tool === "object" && gesture.tool.engine.id === "selection");
+    const scelta = selezione ? selezioneDelClic(gesture) : null;
+    return scelta === null ? { ...outcome, refused: "empty" } : { ...outcome, selection: scelta };
+  }
   const names = new Map<string, string>();
   const real = (value: string): string =>
     value.replace(/@(\d+)/g, (found) => {
@@ -981,6 +1232,111 @@ function benchDrawingOutcome(gesture: DrawingGesture, text: string): DrawingOutc
     selection: vector.expect.selection.map(real),
     refused: vector.expect.refused,
   };
+}
+
+/// I livelli di Fub del testo `testo` come li legge `document.inspect` nel motore vero (K6 T15, giro 4): il
+/// `name` è l'id della scena, il nome a parole resta in `fub:layer`; il numero è la posizione nel testo, così
+/// resta lo stesso fra una lettura e la successiva. Occhio e lucchetto vengono dagli attributi.
+function benchLivelli(testo: string): { id: number; name: string; kind: "Layer"; visible: boolean; locked: boolean; children: [] }[] {
+  return [...testo.matchAll(/<g\s([^>]*\bfub:layer="[^"]*"[^>]*)>/g)].flatMap((trovato, indice) => {
+    const attributi = trovato[1] ?? "";
+    const id = /\bid="([^"]+)"/.exec(attributi)?.[1];
+    if (id === undefined) return [];
+    const visible = !/\bdisplay="none"/.test(attributi);
+    const locked = /\bfub:locked="true"/.test(attributi);
+    return [{ id: indice + 1, name: id, kind: "Layer" as const, visible, locked, children: [] as [] }];
+  });
+}
+
+/// Seleziona tutto e Deseleziona sul disegno del banco: il Completo li manda al motore con
+/// Ctrl+A e Esc. Tutto vuol dire gli oggetti in cima al disegno o in cima a un livello
+/// visibile e non bloccato, senza le risorse di `<defs>` e senza gli oggetti bloccati, come
+/// il motore vero. `null` per gli altri comandi.
+function benchSelezioneOutcome(request: DrawingCommandRequest, testo: string): DrawingOutcome | null {
+  if (request.id !== "disegno.select.all" && request.id !== "disegno.select.none") return null;
+  const esito: DrawingOutcome = {
+    revision: request.revision, preview: null, ops: null, selection: [], losses: [], refused: null, frame: null,
+  };
+  if (request.id === "disegno.select.none") return esito;
+  const radice = new DOMParser().parseFromString(testo, "image/svg+xml").documentElement;
+  const scelti: string[] = [];
+  const raccogli = (padre: Element): void => {
+    for (const figlio of padre.children) {
+      const nome = figlio.localName;
+      if (nome === "defs" || nome === "metadata" || nome === "title" || nome === "desc" || nome === "style") continue;
+      if (figlio.getAttribute("fub:locked") === "true") continue;
+      if (nome === "g" && figlio.hasAttribute("fub:layer")) {
+        if (figlio.getAttribute("display") !== "none") raccogli(figlio);
+        continue;
+      }
+      const id = figlio.getAttribute("id");
+      if (id !== null && id !== "") scelti.push(id);
+    }
+  };
+  raccogli(radice);
+  return { ...esito, selection: scelti };
+}
+
+/// `disegno.document.node` sul disegno del banco: la lettura di un oggetto, che le sezioni del Design
+/// chiedono appena qualcosa è scelto (Contorno, Quota, Oggetti sul tracciato). Ha l'id e il tipo
+/// e, se l'oggetto ha un contorno, lo spessore e le opzioni come le rende il motore
+/// (`crates/fub-disegno/src/famiglie/nucleo.rs`). Niente quota né oggetti sul tracciato: quelle
+/// sezioni non ci sono. Un id che il disegno non ha è un rifiuto (`unmapped`). `null` per gli
+/// altri comandi.
+function benchNodoOutcome(request: DrawingCommandRequest, testo: string): DrawingOutcome | null {
+  if (request.id !== "disegno.document.node") return null;
+  const esito: DrawingOutcome = {
+    revision: request.revision, preview: null, ops: null, selection: request.selection, losses: [], refused: null, frame: null,
+  };
+  const id = (request.value as { id?: unknown } | null)?.id;
+  const radice = new DOMParser().parseFromString(testo, "image/svg+xml").documentElement;
+  const nodo = typeof id === "string" ? [...radice.querySelectorAll("[id]")].find((el) => el.getAttribute("id") === id) : undefined;
+  if (nodo === undefined) return { ...esito, refused: "unmapped" };
+  const lettura: Record<string, unknown> = { id, type: nodo.localName };
+  const tratto = nodo.getAttribute("stroke");
+  if (tratto !== null && tratto !== "none") {
+    const trattini = (nodo.getAttribute("stroke-dasharray") ?? "").split(/[\s,]+/).filter(Boolean).map(Number).filter(Number.isFinite);
+    lettura.strokeWidth = Number(nodo.getAttribute("stroke-width") ?? "1");
+    lettura.strokeOptions = { dash: trattini, dashOffset: 0, miterLimit: 10, align: "center", arrowScale: [100, 100], canAlign: nodo.localName !== "path" && nodo.localName !== "line" && nodo.localName !== "polyline" };
+  }
+  return { ...esito, reading: lettura };
+}
+
+/// I comandi della famiglia `livelli` sul disegno del banco (K6 T15, giro 4), con la regola del motore vero
+/// (`crates/fub-disegno/src/famiglie/livelli.rs`): un livello bloccato non cambia nome e non si elimina, occhio
+/// e lucchetto sì; un livello nuovo va in cima. `null` per gli altri comandi.
+function benchLivelliOutcome(request: DrawingCommandRequest, testo: string): DrawingOutcome | null {
+  const esito = (extra: Partial<DrawingOutcome>): DrawingOutcome => ({
+    revision: request.revision, preview: null, ops: null, selection: request.selection, losses: [], refused: null, frame: null, ...extra,
+  });
+  const livelli = benchLivelli(testo);
+  const valore = (request.value ?? {}) as { ids?: number[]; name?: string; visible?: boolean; locked?: boolean };
+  const scelto = livelli.find((livello) => livello.id === valore.ids?.[0]);
+  switch (request.id) {
+    case "disegno.document.inspect":
+      return esito({ reading: { layers: [...livelli].reverse() } });
+    case "disegno.layer.new": {
+      // Un id di livello come quelli della scena (`l` e otto cifre o lettere).
+      const id = `lz${String(++benchDrawingIds).padStart(7, "0")}`;
+      const elem = { tag: "g", attrs: { id, "fub:layer": valore.name ?? "Livello" }, children: [] };
+      return esito({ ops: JSON.stringify([{ op: "add", parent: "#root", pos: { last: true }, elem }]) });
+    }
+    case "disegno.layer.setProps": {
+      if (scelto === undefined) return esito({ refused: "empty" });
+      if (valore.name !== undefined && scelto.locked) return esito({ refused: "locked" });
+      const attrs: Record<string, string | null> = {};
+      if (valore.name !== undefined) attrs["fub:layer"] = valore.name;
+      if (valore.visible !== undefined) attrs.display = valore.visible ? null : "none";
+      if (valore.locked !== undefined) attrs["fub:locked"] = valore.locked ? "true" : null;
+      return esito({ ops: JSON.stringify([{ op: "set", id: scelto.name, attrs }]) });
+    }
+    case "disegno.layer.delete":
+      if (scelto === undefined) return esito({ refused: "empty" });
+      if (scelto.locked) return esito({ refused: "locked" });
+      return esito({ ops: JSON.stringify([{ op: "remove", target: scelto.name }]) });
+    default:
+      return null;
+  }
 }
 
 /// Il motore del disegno del banco, se la query ne chiede uno.
@@ -1001,13 +1357,53 @@ function benchDrawingEngine(): DrawingFake | undefined {
   ];
   let instances = 0;
   return {
-    open: () => ({ instance: `banco-${++instances}`, revision: "0", mapped: 0, unmapped: losses.length, losses }),
+    // I comandi della prova: quali valgono per la selezione, e il perché (K6 T9a).
+    // Con `?comandi=risposti` valgono quelli a cui il banco sa rispondere
+    // (`disegno-famiglie/`, K6 T12 giro 4): la finestra di Sposta tracciato e
+    // Converti della sezione dei punti si aprono come col motore vero. Senza,
+    // quelli delle trasformazioni (K6 T13 giro 3) e della Selezione (K6 T15).
+    comandi:
+      INDICE_PARAM === "prova"
+        ? (selection) => comandiProva(selection)
+        : params.get("comandi") === "risposti"
+          ? () => comandiRisposti()
+          : (selection) => [...comandiTrasformazioni(selection), ...comandiSelezione(selection, CONNECTORS?.labels ?? [])],
+    open: () => {
+      const instance = `banco-${++instances}`;
+      benchLastInstance = instance;
+      return { instance, revision: "0", mapped: 0, unmapped: losses.length, losses };
+    },
     gesto: (gesture, copia) => benchDrawingOutcome(gesture, copia.text),
+    // Il comando delle scene della finestra ha la sua risposta; gli altri
+    // comandi del Disegno completo hanno quelle di `disegno-famiglie/`, e
+    // `unserved` un comando che non ne ha una.
+    // Le preferenze del motore rispondono sempre: il Completo le legge appena
+    // si apre (`disegno.prefs.get`, la sezione Trasforma), e un `unserved` a
+    // una richiesta della sessione aperta la ferma come motore spento.
+    // Seleziona tutto e Deseleziona leggono la copia del disegno.
+    // I livelli (K6 T15, giro 4) leggono e cambiano la copia del disegno, come il motore vero.
+    comando: (request, copia) =>
+      benchStatoCoiPunti(request) ?? benchSelezioneOutcome(request, copia.text) ?? benchNodoOutcome(request, copia.text) ?? benchLivelliOutcome(request, copia.text) ?? (request.id === BENCH_WINDOW_COMMAND
+        ? benchWindowOutcome(request)
+        : request.id.startsWith("disegno.prefs.")
+          ? benchPrefsOutcome(request)
+          : rispostaDiFamiglia(request)),
   };
+}
+
+/// I comandi che il banco sa fare con l'indice generato: uno per risposta di
+/// `disegno-famiglie/`, accesi.
+function comandiRisposti(): DrawingCommandInfo[] {
+  return [...new Set(RISPOSTE.map((r) => r.comando))].map((id) => ({ id, enabled: true, disabled_reason: null }));
 }
 
 /// Il motore del disegno del banco: `undefined` senza `?drawing=`.
 const DRAWING_ENGINE = benchDrawingEngine();
+// L'indice di prova entra prima che il Completo chieda il suo: `indice()` lo
+// memorizza alla prima chiamata, e il banco apre il disegno dopo.
+if (INDICE_PARAM === "prova") {
+  void import("../src/editors/spatial/completo/indice").then((modulo) => modulo.usaIndiceDiProva(INDICE_PROVA));
+}
 
 // Il ramo Darwin deve nascere prima che `mountTitlebar` legga la piattaforma:
 // la query prepara il browser del banco, mai la shell di produzione.
@@ -1390,6 +1786,7 @@ const SETTINGS: SettingEntry[] = [
         options: [
           { value: "", label: "Massimo dello schermo" },
           { value: "240", label: "240 fps" },
+          { value: "180", label: "180 fps" },
           { value: "165", label: "165 fps" },
           { value: "144", label: "144 fps" },
           { value: "120", label: "120 fps" },
@@ -1724,6 +2121,90 @@ const DRAW_WORKSPACE: readonly SettingEntry[] = [
   },
 ];
 
+/// `?componenti=motore-spento` (K6 T7): la partenza in cui il Motore del disegno
+/// è spento, e con lui il Disegno completo che lo richiede. È costruita qui, come
+/// copia della partenza `studio`, così il fixture dei componenti (specchio del
+/// Rust) resta com'è.
+const COMPONENT_SCENARIO_MOTORE_SPENTO = (() => {
+  const base = COMPONENT_SCENARIO;
+  const mappa = structuredClone(base.mappe[base.partenze.studio!]!);
+  for (const riga of mappa.righe) {
+    if (riga.id === "fub.motore-vettoriale" || riga.id === "fub.disegno-completo") {
+      riga.acceso = false;
+      riga.perche = "Spento";
+    }
+  }
+  return { ...base, partenze: { ...base.partenze, "motore-spento": base.mappe.length }, mappe: [...base.mappe, mappa] };
+})();
+
+/// Gli spazi di lavoro salvati del disegno (K6 T7, `draw.workspaces`): un
+/// elenco di voci JSON con `"v": 1`, vuoto di serie come un vault che non ne ha
+/// salvati. Le scene del menu dello spazio lo lasciano così; il probe di «Salva»
+/// e «Gestisci» lo riempie scrivendo l'impostazione dalla banda.
+const DRAW_SAVED_WORKSPACES: readonly SettingEntry[] = [
+  {
+    spec: {
+      key: "draw.workspaces",
+      label: "Spazi di lavoro salvati",
+      description: "",
+      group: "Disegni",
+      scope: "vault",
+      kind: { kind: "list", default: [] },
+      program_writable: false,
+    },
+    value: [],
+    source: "default",
+  },
+];
+
+/// I tasti del Disegno completo cambiati dall'utente (K6 T9c, `draw.keys`): solo
+/// con l'indice di prova (`?indice=prova`), che dà i comandi alla sezione
+/// «Disegno completo» di Impostazioni › Scorciatoie. Con `?tasti=conflitto`
+/// due tasti cambiati: «Inverti direzione tracciato» prende Ctrl+J di «Unisci»
+/// (vince l'ultimo assegnato) e «Separa» resta senza tasto.
+const DRAW_KEYS: readonly SettingEntry[] =
+  INDICE_PARAM !== "prova"
+    ? []
+    : [
+        {
+          spec: {
+            key: "draw.keys",
+            label: "Tasti del Disegno completo",
+            description: "",
+            group: "Disegni",
+            scope: "machine",
+            kind: { kind: "text", default: "" },
+            program_writable: false,
+          },
+          value:
+            params.get("tasti") === "conflitto"
+              ? JSON.stringify({ v: 1, insieme: null, tasti: { "draw.path.reverse": "Mod-j", "draw.ungroup": null } })
+              : "",
+          source: params.get("tasti") === "conflitto" ? "machine" : "default",
+        },
+      ];
+
+/// Le preferenze del motore (K6 T11, `draw.motore`): solo con `?motore=`, che
+/// le dà al riquadro «Motore del disegno» di Impostazioni › Disegni.
+const DRAW_ENGINE_PREFS: readonly SettingEntry[] =
+  MOTORE_PARAM === null
+    ? []
+    : [
+        {
+          spec: {
+            key: "draw.motore",
+            label: "Preferenze del Motore del disegno",
+            description: "",
+            group: "Disegni",
+            scope: "machine",
+            kind: { kind: "text", default: "" },
+            program_writable: false,
+          },
+          value: MOTORE_PARAM === "nuovo" ? JSON.stringify({ v: 2, prefs: { gridStyle: "dots" } }) : MOTORE_PARAM === "rotto" ? "{non si legge" : "",
+          source: MOTORE_PARAM === "prova" ? "default" : "machine",
+        },
+      ];
+
 /// Il gruppo «App esterne» con le cinque impostazioni della feature `craft`,
 /// i testi del catalogo vero (`fub-host/src/settings.rs`). Solo con
 /// `?craft=1`, così le altre scene delle preferenze restano come sono.
@@ -1976,6 +2457,42 @@ const GRID_PREFERENCES: readonly SettingEntry[] = WORKBOOK_DOC === null && param
   source: GRID_SPEED_CHOSEN ? "machine" : "default",
 }];
 
+/// `?tessere=0|1`: la riga di macchina `map.tile-hosts` (Privacy), vuota o
+/// col sito di prova della mappa (`?base=mappa`). Senza il parametro la riga
+/// non c'è, e le altre scene restano com'erano.
+const TILES_PARAM = params.get("tessere");
+const MAP_TILE_SETTING: readonly SettingEntry[] = TILES_PARAM === null ? [] : [{
+  spec: {
+    key: "map.tile-hosts",
+    label: "Tessere delle mappe",
+    description: "I siti da cui la vista Mappa di una Base può scaricare le tessere, quando premi «Attiva». Vuota, le mappe restano offline e nessuna richiesta esce dal computer.",
+    group: "Privacy",
+    scope: "machine",
+    kind: { kind: "list", default: [] },
+    program_writable: false,
+  },
+  value: TILES_PARAM === "1" ? [MAP_TILE_SITE] : [],
+  source: TILES_PARAM === "1" ? "machine" : "default",
+}];
+
+/// Una tessera di prova, disegnata qui: un riquadro chiaro con la griglia e
+/// il suo indirizzo, come PNG. Le tessere sono immagini del fornitore e non
+/// seguono la luce dell'app.
+async function benchTile(url: string): Promise<ArrayBuffer> {
+  const [z, x, y] = new URL(url).pathname.split("/").slice(1).map((part) => Number.parseInt(part, 10));
+  const canvas = new OffscreenCanvas(256, 256);
+  const pen = canvas.getContext("2d")!;
+  pen.fillStyle = ((x ?? 0) + (y ?? 0)) % 2 === 0 ? "#dfeee2" : "#d6e6f2";
+  pen.fillRect(0, 0, 256, 256);
+  pen.strokeStyle = "#9bb5a3";
+  pen.lineWidth = 2;
+  pen.strokeRect(1, 1, 254, 254);
+  pen.fillStyle = "#4f6f5a";
+  pen.font = "28px sans-serif";
+  pen.fillText(`${z}/${x}/${y}`, 16, 44);
+  return (await canvas.convertToBlob({ type: "image/png" })).arrayBuffer();
+}
+
 /// `?tipi=1`: il registro dei tipi del vault (`properties.types` di
 /// `crates/fub-kernel/src/properties.rs`), per le scene di Selezione e Stato
 /// (T9): la testata di `live=opzioni` e la Bacheca della Base per `stato`.
@@ -2076,7 +2593,7 @@ const KNOWN_VAULTS = [
 ] satisfies KnownVault[];
 
 // ---------------------------------------------------------------------------
-// La scenografia: le risposte del canale dati che `finto.ts` non dà.
+// La scenografia: le risposte del canale dati che `fake.ts` non dà.
 // ---------------------------------------------------------------------------
 
 /// Le icone del vault: le figure monocrome `fub:<nome>`, come il mockup. Con
@@ -2128,7 +2645,7 @@ const TAG = [
 ];
 
 /// Le risposte che la scenografia aggiunge al canale dati, per specie di query.
-/// Ciò che non è qui dentro passa a `finto.ts` **intatto**, regola del lancio
+/// Ciò che non è qui dentro passa a `fake.ts` **intatto**, regola del lancio
 /// compresa: un banco che rispondesse a tutto non direbbe più quale query la
 /// shell ha imparato a fare da sola.
 /// I dati della riga sotto il titolo, per nota: Benvenuto ha due etichette,
@@ -2357,83 +2874,119 @@ const RESPONSES: Partial<Record<IndexQuery["kind"], (q: IndexQuery) => IndexResu
     const total = q.kind === "backlinks" ? (NOTE_FACTS[q.target]?.links ?? 0) : 0;
     return { kind: "backlinks", value: { items: [], offset: 0, total } };
   },
-  // I titoli `#` di una nota del corpus, coi byte del sorgente: quelli che
-  // «Sposta in…» offre come destinazione. Lo slug è quello semplice, minuscole
-  // e trattini; una nota fuori dal corpus non ha titoli.
-  outline: (q) => {
-    const source = q.kind === "outline" ? (CORPUS[q.doc] ?? "") : "";
-    const encoder = new TextEncoder();
-    const value: Heading[] = [];
-    let offset = 0;
-    let fence = false;
-    for (const line of source.split("\n")) {
-      if (/^\s*(```|~~~)/.test(line)) fence = !fence;
-      const found = fence ? null : /^(#{1,6})\s+(.+?)\s*#*\s*$/.exec(line);
-      if (found) {
-        const text = found[2]!;
-        const start = encoder.encode(source.slice(0, offset)).length;
-        const slug = text.toLocaleLowerCase().replace(/[^\p{L}\p{N}\s-]/gu, "").trim().replace(/\s+/g, "-");
-        value.push({ level: found[1]!.length, text, slug, span: { start, end: start + encoder.encode(line).length }, explicit_anchor: null });
-      }
-      offset += line.length + 1;
-    }
-    return { kind: "outline", value };
-  },
+  // I titoli `#` di una nota del corpus (`headingsOf`): quelli che «Sposta
+  // in…» offre come destinazione, e quelli della Struttura.
+  outline: (q) => ({ kind: "outline", value: q.kind === "outline" ? headingsOf(q.doc) : [] }),
   jobs: () => ({ kind: "jobs", value: JOBS }),
 };
+
+/// I titoli `#` di una nota del vault finto, coi byte del sorgente: è l'indice
+/// dei titoli del finto (la domanda `outline`), letto dai file del vault come
+/// l'indice vero. Lo slug è quello semplice, minuscole e trattini; ogni
+/// documento che non è una nota Markdown (un PDF, le sue annotazioni, una
+/// lavagna) non ha titoli.
+function headingsOf(doc: string): Heading[] {
+  const source = doc.endsWith(".md") ? (options.file?.[doc] ?? "") : "";
+  const encoder = new TextEncoder();
+  const value: Heading[] = [];
+  let offset = 0;
+  let fence = false;
+  for (const line of source.split("\n")) {
+    if (/^\s*(```|~~~)/.test(line)) fence = !fence;
+    const found = fence ? null : /^(#{1,6})\s+(.+?)\s*#*\s*$/.exec(line);
+    if (found) {
+      const text = found[2]!;
+      const start = encoder.encode(source.slice(0, offset)).length;
+      const slug = text.toLocaleLowerCase().replace(/[^\p{L}\p{N}\s-]/gu, "").trim().replace(/\s+/g, "-");
+      value.push({ level: found[1]!.length, text, slug, span: { start, end: start + encoder.encode(line).length }, explicit_anchor: null });
+    }
+    offset += line.length + 1;
+  }
+  return value;
+}
+
+/// Il documento davanti, come la shell l'ha pubblicato (`setActiveContext`):
+/// la Struttura del finto lo legge come il provider vero legge
+/// `active_context` (`fub-features/src/outline.rs`).
+let frontDoc: string | null = null;
+
+/// Chi punta a una nota, nella scenografia: le righe di «In entrata» sotto la
+/// Struttura. Il provider le legge dai backlink dell'indice; il finto non li
+/// tiene, e le dichiara qui per le note che le foto mostrano (per Sintassi di
+/// Fub le stesse dei Collegamenti).
+const OUTLINE_INCOMING: Readonly<Record<string, readonly string[]>> = {
+  "Benvenuto.md": ["Guida/Sintassi di Fub.md", "Progetti/Il banco che vede.md", "Diario/2026-08-19.md"],
+  "Guida/Sintassi di Fub.md": ["Benvenuto.md", "Progetti/Il banco che vede.md"],
+};
+
+type TreeItem = Extract<UiNode, { node: "tree_item" }>;
+
+/// I titoli da `at` in poi che stanno sotto `parent`, e l'indice del primo che
+/// non ci sta più: «figlio» vuol dire di livello maggiore, come `subtree` del
+/// provider, così una nota che salta un livello non perde titoli. Il salto
+/// porta il posto del titolo (da 1), e solo chi ha figli nasce aperto.
+function headingItems(headings: readonly Heading[], at: number, parent: number): [TreeItem[], number] {
+  const items: TreeItem[] = [];
+  let index = at;
+  while (index < headings.length && headings[index]!.level > parent) {
+    const heading = headings[index]!;
+    const [children, next] = headingItems(headings, index + 1, heading.level);
+    items.push({
+      node: "tree_item",
+      label: heading.text,
+      selected: false,
+      expanded: children.length > 0,
+      action: { action: "goto", payload: index + 1 },
+      children,
+    });
+    index = next;
+  }
+  return [items, index];
+}
+
+/// «In entrata · N» sotto la Struttura, come `build_incoming_section`: il nome
+/// della nota e la sua cartella; senza riferimenti la sezione non c'è.
+function incomingSection(doc: string): UiNode | null {
+  const sources = OUTLINE_INCOMING[doc] ?? [];
+  if (sources.length === 0) return null;
+  return {
+    node: "section", title: `In entrata · ${sources.length}`, collapsed: false, key: "outline-incoming", children: [{
+      node: "list",
+      items: sources.map((source): UiNode => ({
+        node: "list_item",
+        title: pageName(source),
+        subtitle: source.includes("/") ? source.slice(0, source.lastIndexOf("/")).split("/").pop()! : null,
+        action: { action: "open", payload: { doc: source } },
+        selected: false,
+        key: `${source}#0`,
+        drag: { kind: "document", doc: source },
+      })),
+    }],
+  };
+}
+
+/// La Struttura del documento davanti, con la regola del provider `outline`:
+/// nessun documento, lo stato vuoto «nessuna nota»; un documento senza titoli
+/// (un PDF, le sue annotazioni, una lavagna, una nota senza `#`), lo stato
+/// vuoto «nessun titolo», con «In entrata» se qualcuno lo cita; altrimenti
+/// l'albero dei titoli e, sotto, «In entrata».
+function outlineTree(): UiNode {
+  if (frontDoc === null) return { node: "empty_state", title: "Nessuna nota aperta.", detail: null, action: null };
+  const headings = headingsOf(frontDoc);
+  const incoming = incomingSection(frontDoc);
+  if (headings.length === 0) {
+    const empty: UiNode = { node: "empty_state", title: "Nessun heading.", detail: null, action: null };
+    return incoming === null ? empty : { node: "stack", dir: "column", gap: 2, children: [empty, incoming] };
+  }
+  const [roots] = headingItems(headings, 0, 0);
+  return { node: "stack", dir: "column", gap: 2, children: [{ node: "tree", roots }, ...(incoming === null ? [] : [incoming])] };
+}
 
 /// Gli alberi delle view della scenografia, per id. Sono `UiNode` veri e li
 /// disegna `ui/node.ts` vero: è la ragione per cui il pannello di destra si può
 /// fotografare senza inventarsi del markup: **non c'è markup**, c'è un albero
 /// del contratto e il renderer della shell.
 const TREES: Record<string, UiNode> = {
-  // La forma è quella del provider `outline` (fub-features): l'albero dei
-  // titoli e, sotto, «In entrata» con le note che puntano qui (le tre del
-  // prototipo, per la nota Benvenuto che il banco apre per prima).
-  outline: {
-    node: "stack",
-    dir: "column",
-    gap: 2,
-    children: [
-      {
-        node: "tree",
-        roots: [
-          {
-            node: "tree_item",
-            label: "Sintassi di Fub",
-            selected: false,
-            expanded: true,
-            action: { action: "goto", payload: 1 },
-            children: [
-              { node: "tree_item", label: "Titoli", selected: false, expanded: false, action: { action: "goto", payload: 2 }, children: [] },
-              {
-                node: "tree_item",
-                label: "Testo",
-                selected: false,
-                expanded: true,
-                action: { action: "goto", payload: 3 },
-                children: [
-                  { node: "tree_item", label: "Riferimenti", selected: false, expanded: false, action: { action: "goto", payload: 4 }, children: [] },
-                ],
-              },
-              { node: "tree_item", label: "Tabella", selected: false, expanded: false, action: { action: "goto", payload: 5 }, children: [] },
-              { node: "tree_item", label: "Codice", selected: false, expanded: false, action: { action: "goto", payload: 6 }, children: [] },
-            ],
-          },
-        ],
-      },
-      {
-        node: "section", title: "In entrata · 3", collapsed: false, key: "outline-incoming", children: [{
-          node: "list",
-          items: [
-            { node: "list_item", title: "Sintassi di Fub", subtitle: "Guida", action: { action: "open", payload: { doc: "Guida/Sintassi di Fub.md" } }, selected: false, key: "Guida/Sintassi di Fub.md#0", drag: { kind: "document", doc: "Guida/Sintassi di Fub.md" } },
-            { node: "list_item", title: "Il banco che vede", subtitle: "Progetti", action: { action: "open", payload: { doc: "Progetti/Il banco che vede.md" } }, selected: false, key: "Progetti/Il banco che vede.md#0", drag: { kind: "document", doc: "Progetti/Il banco che vede.md" } },
-            { node: "list_item", title: "2026-08-19", subtitle: "Diario", action: { action: "open", payload: { doc: "Diario/2026-08-19.md" } }, selected: false, key: "Diario/2026-08-19.md#0", drag: { kind: "document", doc: "Diario/2026-08-19.md" } },
-          ],
-        }],
-      },
-    ],
-  },
   // Le forme sono quelle del provider `backlinks` (fub-features): una sezione
   // per parte, col numero nel titolo, chiusa quando è vuota; il filtro in
   // fondo, chiuso.
@@ -2448,6 +3001,14 @@ const TREES: Record<string, UiNode> = {
           items: [
             { node: "list_item", title: "Benvenuto", subtitle: "…sta in Sintassi di Fub, i colori della nota e i link…", action: { action: "open", payload: "Benvenuto.md" }, selected: false, drag: { kind: "document", doc: "Benvenuto.md" } },
             { node: "list_item", title: "Il banco che vede", subtitle: "Vedi anche Sintassi di Fub e una delle scene del banco.", action: { action: "open", payload: "Progetti/Il banco che vede.md" }, selected: false, drag: { kind: "document", doc: "Progetti/Il banco che vede.md" } },
+          ],
+        }],
+      },
+      {
+        node: "section", title: "Dalle proprietà · 1", collapsed: false, key: "property_links", children: [{
+          node: "list",
+          items: [
+            { node: "list_item", title: "Frammenti di codice", subtitle: "Proprietà: guida, vedi", action: { action: "open", payload: "Guida/Frammenti di codice.md" }, selected: false, drag: { kind: "document", doc: "Guida/Frammenti di codice.md" } },
           ],
         }],
       },
@@ -2683,7 +3244,10 @@ const options: Options = {
     // Con `export.run` il riquadro di una nota ha «Esporta ▸»: HTML e PDF.
     ...(EXPORT_MENU ? [command("export.run", "Export documents", "Run a registered export target", null)] : []),
   ],
-  settings: [...SETTINGS, ...DAY_FOLDER, ...(DRAWING === null && PDF_SCENE !== "annotato" && !LIVE_DRAWS ? [] : DRAW_WORKSPACE), ...CRAFT_SETTINGS, ...WORKBOOK_CHROME, ...PROPERTIES_DISPLAY, ...PROPERTY_TYPES_SETTING, ...TOOLBAR_SETTING_ROW, ...MATH_SETTINGS, ...GRID_PREFERENCES],
+  settings: [...SETTINGS, ...DAY_FOLDER, ...(DRAWING === null && PDF_SCENE !== "annotato" && !LIVE_DRAWS ? [] : [...DRAW_WORKSPACE, ...DRAW_SAVED_WORKSPACES]), ...DRAW_KEYS, ...DRAW_ENGINE_PREFS, ...CRAFT_SETTINGS, ...WORKBOOK_CHROME, ...PROPERTIES_DISPLAY, ...PROPERTY_TYPES_SETTING, ...TOOLBAR_SETTING_ROW, ...MATH_SETTINGS, ...GRID_PREFERENCES, ...MAP_TILE_SETTING],
+  // Le tessere della mappa (`?base=mappa`): il finto le chiede solo dopo il
+  // controllo della riga `map.tile-hosts`, come l'host.
+  ...(TILES_PARAM === null ? {} : { mapTile: benchTile }),
   syntaxForms: [...MARKDOWN_SYNTAX],
   ...(BASE === null ? {} : { customQueries: { "fub.base": (query: unknown) => BASE.query(query) } }),
   ...(WORKBOOK_DOC === null ? {} : {
@@ -2726,7 +3290,7 @@ const options: Options = {
   // dall'host vero (vault di prova con «Studio»), le stesse dei test. Una
   // scelta che lo scenario non ha la porta la rifiuta, come nei test.
   // `?componenti=solo-note` parte da un altro stato registrato.
-  components: COMPONENT_SCENARIO,
+  components: COMPONENTS_START === "motore-spento" ? COMPONENT_SCENARIO_MOTORE_SPENTO : COMPONENT_SCENARIO,
   ...(COMPONENTS_START === null ? {} : { componentsStart: COMPONENTS_START }),
   ...(NEW_VAULT ? { initialVault: null, componentsStart: "nuovo" } : {}),
 };
@@ -2775,6 +3339,9 @@ declare global {
       writeFromOutside: typeof host.writeFromOutside;
       calls: typeof host.calls;
       light: "dark" | "light";
+      /// La finestra del comando sul disegno aperto (K6 T6): la famiglia pronta,
+      /// che si carica, o che non si carica.
+      finestra: (stato: "finestra" | "caricamento" | "errore") => Promise<void>;
       /// Solo nello Scrittoio: dichiara le voci di un tema (vedi sotto).
       themeSettings?: () => Promise<void>;
     };
@@ -2811,7 +3378,54 @@ globalThis.window.bench = {
   writeFromOutside: host.writeFromOutside,
   calls: host.calls,
   light: LIGHT,
+  finestra: (stato: "finestra" | "caricamento" | "errore") => benchFinestra(stato),
 };
+
+/// La finestra «Sposta tracciato» del banco (K6 T6), aperta sul disegno
+/// dell'ultima apertura. `finestra`: la famiglia è pronta, col modulo del
+/// prototipo. `caricamento`: la famiglia non arriva. `errore`: la memoria dei
+/// motori è piena, e «Riprova» rifà la promessa. Le frasi del caricamento e
+/// del titolo di `caricamento` ed `errore` sono quelle del prototipo
+/// (`PLAN-ui/disegno-completo.html`, la finestra «Ombra esterna»).
+async function benchFinestra(stato: "finestra" | "caricamento" | "errore"): Promise<void> {
+  if (benchLastInstance === null) throw new Error("il banco: il disegno non è aperto");
+  const instance = benchLastInstance;
+  const { apriFinestra } = await import("../src/editors/spatial/motore/finestre");
+  const { openLifetime } = await import("../src/ui/lifetime");
+  const vita = openLifetime();
+  const modulo = {
+    campi: [
+      { nome: "distanza", tipo: "numero" as const },
+      { nome: "giunzioni", tipo: "scelta" as const, valori: ["vivo", "arrotondato", "smussato"] },
+      { nome: "limite", tipo: "numero" as const, min: 1 },
+    ],
+  };
+  const attesa = new Promise<void>(() => {});
+  const pronto = stato === "finestra" ? Promise.resolve() : stato === "errore" ? Promise.reject("no_memory") : attesa;
+  const aperta = stato === "finestra";
+  void apriFinestra(
+    modulo,
+    pronto,
+    (valori, anteprima) =>
+      host.module.api
+        .drawingCommand(instance, { revision: "0", id: BENCH_WINDOW_COMMAND, selection: [], value: valori, preview: anteprima })
+        .then((outcome) => ({ anteprima: outcome.preview, rifiuto: outcome.refused })),
+    {
+      id: "banco.tracciato.sposta",
+      titolo: aperta ? "Sposta tracciato" : "Ombra esterna",
+      descrizione: aperta ? "Un tracciato nuovo, parallelo a quello scelto, alla distanza che scrivi. Un numero negativo lo porta dentro." : undefined,
+      azione: aperta ? "Sposta" : undefined,
+      campi: { distanza: "Spostamento", giunzioni: "Giunzioni", limite: "Limite angolo vivo" },
+      scelte: { giunzioni: { vivo: "Angolo vivo", arrotondato: "Arrotondato", smussato: "Smussato" } },
+      unita: { distanza: "px", limite: "×" },
+      iniziali: { distanza: 6, giunzioni: "arrotondato", limite: 4 },
+      caricamento: aperta ? undefined : "Sto preparando gli effetti: la prima volta ci vuole un momento.",
+      vita,
+      sulFoglio: () => {},
+      riprova: stato === "errore" ? () => attesa : undefined,
+    },
+  );
+}
 
 /// Le voci di un tema, per la scena che fotografa la loro schermata. Il tema di
 /// serie non ne dichiara, e una schermata che non c'è non si fotografa: la
@@ -2988,12 +3602,16 @@ async function liveTrashAction(action: string, payload: unknown): Promise<ViewUp
 const HOST_TEXT: ReadonlySet<IndexQuery["kind"]> = new Set(["settings", "jobs"]);
 
 /// L'albero di una view della scenografia, nella lingua della shell. Della
-/// struttura soltanto «In entrata»: le voci dell'albero sono i titoli della nota.
+/// struttura soltanto gli stati vuoti e «In entrata»: le voci dell'albero sono
+/// i titoli della nota.
 function treeOf(view: string): UiNode | undefined {
+  if (view === "outline") {
+    const tree = outlineTree();
+    if (tree.node !== "stack") return inShellLanguage(tree);
+    return { ...tree, children: tree.children.map((child) => (child.node === "tree" ? child : inShellLanguage(child))) };
+  }
   const tree = TREES[view];
-  if (!tree || view !== "outline") return tree && inShellLanguage(tree);
-  if (tree.node !== "stack") return tree;
-  return { ...tree, children: tree.children.map((child) => (child.node === "tree" ? child : inShellLanguage(child))) };
+  return tree && inShellLanguage(tree);
 }
 
 /// L'albero con scelta la voce il cui salto porta `payload`, e nessun'altra.
@@ -3159,6 +3777,15 @@ function sheetPartOutcome(text: string | null, selection = { sheet: BENCH_SESSIO
 
 export const api: typeof host.module.api = {
   ...behind,
+  // Il documento davanti è quello che la Struttura legge: quando cambia, la
+  // Struttura è vecchia, come la dichiara il kernel (`follows` del provider).
+  setActiveContext: async (context) => {
+    const stale = await behind.setActiveContext(context);
+    const doc = context?.doc ?? null;
+    if (doc === frontDoc) return stale;
+    frontDoc = doc;
+    return stale.includes("outline") ? stale : [...stale, "outline"];
+  },
   ...(SHEET_PARTS === null ? {} : {
     openGridBytes: async (...args: Parameters<typeof behind.openGridBytes>) => {
       const session = await behind.openGridBytes(...args);

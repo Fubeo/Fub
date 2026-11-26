@@ -39,6 +39,7 @@ import { openLifetime, type Lifetime } from "./lifetime";
 import { openSidePanelView, opensWithoutParams, primaryViews, sidePanelViews } from "./primary-views";
 import { withPathPicker } from "./path-fields";
 import { listStep } from "./list-step";
+import { composingKey } from "../kit/ime";
 import { fuzzyScore } from "./fuzzy";
 
 /// Ciò che la palette chiede alla shell: executere gli intenti, dire qualcosa
@@ -730,6 +731,7 @@ export async function openSlashPalette(
   });
   life.listen(input, "input", render);
   life.listen(input, "keydown", (event) => {
+    if (composingKey(event)) return;
     if (event.key === "Escape") {
       event.preventDefault();
       closeSlashPalette(owner);
@@ -1018,6 +1020,8 @@ function chooseSpecs(
   };
 
   const handleKey = (e: KeyboardEvent) => {
+    // Frecce, Invio ed Esc della composizione sono del metodo d'immissione.
+    if (composingKey(e)) return;
     const step = listStep(e);
     if (step) {
       e.preventDefault();
@@ -1200,7 +1204,7 @@ function renderForm(spec: CommandSpec, box: HTMLElement, host: PaletteHost, pref
     void execute(spec, argsFromForm(spec, raw), box, host);
   });
   form.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") closeCommandPalette();
+    if (e.key === "Escape" && !composingKey(e)) closeCommandPalette();
   });
 
   (form.querySelector("input, select, textarea") as HTMLElement | null)?.focus();

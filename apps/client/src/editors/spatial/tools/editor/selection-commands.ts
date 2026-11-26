@@ -10,12 +10,10 @@ import { nodeOf } from "../arrange";
 import { repenOps, type Repen } from "../repen";
 import { screenBox, toScreen } from "../../view";
 import type { Unit } from "../hit";
-import { hideLayerOps, lockLayerOps } from "../layers";
 import { flagged, flagOps, hasLikeness, inverseOf, nodesOf, similarTo, type Flag, type Likeness } from "../selecting";
 import { copiedStyle } from "./clipboard-commands";
 import { COPY_STYLE_BINDING, PASTE_STYLE_BINDING } from "./constants";
 import type { EditorContext } from "./context";
-import { layerTitle } from "./helpers";
 
 /// Le voci di «Seleziona simili», nell'ordine del menu.
 const LIKENESSES: ReadonlyArray<{ readonly by: Likeness; readonly label: DrawKey }> = [
@@ -41,6 +39,10 @@ export interface SelectionCommandsContext {
   keyedMenu: number;
   menuPoint: () => MouseEvent;
   flagSelection: (flag: Flag) => void;
+  /// «Sblocca tutto» o «Mostra tutto»: gli oggetti che si vedono e si cambiano
+  /// (`flagged`), in un passo, poi la selezione. Il Disegno completo lo usa
+  /// per le sue voci di ≡ › Oggetto.
+  unflagAll: (flag: Flag) => void;
   toggleRow: (key: string, flag: Flag) => void;
   selectionItems: () => MenuItem[];
   pointMenu: () => PointMenu;
@@ -132,6 +134,7 @@ export function installSelectionCommands(ctx: EditorContext): void {
       announce(flag === "locked" ? plural(nodes.length, "draw.unlocked.one", "draw.unlocked.other") : plural(nodes.length, "draw.shown.one", "draw.shown.other"));
     }
   };
+  ctx.unflagAll = unflagAll;
 
   /// Un segno dell'albero, o Ctrl+Maiusc+L e H sulla sua riga attiva: blocca
   /// o sblocca, nasconde o mostra il livello o l'oggetto di chiave `key`. La
@@ -145,10 +148,8 @@ export function installSelectionCommands(ctx: EditorContext): void {
       if (layer === undefined || !has("layers")) return;
       const on = flag === "locked" ? !layer.locked : !layer.hidden;
       cancelGesture();
-      const arranged = flag === "locked" ? lockLayerOps(model, layer, on, newIds()) : hideLayerOps(model, layer, on, newIds());
-      const label: DrawKey = flag === "locked" ? (on ? "draw.action.layer_lock" : "draw.action.layer_unlock") : on ? "draw.action.layer_hide" : "draw.action.layer_show";
-      const said: DrawKey = flag === "locked" ? (on ? "draw.layer.locked" : "draw.layer.unlocked") : on ? "draw.layer.hidden" : "draw.layer.shown";
-      if (ctx.writeLayers(label, arranged, null)) announce(t(said, { name: layerTitle(layer) }));
+      // Col Completo del motore acceso l'occhio e il lucchetto passano dal motore (K6 T15, giro 4).
+      ctx.layerWrite(ctx.layerFlag(layer, flag === "locked" ? "locked" : "hidden", on, false));
       return;
     }
     if (!has("selection")) return;

@@ -272,7 +272,9 @@ pub(super) fn sparse() -> String {
                 .a("height", 8)
                 .a("href", "data:image/png;base64,iVBORw0KGgo="),
         )
-        .child(El::new("g").a("id", "o00000034"));
+        .child(El::new("g").a("id", "o00000034"))
+        // Un sottolivello: un livello dentro un livello (§3).
+        .child(layer("l00000036", "Ritagli").child(El::new("g").a("id", "o00000037")));
     let root = svg(1600, 1000)
         .child(El::new("title").text("Ciclo dell'acqua"))
         .child(El::new("desc").text("Dal mare alle nuvole, e ritorno"))

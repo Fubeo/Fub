@@ -16,6 +16,8 @@ import { ARRANGE_EN, ARRANGE_IT } from "./strings/arrange";
 import { LAYERS_EN, LAYERS_IT } from "./strings/layers";
 import { SELECTION_EN, SELECTION_IT } from "./strings/selection";
 import { CHROME_EN, CHROME_IT } from "./strings/chrome";
+// Il Disegno completo: le finestre (K6 T6) e la scheda Risorse (K6 T10).
+import { COLONNA_EN, COLONNA_IT, COMPLETO_EN, COMPLETO_IT, RISORSE_EN, RISORSE_IT, TEMI_EN, TEMI_IT } from "./strings/completo";
 
 /// Il catalogo italiano, che è anche la forma degli altri. Le voci stanno
 /// per area in `strings/`, ciascuna con il suo inglese accanto; qui si
@@ -28,7 +30,11 @@ const IT = {
   ...ARRANGE_IT,
   ...LAYERS_IT,
   ...SELECTION_IT,
-  ...CHROME_IT
+  ...CHROME_IT,
+  ...COMPLETO_IT,
+  ...RISORSE_IT,
+  ...TEMI_IT,
+  ...COLONNA_IT
 } as const;
 
 /// Una chiave del catalogo del disegno.
@@ -43,7 +49,11 @@ const EN: Record<DrawKey, string> = {
   ...ARRANGE_EN,
   ...LAYERS_EN,
   ...SELECTION_EN,
-  ...CHROME_EN
+  ...CHROME_EN,
+  ...COMPLETO_EN,
+  ...RISORSE_EN,
+  ...TEMI_EN,
+  ...COLONNA_EN
 };
 
 /// Il catalogo del disegno: `t` e `plural` come quelli della shell, sulle

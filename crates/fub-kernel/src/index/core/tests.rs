@@ -435,7 +435,7 @@ fn clearing_the_index_forgets_the_scan_and_the_instants() {
     index.set_entry_observed(asset("foto.png"), 1);
     index.mark_scanned();
     assert!(index.anagrafe_complete());
-    assert!(index.observed_at_the_same_instant(&id));
+    assert_eq!(index.observed_at(&id), Some(1));
 
     // Svuotato, l'indice non sa più quali file ci sono finché una scansione
     // non lo dice di nuovo, e non si porta dietro gli istanti delle voci che
@@ -445,5 +445,312 @@ fn clearing_the_index_forgets_the_scan_and_the_instants() {
         !index.anagrafe_complete(),
         "un indice svuotato non ha finito nessuna scansione"
     );
-    assert!(!index.observed_at_the_same_instant(&id));
+    assert_eq!(index.observed_at(&id), None);
+}
+
+/// Un indice del core vuoto, coi tipi delle proprietà dichiarabili.
+fn property_index() -> CoreIndex {
+    let storage = Arc::new(crate::storage::MemStorage::new());
+    let settings = Arc::new(std::sync::RwLock::new(
+        crate::settings::SettingsStore::open(
+            camino::Utf8Path::new("/vault"),
+            storage.clone(),
+            crate::settings::MachineSettings::in_memory(),
+        ),
+    ));
+    settings
+        .write()
+        .unwrap()
+        .declare("fub.core", &crate::properties::properties_settings())
+        .unwrap();
+    CoreIndex::new(
+        Arc::new(crate::registry::FormatRegistry::new()),
+        settings,
+        crate::organization::OrganizationStore::in_memory(),
+        Arc::new(crate::drafts::Drafts::open(
+            camino::Utf8Path::new("/vault"),
+            storage,
+        )),
+    )
+}
+
+fn note_with(path: &str, frontmatter: serde_json::Value) -> DocumentModel {
+    let mut doc = DocumentModel::empty(DocId::new(path));
+    doc.frontmatter = Frontmatter(frontmatter.as_object().unwrap().clone());
+    doc
+}
+
+/// Le note che la foglia `fub:property-link` trova, in ordine.
+fn property_linked(index: &CoreIndex, doc: &str, key: Option<&str>) -> Vec<String> {
+    use fub_abi::query::{PropertyLinkPredicate, QueryExpr};
+    use fub_abi::traits::Excerpts;
+    let leaf = PropertyLinkPredicate {
+        targets: vec![DocId::new(doc)],
+        key: key.map(str::to_string),
+    };
+    let IndexResult::Documents(rows) = index
+        .query(IndexQuery::Documents {
+            matching: QueryExpr::of(leaf.into_predicate()),
+            sort: None,
+            select: PropertySelect::None,
+            page: None,
+            excerpts: Excerpts::Omit,
+        })
+        .unwrap()
+    else {
+        panic!("documents response");
+    };
+    rows.items
+        .into_iter()
+        .map(|row| row.doc.as_str().to_string())
+        .collect()
+}
+
+/// #503/#479: la foglia dei link nelle proprietà trova chi nomina la nota
+/// per nome, per percorso dalla radice e parziale, per alias e in un elenco;
+/// non un link rotto né un `[[…]]` dentro altro testo; la nota che nomina
+/// sé stessa sì. Con la chiave, solo quella chiave.
+#[test]
+fn the_property_link_leaf_finds_who_names_a_note_in_the_frontmatter() {
+    let mut index = property_index();
+    index.on_documents_indexed(&[
+        note_with(
+            "Area/Progetti/Scorte.md",
+            serde_json::json!({"aliases": ["Magazzino"], "se": "[[Scorte]]"}),
+        ),
+        note_with(
+            "Riunioni/v1.md",
+            serde_json::json!({"progetto": "[[Scorte]]"}),
+        ),
+        note_with(
+            "Riunioni/v2.md",
+            serde_json::json!({"progetto": "[[Area/Progetti/Scorte|Scorte]]"}),
+        ),
+        note_with(
+            "Riunioni/v3.md",
+            serde_json::json!({"progetto": "[[Progetti/Scorte]]"}),
+        ),
+        note_with(
+            "Altro/v4.md",
+            serde_json::json!({"rif": ["[[Altro]]", "[[Scorte#Uno]]"]}),
+        ),
+        note_with("v5.md", serde_json::json!({"progetto": "[[Magazzino]]"})),
+        note_with("v6.md", serde_json::json!({"progetto": "[[Inesistente]]"})),
+        note_with("v7.md", serde_json::json!({"progetto": "vedi [[Scorte]]"})),
+        note_with("v8.md", serde_json::json!({"titolo": "Scorte"})),
+    ]);
+
+    assert_eq!(
+        property_linked(&index, "Area/Progetti/Scorte.md", None),
+        [
+            "Altro/v4.md",
+            "Area/Progetti/Scorte.md",
+            "Riunioni/v1.md",
+            "Riunioni/v2.md",
+            "Riunioni/v3.md",
+            "v5.md",
+        ]
+    );
+    assert_eq!(
+        property_linked(&index, "Area/Progetti/Scorte.md", Some("progetto")),
+        [
+            "Riunioni/v1.md",
+            "Riunioni/v2.md",
+            "Riunioni/v3.md",
+            "v5.md"
+        ]
+    );
+    assert!(property_linked(&index, "Riunioni/v1.md", None).is_empty());
+
+    // Più bersagli in una domanda: chi nomina l'uno o l'altro.
+    let IndexResult::Documents(rows) = index
+        .query(IndexQuery::Documents {
+            matching: fub_abi::query::QueryExpr::of(
+                fub_abi::query::PropertyLinkPredicate {
+                    targets: vec![DocId::new("Altro.md"), DocId::new("Riunioni/v1.md")],
+                    key: None,
+                }
+                .into_predicate(),
+            ),
+            sort: None,
+            select: PropertySelect::None,
+            page: None,
+            excerpts: fub_abi::traits::Excerpts::Omit,
+        })
+        .unwrap()
+    else {
+        panic!("documents response");
+    };
+    assert!(rows.items.is_empty());
+    index.on_documents_indexed(&[note_with("Altro.md", serde_json::json!({}))]);
+    let IndexResult::Documents(rows) = index
+        .query(IndexQuery::Documents {
+            matching: fub_abi::query::QueryExpr::of(
+                fub_abi::query::PropertyLinkPredicate {
+                    targets: vec![
+                        DocId::new("Altro.md"),
+                        DocId::new("Area/Progetti/Scorte.md"),
+                    ],
+                    key: Some("rif".into()),
+                }
+                .into_predicate(),
+            ),
+            sort: None,
+            select: PropertySelect::None,
+            page: None,
+            excerpts: fub_abi::traits::Excerpts::Omit,
+        })
+        .unwrap()
+    else {
+        panic!("documents response");
+    };
+    assert_eq!(
+        rows.items
+            .iter()
+            .map(|r| r.doc.as_str())
+            .collect::<Vec<_>>(),
+        ["Altro/v4.md"]
+    );
+
+    // Un payload che non è la foglia è un errore di chi chiede.
+    let error = index
+        .predicate(&QueryPredicate::Custom {
+            ns: fub_abi::query::PROPERTY_LINK_PREDICATE_NS.into(),
+            predicate: serde_json::json!({"targets": ["a.md"], "chiave": "x"}),
+        })
+        .unwrap_err();
+    assert!(matches!(error, PluginError::BadArgs(_)), "{error:?}");
+}
+
+/// La risposta segue le scritture senza un secondo stato: spostata la nota,
+/// il nome vecchio non porta più a lei e il percorso parziale nemmeno; la
+/// nota spostata la trova chi la nomina per alias, che viaggia con lei.
+#[test]
+fn the_property_link_leaf_follows_a_rename() {
+    let mut index = property_index();
+    index.on_documents_indexed(&[
+        note_with(
+            "Area/Progetti/Scorte.md",
+            serde_json::json!({"aliases": ["Magazzino"]}),
+        ),
+        note_with("v1.md", serde_json::json!({"progetto": "[[Scorte]]"})),
+        note_with(
+            "v2.md",
+            serde_json::json!({"progetto": "[[Progetti/Scorte]]"}),
+        ),
+        note_with("v3.md", serde_json::json!({"progetto": "[[Magazzino]]"})),
+    ]);
+    assert_eq!(
+        property_linked(&index, "Area/Progetti/Scorte.md", None),
+        ["v1.md", "v2.md", "v3.md"]
+    );
+
+    index.on_documents_removed(&[DocId::new("Area/Progetti/Scorte.md")]);
+    index.on_documents_indexed(&[note_with(
+        "Area/Archivio/Ferramenta.md",
+        serde_json::json!({"aliases": ["Magazzino"]}),
+    )]);
+    assert!(property_linked(&index, "Area/Progetti/Scorte.md", None).is_empty());
+    assert_eq!(
+        property_linked(&index, "Area/Archivio/Ferramenta.md", None),
+        ["v3.md"]
+    );
+}
+
+/// Il registro non cambia che cosa è un link della proprietà: una Relazione
+/// lo è, e un `[[…]]` solo in una chiave dichiarata Testo lo resta (una
+/// rinomina deve poterlo riscrivere). La chiave restringe.
+#[test]
+fn the_property_link_leaf_reads_the_declared_types() {
+    let mut index = property_index();
+    index
+        .settings
+        .write()
+        .unwrap()
+        .set(
+            crate::properties::TYPES,
+            SettingValue::Text(
+                r#"{"version":1,"types":{"libri":"relation","nota":"text"}}"#.into(),
+            ),
+        )
+        .unwrap();
+    index.on_documents_indexed(&[
+        note_with("Libri/Dune.md", serde_json::json!({})),
+        note_with(
+            "a.md",
+            serde_json::json!({"libri": ["[[Dune]]", "a parole"]}),
+        ),
+        note_with("b.md", serde_json::json!({"nota": "[[Dune]]"})),
+    ]);
+    assert_eq!(
+        property_linked(&index, "Libri/Dune.md", Some("libri")),
+        ["a.md"]
+    );
+    assert_eq!(
+        property_linked(&index, "Libri/Dune.md", None),
+        ["a.md", "b.md"]
+    );
+}
+
+/// L'anagrafe di una riapertura ferma si scopre già scritta confrontando i
+/// metadati al loro posto (#524): il confronto deve dire «diverso» per ogni
+/// campo che `stored_metadata` scriverebbe diverso, tag compresi, o una
+/// sessione lascerebbe sul disco metadati più vecchi di quelli veri.
+#[test]
+fn the_metadata_comparison_sees_every_field_the_registry_writes() {
+    let mut index = property_index();
+    let id = DocId::new("nota.md");
+    let other = DocId::new("altra.md");
+    let stored = crate::entries::StoredMeta {
+        frontmatter: Frontmatter(
+            serde_json::json!({"tipo": "progetto"})
+                .as_object()
+                .unwrap()
+                .clone(),
+        ),
+        outline: Vec::new(),
+        links: Vec::new(),
+        anchors: Vec::new(),
+        tags: vec!["#Rust".to_string(), "#casa".to_string()],
+    };
+    index.restore(&id, stored);
+    // Le grafie tornano nell'ordine delle chiavi canoniche: il riferimento è
+    // ciò che l'anagrafe scriverebbe.
+    let stored = index.stored_metadata(&id).unwrap();
+    assert_eq!(stored.tags, ["#casa", "#Rust"]);
+    assert!(index.stores_metadata_as(&id, Some(&stored)));
+    assert!(
+        !index.stores_metadata_as(&id, None),
+        "a row without metadata"
+    );
+    assert!(
+        index.stores_metadata_as(&other, None),
+        "nothing known, nothing written"
+    );
+    assert!(!index.stores_metadata_as(&other, Some(&stored)));
+
+    let mut changed = stored.clone();
+    changed.frontmatter = Frontmatter(serde_json::Map::new());
+    assert!(
+        !index.stores_metadata_as(&id, Some(&changed)),
+        "frontmatter"
+    );
+    for tags in [
+        vec!["#casa".to_string()],
+        vec!["#Rust".to_string(), "#casa".to_string()],
+        vec!["#casa".to_string(), "#rust".to_string()],
+        vec![
+            "#casa".to_string(),
+            "#Rust".to_string(),
+            "#orto".to_string(),
+        ],
+        Vec::new(),
+    ] {
+        let mut changed = stored.clone();
+        changed.tags = tags.clone();
+        assert!(
+            !index.stores_metadata_as(&id, Some(&changed)),
+            "tags {tags:?}"
+        );
+    }
 }

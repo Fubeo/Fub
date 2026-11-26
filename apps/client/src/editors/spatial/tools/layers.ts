@@ -15,7 +15,7 @@
 import { compose, invert } from "../scene/matrix";
 import { elementChildren, type ContainerNode, type DocumentModel } from "../scene/model";
 import { ROOT } from "../scene/ops";
-import { nodeOf, Plan, type Arranged } from "./arrange";
+import { nodeOf, plainAttributes, Plan, type Arranged } from "./arrange";
 import { transformValue, type NewIds } from "./edit";
 import type { LayerInfo, Unit } from "./hit";
 import { carriedTo } from "./place";
@@ -30,9 +30,29 @@ export type Shift = "up" | "down";
 /// I figli della radice che vengono prima dei livelli.
 const HEAD: ReadonlySet<string> = new Set(["title", "desc", "paper", "board"]);
 
+/// I livelli della radice fra `layers`, nello stesso ordine: quelli in cui si
+/// disegna e che i comandi del livello corrente spostano, tolgono e scelgono.
+/// I sottolivelli (formato della scena §3) stanno nell'albero degli oggetti.
+export function rootLayers(layers: readonly LayerInfo[]): readonly LayerInfo[] {
+  return layers.every((layer) => layer.path.length === 1) ? layers : layers.filter((layer) => layer.path.length === 1);
+}
+
 /// Il nodo del modello di un livello.
 function layerNode(model: DocumentModel, layer: LayerInfo): ContainerNode {
   return elementChildren(model.root)[layer.path[0]!] as ContainerNode;
+}
+
+/// Vero se il livello ritaglia: ha `clip-path` scritto come attributo, come lo scrive il motore
+/// con «Crea maschera di ritaglio» (formato della scena, «I ritagli e le maschere»).
+export function layerClips(model: DocumentModel, layer: LayerInfo): boolean {
+  const node = layerNode(model, layer);
+  return node !== undefined && plainAttributes(node).has("clip-path");
+}
+
+/// Vero se il livello non ha oggetti (nemmeno sottolivelli).
+export function layerEmpty(model: DocumentModel, layer: LayerInfo): boolean {
+  const node = layerNode(model, layer);
+  return node === undefined || elementChildren(node).length === 0;
 }
 
 /// Il nome di un livello com'è scritto: senza spazi ai bordi e al più

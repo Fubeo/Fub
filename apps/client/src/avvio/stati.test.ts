@@ -38,6 +38,23 @@ afterEach(() => {
 });
 
 describe("stati.js", () => {
+  // Il marchio è un SVG: non aspetta nessun carattere, né uno lento né uno
+  // che non si carica.
+  it.each([
+    ["lento", () => new Promise<never>(() => {})],
+    ["che non si carica", () => new Promise<never>((_, no) => setTimeout(() => no(new Error("rete")), 300))],
+  ])("con un carattere %s il marchio entra lo stesso a 120 ms", async (_, load) => {
+    Object.defineProperty(document, "fonts", { value: { load: vi.fn(load) }, configurable: true });
+    try {
+      esegui();
+      await microcompiti();
+      vi.advanceTimersByTime(120);
+      expect(strato().hasAttribute("data-marchio")).toBe(true);
+    } finally {
+      delete (document as { fonts?: unknown }).fonts;
+    }
+  });
+
   it("i tempi: 119 ms niente marchio, poi il marchio, 2 s attesa, 10 s lento, 30 s guasto", () => {
     esegui();
     const avvio = strato();

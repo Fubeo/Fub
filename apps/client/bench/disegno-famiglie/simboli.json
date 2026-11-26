@@ -1,0 +1,12 @@
+{
+  "$nota": "Le risposte della famiglia simboli del banco. La lista dei simboli è vuota: il disegno del banco non ne ha. Il Completo la legge appena si apre (la sezione Simboli e la fila del Simbolismo), e un comando senza risposta renderebbe `unserved`, che ferma la sessione come motore spento.",
+  "risposte": [
+    {
+      "comando": "disegno.symbol.list",
+      "argomenti": {},
+      "esito": {
+        "reading": { "symbols": [] }
+      }
+    }
+  ]
+}

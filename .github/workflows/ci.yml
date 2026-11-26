@@ -188,8 +188,12 @@ jobs:
         run: cargo check -p fub-canvas-core --target wasm32-unknown-unknown --locked
       - name: la shell raggiunge il workspace solo dalle porte strette dell'host
         run: node .github/scripts/check-host-workspace-boundary.mjs
-      - name: soltanto gli adattatori nominano WordCraft e GridCraft nei sorgenti
+      - name: soltanto gli adattatori nominano WordCraft, GridCraft e VectorCraft, nei sorgenti e nei Cargo.toml
         run: node .github/scripts/check-engine-boundary.mjs
+      - name: la mappa del disegno copre ogni funzione di VectorCraft
+        run: node --test tools/disegno-mappa/estrai.test.mjs && node .github/scripts/check-disegno-mappa.mjs --self-test && node .github/scripts/check-disegno-mappa.mjs
+      - name: il disegno non tocca il disco
+        run: node --test tools/disegno-disco/elenco.test.mjs && node tools/disegno-disco/elenco.mjs --check
       - name: nessuna interfaccia delle app Craft in fub-app, librerie doppie sotto il tetto
         run: node .github/scripts/check-motori.mjs --self-test && node .github/scripts/check-motori.mjs
       - name: la copia di WordCraft è l'upstream del lock più le patch di vendor/wordcraft/patches
@@ -331,12 +335,16 @@ jobs:
       # solo 26 minuti. `rust-lld` collega più in fretta del linker di MSVC, e
       # le sole righe nel debug alleggeriscono i PDB senza togliere file e riga
       # ai backtrace. Prima della cache, perché ne cambia la chiave.
-      - name: su Windows, rust-lld e il debug delle sole righe
+      - name: su Windows, rust-lld
         if: runner.os == 'Windows'
         shell: bash
-        run: |
-          echo "CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER=rust-lld.exe" >> "$GITHUB_ENV"
-          echo "CARGO_PROFILE_DEV_DEBUG=line-tables-only" >> "$GITHUB_ENV"
+        run: echo "CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER=rust-lld.exe" >> "$GITHUB_ENV"
+      # Su Linux, con il motore del disegno, il debug completo dei circa 200
+      # eseguibili di prova riempiva il disco del runner al collegamento
+      # (2026-11-23, «No space left on device»): le sole righe anche qui.
+      - name: il debug delle sole righe
+        shell: bash
+        run: echo "CARGO_PROFILE_DEV_DEBUG=line-tables-only" >> "$GITHUB_ENV"
       # Il budget delle cache è di 10 GB per tutto il repository, e quando si
       # sfora se ne va la più vecchia: i job che compilano un sottoinsieme di
       # questo leggono la cache dei test di Linux (`shared-key: test`) invece
@@ -414,6 +422,8 @@ jobs:
         run: cargo nextest run -p fub-features --features draw --no-fail-fast --profile ci
       - name: la riga del Motore del disegno, con la feature `engine-drawing` delle feature (FUORI_DAL_DEFAULT)
         run: cargo nextest run -p fub-features --features engine-drawing --no-fail-fast --profile ci
+      - name: la riga del Disegno completo, con la feature `drawing-complete` delle feature (FUORI_DAL_DEFAULT)
+        run: cargo nextest run -p fub-features --features drawing-complete --no-fail-fast --profile ci
       - name: i disegni senza il motore, la mappa dei componenti e le porte del disegno dell'host
         run: cargo nextest run -p fub-host --no-default-features --features draw --test componenti --test drawing --no-fail-fast --profile ci
       - name: l'oracolo a pixel, con la feature `pixel` del banco (FUORI_DAL_DEFAULT)
@@ -514,9 +524,9 @@ jobs:
           echo "FUB_MERMAID_CHROME=$chrome" >> "$GITHUB_ENV"
       - name: Ogni diagramma Mermaid è valido e renderizzabile
         run: node .github/scripts/check-mermaid.mjs --render
-      - name: Il lettore dei numeri sa leggere l'italiano
+      - name: Il controllo della prosa riconosce riferimenti legacy, cronaca e checklist chiuse
         run: node .github/scripts/check-prose.mjs --self-test
-      - name: I numeri e le garanzie che la prosa afferma sui sorgenti
+      - name: I documenti non hanno riferimenti legacy, cronaca fuori da docs/project o checklist chiuse
         run: node .github/scripts/check-prose.mjs
       - name: La riga vuota che spezza una tabella non è quella che ne separa due
         run: node .github/scripts/check-tables.mjs --autoprova
@@ -618,8 +628,10 @@ jobs:
         id: bench_verify
         run: npm run bench:verify
         working-directory: apps/client
+      # Anche con il job verde, se una foto è stata ripresa al secondo scatto
+      # (`instabili.json`): così si vede quale scena va resa stabile.
       - name: differenze e foglio di contatto del banco visivo
-        if: ${{ failure() && steps.bench_verify.outcome == 'failure' }}
+        if: ${{ always() && (steps.bench_verify.outcome == 'failure' || hashFiles('apps/client/bench/.output/instabili.json') != '') }}
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: banco-visivo-${{ github.sha }}
@@ -837,14 +849,15 @@ jobs:
     # runner senza scheda grafica i numeri non sono assoluti: la sezione `ci`
     # di `bench/webview/budgets.json` è una soglia di peggioramento.
     #
-    # Due macchine: R1 da sola durava 17 minuti dei 27 del banco (trenta giri
-    # di apertura e chiusura, ognuno con dieci secondi di quiete), e gli
-    # altri scenari insieme dieci. Ognuna compila l'app per conto suo: un
+    # Due macchine: R1 da sola dura circa 8 minuti (quindici giri di apertura
+    # e chiusura, ognuno con una quiete che finisce quando la memoria si
+    # ferma, al più 10 s; fino al 20 novembre 2026 trenta giri da un minuto
+    # l'uno ne facevano 40), e gli altri scenari insieme circa dieci. Ognuna compila l'app per conto suo: un
     # artefatto passato da un job all'altro metterebbe la compilazione in
     # fila davanti a entrambe. Una macchina sola per R1 è anche una misura
     # della memoria senza altri scenari prima.
     #
-    # Due compilazioni di release e 27 minuti: come i banchi, non su una PR in
+    # Due compilazioni di release e circa 20 minuti: come i banchi, non su una PR in
     # bozza, e su una PR pronta soltanto se tocca ciò che finisce nell'app
     # (`webview` di `cosa cambia`). Su `main` gira sempre, e il cancello del
     # rilascio lo vuole verde.

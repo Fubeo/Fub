@@ -23,9 +23,9 @@ const NOTES = [
   { doc: "Opere/Campo.md", properties: [{ key: "stato", value: "In prestito" }, { key: "valore", value: 800.5 }] },
 ];
 
-const mount = (views: View[], options: BaseSurfaceOptions = {}) => {
+const mount = (views: View[], options: BaseSurfaceOptions = {}, seed: typeof NOTES = NOTES) => {
   let revision = 1;
-  let notes = NOTES.map((note) => ({ ...note, properties: note.properties.map((each) => ({ ...each })) }));
+  let notes = seed.map((note) => ({ ...note, properties: note.properties.map((each) => ({ ...each })) }));
   const stored = new Map<string, unknown>();
   const host = document.createElement("div");
   document.body.append(host);
@@ -45,6 +45,7 @@ const mount = (views: View[], options: BaseSurfaceOptions = {}) => {
         view: view.name, view_type: view.type, columns, column_labels: {}, required_props: [], all_properties: true,
         group: (view.keys.group as { key: string } | undefined)?.key ?? null, limit: null, map: null, create_defaults: {},
         filters: view.keys.filters ?? "all", sort: view.keys.sort ?? [], order: view.keys.order ?? [], summaries,
+        ...(view.type === "calendar" ? { date_key: view.keys.date ?? null } : {}),
       } };
     }
     if (query.op === "derive") {
@@ -195,6 +196,36 @@ describe("il piede coi riepiloghi del core", () => {
     } finally { done(); }
   });
 
+  // #445: lo scorrimento di lato della tabella lo decide chi guarda. Il
+  // riepilogo scelto dal menu ridisegna la tabella: quella nuova riparte da
+  // dove era scorsa la vecchia, e nessuno la porta in vista da sé. (Nel banco
+  // la tabella a 700 px restava scorsa di 11 px per il `page.click` di
+  // Playwright, che porta in vista l'intestazione prima di premerla; col
+  // puntatore vero, in Chromium e in WebKitGTK, non scorre niente.)
+  it("il riepilogo scelto dal menu della colonna lascia la tabella scorsa di lato dov'era", async () => {
+    const { host, invokeCommand, done } = mount([{ name: "Tabella", type: "table", keys: { order: ["stato", "valore"] } }]);
+    const reveal = vi.spyOn(Element.prototype, "scrollIntoView");
+    try {
+      await ready(host);
+      const before = host.querySelector<HTMLElement>(".base-table-viewport")!;
+      before.scrollLeft = 37;
+      const head = host.querySelector<HTMLButtonElement>('th[data-column="valore"] .base-head')!;
+      head.click();
+      pick("Riepilogo");
+      await vi.waitFor(() => expect(document.querySelector(".context-submenu button")).not.toBeNull());
+      const sum = [...document.querySelectorAll<HTMLButtonElement>(".context-submenu button")].find((each) => each.querySelector(".menu-label")?.textContent === "Somma")!;
+      reveal.mockClear();
+      sum.click();
+      await vi.waitFor(() => expect(invokeCommand).toHaveBeenCalledWith("base.view.set", expect.objectContaining({ key: "summaries" })));
+      await vi.waitFor(() => expect(host.querySelector('tfoot td[data-column="valore"] .base-foot-value')).not.toBeNull());
+      await settled(host);
+      const after = host.querySelector<HTMLElement>(".base-table-viewport")!;
+      expect(after).not.toBe(before);
+      expect(after.scrollLeft).toBe(37);
+      expect(reveal.mock.contexts.filter((element) => host.contains(element as Node))).toEqual([]);
+    } finally { reveal.mockRestore(); done(); }
+  });
+
   it("le schede hanno il piede in fila", async () => {
     const { host, done } = mount([{ name: "Schede", type: "cards", keys: { summaries: [{ key: "valore", aggregate: "sum" }] } }]);
     try {
@@ -222,7 +253,8 @@ describe("«+»: una vista nuova", () => {
         ["base.view.add", { doc: "Opere.base", name: "Bacheca", type: "kanban", base: "r1" }],
         ["base.view.set", { doc: "Opere.base", view: "Bacheca", key: "filters", value: JSON.stringify(filter), base: "r2" }],
         ["base.view.set", { doc: "Opere.base", view: "Bacheca", key: "order", value: JSON.stringify(["valore", "stato"]), base: "r3" }],
-        ["base.view.set", { doc: "Opere.base", view: "Bacheca", key: "group", value: JSON.stringify({ key: "valore" }), base: "r4" }],
+        // Le corsie non sono mai un numero o una data: «stato» è il testo.
+        ["base.view.set", { doc: "Opere.base", view: "Bacheca", key: "group", value: JSON.stringify({ key: "stato" }), base: "r4" }],
       ]);
       // Una frase sola per il gesto, con l'annulla che toglie la vista.
       expect(notified.map((each) => each.message)).toEqual(["Vista aggiunta"]);
@@ -251,6 +283,89 @@ describe("«+»: una vista nuova", () => {
       pick("Tabella");
       await vi.waitFor(() => expect(invokeCommand).toHaveBeenCalledWith("base.view.add", expect.objectContaining({ name: "Tabella 2", type: "table" })));
       await settled(host);
+    } finally { done(); }
+  });
+
+  // IMP-3809, IMP-3810: le pratiche di uno studio, con la scadenza in tutte,
+  // la chiusura solo in una, il cliente diverso in ognuna e tre stati.
+  const day = (d: number) => ({ kind: "date", value: { year: 2026, month: 11, day: d, time: null } });
+  const PRATICHE = [
+    { doc: "Pratiche/A.md", properties: [{ key: "scadenza", value: day(10) }, { key: "cliente", value: "Rossi" }, { key: "stato", value: "da fare" }] },
+    { doc: "Pratiche/B.md", properties: [{ key: "scadenza", value: day(14) }, { key: "cliente", value: "Bianchi" }, { key: "stato", value: "in corso" }] },
+    { doc: "Pratiche/C.md", properties: [{ key: "scadenza", value: day(17) }, { key: "cliente", value: "Verdi" }, { key: "stato", value: "da fare" }] },
+    { doc: "Pratiche/D.md", properties: [{ key: "chiusa il", value: day(2) }, { key: "scadenza", value: day(19) }, { key: "cliente", value: "Neri" }, { key: "stato", value: "fatta" }] },
+  ] as unknown as typeof NOTES;
+  const readyRows = (host: HTMLElement, count: number) => vi.waitFor(() => expect(host.querySelectorAll(".base-table tbody tr[data-doc]").length).toBe(count));
+
+  it("una bacheca nuova fa le corsie sulla prima proprietà di testo con pochi valori, mai su una data", async () => {
+    const { host, invokeCommand, done } = mount([{ name: "Tabella", type: "table", keys: { order: ["scadenza", "cliente", "stato"] } }], {}, PRATICHE);
+    try {
+      await readyRows(host, 4);
+      host.querySelector<HTMLButtonElement>(".base-tool-new-view")!.click();
+      pick("Bacheca");
+      await vi.waitFor(() => expect(host.querySelector('.base-tab[aria-pressed="true"]')?.getAttribute("data-view")).toBe("Bacheca"));
+      await settled(host);
+      expect(sets(invokeCommand).slice(-1)[0]).toEqual(["base.view.set", { doc: "Opere.base", view: "Bacheca", key: "group", value: JSON.stringify({ key: "stato" }), base: "r3" }]);
+    } finally { done(); }
+  });
+
+  it("la bacheca dice nella testa la proprietà delle corsie, e sceglierne un'altra scrive `group`", async () => {
+    const { host, invokeCommand, views, done } = mount([{ name: "Bacheca", type: "kanban", keys: { group: { key: "stato" }, order: ["stato", "cliente", "scadenza"] } }], {}, PRATICHE);
+    try {
+      await vi.waitFor(() => expect(host.querySelectorAll(".base-kanban-column").length).toBe(3));
+      const picker = host.querySelector<HTMLSelectElement>(".base-kanban-head .base-view-key-select")!;
+      expect(host.querySelector(".base-kanban-head label")!.textContent).toBe("Corsie per");
+      expect(picker.value).toBe("stato");
+      // Le date non fanno corsie: la scadenza e la chiusura non ci sono.
+      expect([...picker.options].map((each) => each.value)).toEqual(["stato", "cliente"]);
+      picker.value = "cliente";
+      picker.dispatchEvent(new Event("change"));
+      await vi.waitFor(() => expect(invokeCommand).toHaveBeenCalledWith("base.view.set", { doc: "Opere.base", view: "Bacheca", key: "group", value: JSON.stringify({ key: "cliente" }), base: "r1" }));
+      expect(views[0]!.keys.group).toEqual({ key: "cliente" });
+      await vi.waitFor(() => expect(host.querySelectorAll(".base-kanban-column").length).toBe(4));
+    } finally { done(); }
+  });
+
+  it("una bacheca senza corsie nel file lo dice e offre la scelta", async () => {
+    const { host, invokeCommand, done } = mount([{ name: "Bacheca", type: "kanban", keys: {} }], {}, PRATICHE);
+    try {
+      await vi.waitFor(() => expect(host.querySelector(".base-kanban-empty")).not.toBeNull());
+      expect(host.querySelector(".base-error")).toBeNull();
+      const picker = host.querySelector<HTMLSelectElement>(".base-kanban-head .base-view-key-select")!;
+      expect(picker.value).toBe("");
+      picker.value = "stato";
+      picker.dispatchEvent(new Event("change"));
+      await vi.waitFor(() => expect(invokeCommand).toHaveBeenCalledWith("base.view.set", expect.objectContaining({ key: "group", value: JSON.stringify({ key: "stato" }) })));
+    } finally { done(); }
+  });
+
+  it("un calendario nuovo prende la data che più note hanno, e la testa la cambia scrivendo `date`", async () => {
+    const { host, invokeCommand, done } = mount([{ name: "Tabella", type: "table", keys: { order: ["cliente"] } }], {}, PRATICHE);
+    try {
+      await readyRows(host, 4);
+      host.querySelector<HTMLButtonElement>(".base-tool-new-view")!.click();
+      pick("Calendario");
+      await vi.waitFor(() => expect(host.querySelector('.base-tab[aria-pressed="true"]')?.getAttribute("data-view")).toBe("Calendario"));
+      await settled(host);
+      // «chiusa il» viene prima nella nota D ma c'è in una sola: vince la scadenza.
+      expect(sets(invokeCommand).slice(-1)[0]).toEqual(["base.view.set", { doc: "Opere.base", view: "Calendario", key: "date", value: JSON.stringify("scadenza"), base: "r3" }]);
+      await vi.waitFor(() => expect(host.querySelector<HTMLSelectElement>(".base-cal-head .base-view-key-select")?.value).toBe("scadenza"));
+      const picker = host.querySelector<HTMLSelectElement>(".base-cal-head .base-view-key-select")!;
+      expect(host.querySelector(".base-cal-head label")!.textContent).toBe("Data");
+      expect([...picker.options].map((each) => each.value)).toEqual(["scadenza", "chiusa il"]);
+      picker.value = "chiusa il";
+      picker.dispatchEvent(new Event("change"));
+      await vi.waitFor(() => expect(invokeCommand).toHaveBeenLastCalledWith("base.view.set", { doc: "Opere.base", view: "Calendario", key: "date", value: JSON.stringify("chiusa il"), base: "r4" }));
+    } finally { done(); }
+  });
+
+  it("in una Base dentro una nota la testa della bacheca mostra le corsie ma non le cambia", async () => {
+    const { host, done } = mount([{ name: "Bacheca", type: "kanban", keys: { group: { key: "stato" } } }], { sourceInNote: true }, PRATICHE);
+    try {
+      await vi.waitFor(() => expect(host.querySelectorAll(".base-kanban-column").length).toBe(3));
+      const picker = host.querySelector<HTMLSelectElement>(".base-kanban-head .base-view-key-select")!;
+      expect(picker.value).toBe("stato");
+      expect(picker.disabled).toBe(true);
     } finally { done(); }
   });
 
@@ -316,6 +431,41 @@ describe("venti viste", () => {
       if (width) Object.defineProperty(HTMLElement.prototype, "scrollWidth", width);
       else delete (HTMLElement.prototype as { scrollWidth?: number }).scrollWidth;
     }
+  });
+});
+
+describe("la barra al telefono (#470)", () => {
+  it("se nemmeno la vista scelta sta accanto agli strumenti, la barra va su due file e le linguette restano", async () => {
+    // happy-dom non misura: in una fila le linguette non stanno mai (al
+    // telefono ogni strumento è largo un dito), sulla fila tutta loro sì.
+    const width = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "scrollWidth");
+    Object.defineProperty(HTMLElement.prototype, "scrollWidth", { configurable: true, get(this: HTMLElement) {
+      if (!this.classList.contains("base-tabs")) return 0;
+      return this.closest(".base-bar")?.classList.contains("stacked") ? 0 : 2000;
+    } });
+    const { host, done } = mount([{ name: "Tabella", type: "table", keys: {} }, { name: "Schede", type: "cards", keys: {} }]);
+    try {
+      await ready(host);
+      const bar = host.querySelector(".base-bar")!;
+      await vi.waitFor(() => expect(bar.classList.contains("stacked")).toBe(true));
+      const tabs = bar.querySelector(".base-tabs")!;
+      // Sulla fila loro le linguette stanno tutte, col nome com'è.
+      expect(tabs.classList.contains("compact")).toBe(false);
+      expect([...tabs.querySelectorAll<HTMLElement>(".base-tab[data-view]")].filter((tab) => !tab.hidden).map((tab) => tab.dataset.view)).toEqual(["Tabella", "Schede"]);
+      expect(tabs.querySelector<HTMLElement>(".base-tab-more")!.hidden).toBe(true);
+    } finally {
+      done();
+      if (width) Object.defineProperty(HTMLElement.prototype, "scrollWidth", width);
+      else delete (HTMLElement.prototype as { scrollWidth?: number }).scrollWidth;
+    }
+  });
+
+  it("dove le linguette stanno nella fila, la barra resta una", async () => {
+    const { host, done } = mount([{ name: "Tabella", type: "table", keys: {} }]);
+    try {
+      await ready(host);
+      expect(host.querySelector(".base-bar")!.classList.contains("stacked")).toBe(false);
+    } finally { done(); }
   });
 });
 

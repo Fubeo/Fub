@@ -70,9 +70,9 @@ describe("la classificazione (§4)", () => {
 
   it("ogni attributo dell'elenco è ammesso", () => {
     const presentation =
-      'id="o1" fill="#ff0000" fill-opacity="0.5" stroke="none" stroke-width="2" ' +
+      'id="o1" fill="#ff0000" fill-opacity="0.5" fill-rule="evenodd" stroke="none" stroke-width="2" ' +
       'stroke-opacity="1" stroke-linecap="round" stroke-linejoin="bevel" ' +
-      'stroke-dasharray="4 2" opacity="0" display="inline" transform="rotate(45)" ' +
+      'stroke-dasharray="4 2" stroke-dashoffset="-1.5mm" stroke-miterlimit="10" opacity="0" display="inline" transform="rotate(45)" ' +
       'font-family="Inter, sans-serif" font-size="12" font-weight="bold" font-style="italic" ' +
       'letter-spacing="-0.5" text-anchor="middle"';
     expect(first(`<rect ${presentation} x="0" y="0" width="1" height="1"/>`)).toBe("rect");
@@ -84,7 +84,9 @@ describe("la classificazione (§4)", () => {
       'class="a"',
       'style="fill:red"',
       'onclick="alert(1)"',
-      'stroke-miterlimit="4"',
+      'stroke-miterlimit="0.5"',
+      'stroke-dashoffset="10%"',
+      'fill-rule="inherit"',
       'filter="blur(2px)"',
       'mask-type="alpha"',
       'data-x="1"',
@@ -559,10 +561,10 @@ describe("la classificazione (§4)", () => {
     expect(role(scene, [0])).toBe("rect");
   });
 
-  it("i livelli sono gruppi con fub:layer sotto la radice", () => {
+  it("i livelli sono gruppi con fub:layer sotto la radice o un livello", () => {
     const source = doc(
       '<g id="l1" fub:layer="Primo piano" fub:locked="true" display="none">' +
-        '<g fub:layer="Annidato"></g>' +
+        '<g fub:layer="Annidato"><g fub:layer="Più giù"/><g><g fub:layer="Nel gruppo"/></g></g>' +
         "</g>" +
         '<g fub:layer="" fub:locked="false"/>' +
         "<g></g>",
@@ -573,7 +575,13 @@ describe("la classificazione (§4)", () => {
     const info = layer.layer!;
     expect(info.name).toBe("Primo piano");
     expect(info.locked && info.hidden).toBe(true);
-    expect(role(scene, [0, 0])).toBe("group");
+    // Un livello dentro un livello è un sottolivello, a ogni profondità; in un gruppo `fub:layer`
+    // non conta.
+    expect(role(scene, [0, 0])).toBe("layer");
+    expect(at(scene, [0, 0])!.layer!.name).toBe("Annidato");
+    expect(role(scene, [0, 0, 0])).toBe("layer");
+    expect(role(scene, [0, 0, 1])).toBe("group");
+    expect(role(scene, [0, 0, 1, 0])).toBe("group");
     const empty = at(scene, [1])!;
     expect(empty.role).toBe("layer");
     expect(empty.layer!.locked).toBe(false);

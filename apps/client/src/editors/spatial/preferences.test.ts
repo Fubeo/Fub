@@ -8,6 +8,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { SettingEntry } from "../../host/contract";
 import type { FakeHost } from "../../host/fake";
 import { DEFAULT_CURVE } from "../../ink/input/pressure";
+import { DEFAULT_GRID } from "./tools/grid";
 
 const box = vi.hoisted(() => ({ host: null as FakeHost | null }));
 
@@ -157,6 +158,48 @@ describe("la griglia ricordata", () => {
     const grid = await readGrid();
     expect(grid.shown).toBe(true);
     expect("steady" in grid).toBe(false);
+  });
+
+  it("gli interruttori della vista (K6 T11) tornano se accesi, e spenti non ci sono; un valore che non è vero o falso butta la griglia", async () => {
+    const host = createFakeHost();
+    const { readGrid } = await boot(host);
+    await host.module.api.setViewState(GRID_KEY, { shown: true, snap: false, step: 10, transparencyGrid: true, hideEdges: true, hideBoundingBox: false, livePaintGaps: true });
+    const letta = await readGrid();
+    expect(letta).toEqual({ shown: true, snap: false, step: 10, steps: {}, panel: null, bar: true, shapes: true, closed: [], twist: true, taps: true, pen: DEFAULT_CURVE, transparencyGrid: true, hideEdges: true, livePaintGaps: true });
+    expect("hideBoundingBox" in letta).toBe(false);
+    await host.module.api.setViewState(GRID_KEY, { shown: true, snap: false, step: 10, hideBoundingBox: "sì" });
+    expect(await readGrid()).toEqual(DEFAULT_GRID);
+  });
+
+  it("l'aggancio al pixel (K6 T11) torna se acceso, spento non c'è, e una scrittura che non riesce lo dice come quella della griglia", async () => {
+    const host = createFakeHost();
+    const { clearHistory, readGrid, recentNotices, saveGrid } = await boot(host);
+    await host.module.api.setViewState(GRID_KEY, { shown: false, snap: false, step: 20, snapPixel: true });
+    expect(await readGrid()).toEqual({ ...DEFAULT_GRID, snapPixel: true });
+    await host.module.api.setViewState(GRID_KEY, { shown: false, snap: false, step: 20, snapPixel: false });
+    expect(await readGrid()).toEqual(DEFAULT_GRID);
+    await host.module.api.setViewState(GRID_KEY, { shown: false, snap: false, step: 20, snapPixel: "sì" });
+    expect(await readGrid()).toEqual(DEFAULT_GRID);
+
+    clearHistory();
+    const heal = host.fault("setViewState", "disco pieno");
+    saveGrid({ ...DEFAULT_GRID, snapPixel: true });
+    await settle();
+    expect(recentNotices().map(({ text, tone }) => ({ text, tone }))).toEqual([
+      { text: "Non riesco a ricordare la griglia per i prossimi disegni: disco pieno", tone: "guasto" },
+    ]);
+    heal();
+  });
+
+  it("guide sensibili e agganci del motore (Visualizza) tornano se diversi da quelli di serie; un valore che non si legge butta la griglia", async () => {
+    const host = createFakeHost();
+    const { readGrid } = await boot(host);
+    await host.module.api.setViewState(GRID_KEY, { shown: false, snap: false, step: 20, smartGuidesOff: true, snapPointOff: true, snapGlyph: true });
+    expect(await readGrid()).toEqual({ ...DEFAULT_GRID, smartGuidesOff: true, snapPointOff: true, snapGlyph: true });
+    await host.module.api.setViewState(GRID_KEY, { shown: false, snap: false, step: 20, smartGuidesOff: false, snapPointOff: false, snapGlyph: false });
+    expect(await readGrid()).toEqual(DEFAULT_GRID);
+    await host.module.api.setViewState(GRID_KEY, { shown: false, snap: false, step: 20, snapGlyph: "sì" });
+    expect(await readGrid()).toEqual(DEFAULT_GRID);
   });
 
   it("la gomma e la penna ricordate tornano; quelle che non si leggono valgono quelle di serie", async () => {
@@ -548,14 +591,31 @@ describe("lo spazio di lavoro del disegno", () => {
   it("la chiave scelta vale; il livello di prima non si legge più", async () => {
     const { workspaceOf } = await boot(createFakeHost({ settings: [] }));
     // Niente scelto: Completo, colonna di serie.
-    expect(workspaceOf([])).toEqual({ workspace: "full", toolbar: [] });
+    expect(workspaceOf([])).toEqual({ space: "full", workspace: "full", saved: [], savedRaw: [], toolbar: [] });
     // `draw.level` e `draw.custom` restano nel file, ma non contano più.
-    expect(workspaceOf([drawEntry("draw.level", "essential"), drawEntry("draw.custom", ["pen"])])).toEqual({ workspace: "full", toolbar: [] });
-    expect(workspaceOf([drawEntry("draw.workspace", "simple")])).toEqual({ workspace: "simple", toolbar: [] });
+    expect(workspaceOf([drawEntry("draw.level", "essential"), drawEntry("draw.custom", ["pen"])])).toMatchObject({ space: "full", workspace: "full", toolbar: [] });
+    expect(workspaceOf([drawEntry("draw.workspace", "simple")])).toMatchObject({ space: "simple", workspace: "simple", toolbar: [] });
     // Uno strumento che non c'è non conta; il Testo c'è di nuovo (K5).
-    expect(workspaceOf([drawEntry("draw.workspace", "full"), drawEntry("draw.toolbar", ["select", "text", "domani"])])).toEqual({ workspace: "full", toolbar: ["select", "text"] });
+    expect(workspaceOf([drawEntry("draw.workspace", "full"), drawEntry("draw.toolbar", ["select", "text", "domani"])])).toMatchObject({ workspace: "full", toolbar: ["select", "text"] });
     // Uno spazio sconosciuto vale Completo.
-    expect(workspaceOf([drawEntry("draw.workspace", "tablet")]).workspace).toBe("full");
+    expect(workspaceOf([drawEntry("draw.workspace", "tablet")])).toMatchObject({ space: "full", workspace: "full" });
+  });
+
+  it("un preset del Completo resta lo spazio scelto, con la base Completo; uno salvato si cerca fra i salvati", () => {
+    return boot(createFakeHost({ settings: [] })).then(({ workspaceOf }) => {
+      const mio = '{"v":1,"id":"salvato-1","nome":"Mio","colonna":[],"scheda":"layers","sezione":null,"righelli":true}';
+      expect(workspaceOf([drawEntry("draw.workspace", "automazione")])).toMatchObject({ space: "automazione", workspace: "full" });
+      const salvato = workspaceOf([drawEntry("draw.workspace", "salvato-1"), drawEntry("draw.workspaces", [mio])]);
+      expect(salvato).toMatchObject({ space: "salvato-1", workspace: "full" });
+      expect(salvato.saved.map((each) => each.nome)).toEqual(["Mio"]);
+      // Lo stesso id senza l'elenco che lo contiene vale Completo: il valore
+      // resta nel file, com'è.
+      expect(workspaceOf([drawEntry("draw.workspace", "salvato-1")])).toMatchObject({ space: "full" });
+      // Una voce rotta si ignora, e resta nell'elenco com'è, per la prossima scrittura.
+      const rotta = workspaceOf([drawEntry("draw.workspaces", [mio, "{non è json"])]);
+      expect(rotta.saved).toHaveLength(1);
+      expect(rotta.savedRaw).toEqual([mio, "{non è json"]);
+    });
   });
 
   it("una lettura superata da una più recente non arriva, né all'editor né alla memoria", async () => {
@@ -604,7 +664,7 @@ describe("lo spazio di lavoro del disegno", () => {
     const applied: unknown[] = [];
     const stop = watchWorkspace((choice) => applied.push(choice));
     await settle();
-    expect(applied).toEqual([{ workspace: "simple", toolbar: [] }]);
+    expect(applied).toMatchObject([{ space: "simple", workspace: "simple", toolbar: [] }]);
 
     await host.module.api.setSetting("editor.line_numbers", false);
     await settle();
@@ -619,13 +679,13 @@ describe("lo spazio di lavoro del disegno", () => {
       ["draw.workspace", "full"],
       ["draw.toolbar", ["select", "pen"]],
     ]);
-    expect(applied[applied.length - 1]).toEqual({ workspace: "full", toolbar: ["select", "pen"] });
+    expect(applied[applied.length - 1]).toMatchObject({ space: "full", workspace: "full", toolbar: ["select", "pen"] });
     expect(host.atGate("resetSetting")).toEqual([]);
 
     stop();
     await host.module.api.setSetting("draw.workspace", "simple");
     await settle();
-    expect(applied[applied.length - 1], "dopo stop").toEqual({ workspace: "full", toolbar: ["select", "pen"] });
+    expect(applied[applied.length - 1], "dopo stop").toMatchObject({ space: "full", workspace: "full", toolbar: ["select", "pen"] });
   });
 
   it("una scrittura che non riesce lo dice", async () => {
@@ -635,5 +695,44 @@ describe("lo spazio di lavoro del disegno", () => {
     bare.saveWorkspace("simple");
     await settle();
     expect(bare.recentNotices().map((notice) => notice.text)).toEqual([expect.stringMatching(/disco pieno/)]);
+  });
+});
+
+describe("i cursori di precisione: la scelta sta nello stato di vista della macchina", () => {
+  it("di serie sono spenti, e la scelta fatta resta quando il disegno si apre di nuovo", async () => {
+    const host = createFakeHost();
+    const prima = await boot(host);
+    expect(await prima.readPreciseCursors()).toBe(false);
+    expect(await prima.savePreciseCursors(true)).toBe(true);
+    expect(prima.currentPreciseCursors()).toBe(true);
+    // Il disegno si riapre: moduli nuovi sullo stesso stato di vista.
+    const dopo = await boot(host);
+    expect(dopo.currentPreciseCursors()).toBe(false);
+    expect(await dopo.readPreciseCursors()).toBe(true);
+    expect(host.atGate("viewState").map((call) => call.args)).toContainEqual(["draw.preciseCursors"]);
+  });
+
+  it("una scrittura che non riesce lascia la scelta di prima, e lo dice", async () => {
+    const host = createFakeHost();
+    const { readPreciseCursors, savePreciseCursors, currentPreciseCursors, recentNotices } = await boot(host);
+    await readPreciseCursors();
+    const guasti = () => recentNotices().filter((notice) => notice.tone === "guasto").length;
+    const prima = guasti();
+    const annulla = host.fault("setViewState", "disco pieno");
+    expect(await savePreciseCursors(true)).toBe(false);
+    annulla();
+    // La scelta in uso resta quella di prima, e chi disegna lo vede dall'avviso. Il finto host salva il valore
+    // prima di far fallire la chiamata (`setViewState` in host/fake.ts): per questo non si rilegge lo stato.
+    expect(currentPreciseCursors()).toBe(false);
+    expect(guasti()).toBe(prima + 1);
+  });
+
+  it("un valore che non è vero o falso non accende la voce", async () => {
+    for (const broken of ["yes", 1, { on: true }]) {
+      const host = createFakeHost();
+      const { readPreciseCursors } = await boot(host);
+      await host.module.api.setViewState("draw.preciseCursors", broken);
+      expect(await readPreciseCursors(), JSON.stringify(broken)).toBe(false);
+    }
   });
 });

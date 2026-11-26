@@ -55,13 +55,14 @@ use std::sync::Arc;
 
 use crate::custody::{Custody, WriteTurn};
 use crate::query::query_workspace;
+use crate::stop_relay::StopRelay;
 
 use fub_abi::command::{CommandOutcome, Failure, InvokeMode, PlannedEdit, UndoStep};
 use fub_abi::edit::{EditReport, EditRequest, Revision, WriteBase};
 use fub_abi::format::{DocumentFormat, LinkInsert};
 use fub_abi::locale::Locale;
 use fub_abi::model::{DocId, DocumentModel, TaskMarker};
-use fub_abi::net::{HttpRequest, HttpResponse};
+use fub_abi::net::{HttpRequest, HttpResponse, LimitedFetchError};
 use fub_abi::rules::path_policy::fenced_doc_id;
 use fub_abi::session::ViewContext;
 use fub_abi::settings::SettingValue;
@@ -230,7 +231,12 @@ impl JobHost {
     /// Host figlio per una **lettura** col suo frame: ha la bandiera `own`,
     /// figlia di quelle di questo host. Le sue bandiere sono quelle che
     /// guarda, e le stesse che la lettura iscrive fra quelle in volo.
-    fn for_read(&self, plugin: impl Into<String>, mode: InvokeMode, own: Arc<AtomicBool>) -> Self {
+    pub(crate) fn for_read(
+        &self,
+        plugin: impl Into<String>,
+        mode: InvokeMode,
+        own: Arc<AtomicBool>,
+    ) -> Self {
         let mut outer_stops = self.outer_stops.clone();
         outer_stops.push(Arc::clone(&self.cancelled));
         JobHost {
@@ -251,11 +257,13 @@ impl JobHost {
             .chain(outer)
             .any(|flag| flag.load(Ordering::Relaxed))
         {
-            return Err(PluginError::Cancelled(
-                format!("the job of `{}` has been cancelled", self.plugin).into(),
-            ));
+            return Err(self.cancelled_error());
         }
         Ok(())
+    }
+
+    fn cancelled_error(&self) -> PluginError {
+        PluginError::Cancelled(format!("the job of `{}` has been cancelled", self.plugin).into())
     }
 
     /// Il turno di scrittura per **un job**, cioè per chi sta dentro il codice di
@@ -432,10 +440,15 @@ impl JobHost {
             let mut detached = self.for_provider(hook.owner(), InvokeMode::Apply);
             hook.invoke(&mut detached)
         });
+        // Il disco si scrive fuori dal prestito esclusivo e sotto il turno
+        // (IMP-1805): la CAS resta quella preparata, e il prestito serve solo
+        // alle tabelle.
+        let placed = prepared
+            .place(source, before_write)
+            .map_err(PluginError::from)?;
         let pending = {
             let mut ws = workspace.write()?;
-            ws.commit_document_write(prepared, source, model, before_write)
-                .map_err(PluginError::from)?
+            ws.commit_placed_document_write(placed, model)
         };
         let pending = pending.invoke_indexes();
         let deferred = {
@@ -462,6 +475,10 @@ impl JobHost {
     ) -> Result<EditReport, PluginError> {
         self.stopped()?;
         let workspace = self.workspace.clone();
+        // Rientrante: chi passa da `apply_edit_detached` lo ha già. Il recupero
+        // delle rinomine ci arriva diretto, e la scrittura sul disco fuori dal
+        // prestito conta sul turno per non avere un altro writer in mezzo.
+        let _turn = self.turn(&workspace)?;
         let prepared = {
             let ws = workspace.read()?;
             let id = fenced_doc_id(id)?;
@@ -484,10 +501,15 @@ impl JobHost {
             hook.invoke(&mut detached)
         });
         let base = request.base;
+        // Il disco si scrive fuori dal prestito esclusivo e sotto il turno
+        // (IMP-1805): la CAS resta quella preparata, e il prestito serve solo
+        // alle tabelle.
+        let placed = prepared
+            .place(&next, before_write)
+            .map_err(PluginError::from)?;
         let pending = {
             let mut ws = workspace.write()?;
-            ws.commit_document_edit(prepared, &next, model, before_write, base, &report)
-                .map_err(PluginError::from)?
+            ws.commit_placed_document_edit(placed, model, base, &report)
         };
         let pending = pending.invoke_indexes();
         let deferred = {
@@ -709,13 +731,32 @@ pub(crate) fn drain_events(workspace: &Custody<Workspace>) -> Result<(), PluginE
 }
 
 /// Consegna gli eventi e completa l'epilogo opaco preparato dal kernel.
+///
+/// La riga del registro si appende **fuori** dal prestito esclusivo (IMP-1805):
+/// è una scrittura sul disco, e su un disco occupato dura secondi che nessuna
+/// lettura del vault deve passare ad aspettare. L'ordine delle righe lo tiene
+/// il turno di scrittura, quindi la si stacca solo se il turno è di questo
+/// thread — lo è per ogni chiamante di oggi; chi non lo tenesse la scrive
+/// dentro il prestito, come prima.
 pub(crate) fn finish_events<T>(
     workspace: &Custody<Workspace>,
     deferred: DeferredEvents<T>,
 ) -> Result<T, PluginError> {
     drain_events(workspace)?;
-    let mut ws = workspace.write()?;
-    Ok(ws.finish_deferred_events(deferred))
+    if !workspace.holds_turn() {
+        let mut ws = workspace.write()?;
+        return Ok(ws.finish_deferred_events(deferred));
+    }
+    let (outcome, record) = {
+        let mut ws = workspace.write()?;
+        ws.finish_deferred_events_detached(deferred)
+    };
+    if let Some(record) = record {
+        if let Err(failure) = record.append() {
+            workspace.write()?.report_journal_failure(failure);
+        }
+    }
+    Ok(outcome)
 }
 
 /// Esegue un comando **di sola lettura** col frame tutto suo
@@ -804,7 +845,16 @@ pub(crate) fn run_detached_rebuild_index(
                 ws.prepare_finish_index_with_graph(work, graph)
             };
             let completed_finish = prepared_finish.invoke();
-            let opening = workspace.write()?.finalize_finish_index(completed_finish);
+            let (opening, rejoin) = workspace
+                .write()?
+                .finalize_finish_index_detached(completed_finish);
+            // Come all'apertura (`runner/shared.rs`): i dati delle rinomine
+            // riconosciute si spostano fuori dal prestito esclusivo, sotto il
+            // turno del comando, prima della raccolta qui sotto.
+            if !rejoin.is_empty() {
+                let completed = rejoin.invoke();
+                workspace.write()?.finish_rejoin(completed);
+            }
 
             let _ = crate::teardown::flush_indexes(workspace)?;
             workspace.read()?.store_entries();
@@ -967,10 +1017,12 @@ impl VaultWrite for JobHost {
             hook.invoke(&mut detached)
         });
         self.stopped()?;
+        let placed = prepared
+            .place(bytes, before_write)
+            .map_err(PluginError::from)?;
         let pending = {
             let mut ws = workspace.write()?;
-            ws.commit_document_bytes_write(prepared, bytes, model, before_write)
-                .map_err(PluginError::from)?
+            ws.commit_placed_document_bytes_write(placed, model)
         };
         let pending = pending.invoke_indexes();
         let deferred = {
@@ -1752,6 +1804,74 @@ impl HostNetwork for JobHost {
     /// token arriva al transport e il suo reader chiude la connessione al primo
     /// controllo, senza aspettare il tetto globale dell'host.
     fn fetch(&self, request: HttpRequest) -> Result<HttpResponse, PluginError> {
+        self.on_wire(None, |guard, stop| guard.fetch_cancelled(request, stop))
+    }
+
+    /// Come [`fetch`](HostNetwork::fetch), fermata anche dalla bandiera del
+    /// chiamante.
+    fn fetch_cancelled(
+        &self,
+        request: HttpRequest,
+        cancelled: &AtomicBool,
+    ) -> Result<HttpResponse, PluginError> {
+        self.on_wire(Some(cancelled), |guard, stop| {
+            guard.fetch_cancelled(request, stop)
+        })
+    }
+
+    /// Come [`fetch_cancelled`](HostNetwork::fetch_cancelled), con il tetto
+    /// di byte del chiamante portato fino al filo.
+    fn fetch_limited(
+        &self,
+        request: HttpRequest,
+        cancelled: &AtomicBool,
+        max_bytes: u64,
+    ) -> Result<HttpResponse, LimitedFetchError> {
+        self.on_wire(Some(cancelled), |guard, stop| {
+            guard.fetch_limited(request, stop, max_bytes)
+        })
+    }
+}
+
+impl JobHost {
+    /// **Una regola per le tre porte della rete**: la richiesta passa dal
+    /// `Guard` di tutti gli altri (il cancello è uno solo, e chi gira dentro
+    /// un job non ne attraversa uno più largo), e il trasferimento si ferma
+    /// quando si alza **una qualunque** delle bandiere — quella del chiamante,
+    /// se c'è (per esempio il cane da guardia di un suo tempo limite), quella
+    /// di questo host e quelle di chi lo contiene. Il filo ne guarda una sola,
+    /// e [`StopRelay`] gliela dà.
+    ///
+    /// Una bandiera già alzata ferma la richiesta prima del filo: non parte
+    /// nemmeno.
+    fn on_wire<T, E: From<PluginError>>(
+        &self,
+        caller: Option<&AtomicBool>,
+        send: impl FnOnce(&dyn HostNetwork, &AtomicBool) -> Result<T, E>,
+    ) -> Result<T, E> {
+        let (client, granted) = self.network_wire()?;
+        let relay = StopRelay::watching(
+            caller
+                .into_iter()
+                .chain(std::iter::once(self.cancelled.as_ref()))
+                .chain(self.outer_stops.iter().map(Arc::as_ref)),
+        );
+        if relay.raised() {
+            return Err(self.cancelled_error().into());
+        }
+        let guard = Guard::new(client.as_ref(), granted);
+        relay
+            .run(|stop| send(&guard, stop))
+            .map_err(PluginError::from)?
+    }
+}
+
+impl JobHost {
+    /// Il filo e il permesso di adesso, presi per un istante: vedi
+    /// [`fetch`](HostNetwork::fetch) qui sopra per il perché.
+    fn network_wire(
+        &self,
+    ) -> Result<(Arc<dyn HostNetwork>, fub_kernel::host::Granted), PluginError> {
         self.stopped()?;
         if self.mode == InvokeMode::DryRun {
             authorize_family(
@@ -1772,9 +1892,7 @@ impl HostNetwork for JobHost {
                 "this host is mounted without a network client".into(),
             ));
         };
-        // Lo stesso `Guard` di tutti gli altri: il cancello è uno solo, e chi
-        // gira dentro un job non ne attraversa uno più largo.
-        Guard::new(client.as_ref(), granted).fetch_cancelled(request, self.cancelled.as_ref())
+        Ok((client, granted))
     }
 }
 

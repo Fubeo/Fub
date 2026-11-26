@@ -1,7 +1,6 @@
 // @vitest-environment happy-dom
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { markdown } from "@codemirror/lang-markdown";
-import { ensureSyntaxTree } from "@codemirror/language";
 import { EditorState, Prec } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { openLifetime, type Lifetime } from "../../../../../ui/lifetime";
@@ -11,12 +10,16 @@ import { livePreview } from "../livepreview";
 import { editFormulaAt, placeFormulaAt } from "../math-live";
 import { MathEditor, type MathPreferences } from "./editor";
 import { formulaPaste } from "./paste";
+import { drawn, MATH_READY_MS, mathReady } from "./test-drawn";
+import { parsedView } from "../test-support";
 
 // Copia e incolla, Invio che allinea, il posto della formula (T65, E27), col
 // riquadro vero e KaTeX vero.
 
 vi.mock("../../../../../ui/notify", () => ({ notify: () => undefined }));
 vi.mock("../../../../../host/ipc", () => ({ api: { setSetting: async () => undefined } }));
+
+beforeAll(mathReady, MATH_READY_MS);
 
 beforeEach(() => {
   // KaTeX non disegna in quirks mode, e happy-dom non dice il suo modo.
@@ -31,12 +34,6 @@ afterEach(() => {
   document.body.replaceChildren();
   Reflect.deleteProperty(document, "compatMode");
 });
-
-const settle = () => new Promise((done) => setTimeout(done, 40));
-async function drawn(): Promise<void> {
-  await settle();
-  for (let i = 0; i < 100 && document.querySelector(".cm-fub-mx-surface[data-state=loading]"); i++) await settle();
-}
 
 /// Un incolla col suo testo semplice.
 function paste(target: EventTarget, text: string): Event {
@@ -172,8 +169,7 @@ function mount(doc: string, anchor = 0): EditorView {
       ],
     }),
   });
-  ensureSyntaxTree(view.state, view.state.doc.length, 1000);
-  view.dispatch({});
+  parsedView(view);
   views.push(view);
   return view;
 }
@@ -199,12 +195,12 @@ describe("il posto dal tasto destro", () => {
     const view = mount(doc);
     expect(placeFormulaAt(view, doc.indexOf("a=b"), true)).toBe(true);
     expect(view.state.doc.toString()).toBe("Sia\n\n$$\na=b\n$$\n\nok\n");
-    await drawn();
+    await drawn(".cm-fub-mx-block");
     expect(document.querySelector(".cm-fub-mx-block")).not.toBeNull();
     const at = view.state.doc.toString().indexOf("$$");
     expect(placeFormulaAt(view, at, false)).toBe(true);
     expect(view.state.doc.toString()).toBe("Sia\n\n$a=b$\n\nok\n");
-    await drawn();
+    await drawn(".cm-fub-mx-popover .cm-fub-mx, .cm-fub-mx[data-display=inline]");
     expect(document.querySelector(".cm-fub-mx-popover .cm-fub-mx, .cm-fub-mx[data-display=inline]")).not.toBeNull();
   });
 
@@ -212,7 +208,7 @@ describe("il posto dal tasto destro", () => {
     const doc = "Sia $x^2$ ok\n";
     const view = mount(doc);
     expect(editFormulaAt(view, doc.indexOf("x"))).toBe(true);
-    await drawn();
+    await drawn(".cm-fub-mx[data-display=inline]");
     expect(document.querySelector(".cm-fub-mx[data-display=inline]")).not.toBeNull();
     expect(view.state.doc.toString()).toBe(doc);
   });

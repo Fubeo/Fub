@@ -1,0 +1,1484 @@
+{
+  "$nota": "I casi della famiglia testo (piano K6, T16): il testo di punto e il testo in area. Carattere (`text.setRangeStyle`: famiglia, stile, dimensione, spaziatura e interlinea) e Paragrafo (`text.setStyle`: allineamento a sinistra, al centro e a destra) sui testi scelti, e lo strumento Testo, che crea un testo nuovo o cambia le righe di uno che c'è. L'interlinea è il `dy` di ogni riga: il testo si riscrive intero, con lo stesso id. Maiuscole e minuscole (`type.changeCase`), Trova e sostituisci (`edit.findReplace`) e Trova il successivo (`edit.findNext`) cambiano o scelgono le parole. Converti in testo di punto e in testo in area (`type.convertToPointType`, `type.convertToAreaType`) riscrivono il `<text>` con o senza `fub:wrap`; in questi casi non ci sono caratteri, quindi il testo in area non si dispone e Fub rifiuta (`unsupported`) invece di scrivere righe sbagliate, e Crea profili non ha lettere da disegnare e rifiuta allo stesso modo. Con Inter li provano `famiglie.rs` (`crea_profili_scrive_le_lettere`, `testo_in_area_*`). Crenatura e giustificato il file di Fub non li scrive: Fub rifiuta (`unsupported`) invece di perderli; un comando sui testi senza testi scelti non cambia niente (`empty`), e con altri oggetti scelti cambia solo i testi. Scrivere dentro un testo che c'è lo provano i gesti del motore (`gesti_motore.rs`), con i caratteri. Carattere e Paragrafo sono sezioni del client: la loro prova è il test che le apre. Riempi con testo segnaposto (`type.fillPlaceholder`) mette nei testi scelti la frase di VectorCraft, nel primo stile (senza testi scelti il motore lo dice: argomenti sbagliati); il testo in area si riempie fino alla cornice. Inserisci carattere (`type.insert`) aggiunge in fondo ai testi scelti uno dei caratteri speciali di VectorCraft (lineette, virgolette, spazi, tabulazione, a capo) o un testo; un testo vuoto non cambia niente. Scala attributi del testo (`type.scaleTextAttributes`) non trova mai una scala da fissare: Fub scrive la scala di un testo nella dimensione del carattere (`empty`).",
+  "casi": [
+    {
+      "id": "text.setRangeStyle",
+      "disegno": "base.svg",
+      "selezione": [
+        "ot1t1t1t1"
+      ],
+      "argomenti": {
+        "size": 40
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "ot1t1t1t1",
+            "attrs": {
+              "font-size": "40"
+            }
+          }
+        ]
+      },
+      "dopo": "text-setRangeStyle-size.svg"
+    },
+    {
+      "id": "text.setRangeStyle",
+      "disegno": "base.svg",
+      "selezione": [
+        "ot1t1t1t1"
+      ],
+      "argomenti": {
+        "font": "Noto Serif"
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "ot1t1t1t1",
+            "attrs": {
+              "font-family": "Noto Serif"
+            }
+          }
+        ]
+      },
+      "dopo": "text-setRangeStyle-font.svg"
+    },
+    {
+      "id": "text.setRangeStyle",
+      "disegno": "base.svg",
+      "selezione": [
+        "ot2t2t2t2"
+      ],
+      "argomenti": {
+        "tracking": 100
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "ot2t2t2t2",
+            "attrs": {
+              "letter-spacing": "2"
+            }
+          }
+        ]
+      },
+      "dopo": "text-setRangeStyle-tracking.svg"
+    },
+    {
+      "id": "text.setRangeStyle",
+      "disegno": "base.svg",
+      "selezione": [
+        "ot1t1t1t1"
+      ],
+      "argomenti": {
+        "style": "Bold"
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "ot1t1t1t1",
+            "attrs": {
+              "font-weight": "bold"
+            }
+          }
+        ]
+      },
+      "dopo": "text-setRangeStyle-style.svg"
+    },
+    {
+      "id": "text.setRangeStyle",
+      "disegno": "base.svg",
+      "selezione": [
+        "ot1t1t1t1",
+        "oa1a1a1a1",
+        "ot2t2t2t2"
+      ],
+      "argomenti": {
+        "size": 24
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "set",
+                "id": "ot1t1t1t1",
+                "attrs": {
+                  "font-size": "24"
+                }
+              },
+              {
+                "op": "set",
+                "id": "ot2t2t2t2",
+                "attrs": {
+                  "font-size": "24"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "text-setRangeStyle-due.svg"
+    },
+    {
+      "id": "text.setRangeStyle",
+      "disegno": "base.svg",
+      "selezione": [
+        "ot1t1t1t1"
+      ],
+      "argomenti": {
+        "leading": 50
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "ot1t1t1t1"
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "first": true
+                },
+                "elem": {
+                  "tag": "text",
+                  "attrs": {
+                    "id": "ot1t1t1t1",
+                    "x": "40",
+                    "y": "80",
+                    "fill": "#000000",
+                    "font-family": "Inter, sans-serif",
+                    "font-size": "32"
+                  },
+                  "children": [
+                    {
+                      "tag": "tspan",
+                      "attrs": {
+                        "x": "40",
+                        "dy": "0"
+                      },
+                      "text": "Pioggia"
+                    },
+                    {
+                      "tag": "tspan",
+                      "attrs": {
+                        "x": "40",
+                        "dy": "50"
+                      },
+                      "text": "sul mare"
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "text-setRangeStyle-leading.svg"
+    },
+    {
+      "id": "text.setRangeStyle",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {
+        "size": 24
+      },
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "text.setRangeStyle",
+      "disegno": "base.svg",
+      "selezione": [
+        "ot1t1t1t1"
+      ],
+      "argomenti": {
+        "kerning": "optical"
+      },
+      "atteso": {
+        "rifiuto": "unsupported"
+      }
+    },
+    {
+      "id": "text.setStyle",
+      "disegno": "base.svg",
+      "selezione": [
+        "ot1t1t1t1"
+      ],
+      "argomenti": {
+        "justify": "center"
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "ot1t1t1t1",
+            "attrs": {
+              "text-anchor": "middle"
+            }
+          }
+        ]
+      },
+      "dopo": "text-setStyle-center.svg"
+    },
+    {
+      "id": "text.setStyle",
+      "disegno": "base.svg",
+      "selezione": [
+        "ot2t2t2t2"
+      ],
+      "argomenti": {
+        "justify": "right"
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "ot2t2t2t2",
+            "attrs": {
+              "text-anchor": "end"
+            }
+          }
+        ]
+      },
+      "dopo": "text-setStyle-right.svg"
+    },
+    {
+      "id": "text.setStyle",
+      "disegno": "base.svg",
+      "selezione": [
+        "ot1t1t1t1"
+      ],
+      "argomenti": {
+        "justify": "justifyAll"
+      },
+      "atteso": {
+        "rifiuto": "unsupported"
+      }
+    },
+    {
+      "id": "type",
+      "fonte": "strumento",
+      "disegno": "base.svg",
+      "gesto": [
+        {
+          "phase": "preview",
+          "events": [
+            {
+              "kind": "down",
+              "x": 40,
+              "y": 260,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "up",
+              "x": 40,
+              "y": 260,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ],
+          "inputs": []
+        },
+        {
+          "phase": "preview",
+          "events": [],
+          "inputs": [
+            {
+              "kind": "text",
+              "text": "Città"
+            },
+            {
+              "kind": "key",
+              "key": "Enter",
+              "code": "Enter",
+              "pressed": true
+            },
+            {
+              "kind": "text",
+              "text": "al mare 🌧"
+            }
+          ]
+        },
+        {
+          "phase": "commit",
+          "events": [],
+          "inputs": [
+            {
+              "kind": "key",
+              "key": "Escape",
+              "code": "Escape",
+              "pressed": true
+            }
+          ]
+        }
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "add",
+            "parent": "l1a2b3c4d",
+            "pos": {
+              "last": true
+            },
+            "elem": {
+              "tag": "text",
+              "attrs": {
+                "x": "40",
+                "y": "260",
+                "fill": "#000000",
+                "font-family": "Inter, sans-serif",
+                "font-size": "32",
+                "id": "o0rpq5ny2"
+              },
+              "children": [
+                {
+                  "tag": "tspan",
+                  "attrs": {
+                    "x": "40",
+                    "dy": "0"
+                  },
+                  "text": "Città"
+                },
+                {
+                  "tag": "tspan",
+                  "attrs": {
+                    "x": "40",
+                    "dy": "38.4"
+                  },
+                  "text": "al mare 🌧"
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "dopo": "type-nuovo.svg"
+    },
+    {
+      "id": "verticalType",
+      "fonte": "strumento",
+      "disegno": "base.svg",
+      "gesto": [
+        {
+          "phase": "preview",
+          "events": [
+            {
+              "kind": "down",
+              "x": 600,
+              "y": 40,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "up",
+              "x": 600,
+              "y": 40,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ],
+          "inputs": []
+        },
+        {
+          "phase": "preview",
+          "events": [],
+          "inputs": [
+            {
+              "kind": "text",
+              "text": "縦書き"
+            },
+            {
+              "kind": "key",
+              "key": "Enter",
+              "code": "Enter",
+              "pressed": true
+            },
+            {
+              "kind": "text",
+              "text": "二列 AB"
+            }
+          ]
+        },
+        {
+          "phase": "commit",
+          "events": [],
+          "inputs": [
+            {
+              "kind": "key",
+              "key": "Escape",
+              "code": "Escape",
+              "pressed": true
+            }
+          ]
+        }
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "add",
+            "parent": "l1a2b3c4d",
+            "pos": {
+              "last": true
+            },
+            "elem": {
+              "tag": "text",
+              "attrs": {
+                "x": "597.44",
+                "y": "40",
+                "writing-mode": "vertical-rl",
+                "fill": "#000000",
+                "font-family": "Inter, sans-serif",
+                "font-size": "32",
+                "id": "o0rpq5ny2"
+              },
+              "children": [
+                {
+                  "tag": "tspan",
+                  "attrs": {
+                    "y": "40",
+                    "dx": "0"
+                  },
+                  "text": "縦書き"
+                },
+                {
+                  "tag": "tspan",
+                  "attrs": {
+                    "y": "40",
+                    "dx": "-38.4"
+                  },
+                  "text": "二列 AB"
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "dopo": "verticalType-nuovo.svg"
+    },
+    {
+      "id": "type.orientation.vertical",
+      "disegno": "base.svg",
+      "selezione": [
+        "ot1t1t1t1"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "ot1t1t1t1"
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "first": true
+                },
+                "elem": {
+                  "tag": "text",
+                  "attrs": {
+                    "id": "ot1t1t1t1",
+                    "x": "37.44",
+                    "y": "80",
+                    "fill": "#000000",
+                    "font-family": "Inter, sans-serif",
+                    "font-size": "32",
+                    "writing-mode": "vertical-rl"
+                  },
+                  "children": [
+                    {
+                      "tag": "tspan",
+                      "attrs": {
+                        "y": "80",
+                        "dx": "0"
+                      },
+                      "text": "Pioggia"
+                    },
+                    {
+                      "tag": "tspan",
+                      "attrs": {
+                        "y": "80",
+                        "dx": "-40"
+                      },
+                      "text": "sul mare"
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "type-orientation-vertical.svg"
+    },
+    {
+      "id": "type.orientation.horizontal",
+      "disegno": "type-orientation-vertical.svg",
+      "selezione": [
+        "ot1t1t1t1"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "ot1t1t1t1"
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "first": true
+                },
+                "elem": {
+                  "tag": "text",
+                  "attrs": {
+                    "id": "ot1t1t1t1",
+                    "x": "40",
+                    "y": "80",
+                    "fill": "#000000",
+                    "font-family": "Inter, sans-serif",
+                    "font-size": "32"
+                  },
+                  "children": [
+                    {
+                      "tag": "tspan",
+                      "attrs": {
+                        "x": "40",
+                        "dy": "0"
+                      },
+                      "text": "Pioggia"
+                    },
+                    {
+                      "tag": "tspan",
+                      "attrs": {
+                        "x": "40",
+                        "dy": "40"
+                      },
+                      "text": "sul mare"
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "type-orientation-horizontal.svg"
+    },
+    {
+      "id": "view.snapToGlyph",
+      "fonte": "interfaccia",
+      "prova": "apps/client/src/editors/spatial/tools/editor/chrome/visualizza.test.ts"
+    },
+    {
+      "id": "character",
+      "fonte": "pannello",
+      "prova": "apps/client/src/editors/spatial/completo/famiglie/testo/testo.test.ts"
+    },
+    {"id": "text.setRangeStyle", "disegno": "base.svg", "selezione": ["ot1t1t1t1"], "argomenti": {"underline": true}, "atteso": {"ops": [{"op": "set", "id": "ot1t1t1t1", "attrs": {"text-decoration": "underline"}}]}, "dopo": "text-setRangeStyle-underline.svg"},
+    {"id": "text.setRangeStyle", "disegno": "decorato.svg", "selezione": ["ot1t1t1t1"], "argomenti": {"underline": false}, "atteso": {"ops": [{"op": "set", "id": "ot1t1t1t1", "attrs": {"text-decoration": "overline"}}]}, "dopo": "text-setRangeStyle-sopralineato.svg"},
+    {"id": "text.setRangeStyle", "disegno": "decorato.svg", "selezione": ["ot1t1t1t1"], "argomenti": {"strikethrough": true}, "atteso": {"ops": [{"op": "set", "id": "ot1t1t1t1", "attrs": {"text-decoration": "underline overline line-through"}}]}, "dopo": "text-setRangeStyle-barrato.svg"},
+    {"id": "text.missingFonts", "disegno": "base.svg", "selezione": ["ot1t1t1t1"], "argomenti": {}, "atteso": {"lettura": {"count": 1, "fonts": [{"family": "Inter", "style": "Regular", "status": "missing", "resolved": null}]}}},
+    {"id": "text.fonts", "disegno": "base.svg", "selezione": ["ot1t1t1t1"], "argomenti": {}, "atteso": {"lettura": [{"family": "Inter", "style": "Regular", "runs": 3, "objects": 2, "missing": true, "status": "missing", "resolved": null, "missingGlyphs": 13}]}},
+    {"id": "text.fontList", "disegno": "base.svg", "selezione": ["ot1t1t1t1"], "argomenti": {}, "atteso": {"lettura": {"families": []}}},
+    {"id": "text.fontList", "disegno": "base.svg", "selezione": ["ot1t1t1t1"], "argomenti": {"family": "Inter"}, "atteso": {"errore": "bad_args"}},
+    {"id": "text.tabs.get", "disegno": "base.svg", "selezione": ["ot1t1t1t1"], "argomenti": {}, "atteso": {"lettura": {"stops": []}}},
+    {"id": "text.thread.info", "disegno": "base.svg", "selezione": ["ot1t1t1t1"], "argomenti": {}, "atteso": {"lettura": []}},
+    {"id": "view.snapToGlyph.options", "disegno": "base.svg", "selezione": ["ot1t1t1t1"], "argomenti": {}, "atteso": {"lettura": {"baseline": true, "xHeight": true, "bounds": true, "proximity": true, "angular": true, "anchors": true}}},
+    {"id": "type.fillPlaceholder", "disegno": "base.svg", "selezione": ["ot1t1t1t1", "oa1a1a1a1"], "argomenti": {}, "atteso": {"ops": [{"op": "text", "id": "ot1t1t1t1", "lines": ["Sample copy flows here while the layout takes shape."]}]}, "dopo": "type-fillPlaceholder.svg"},
+    {"id": "type.fillPlaceholder", "disegno": "base.svg", "selezione": ["oa1a1a1a1"], "argomenti": {}, "atteso": {"rifiuto": "empty"}},
+    {"id": "type.insert", "disegno": "base.svg", "selezione": ["ot2t2t2t2", "oa1a1a1a1"], "argomenti": {"char": "emDash"}, "atteso": {"ops": [{"op": "text", "id": "ot2t2t2t2", "lines": ["Una riga—"]}]}, "dopo": "type-insert-emDash.svg"},
+    {"id": "type.insert", "disegno": "base.svg", "selezione": ["ot2t2t2t2"], "argomenti": {"char": "paragraphReturn"}, "atteso": {"ops": [{"op": "text", "id": "ot2t2t2t2", "lines": ["Una riga", ""]}]}, "dopo": "type-insert-aCapo.svg"},
+    {"id": "type.insert", "disegno": "base.svg", "selezione": ["ot2t2t2t2"], "argomenti": {"char": "tab"}, "atteso": {"ops": [{"op": "text", "id": "ot2t2t2t2", "lines": ["Una riga\t"]}]}, "dopo": "type-insert-tab.svg"},
+    {"id": "type.insert", "disegno": "base.svg", "selezione": ["ot2t2t2t2"], "argomenti": {"text": ""}, "atteso": {"rifiuto": "empty"}},
+    {"id": "type.insert", "disegno": "base.svg", "selezione": ["ot2t2t2t2"], "argomenti": {"char": "magia"}, "atteso": {"errore": "bad_args"}},
+    {"id": "type.scaleTextAttributes", "disegno": "base.svg", "selezione": ["ot1t1t1t1"], "argomenti": {}, "atteso": {"rifiuto": "empty"}},
+    {"id": "text.replaceFont", "disegno": "base.svg", "selezione": ["ot2t2t2t2"], "argomenti": {"from": {"family": "Inter"}, "to": {"family": "Nessuno"}}, "atteso": {"errore": "bad_args"}},
+    {"id": "type.findFont", "fonte": "interfaccia", "prova": "apps/client/src/editors/spatial/completo/trova-carattere.test.ts"},
+    {"id": "text.setText", "disegno": "base.svg", "selezione": ["ot2t2t2t2"], "argomenti": {"text": "Neve"}, "atteso": {"ops": [{"op": "text", "id": "ot2t2t2t2", "lines": ["Neve"]}]}, "dopo": "text-setText.svg"},
+    {"id": "text.setText", "disegno": "base.svg", "selezione": ["ot2t2t2t2"], "argomenti": {"text": "Neve\nal sole"}, "atteso": {"ops": [{"op": "text", "id": "ot2t2t2t2", "lines": ["Neve", "al sole"]}]}, "dopo": "text-setText-righe.svg"},
+    {"id": "type.bold", "fonte": "interfaccia", "prova": "apps/client/src/editors/spatial/completo/famiglie/testo/stile.test.ts"},
+    {"id": "type.italic", "fonte": "interfaccia", "prova": "apps/client/src/editors/spatial/completo/famiglie/testo/stile.test.ts"},
+    {"id": "type.underline", "fonte": "interfaccia", "prova": "apps/client/src/editors/spatial/completo/famiglie/testo/stile.test.ts"},
+    {"id": "type.alignLeft", "fonte": "interfaccia", "prova": "apps/client/src/editors/spatial/completo/famiglie/testo/allinea.test.ts"},
+    {"id": "type.alignCenter", "fonte": "interfaccia", "prova": "apps/client/src/editors/spatial/completo/famiglie/testo/allinea.test.ts"},
+    {"id": "type.alignRight", "fonte": "interfaccia", "prova": "apps/client/src/editors/spatial/completo/famiglie/testo/allinea.test.ts"},
+    {
+      "id": "paragraph",
+      "fonte": "pannello",
+      "prova": "apps/client/src/editors/spatial/completo/famiglie/testo/testo.test.ts"
+    },
+    {
+      "id": "type.size.increase",
+      "selezione": [
+        "ot1t1t1t1"
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "ot1t1t1t1",
+            "attrs": {
+              "font-size": "34"
+            }
+          }
+        ]
+      },
+      "disegno": "base.svg",
+      "dopo": "type-size-increase.svg"
+    },
+    {
+      "id": "type.size.decrease",
+      "selezione": [
+        "ot1t1t1t1"
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "ot1t1t1t1",
+            "attrs": {
+              "font-size": "30"
+            }
+          }
+        ]
+      },
+      "disegno": "base.svg",
+      "dopo": "type-size-decrease.svg"
+    },
+    {
+      "id": "type.size.increaseByFive",
+      "selezione": [
+        "ot1t1t1t1"
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "ot1t1t1t1",
+            "attrs": {
+              "font-size": "42"
+            }
+          }
+        ]
+      },
+      "disegno": "base.svg",
+      "dopo": "type-size-increaseByFive.svg"
+    },
+    {
+      "id": "type.size.decreaseByFive",
+      "selezione": [
+        "ot1t1t1t1"
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "ot1t1t1t1",
+            "attrs": {
+              "font-size": "22"
+            }
+          }
+        ]
+      },
+      "disegno": "base.svg",
+      "dopo": "type-size-decreaseByFive.svg"
+    },
+    {
+      "id": "type.step",
+      "selezione": [
+        "ot1t1t1t1"
+      ],
+      "argomenti": {
+        "attribute": "tracking",
+        "by": 2
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "ot1t1t1t1",
+            "attrs": {
+              "letter-spacing": "1.28"
+            }
+          }
+        ]
+      },
+      "disegno": "base.svg",
+      "dopo": "type-step-tracking.svg"
+    },
+    {
+      "id": "type.step",
+      "selezione": [
+        "ot1t1t1t1"
+      ],
+      "argomenti": {
+        "attribute": "leading",
+        "by": 1
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "ot1t1t1t1"
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "first": true
+                },
+                "elem": {
+                  "tag": "text",
+                  "attrs": {
+                    "id": "ot1t1t1t1",
+                    "x": "40",
+                    "y": "80",
+                    "fill": "#000000",
+                    "font-family": "Inter, sans-serif",
+                    "font-size": "32"
+                  },
+                  "children": [
+                    {
+                      "tag": "tspan",
+                      "attrs": {
+                        "x": "40",
+                        "dy": "0"
+                      },
+                      "text": "Pioggia"
+                    },
+                    {
+                      "tag": "tspan",
+                      "attrs": {
+                        "x": "40",
+                        "dy": "42"
+                      },
+                      "text": "sul mare"
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "disegno": "base.svg",
+      "dopo": "type-step-leading.svg"
+    },
+    {
+      "id": "type.step",
+      "selezione": [
+        "ot1t1t1t1"
+      ],
+      "argomenti": {
+        "attribute": "baselineShift",
+        "by": 1
+      },
+      "atteso": {
+        "rifiuto": "unsupported"
+      },
+      "disegno": "base.svg"
+    },
+    {
+      "id": "type.resetTracking",
+      "selezione": [
+        "ot2t2t2t2"
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "ot2t2t2t2",
+            "attrs": {
+              "letter-spacing": null
+            }
+          }
+        ]
+      },
+      "disegno": "text-setRangeStyle-tracking.svg",
+      "dopo": "type-resetTracking.svg"
+    },
+    {
+      "id": "type.resetHorizontalScale",
+      "selezione": [
+        "ot1t1t1t1"
+      ],
+      "atteso": {
+        "rifiuto": "empty"
+      },
+      "disegno": "base.svg"
+    },
+    {
+      "id": "type.changeCase",
+      "selezione": [
+        "ot1t1t1t1"
+      ],
+      "argomenti": {
+        "case": "upper"
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "text",
+            "id": "ot1t1t1t1",
+            "lines": [
+              "PIOGGIA",
+              "SUL MARE"
+            ]
+          }
+        ]
+      },
+      "dopo": "type-changeCase-upper.svg",
+      "disegno": "base.svg"
+    },
+    {
+      "id": "type.changeCase",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {
+        "case": "upper"
+      },
+      "atteso": {
+        "rifiuto": "empty"
+      },
+      "disegno": "base.svg"
+    },
+    {
+      "id": "edit.findReplace",
+      "argomenti": {
+        "find": "mare",
+        "replace": "lago"
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "text",
+            "id": "ot1t1t1t1",
+            "lines": [
+              "Pioggia",
+              "sul lago"
+            ]
+          }
+        ]
+      },
+      "dopo": "edit-findReplace.svg",
+      "disegno": "base.svg",
+      "selezione": []
+    },
+    {
+      "id": "edit.findReplace",
+      "argomenti": {
+        "replace": "lago"
+      },
+      "atteso": {
+        "errore": "bad_args"
+      },
+      "disegno": "base.svg",
+      "selezione": []
+    },
+    {
+      "id": "edit.findNext",
+      "argomenti": {
+        "find": "riga"
+      },
+      "atteso": {
+        "selezione": [
+          "ot2t2t2t2"
+        ]
+      },
+      "disegno": "base.svg",
+      "selezione": []
+    },
+    {
+      "id": "type.createOutlines",
+      "selezione": [
+        "ot2t2t2t2"
+      ],
+      "atteso": {
+        "rifiuto": "unsupported"
+      },
+      "disegno": "base.svg",
+      "argomenti": {}
+    },
+    {
+      "id": "type.convertToAreaType",
+      "selezione": [
+        "ot2t2t2t2"
+      ],
+      "atteso": {
+        "rifiuto": "unsupported"
+      },
+      "disegno": "base.svg",
+      "argomenti": {}
+    },
+    {
+      "id": "type.convertToAreaType",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "atteso": {
+        "rifiuto": "empty"
+      },
+      "disegno": "base.svg",
+      "argomenti": {}
+    },
+    {
+      "id": "type.convertToPointType",
+      "disegno": "area.svg",
+      "selezione": [
+        "oz1z1z1z1"
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "oz1z1z1z1"
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "last": true
+                },
+                "elem": {
+                  "tag": "text",
+                  "attrs": {
+                    "id": "oz1z1z1z1",
+                    "x": "40",
+                    "y": "60",
+                    "fill": "#000000",
+                    "font-family": "Inter, sans-serif",
+                    "font-size": "20"
+                  },
+                  "children": [
+                    {
+                      "tag": "tspan",
+                      "attrs": {
+                        "x": "40",
+                        "dy": "0"
+                      },
+                      "text": "Le onde del mare tornano a riva"
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "type-convertToPointType.svg",
+      "argomenti": {}
+    },
+    {
+      "id": "type.convertToPointType",
+      "selezione": [
+        "ot1t1t1t1"
+      ],
+      "atteso": {
+        "rifiuto": "empty"
+      },
+      "disegno": "base.svg",
+      "argomenti": {}
+    },
+    {
+      "id": "type",
+      "fonte": "strumento",
+      "gesto": [
+        {
+          "phase": "preview",
+          "events": [
+            {
+              "kind": "down",
+              "x": 200,
+              "y": 220,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 280,
+              "y": 250,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 360,
+              "y": 280,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "up",
+              "x": 360,
+              "y": 280,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ],
+          "inputs": []
+        },
+        {
+          "phase": "preview",
+          "events": [],
+          "inputs": [
+            {
+              "kind": "text",
+              "text": "Onde del mare che tornano"
+            }
+          ]
+        },
+        {
+          "phase": "commit",
+          "events": [],
+          "inputs": [
+            {
+              "kind": "key",
+              "key": "Escape",
+              "code": "Escape",
+              "pressed": true
+            }
+          ]
+        }
+      ],
+      "atteso": {
+        "rifiuto": "unsupported"
+      },
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {}
+    },
+    {
+      "id": "text.editRange",
+      "argomenti": {
+        "element": "ot1t1t1t1",
+        "text": "Pioggia\nsul lago"
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "text",
+            "id": "ot1t1t1t1",
+            "lines": [
+              "Pioggia",
+              "sul lago"
+            ]
+          }
+        ]
+      },
+      "dopo": "edit-findReplace.svg",
+      "disegno": "base.svg",
+      "selezione": []
+    },
+    {
+      "id": "text.editRange",
+      "argomenti": {
+        "text": "Pioggia"
+      },
+      "atteso": {
+        "errore": "bad_args"
+      },
+      "disegno": "base.svg",
+      "selezione": []
+    },
+    {
+      "id": "text.editRange",
+      "argomenti": {
+        "element": "oa1a1a1a1",
+        "text": "Pioggia"
+      },
+      "atteso": {
+        "errore": "bad_args"
+      },
+      "disegno": "base.svg",
+      "selezione": []
+    },
+    {
+      "id": "text.editRange",
+      "argomenti": {
+        "element": "ot1t1t1t1",
+        "start": 0,
+        "end": 2,
+        "insert": "X"
+      },
+      "atteso": {
+        "errore": "bad_args"
+      },
+      "disegno": "base.svg",
+      "selezione": []
+    },
+    {
+      "id": "areaType",
+      "fonte": "strumento",
+      "gesto": [
+        {
+          "phase": "preview",
+          "events": [
+            {
+              "kind": "down",
+              "x": 200,
+              "y": 220,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 280,
+              "y": 250,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 360,
+              "y": 280,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "up",
+              "x": 360,
+              "y": 280,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ],
+          "inputs": []
+        },
+        {
+          "phase": "preview",
+          "events": [],
+          "inputs": [
+            {
+              "kind": "text",
+              "text": "Onde del mare che tornano"
+            }
+          ]
+        },
+        {
+          "phase": "commit",
+          "events": [],
+          "inputs": [
+            {
+              "kind": "key",
+              "key": "Escape",
+              "code": "Escape",
+              "pressed": true
+            }
+          ]
+        }
+      ],
+      "atteso": {
+        "rifiuto": "unsupported"
+      },
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {}
+    },
+    {
+      "id": "areaType",
+      "fonte": "strumento",
+      "gesto": [
+        {
+          "phase": "preview",
+          "events": [
+            {
+              "kind": "down",
+              "x": 300,
+              "y": 100.5,
+              "pressure": 1,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "up",
+              "x": 300,
+              "y": 100.5,
+              "pressure": 0,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ],
+          "inputs": []
+        },
+        {
+          "phase": "preview",
+          "events": [],
+          "inputs": [
+            {
+              "kind": "text",
+              "text": "Onde del mare"
+            }
+          ]
+        },
+        {
+          "phase": "commit",
+          "events": [],
+          "inputs": [
+            {
+              "kind": "key",
+              "key": "Escape",
+              "code": "Escape",
+              "pressed": true
+            }
+          ]
+        }
+      ],
+      "atteso": {
+        "rifiuto": "unsupported"
+      },
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {}
+    },
+    {
+      "id": "areaType",
+      "fonte": "strumento",
+      "gesto": [
+        {
+          "phase": "preview",
+          "events": [
+            {
+              "kind": "down",
+              "x": 330,
+              "y": 200.5,
+              "pressure": 1,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "up",
+              "x": 330,
+              "y": 200.5,
+              "pressure": 0,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ],
+          "inputs": []
+        },
+        {
+          "phase": "preview",
+          "events": [],
+          "inputs": [
+            {
+              "kind": "text",
+              "text": "Onde del mare"
+            }
+          ]
+        },
+        {
+          "phase": "commit",
+          "events": [],
+          "inputs": [
+            {
+              "kind": "key",
+              "key": "Escape",
+              "code": "Escape",
+              "pressed": true
+            }
+          ]
+        }
+      ],
+      "atteso": {
+        "rifiuto": "unsupported"
+      },
+      "disegno": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 400 300\" width=\"400\" height=\"300\"><rect id=\"fub-paper\" fub:role=\"paper\" x=\"0\" y=\"0\" width=\"400\" height=\"300\" fill=\"#ffffff\"/><g id=\"l1a2b3c4d\" fub:layer=\"Livello 1\"><path id=\"op7a7a7a7\" d=\"M300 200 L360 200 L330 260 Z\" fill=\"#cccccc\"/></g></svg>",
+      "selezione": [],
+      "argomenti": {}
+    },
+    {
+      "id": "typeOnPath",
+      "fonte": "strumento",
+      "gesto": [
+        {
+          "phase": "preview",
+          "events": [
+            {
+              "kind": "down",
+              "x": 200,
+              "y": 125,
+              "pressure": 1,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "up",
+              "x": 200,
+              "y": 125,
+              "pressure": 0,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ],
+          "inputs": []
+        },
+        {
+          "phase": "preview",
+          "events": [],
+          "inputs": [
+            {
+              "kind": "text",
+              "text": "Onde del mare"
+            }
+          ]
+        },
+        {
+          "phase": "commit",
+          "events": [],
+          "inputs": [
+            {
+              "kind": "key",
+              "key": "Escape",
+              "code": "Escape",
+              "pressed": true
+            }
+          ]
+        }
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "first": true
+                },
+                "elem": {
+                  "tag": "defs",
+                  "attrs": {
+                    "id": "fub-defs"
+                  },
+                  "children": [
+                    {
+                      "tag": "path",
+                      "attrs": {
+                        "id": "rwnm1svrw",
+                        "fub:role": "private",
+                        "d": "M50 200 C150 100 250 100 350 200"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "op": "remove",
+                "target": "op7a7a7a7"
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "last": true
+                },
+                "elem": {
+                  "tag": "text",
+                  "attrs": {
+                    "fill": "#000000",
+                    "font-family": "Inter, sans-serif",
+                    "font-size": "32",
+                    "id": "ok7thtlvb"
+                  },
+                  "children": [
+                    {
+                      "tag": "textPath",
+                      "attrs": {
+                        "startOffset": "172.17",
+                        "href": "#rwnm1svrw"
+                      },
+                      "text": "Onde del mare"
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "disegno": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 400 300\" width=\"400\" height=\"300\"><rect id=\"fub-paper\" fub:role=\"paper\" x=\"0\" y=\"0\" width=\"400\" height=\"300\" fill=\"#ffffff\"/><g id=\"l1a2b3c4d\" fub:layer=\"Livello 1\"><path id=\"op7a7a7a7\" d=\"M50 200 C150 100 250 100 350 200\" fill=\"none\" stroke=\"#000000\"/></g></svg>",
+      "selezione": [],
+      "argomenti": {},
+      "dopo": "typeOnPath-curva.svg"
+    },
+    {"id": "text.create", "disegno": "base.svg", "selezione": [], "argomenti": {"x": 100, "y": 250, "text": "Ciao"}, "atteso": {"ops": [{"op": "add", "parent": "l1a2b3c4d", "pos": {"last": true}, "elem": {"tag": "text", "attrs": {"x": "100", "y": "250", "fill": "#000000", "font-family": "Inter, sans-serif", "font-size": "32", "id": "ou1uww6bx"}, "children": [{"tag": "tspan", "attrs": {"x": "100", "dy": "0"}, "text": "Ciao"}]}}]}, "dopo": "text-create.svg"},
+    {"id": "text.create", "disegno": "base.svg", "selezione": [], "argomenti": {"x": 100, "y": 250, "text": "Ciao a tutti", "area": {"width": 120, "height": 40}}, "atteso": {"rifiuto": "unsupported"}},
+    {"id": "text.create", "disegno": "base.svg", "selezione": [], "argomenti": {"x": "qui", "y": 250, "text": "Ciao"}, "atteso": {"errore": "bad_args"}},
+    {"id": "text.create", "disegno": "base.svg", "selezione": [], "argomenti": {"x": 100, "y": 250}, "atteso": {"rifiuto": "empty"}},
+    {"id": "text.createInPath", "disegno": "forme.svg", "selezione": [], "argomenti": {"path": "oa1a1a1a1", "text": "Dentro il riquadro"}, "atteso": {"rifiuto": "unsupported"}},
+    {"id": "text.createInPath", "disegno": "forme.svg", "selezione": [], "argomenti": {"path": "op1p1p1p1", "mode": "onPath", "text": "Sulla linea", "at": [200, 175]}, "atteso": {"ops": [{"op": "batch", "ops": [{"op": "add", "parent": "#root", "pos": {"first": true}, "elem": {"tag": "defs", "attrs": {"id": "fub-defs"}, "children": [{"tag": "path", "attrs": {"id": "retxw7qwt", "fub:role": "private", "d": "M40 250 C140 150 260 150 360 250"}}]}}, {"op": "remove", "target": "op1p1p1p1"}, {"op": "add", "parent": "l1a2b3c4d", "pos": {"last": true}, "elem": {"tag": "text", "attrs": {"fill": "#000000", "font-family": "Inter, sans-serif", "font-size": "32", "id": "o3sjmdne3"}, "children": [{"tag": "textPath", "attrs": {"startOffset": "181.43", "href": "#retxw7qwt"}, "text": "Sulla linea"}]}}]}]}, "dopo": "text-createInPath-onPath.svg"},
+    {"id": "text.createInPath", "disegno": "forme.svg", "selezione": [], "argomenti": {"path": "op1p1p1p1", "mode": "spirale"}, "atteso": {"rifiuto": "empty"}},
+    {"id": "text.discardEmpty", "disegno": "base.svg", "selezione": [], "argomenti": {"id": "ot2t2t2t2"}, "atteso": {"rifiuto": "empty"}},
+    {"id": "text.areaOptions", "disegno": "area.svg", "selezione": ["oz1z1z1z1"], "argomenti": {}, "atteso": {"lettura": {"rows": 1, "columns": 1, "gutter": 18.0, "inset": 0.0, "firstBaseline": "ascent", "firstBaselineMin": 0.0, "verticalAlign": "top", "fit": "autoHeight", "flow": "columns", "rowGutter": 18.0, "fitMinPercent": 50.0, "width": 200.0, "height": 20.0, "overflow": false, "fitScale": 1.0}}},
+    {"id": "text.areaOptions", "disegno": "area.svg", "selezione": ["oz1z1z1z1"], "argomenti": {"width": 150}, "atteso": {"rifiuto": "unsupported"}},
+    {"id": "text.areaOptions", "disegno": "area.svg", "selezione": ["oz1z1z1z1"], "argomenti": {"verticalAlign": "center"}, "atteso": {"rifiuto": "unsupported"}},
+    {"id": "text.areaOptions", "disegno": "area.svg", "selezione": ["oz1z1z1z1"], "argomenti": {"columns": 2}, "atteso": {"rifiuto": "unsupported"}},
+    {"id": "text.reshapeArea", "disegno": "area.svg", "selezione": ["oz1z1z1z1"], "argomenti": {"anchors": [[0, 1], [0, 2]], "dx": 20, "dy": 0}, "atteso": {"rifiuto": "unsupported"}},
+    {"id": "type.pathOptions", "disegno": "typeOnPath-curva.svg", "selezione": ["ok7thtlvb"], "argomenti": {}, "atteso": {"lettura": {"start": 0.5000027989805035, "end": null, "flip": false, "effect": "rainbow", "alignToPath": "baseline", "spacing": 0.0}}},
+    {"id": "type.pathOptions", "disegno": "typeOnPath-curva.svg", "selezione": ["ok7thtlvb"], "argomenti": {"start": 0.1}, "atteso": {"ops": [{"op": "batch", "ops": [{"op": "remove", "target": "ok7thtlvb"}, {"op": "add", "parent": "l1a2b3c4d", "pos": {"last": true}, "elem": {"tag": "text", "attrs": {"id": "ok7thtlvb", "fill": "#000000", "font-family": "Inter, sans-serif", "font-size": "32"}, "children": [{"tag": "textPath", "attrs": {"startOffset": "34.43", "href": "#rwnm1svrw"}, "text": "Onde del mare"}]}}]}]}, "dopo": "type-pathOptions-start.svg"},
+    {"id": "type.pathOptions", "disegno": "curva-dall-inizio.svg", "selezione": ["ok7thtlvb"], "argomenti": {"flip": true}, "atteso": {"ops": [{"op": "batch", "ops": [{"op": "remove", "target": "ok7thtlvb"}, {"op": "add", "parent": "l1a2b3c4d", "pos": {"last": true}, "elem": {"tag": "text", "attrs": {"id": "ok7thtlvb", "fill": "#000000", "font-family": "Inter, sans-serif", "font-size": "32"}, "children": [{"tag": "textPath", "attrs": {"href": "#rwnm1svrw"}, "text": "Onde del mare"}]}}, {"op": "set", "id": "rwnm1svrw", "attrs": {"d": "M350 200 C250 100 150 100 50 200"}}]}]}, "dopo": "type-pathOptions-flip.svg"},
+    {"id": "type.pathOptions", "disegno": "typeOnPath-curva.svg", "selezione": ["ok7thtlvb"], "argomenti": {"flip": true}, "atteso": {"rifiuto": "unsupported"}},
+    {"id": "type.pathOptions", "disegno": "typeOnPath-curva.svg", "selezione": ["ok7thtlvb"], "argomenti": {"effect": "skew"}, "atteso": {"rifiuto": "unsupported"}},
+    {"id": "text.reshapePath", "disegno": "typeOnPath-curva.svg", "selezione": ["ok7thtlvb"], "argomenti": {"anchors": [[0, 1]], "dx": 0, "dy": 30}, "atteso": {"ops": [{"op": "batch", "ops": [{"op": "remove", "target": "ok7thtlvb"}, {"op": "add", "parent": "l1a2b3c4d", "pos": {"last": true}, "elem": {"tag": "text", "attrs": {"id": "ok7thtlvb", "fill": "#000000", "font-family": "Inter, sans-serif", "font-size": "32"}, "children": [{"tag": "textPath", "attrs": {"startOffset": "172.93", "href": "#rwnm1svrw"}, "text": "Onde del mare"}]}}, {"op": "set", "id": "rwnm1svrw", "attrs": {"d": "M50 200 C150 100 250 130 350 230"}}]}]}, "dopo": "text-reshapePath.svg"}
+  ]
+}

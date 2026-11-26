@@ -13,6 +13,7 @@ import {
   type LiveDecoKind,
 } from "./livepreview";
 import type { RevealPolicy } from "../../live-reveal";
+import { parsed } from "./test-support";
 
 // La vivi preview si testa qui, headless: la funzione pura riceve un
 // EditorState (che porta con sé l'albero Lezer) e le righe attive, e
@@ -24,11 +25,11 @@ import type { RevealPolicy } from "../../live-reveal";
 // l'editor monta.
 
 function state(doc: string, selection?: { anchor: number; head?: number }) {
-  return EditorState.create({
+  return parsed(EditorState.create({
     doc,
     selection: selection,
     extensions: [markdown({ base: markdownGrammar })],
-  });
+  }));
 }
 
 /// Decorazioni con nessuna riga attiva (il caso "cursore altrove").

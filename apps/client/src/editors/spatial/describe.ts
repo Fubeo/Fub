@@ -419,9 +419,9 @@ export function describe(node: OutlineNode, options: DescribeOptions = {}): stri
 }
 
 /// Quanti oggetti ha il disegno, contati come li sceglie l'editor: i figli
-/// dei livelli e gli oggetti alla radice, un gruppo per uno.
+/// dei livelli e dei sottolivelli e gli oggetti alla radice, un gruppo per uno.
 export function countObjects(nodes: readonly OutlineNode[]): number {
   let count = 0;
-  for (const node of nodes) count += node.item.role === "layer" ? node.children.length : 1;
+  for (const node of nodes) count += node.item.role === "layer" ? countObjects(node.children) : 1;
   return count;
 }

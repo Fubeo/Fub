@@ -35,6 +35,24 @@ e questa, Ctrl-Spazio fa il Ctrl-clic da tastiera. La barra della scelta sta
 sotto l'albero, ferma in fondo alla colonna, così comparendo non sposta le
 righe sotto il puntatore: dice quante note sono scelte e offre «Sposta in…»,
 «In una cartella nuova», «Sposta nel cestino» e «Deseleziona»; Esc la azzera.
+Un clic semplice su una riga azzera la scelta e apre la nota. Un gesto della
+barra, o del menu del gruppo, prende le note scelte nel momento in cui parte:
+la scelta si svuota subito e resta vuota a gesto finito, così le note spostate
+non restano scelte e ciò che si sceglie mentre uno spostamento lungo va è una
+scelta nuova, che la fine del primo non tocca. Se il dialogo si annulla, o la
+cartella nuova non nasce, la scelta torna com'era. Una nota spostata,
+rinominata o cestinata, anche da un altro programma, esce subito dalla scelta:
+la barra non offre mai un percorso che non c'è più. «In una cartella nuova»
+crea la cartella dove stanno le note scelte se sono tutte nella stessa
+cartella, altrimenti nella radice visibile (il vault o lo spazio attivo), e il
+dialogo del nome lo dice prima («Nuova cartella in Progetti», «Nuova cartella
+nella radice»).
+Più note spostate insieme (dalla barra, dal trascinamento o in una cartella
+nuova) vanno una alla volta: un avviso dice a che punto sono («Sposto 60 note
+in Clienti: 12 di 60…»), e alla fine uno solo dice quante sono arrivate. Una
+nota che non si può spostare (la destinazione ha già una nota con quel nome,
+per esempio) resta dov'era, intera, e ha il suo avviso col nome e il motivo;
+il riepilogo dice quante restano indietro.
 Dal menu contestuale un allegato si rinomina, conservando l'estensione, e si
 cestina come una nota: il kernel lo toglie dall'anagrafe con `EntryRemoved` e
 il ripristino lo rimette dov'era, byte per byte.
@@ -87,7 +105,11 @@ Il campo del pannello dei segnalibri segue la stessa regola, sul nome e sul
 percorso del segnalibro.
 Nella testata del foglio ogni cartella del percorso della nota si preme col
 puntatore: l'albero la apre e la porta in vista. Il nome resta il titolo che
-si rinomina col doppio clic o con F2. Una nota rinominata o spostata, da Fub o
+si rinomina col doppio clic o con F2; col fuoco sul nome, scrivere apre il
+campo con la prima lettera già dentro. Il nome scritto, lì e con F2
+nell'explorer, segue la stessa regola del titolo (`placedTitle`): un nome
+semplice resta nella cartella, uno «/» in testa o un percorso che comincia con
+la cartella stessa partono dalla radice. Una nota rinominata o spostata, da Fub o
 da un'altra app, resta appuntata col percorso nuovo e tiene la sua icona: la
 scrivania e l'explorer mostrano la stessa appuntata.
 

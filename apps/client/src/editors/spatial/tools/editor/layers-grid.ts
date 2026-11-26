@@ -10,10 +10,10 @@ import { sameCurve } from "../../../../ink/input/pressure";
 import type { Bounds } from "../../scene/geometry";
 import { plural, t, type DrawKey } from "../../strings";
 import { fittedPage, gesture as asGesture } from "../edit";
-import type { Arranged } from "../arrange";
+import { plainAttributes, type Arranged } from "../arrange";
 import { gridStep, sameStep, unitSteps, withStep, type Grid } from "../grid";
 import { nextTurn } from "../../view";
-import type { LayerInfo } from "../hit";
+import type { LayerInfo, Unit } from "../hit";
 import {
   addLayerOps,
   canShiftLayer,
@@ -22,25 +22,64 @@ import {
   layerName,
   inLayer,
   intoLayerOps,
+  layerClips,
+  layerEmpty,
   lockLayerOps,
   MAX_LAYER_NAME,
   removeLayerOps,
   renameLayerOps,
+  rootLayers,
   shiftLayerOps,
   type Shift,
 } from "../layers";
 import { BAR_FEATURES } from "./constants";
 import type { EditorContext } from "./context";
 import { checkedGrid, layerRefusal, layerState, layerTitle, union } from "./helpers";
+import type { Op } from "../../scene/ops";
+import { elementChildren } from "../../scene/model";
+import type { PortaLivelli, RichiestaLivello } from "../../completo/livelli-porta";
 
 /// Quanti caratteri del nome di un livello entrano nel nome di un comando:
 /// il resto, come «su» e «giù», deve restare in vista.
 const LAYER_IN_COMMAND = 24;
 
+/// Un comando di livello del pannello o del menu dei livelli, che `layerWrite` scrive: dal motore
+/// del Completo quando è acceso (K6 T15, giro 4), se no con le operazioni native.
+export interface LayerWrite {
+  /// Il nome del passo nella cronologia.
+  readonly label: DrawKey;
+  /// Il comando per il motore del Completo.
+  readonly request: RichiestaLivello;
+  /// Le operazioni native e il livello corrente dopo, calcolate quando si scrivono; assenti per un
+  /// comando che fa solo il motore del Completo (Duplica, Appiattisci), che senza motore non parte.
+  readonly native?: () => { readonly arranged: Arranged; readonly key: string | null };
+  /// Il livello corrente dopo l'esito del motore, dalle sue operazioni; `null` lo lascia com'è.
+  readonly engineKey: (ops: readonly Op[]) => string | null;
+  /// Ciò che si dice a comando scritto.
+  readonly said: () => string;
+}
+
 /// Ciò che i livelli, la griglia e la pagina dà agli altri pezzi dell'editor.
 export interface LayersGridContext {
   writeLayers: (label: DrawKey, arranged: Arranged, key: string | null) => boolean;
+  /// I comandi di livello che passano dal motore del Completo aperto e acceso (K6 T15, giro 4,
+  /// `completo/livelli-porta.ts`); `null`, o assente, nel Semplice e senza motore.
+  livelliMotore?: () => PortaLivelli | null;
+  /// Scrive un comando di livello: dal motore del Completo se è acceso, se no da sé.
+  layerWrite: (write: LayerWrite) => void;
+  /// Perché `layer` non si rinomina: nel Completo del motore un livello bloccato non cambia
+  /// nome (la regola della famiglia `livelli`). `null` se si rinomina; nel Semplice sempre.
+  layerFrozen: (layer: LayerInfo) => DrawKey | null;
+  /// Il comando che rinomina `layer` in `name` (già pulito e diverso); con `current` il livello
+  /// diventa quello corrente.
+  layerRename: (layer: LayerInfo, name: string, current: boolean) => LayerWrite;
+  /// Il comando che nasconde o mostra, blocca o sblocca `layer`; con `current` il livello diventa
+  /// quello corrente.
+  layerFlag: (layer: LayerInfo, flag: "hidden" | "locked", on: boolean, current: boolean) => LayerWrite;
   layerItems: () => MenuItem[];
+  /// Un clic sulla riga di un livello nell'albero (Imposta livello corrente di VectorCraft): il
+  /// livello di chiave `key` diventa quello corrente, e lo si annuncia.
+  chooseLayerKey: (key: string) => void;
   intoItems: () => MenuItem[];
   changeGrid: (next: Grid) => void;
   pageItems: () => MenuItem[];
@@ -82,6 +121,101 @@ export function installLayersGrid(ctx: EditorContext): void {
   };
   ctx.writeLayers = writeLayers;
 
+  /// Il livello che le operazioni di un livello nuovo aggiungono: il suo id.
+  const addedLayer = (ops: readonly Op[]): string | null => {
+    for (const op of ops) {
+      if (op.op === "batch") {
+        const inner = addedLayer(op.ops);
+        if (inner !== null) return inner;
+      } else if (op.op === "add" && "elem" in op && op.elem.attrs["fub:layer"] !== undefined) {
+        return op.elem.attrs.id ?? null;
+      }
+    }
+    return null;
+  };
+
+  const layerWrite = (write: LayerWrite): void => {
+    const nativeNow = (): void => {
+      if (write.native === undefined) {
+        announce(t("draw.livelli.senzaMotore"));
+        return;
+      }
+      const made = write.native();
+      if (writeLayers(write.label, made.arranged, made.key)) announce(write.said());
+    };
+    const porta = ctx.livelliMotore?.() ?? null;
+    if (porta === null) {
+      nativeNow();
+      return;
+    }
+    const engine = ctx.engine;
+    const text = engine.normalized;
+    void porta.comando(write.request).then((esito) => {
+      if (ctx.disposed || !editable()) return;
+      // Mentre il motore rispondeva il disegno è cambiato: l'esito parla del disegno di prima.
+      if (ctx.engine !== engine || engine.normalized !== text) {
+        announce(t("draw.livelli.cambiato"));
+        return;
+      }
+      switch (esito.kind) {
+        case "nativo":
+          nativeNow();
+          return;
+        case "rifiuto":
+          announce(esito.motivo === null ? t("draw.unchanged") : t("draw.rejected", { reason: t(esito.motivo) }));
+          return;
+        case "fallito":
+          announce(t("draw.completo.key.failed"));
+          return;
+        case "argomenti":
+          announce(esito.frase);
+          return;
+        case "fatto":
+          if (writeLayers(write.label, { ops: esito.ops, keys: [] }, write.engineKey(esito.ops))) announce(write.said());
+      }
+    });
+  };
+  ctx.layerWrite = layerWrite;
+
+  const layerFrozen = (layer: LayerInfo): DrawKey | null =>
+    layer.locked && (ctx.livelliMotore?.() ?? null) !== null ? "draw.livelli.bloccato" : null;
+  ctx.layerFrozen = layerFrozen;
+
+  /// Rinomina `layer` in `name`, già pulito e diverso; con `current` resta il livello corrente.
+  function renameWrite(layer: LayerInfo, name: string, current: boolean): LayerWrite {
+    return {
+      label: "draw.action.layer_rename",
+      request: { kind: "proprieta", livello: layer.id ?? "", nome: name },
+      native: () => {
+        const arranged = renameLayerOps(ctx.engine.model!, layer, name, newIds());
+        return { arranged, key: current ? (arranged.keys[0] ?? null) : null };
+      },
+      engineKey: () => (current ? layer.id : null),
+      said: () => t("draw.layer.renamed", { name: layerTitle({ ...layer, name }) }),
+    };
+  }
+  ctx.layerRename = renameWrite;
+
+  /// Nasconde o mostra, blocca o sblocca `layer`; con `current` resta il livello corrente.
+  function flagWrite(layer: LayerInfo, flag: "hidden" | "locked", on: boolean, current: boolean): LayerWrite {
+    const locking = flag === "locked";
+    return {
+      label: locking ? (on ? "draw.action.layer_lock" : "draw.action.layer_unlock") : on ? "draw.action.layer_hide" : "draw.action.layer_show",
+      request: locking
+        ? { kind: "proprieta", livello: layer.id ?? "", bloccato: on }
+        : { kind: "proprieta", livello: layer.id ?? "", visibile: !on },
+      native: () => {
+        const model = ctx.engine.model!;
+        const arranged = locking ? lockLayerOps(model, layer, on, newIds()) : hideLayerOps(model, layer, on, newIds());
+        return { arranged, key: current ? (arranged.keys[0] ?? null) : null };
+      },
+      engineKey: () => (current ? layer.id : null),
+      said: () =>
+        t(locking ? (on ? "draw.layer.locked" : "draw.layer.unlocked") : on ? "draw.layer.hidden" : "draw.layer.shown", { name: layerTitle(layer) }),
+    };
+  }
+  ctx.layerFlag = flagWrite;
+
   /// Sceglie il livello corrente; se lì non si disegna, lo dice subito.
   function chooseLayer(layer: LayerInfo): void {
     if (!has("layers")) return;
@@ -96,8 +230,16 @@ export function installLayersGrid(ctx: EditorContext): void {
     if (!has("layers") || !editable()) return;
     cancelGesture();
     const name = freshLayerName(currentIndex().layers, (n) => t("draw.layer.default", { n }));
-    const arranged = addLayerOps(ctx.engine.model!, currentLayer(), name, newIds());
-    if (writeLayers("draw.action.layer_add", arranged, arranged.keys[0] ?? null)) announce(t("draw.layer.added", { name }));
+    layerWrite({
+      label: "draw.action.layer_add",
+      request: { kind: "nuovo", nome: name },
+      native: () => {
+        const arranged = addLayerOps(ctx.engine.model!, currentLayer(), name, newIds());
+        return { arranged, key: arranged.keys[0] ?? null };
+      },
+      engineKey: addedLayer,
+      said: () => t("draw.layer.added", { name }),
+    });
   }
 
   /// «Rinomina…»: il nome nuovo del livello corrente, mai vuoto.
@@ -105,6 +247,11 @@ export function installLayersGrid(ctx: EditorContext): void {
     if (ctx.asking) return;
     const layer = layering();
     if (layer === null) return;
+    const frozen = layerFrozen(layer);
+    if (frozen !== null) {
+      announce(t(frozen));
+      return;
+    }
     ctx.asking = true;
     try {
       const answer = await promptForm({
@@ -117,10 +264,11 @@ export function installLayersGrid(ctx: EditorContext): void {
       // livello che ha ancora la stessa chiave.
       const now = currentIndex().layers.find((other) => keyOf(other) === keyOf(layer));
       if (name === "" || now === undefined) return;
-      const arranged = renameLayerOps(ctx.engine.model!, now, name, newIds());
-      if (writeLayers("draw.action.layer_rename", arranged, arranged.keys[0] ?? null)) {
-        announce(t("draw.layer.renamed", { name: layerTitle({ ...now, name }) }));
+      if (name === now.name) {
+        announce(t("draw.unchanged"));
+        return;
       }
+      layerWrite(renameWrite(now, name, true));
     } finally {
       ctx.asking = false;
     }
@@ -128,20 +276,12 @@ export function installLayersGrid(ctx: EditorContext): void {
 
   function hideLayer(hidden: boolean): void {
     const layer = layering();
-    if (layer === null) return;
-    const arranged = hideLayerOps(ctx.engine.model!, layer, hidden, newIds());
-    if (writeLayers(hidden ? "draw.action.layer_hide" : "draw.action.layer_show", arranged, arranged.keys[0] ?? null)) {
-      announce(t(hidden ? "draw.layer.hidden" : "draw.layer.shown", { name: layerTitle(layer) }));
-    }
+    if (layer !== null) layerWrite(flagWrite(layer, "hidden", hidden, true));
   }
 
   function lockLayer(locked: boolean): void {
     const layer = layering();
-    if (layer === null) return;
-    const arranged = lockLayerOps(ctx.engine.model!, layer, locked, newIds());
-    if (writeLayers(locked ? "draw.action.layer_lock" : "draw.action.layer_unlock", arranged, arranged.keys[0] ?? null)) {
-      announce(t(locked ? "draw.layer.locked" : "draw.layer.unlocked", { name: layerTitle(layer) }));
-    }
+    if (layer !== null) layerWrite(flagWrite(layer, "locked", locked, true));
   }
 
   /// Porta il livello corrente sopra quello che ha sopra, o sotto quello
@@ -149,7 +289,7 @@ export function installLayersGrid(ctx: EditorContext): void {
   function shiftLayer(shift: Shift): void {
     const layer = layering();
     if (layer === null) return;
-    const layers = currentIndex().layers;
+    const layers = rootLayers(currentIndex().layers);
     const at = layers.findIndex((other) => other.path[0] === layer.path[0]);
     const other = layers[shift === "up" ? at + 1 : at - 1];
     const looked = keptLook(shiftLayerOps(ctx.engine.model!, layers, layer, shift, newIds()), { key: "draw.order.styled" });
@@ -164,23 +304,152 @@ export function installLayersGrid(ctx: EditorContext): void {
   function deleteLayer(): void {
     const layer = layering();
     if (layer === null) return;
-    const layers = currentIndex().layers;
+    const layers = rootLayers(currentIndex().layers);
     if (layers.length < 2 || layer.locked) return;
     const at = layers.findIndex((other) => other.path[0] === layer.path[0]);
     const next = layers[at - 1] ?? layers[at + 1]!;
     // Dopo, il livello sopra ha un posto in meno.
     const nextAt = next.path[0]! > layer.path[0]! ? next.path[0]! - 1 : next.path[0]!;
     const count = outlineNow().byKey.get(keyOf(layer))?.children.length ?? 0;
-    if (!writeLayers("draw.action.layer_delete", removeLayerOps(layer), next.id ?? `@${nextAt}`)) return;
+    const key = next.id ?? `@${nextAt}`;
     const name = layerTitle(layer);
     const gone = count === 0 ? t("draw.layer.deleted", { name }) : plural(count, "draw.layer.deleted.one", "draw.layer.deleted.other", { name });
-    announce(`${gone} ${t("draw.layer.chosen", { name: layerTitle(next) })}`);
+    layerWrite({
+      label: "draw.action.layer_delete",
+      request: { kind: "elimina", livello: layer.id ?? "" },
+      native: () => ({ arranged: removeLayerOps(layer), key }),
+      engineKey: () => key,
+      said: () => `${gone} ${t("draw.layer.chosen", { name: layerTitle(next) })}`,
+    });
   }
+
+  /// Duplica il livello corrente (solo col motore del Completo): la copia va subito sopra, col
+  /// nome «… copia», e diventa il livello corrente. Anche un livello bloccato si copia.
+  function duplicateLayer(): void {
+    const layer = layering();
+    if (layer === null || !editable()) return;
+    cancelGesture();
+    const name = layerTitle(layer);
+    layerWrite({
+      label: "draw.livelli.azione.duplica",
+      request: { kind: "duplica", livello: layer.id ?? "" },
+      engineKey: addedLayer,
+      said: () => t("draw.livelli.duplicato", { name }),
+    });
+  }
+
+  /// Nuovo sottolivello (solo col motore del Completo): un livello vuoto in cima al livello
+  /// corrente, come in VectorCraft (ADR 0251). Si continua a disegnare nel livello corrente; il
+  /// sottolivello si vede nell'albero degli oggetti.
+  function addSublayer(): void {
+    const layer = layering();
+    if (layer === null || !editable()) return;
+    cancelGesture();
+    const name = layerTitle(layer);
+    layerWrite({
+      label: "draw.livelli.azione.sottolivello",
+      request: { kind: "sottolivello", livello: layer.id ?? "" },
+      engineKey: () => layer.id,
+      said: () => t("draw.livelli.sottolivello.fatto", { name }),
+    });
+  }
+
+  /// Crea o rilascia la maschera di ritaglio del livello corrente (solo col motore del Completo),
+  /// come in VectorCraft: l'oggetto più alto ritaglia il resto del livello; di nuovo, smette e
+  /// torna un oggetto senza colore.
+  function toggleLayerClip(): void {
+    const layer = layering();
+    if (layer === null || !editable() || layer.locked) return;
+    cancelGesture();
+    const name = layerTitle(layer);
+    const clips = layerClips(ctx.engine.model!, layer);
+    layerWrite({
+      label: "draw.livelli.azione.ritaglio",
+      request: { kind: "ritaglia", livello: layer.id ?? "" },
+      engineKey: () => layer.id,
+      said: () => t(clips ? "draw.livelli.ritaglio.rilasciato" : "draw.livelli.ritaglio.creato", { name }),
+    });
+  }
+
+  /// Il gruppo scelto da solo, con un id: il menu dei livelli ritaglia lui e non il livello, come
+  /// in VectorCraft (la riga o il gruppo scelto prima del livello corrente).
+  const chosenGroup = (): Unit | null => {
+    const units = ctx.selectedUnits();
+    const only = units.length === 1 ? units[0]! : null;
+    return only !== null && only.role === "group" && only.id !== null && ctx.selection.length === 1 ? only : null;
+  };
+
+  /// Crea o rilascia la maschera di ritaglio del gruppo scelto (solo col motore del Completo).
+  function toggleGroupClip(group: Unit): void {
+    if (!editable()) return;
+    cancelGesture();
+    const clips = plainAttributes(group.node).has("clip-path");
+    layerWrite({
+      label: "draw.livelli.azione.ritaglioGruppo",
+      request: { kind: "ritagliaGruppo", gruppo: group.id! },
+      engineKey: () => null,
+      said: () => t(clips ? "draw.livelli.ritaglioGruppo.rilasciato" : "draw.livelli.ritaglioGruppo.creato"),
+    });
+  }
+
+  /// Raccogli in un nuovo livello (solo col motore del Completo): gli oggetti scelti in un livello
+  /// nuovo accanto al più alto di loro; dentro un livello è un sottolivello.
+  function collectInNew(): void {
+    const scelti = [...ctx.selection];
+    if (scelti.length === 0 || !editable()) return;
+    cancelGesture();
+    layerWrite({
+      label: "draw.livelli.azione.raccogli",
+      request: { kind: "raccogli", oggetti: scelti },
+      engineKey: () => null,
+      said: () => t("draw.livelli.raccolto"),
+    });
+  }
+
+  /// Appiattisci grafica (solo col motore del Completo): tutto il disegno nel livello corrente, i
+  /// livelli nascosti si scartano, come in VectorCraft. Il livello corrente resta lui.
+  function flattenLayer(): void {
+    const layer = layering();
+    if (layer === null || !editable() || layer.hidden) return;
+    cancelGesture();
+    const name = layerTitle(layer);
+    layerWrite({
+      label: "draw.livelli.azione.appiattisci",
+      request: { kind: "appiattisci", livello: layer.id ?? "" },
+      engineKey: () => layer.id,
+      said: () => t("draw.livelli.appiattito", { name }),
+    });
+  }
+
+  /// La voce della maschera di ritaglio del livello: Crea o Rilascia secondo il file; spenta su un
+  /// livello bloccato (o di sola lettura) e, per crearla, su un livello vuoto.
+  const clipItem = (current: LayerInfo, name: string, frozen: DrawKey | null): MenuItem => {
+    const model = ctx.engine.model!;
+    const group = chosenGroup();
+    if (group !== null) {
+      const clips = plainAttributes(group.node).has("clip-path");
+      const empty = !clips && group.node.kind === "container" && elementChildren(group.node).length === 0;
+      const off = frozen ?? (empty ? "draw.livelli.ritaglioGruppo.vuoto" : null);
+      return {
+        label: t(clips ? "draw.livelli.ritaglioGruppo.rilascia" : "draw.livelli.ritaglioGruppo.crea"),
+        ...(off === null ? {} : { disabled: true, description: t(off) }),
+        run: () => toggleGroupClip(group),
+      };
+    }
+    const clips = layerClips(model, current);
+    const empty = !clips && layerEmpty(model, current);
+    const off = frozen ?? (empty ? "draw.livelli.ritaglio.vuoto" : null);
+    return {
+      label: t(clips ? "draw.livelli.ritaglio.rilascia" : "draw.livelli.ritaglio.crea", { name }),
+      ...(off === null ? {} : { disabled: true, description: t(off) }),
+      run: () => toggleLayerClip(),
+    };
+  };
 
   /// Il menu dei livelli: i livelli dalla cima, per scegliere quello
   /// corrente, e i comandi su quello corrente.
   const layerItems = (): MenuItem[] => {
-    const layers = currentIndex().layers;
+    const layers = rootLayers(currentIndex().layers);
     const current = currentLayer();
     const items: MenuItem[] = [];
     for (let i = layers.length - 1; i >= 0; i--) {
@@ -200,12 +469,64 @@ export function installLayersGrid(ctx: EditorContext): void {
     if (current === null) return items;
     const name = layerTitle(current, LAYER_IN_COMMAND);
     const lone = layers.length < 2;
+    const frozen = layerFrozen(current);
     items.push(
-      { label: t("draw.layer.rename", { name }), run: () => void renameLayer() },
+      {
+        label: t("draw.layer.rename", { name }),
+        ...(frozen === null ? {} : { disabled: true, description: t(frozen) }),
+        run: () => void renameLayer(),
+      },
       { label: t(current.hidden ? "draw.layer.show" : "draw.layer.hide", { name }), run: () => hideLayer(!current.hidden) },
       { label: t(current.locked ? "draw.layer.unlock" : "draw.layer.lock", { name }), run: () => lockLayer(!current.locked) },
       { label: t("draw.layer.up", { name }), disabled: !canShiftLayer(layers, current, "up"), run: () => shiftLayer("up") },
       { label: t("draw.layer.down", { name }), disabled: !canShiftLayer(layers, current, "down"), run: () => shiftLayer("down") },
+    );
+    // Duplica e Appiattisci li fa solo il motore del Completo.
+    if ((ctx.livelliMotore?.() ?? null) !== null) {
+      const hiddenOthers = layers.some((other) => other.hidden && other.path[0] !== current.path[0]);
+      items.push(
+        { label: t("draw.livelli.duplica", { name }), run: () => duplicateLayer() },
+        {
+          label: t("draw.livelli.sottolivello", { name }),
+          ...(frozen === null ? {} : { disabled: true, description: t(frozen) }),
+          run: () => addSublayer(),
+        },
+        clipItem(current, name, frozen),
+        {
+          label: t("draw.livelli.raccogli"),
+          disabled: ctx.selection.length === 0,
+          ...(ctx.selection.length === 0 ? { description: t("draw.livelli.raccogli.niente") } : {}),
+          run: () => collectInNew(),
+        },
+        {
+          label: t("draw.livelli.appiattisci", { name }),
+          disabled: lone || current.hidden,
+          ...(lone
+            ? { description: t("draw.layer.delete.last") }
+            : current.hidden
+              ? { description: t("draw.livelli.appiattisci.nascosto") }
+              : hiddenOthers
+                ? { description: t("draw.livelli.appiattisci.scarta") }
+                : {}),
+          run: () => flattenLayer(),
+        },
+      );
+    }
+    // Individua oggetto, come nel pannello Livelli di VectorCraft: apre l'albero sulla riga
+    // dell'ultimo oggetto scelto, aprendo i livelli e i gruppi che lo contengono. È solo vista.
+    const scelto = ctx.selection[ctx.selection.length - 1];
+    items.push({
+      label: t("draw.livelli.individua"),
+      separator: true,
+      disabled: scelto === undefined,
+      ...(scelto === undefined ? { description: t("draw.livelli.individua.niente") } : {}),
+      run: () => {
+        if (scelto === undefined) return;
+        ctx.showObjects(true, false);
+        ctx.tree.locate(scelto);
+      },
+    });
+    items.push(
       {
         label: t("draw.layer.delete", { name }),
         separator: true,
@@ -218,6 +539,10 @@ export function installLayersGrid(ctx: EditorContext): void {
     return items;
   };
   ctx.layerItems = layerItems;
+  ctx.chooseLayerKey = (key) => {
+    const layer = currentIndex().layers.find((each) => keyOf(each) === key);
+    if (layer !== undefined) chooseLayer(layer);
+  };
 
   // --- Griglia e pagina -------------------------------------------------------
 
@@ -235,14 +560,25 @@ export function installLayersGrid(ctx: EditorContext): void {
     const unit = docUnit();
     if (ctx.grid.shown !== before.shown) announce(t(ctx.grid.shown ? "draw.grid.shown" : "draw.grid.hidden"));
     else if (ctx.grid.snap !== before.snap) announce(t(ctx.grid.snap ? "draw.grid.snap.on" : "draw.grid.snap.off"));
+    else if (ctx.grid.snapPixel !== before.snapPixel) announce(t(ctx.grid.snapPixel ? "draw.grid.pixel.on" : "draw.grid.pixel.off"));
+    else if (ctx.grid.smartGuidesOff !== before.smartGuidesOff) announce(t(ctx.grid.smartGuidesOff ? "draw.view.smartGuides.off" : "draw.view.smartGuides.on"));
+    else if (ctx.grid.snapPointOff !== before.snapPointOff) announce(t(ctx.grid.snapPointOff ? "draw.view.snapPoint.off" : "draw.view.snapPoint.on"));
+    else if (ctx.grid.snapGlyph !== before.snapGlyph) announce(t(ctx.grid.snapGlyph ? "draw.view.snapGlyph.on" : "draw.view.snapGlyph.off"));
     else if (!sameStep(gridStep(ctx.grid, unit), gridStep(before, unit))) announce(t("draw.grid.stepped", { step: lengthSpoken(stepNow()) }));
     else if (ctx.grid.shapes !== before.shapes) announce(t(ctx.grid.shapes ? "draw.recognize.on" : "draw.recognize.off"));
     else if (ctx.grid.bar !== before.bar) announce(t(ctx.grid.bar ? "draw.bar.beside.on" : "draw.bar.beside.off"));
     else if (ctx.grid.twist !== before.twist || ctx.grid.taps !== before.taps || !sameCurve(ctx.grid.pen, before.pen) || ctx.grid.steady?.amount !== before.steady?.amount || ctx.grid.steady?.string !== before.steady?.string) announce(t("draw.touch.changed"));
+    else if (ctx.grid.transparencyGrid !== before.transparencyGrid) announce(t(ctx.grid.transparencyGrid ? "draw.view.transparency.on" : "draw.view.transparency.off"));
+    else if (ctx.grid.hideEdges !== before.hideEdges) announce(t(ctx.grid.hideEdges ? "draw.view.edges.hidden" : "draw.view.edges.shown"));
+    else if (ctx.grid.hideBoundingBox !== before.hideBoundingBox) announce(t(ctx.grid.hideBoundingBox ? "draw.view.boundingBox.hidden" : "draw.view.boundingBox.shown"));
+    else if (ctx.grid.hideArtboards !== before.hideArtboards) announce(t(ctx.grid.hideArtboards ? "draw.view.artboards.hidden" : "draw.view.artboards.shown"));
+    else if (ctx.grid.livePaintGaps !== before.livePaintGaps) announce(t(ctx.grid.livePaintGaps ? "draw.view.livePaintGaps.shown" : "draw.view.livePaintGaps.hidden"));
     // Il pannello aperto o chiuso, le sue sezioni, la gomma, la penna, il
     // tasto laterale e l'uscita si ricordano in silenzio: chi li cambia lo
     // dice da sé, o lo si vede.
     else if (ctx.grid.panel === before.panel && ctx.grid.closed.join("\n") === before.closed.join("\n") && !penChanged(ctx.grid, before)) return;
+    // Bordi, riquadro e spazi vuoti sono segni sul foglio, che si rifanno con la selezione.
+    if (ctx.grid.hideEdges !== before.hideEdges || ctx.grid.hideBoundingBox !== before.hideBoundingBox || ctx.grid.livePaintGaps !== before.livePaintGaps) ctx.showHandles();
     syncProperties();
     options.onGridChange?.(ctx.grid);
   };
@@ -366,7 +702,7 @@ export function installLayersGrid(ctx: EditorContext): void {
   /// già tutti gli oggetti scelti, e quello bloccato o nascosto, che lo dice.
   const intoItems = (): MenuItem[] => {
     const units = selectedUnits();
-    const layers = currentIndex().layers;
+    const layers = rootLayers(currentIndex().layers);
     const items: MenuItem[] = [];
     for (let i = layers.length - 1; i >= 0; i--) {
       const layer = layers[i]!;

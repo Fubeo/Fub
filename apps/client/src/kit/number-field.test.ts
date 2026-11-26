@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { accessibleName } from "../ui/a11y-check";
 import { openLifetime, type Lifetime } from "../ui/lifetime";
 import { numberField, SCRUB_PX, type NumberFieldOptions } from "./number-field";
-import { listenerLedger, pointer, press } from "./testing";
+import { listenerLedger, pointer, press, WEBKIT_COMPOSING } from "./testing";
 
 let life: Lifetime;
 let commits: number[];
@@ -76,6 +76,18 @@ describe("il campo numerico del kit", () => {
     expect(input.getAttribute("aria-invalid")).toBe("true");
   });
 
+  it("Invio ed Esc che chiudono una composizione restano del metodo d'immissione", () => {
+    const { input } = field();
+    type(input, "40");
+    press(input, "Enter", { isComposing: true });
+    press(input, "Enter", WEBKIT_COMPOSING);
+    press(input, "Escape", WEBKIT_COMPOSING);
+    expect(commits).toEqual([]);
+    expect(input.value).toBe("40");
+    press(input, "Enter");
+    expect(commits).toEqual([40]);
+  });
+
   it("ciò che non si legge resta scritto e dice perché", () => {
     const { input, element } = field({ relative: true });
     type(input, "3 in");
@@ -110,6 +122,27 @@ describe("il campo numerico del kit", () => {
     expect(value()).toBe(120);
     expect(input.value).toBe("90");
     expect(input.getAttribute("aria-invalid")).toBe("true");
+  });
+
+  it("con onClear il vuoto confermato si prende; senza, è un errore", () => {
+    let svuotati = 0;
+    const libero = field({ onClear: () => void svuotati++ });
+    type(libero.input, " ");
+    press(libero.input, "Enter");
+    expect(svuotati).toBe(1);
+    expect(libero.value()).toBeNull();
+    expect(libero.input.getAttribute("aria-invalid")).toBeNull();
+    expect(commits).toEqual([]);
+    const rifiutato = field({ onClear: () => "serve un trattino" });
+    type(rifiutato.input, "");
+    press(rifiutato.input, "Enter");
+    expect(rifiutato.value()).toBe(120);
+    expect(rifiutato.input.getAttribute("aria-invalid")).toBe("true");
+    const obbligato = field();
+    type(obbligato.input, "");
+    press(obbligato.input, "Enter");
+    expect(obbligato.value()).toBe(120);
+    expect(obbligato.input.getAttribute("aria-invalid")).toBe("true");
   });
 
   it("misto: vuoto, dice «Misto», e le frecce non hanno da dove partire", () => {

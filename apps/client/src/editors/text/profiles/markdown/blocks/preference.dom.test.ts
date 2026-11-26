@@ -16,6 +16,7 @@ import { blockSelection } from "./selection";
 import { blockTextSpan, bodySpan } from "./keys";
 import { modelOf } from "./transform";
 import { handlesView } from "./handles";
+import { parsedView } from "../test-support";
 
 vi.mock("../../../../../host/query", () => ({ settings: vi.fn() }));
 
@@ -66,6 +67,7 @@ async function note(doc: string, blocks: boolean, anchor = 0, extra: { vim?: boo
   await settle();
   await settle();
   const view = EditorView.findFromDOM(parent)!;
+  parsedView(view);
   view.dispatch({ selection: { anchor } });
   const made = { ed, view, parent };
   mounted.push(made);

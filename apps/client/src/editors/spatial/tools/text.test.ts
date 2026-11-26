@@ -2,7 +2,7 @@
 // porta.
 
 import { describe, expect, it } from "vitest";
-import { BLANK_LINE, editableText, newTextElem, textElem, textLines, TEXT_FAMILY, TEXT_SIZE, wordsOf } from "./text";
+import { areaWords, areaWordsOf, BLANK_LINE, editableText, newTextElem, textElem, textLines, TEXT_FAMILY, TEXT_SIZE, wordsOf } from "./text";
 
 describe("le righe di un testo", () => {
   it("vanno a capo a ogni fine riga, e le vuote in testa e in coda non ci sono", () => {
@@ -77,5 +77,39 @@ describe("il testo nuovo dello strumento Testo, e le sue parole", () => {
       { ...elem, children: [{ tag: "tspan", attrs: { x: "10", dy: "0" }, runs: ["Uno ", { text: "due", attrs: { "font-weight": "700" } }] }] },
     ];
     for (const each of cases) expect(wordsOf(each as never), JSON.stringify(each)).toBeNull();
+  });
+});
+
+describe("le parole di un testo in area (K6 T16)", () => {
+  const riga = (text: string, join?: string, extra: Record<string, string> = {}) => ({
+    tag: "tspan",
+    attrs: { ...(join === undefined ? {} : { "fub:join": join }), x: "40", dy: "24", ...extra },
+    text,
+  });
+  const area = (children: readonly unknown[], attrs: Record<string, string> = {}) =>
+    ({ tag: "text", attrs: { id: "oz1", x: "40", y: "60", "fub:wrap": "120", ...attrs }, children }) as never;
+
+  it("riuniscono le righe come dice `fub:join`, tengono gli spazi, e il paragrafo di uno spazio indivisibile si rilegge vuoto", () => {
+    const elem = area([riga("Le onde  del"), riga("mare", "space"), riga(BLANK_LINE), riga("preci"), riga("pitevolissimevolmente", "word"), riga("fine ")]);
+    expect(areaWordsOf(elem)).toBe("Le onde  del mare\n\nprecipitevolissimevolmente\nfine ");
+    // Lo spazio indivisibile dentro un paragrafo con altre righe è testo.
+    expect(areaWordsOf(area([riga(BLANK_LINE), riga("mare", "space")]))).toBe(`${BLANK_LINE} mare`);
+    // Un `fub:join` sulla prima riga non conta.
+    expect(areaWordsOf(area([riga("Uno", "space")]))).toBe("Uno");
+  });
+
+  it("niente parole per un testo di punto, con altri attributi del formato, coi pezzi o con righe di stili diversi", () => {
+    const cases = [
+      { tag: "text", attrs: { x: "40", y: "60" }, children: [riga("Uno")] },
+      area([riga("Uno")], { "fub:inside": "#p" }),
+      area([{ tag: "tspan", attrs: { x: "40", dy: "0" }, children: [{ tag: "tspan", attrs: {}, text: "Uno" }] }]),
+      area([riga("Uno"), riga("Due", undefined, { fill: "#ff0000" })]),
+      area([]),
+    ];
+    for (const each of cases) expect(areaWordsOf(each as never), JSON.stringify(each)).toBeNull();
+  });
+
+  it("dal campo tengono spazi e a capo, senza ciò che XML non ammette", () => {
+    expect(areaWords("Uno  due \r\n\r\ntre\u0001\rquattro")).toBe("Uno  due \n\ntre\nquattro");
   });
 });

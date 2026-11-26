@@ -21,6 +21,7 @@
 // tastiera a un DOM che c'è già.
 
 import type { Lifetime } from "../ui/lifetime";
+import { composingKey } from "./ime";
 
 export interface RovingToolbarOptions {
   /// I controlli della barra adesso, nell'ordine del DOM: pulsanti, elenchi e
@@ -106,7 +107,7 @@ export function rovingToolbar(element: HTMLElement, options: RovingToolbarOption
   }
 
   lifetime.listen(element, "keydown", (event) => {
-    if (event.defaultPrevented || event.isComposing) return;
+    if (event.defaultPrevented || composingKey(event)) return;
     if (event.key === "Escape") {
       if (!options.onEscape || !owner(event.target, options.controls())) return;
       event.preventDefault();

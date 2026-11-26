@@ -68,6 +68,119 @@ italiana sono `AltGr++` e `AltGr+è`, con `Maiusc` per le graffe. Con `Ctrl` le
 parentesi restano all'ordine, come dice «Disporre» in [Disegni](drawing.md).
 Come per le frecce, i colpi di fila si annullano insieme.
 
+## Nel disegno completo
+
+Nel menu ≡ › Oggetto › Trasforma del Disegno completo ci sono Sposta, Ruota,
+Rifletti, Scala e Inclina. Ciascuna apre una finestra con l'anteprima sul
+foglio. Scala accetta da 0,01 % a 10000 %: un numero fuori dai limiti è in
+errore accanto al campo, e OK resta spento. Ripeti trasformazione applica di
+nuovo l'ultima. Con un oggetto bloccato nella selezione il comando non parte,
+e la frase dice di sbloccarlo o toglierlo dalla selezione.
+
+Nella colonna, il gruppo «modificare» ha Ruota, Rifletti, Scala e Inclina come
+strumenti. Con uno di loro un clic senza trascinare sulla tavola apre la finestra
+del suo comando, sulla selezione: senza selezione la finestra non si apre e si
+dice «Scegli un oggetto.». Il clic non cambia il centro: Ruota, Rifletti, Scala
+e Inclina lavorano attorno al centro della selezione, che la finestra non chiede
+(il suo comando non ha un punto). Un trascinamento sulla tavola con lo strumento
+trasforma la selezione attorno a quel centro, e il rilascio è un solo passo di
+annulla. Con un oggetto bloccato nella
+selezione il gesto è rifiutato, con la stessa frase della finestra.
+
+Nella stessa casella c'è la **Trasformazione libera** (`E`): si trascina una
+maniglia della cornice per scalare (`Maiusc` proporzionale, `Alt` dal centro),
+dentro per spostare, appena fuori da un angolo per ruotare; `Ctrl` su una
+maniglia di lato inclina lungo quel lato.
+Nella riga delle opzioni in alto, come nel riquadro di VectorCraft, ci sono
+**Vincola** (come tenere `Maiusc`: scala proporzionale, spostamenti e rotazioni
+a 45°) e i tre modi: Trasformazione libera, Distorsione prospettica (gli angoli
+si muovono a coppie lungo il loro lato) e Distorsione libera (ogni angolo per
+conto suo). Vincola vale solo nel primo modo, e negli altri è spenta. `Ctrl` su
+un angolo deforma anche nel modo libero, come nell'Illustrator classico.
+
+Nella stessa casella c'è **Rimodella**: si prende il contorno di un oggetto
+scelto in un punto qualsiasi, entro 4 pixel, e lo si tira. Lì nasce un punto
+nuovo che segue il puntatore, e i punti vicini lo seguono un poco, come in
+VectorCraft; `Maiusc` tiene la direzione a multipli di 45°, `Esc` lascia tutto
+com'era. Un tiro lontano dal contorno non cambia niente, e un tratto della
+penna di Fub non si rimodella: lo si dice.
+
+Sempre lì c'è **Altera marionetta**, come in VectorCraft: con un oggetto scelto
+mostra subito gli spilli automatici, al centro e alle estremità. Un clic
+sull'oggetto aggiunge uno spillo, `Maiusc` ne sceglie più d'uno; trascinare uno
+spillo sposta quelli scelti e piega l'oggetto, mentre gli altri lo tengono
+fermo. `Alt` trascinando vicino a uno spillo gira l'oggetto attorno a lui, e
+`Canc` toglie gli spilli scelti. Ogni deformazione riparte dalla forma di
+partenza: riportare lo spillo dov'era ridà l'oggetto com'era. Gli spilli restano
+finché resta scelto lo stesso oggetto, ma il file non li salva.
+
+Nella casella «Larghezza» ci sono i sette **pennelli che deformano**, come in
+VectorCraft: Altera spinge il contorno nel verso in cui si trascina, Vortice lo
+avvolge, Contrai lo stringe verso il centro del pennello, Gonfia lo allarga,
+Smerla, Cristallizza e Grinza lo increspano. Con una selezione cambiano solo
+gli oggetti scelti; senza, tutto ciò che il pennello tocca. Il tiro intero è un
+passo di annulla, e `Esc` lo lascia com'era. Un tiro che non tocca niente non
+cambia niente, e un tratto della penna di Fub non si deforma: lo si dice.
+
+La prima della casella è la **Larghezza**, come in VectorCraft: trascinata dal
+contorno di una linea la allarga (o la stringe) in quel punto, e la linea
+cambia spessore lungo il percorso; con `Alt` si muove un lato solo. Un clic
+sul centro di un punto lo sceglie, `Maiusc` ne aggiunge altri; `Canc` (o
+Backspace) toglie i punti scelti e `Esc` toglie la scelta. I punti restano
+scelti da un gesto all'altro. Il file tiene la linea come contorno pieno e il
+profilo nella ricetta, che si riapre e si modifica ancora.
+
+Come in VectorCraft, rettangoli, ellissi, cerchi e poligoni si comportano da
+tracciati: con la Selezione diretta se ne spostano i punti, e la
+Trasformazione libera li distorce. Una forma deformata diventa un tracciato al
+suo posto nel file, con lo stesso id, gli stessi colori, il titolo e gli altri
+attributi; annulla la riporta com'era, byte per byte. Una forma solo spostata,
+scalata o ruotata resta quella che era. Una linea, un tracciato in un file con
+uno stile CSS o una forma con una freccia non si deformano, e lo si dice.
+
+La sezione Trasforma, nella scheda Design, è il pannello Trasforma di
+VectorCraft. Il punto di riferimento (una griglia di nove posti, di serie il
+centro) dice quale punto del riquadro sono X e Y e attorno a quale punto
+girano rotazione, inclinazione e riflessi. Il riquadro lo legge Ispeziona
+documento (`transformBox`): segue la rotazione dell'oggetto, e le misure sono
+quelle della scena anche quando la radice del file è scalata. Larghezza e
+altezza tengono le proporzioni col lucchetto acceso (preferenza
+`constrainProportions` del motore) o confermando con Ctrl+Invio; Alt+Invio
+applica il valore a una copia. La rotazione è l'angolo del riquadro, in senso
+antiorario, e parte solo se cambia; l'inclinazione si scrive di quanto
+inclinare, da 0 (fra -90° e 90°, esclusi). Ci sono gli angoli pronti (rotazione
+ogni 45°, inclinazione ogni 15° fino a 60°), Rifletti in orizzontale e in
+verticale, Reimposta riquadro e le caselle Scala angoli e Scala tratti, che
+cambiano le preferenze del motore. Sotto ci sono le proprietà della forma viva
+scelta (rettangolo, poligono, ellisse, angoli di un tracciato: vedi
+`drawing-shapes.md`), lette da Ispeziona documento (`liveShape`). Senza una selezione i comandi sono spenti;
+il lucchetto e le caselle no. Senza motore i campi mostrano le misure della
+vista, nell'unità del pannello. Nel Disegno completo «Posizione e misure» e i
+gruppi Distribuisci non ci sono: li dà questa sezione e la sezione Allinea.
+
+Nel menu ≡ › Oggetto › Disponi ci sono le sette voci che dispongono gli oggetti
+scelti: Disponi in griglia, Scambia oggetti, Sostituisci con l'oggetto superiore,
+Imposta dimensione di ciascuno, Raggruppa oggetti sovrapposti, Opacità casuale e
+Ordina oggetti. Disponi in griglia mette gli oggetti in righe e colonne a partire
+dall'angolo in alto a sinistra della selezione, con una cella per il più largo
+della colonna e il più alto della riga. Scambia oggetti vuole esattamente due
+oggetti; Sostituisci con l'oggetto superiore, Raggruppa oggetti sovrapposti e
+Ordina oggetti ne vogliono almeno due; le altre bastano a una selezione. Imposta
+dimensione di ciascuno e Opacità casuale aprono una finestra: larghezza e altezza
+(con «Proporzionale» l'altezza segue), oppure minimo, massimo e seme. Lo stesso
+seme, sugli stessi oggetti nello stesso ordine, dà la stessa scelta. Con un
+oggetto bloccato o con un inchiostro di Fub il comando non parte, e la voce dice
+perché; se non cambia niente, non parte.
+
+Trasforma singolarmente (Oggetto › Trasforma, T13 giro 7) sposta, scala e ruota
+ogni oggetto della selezione attorno al proprio centro, con la sua finestra e
+l'anteprima: la scala orizzontale e verticale da 0,01 % a 10000 %, lo spostamento
+in pt e l'angolo in gradi. Un valore fuori dai limiti è in errore accanto al
+campo, e la scala a zero è rifiutata.
+
+Sposta leggermente, Distorci e le forme dal vivo non ci sono ancora: le forme
+dal vivo aspettano T27.
+
 ## Che cosa si scrive
 
 Ogni gesto è un passo di annulla, «Ridimensionamento» o «Rotazione», e scrive

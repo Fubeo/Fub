@@ -15,7 +15,9 @@
 //!   revisione calcolata sugli stessi pezzi con [`RevisionHasher`], la stessa
 //!   di `document_revision`;
 //! - [`Ranged::revision`], la sola revisione, letta a pezzi quando serve e
-//!   ricordata finché una lease nuova dice che il file è lo stesso.
+//!   ricordata finché una lease nuova dice che il file è lo stesso e il
+//!   timbro di cambiamento era già più vecchio di una grana quando la si è
+//!   letta ([`change_stamp_settled`]).
 //!
 //! Il kernel ricontrolla stat, identità e timbro di cambiamento prima e dopo
 //! ogni pezzo: un file cambiato fra due pezzi è [`RangedError::Stale`] (in un
@@ -29,8 +31,8 @@ use std::sync::{Arc, Mutex, OnceLock};
 use camino::Utf8PathBuf;
 use fub_abi::model::DocId;
 use fub_abi::{Revision, RevisionHasher};
-use fub_kernel::storage::{FileIdentity, Stat};
-use fub_kernel::transfer::ResourceLease;
+use fub_kernel::storage::{change_stamp_clock, FileIdentity, Stat};
+use fub_kernel::transfer::{change_stamp_settled, ResourceLease};
 use fub_kernel::workspace::ResourceReader;
 use fub_kernel::KernelError;
 
@@ -92,6 +94,17 @@ pub struct Whole {
     pub revision: Revision,
 }
 
+/// L'orologio con cui si data una lease, nell'unità del timbro di
+/// cambiamento: [`change_stamp_clock`], o uno finto nelle prove.
+type Clock = fn() -> Option<u64>;
+
+/// Un orologio che dice sempre «molto dopo»: per le prove, ogni timbro è
+/// già più vecchio di una grana.
+#[cfg(test)]
+pub(crate) fn long_after() -> Option<u64> {
+    Some(u64::MAX)
+}
+
 /// Le letture a pezzi di un vault: il lettore del kernel e niente altro.
 #[derive(Clone)]
 pub struct Ranged {
@@ -99,6 +112,7 @@ pub struct Ranged {
     /// I byte chiesti al kernel da ogni file aperto da qui, anche dalle
     /// copie di questo lettore.
     read: Arc<AtomicU64>,
+    clock: Clock,
 }
 
 impl Ranged {
@@ -106,16 +120,29 @@ impl Ranged {
         Ranged {
             reader,
             read: Arc::new(AtomicU64::new(0)),
+            clock: change_stamp_clock,
         }
     }
 
     /// Una lease su `doc`: il peso viene da lì (`lease.stat.size`), non
     /// dall'elenco della cartella.
     pub fn open(&self, doc: &DocId) -> Result<RangedFile<'_>, RangedError> {
+        // L'orologio si legge prima della lease: una riscrittura fra le due
+        // cose sta così dopo `observed`, e la formula la tiene in conto.
+        let observed = (self.clock)();
         let lease = self.reader.open(doc)?;
         let mut file = RangedFile::new(&self.reader, lease);
         file.total = Some(Arc::clone(&self.read));
+        file.observed = observed;
         Ok(file)
+    }
+
+    /// Lo stesso lettore con l'orologio `clock`: le prove che danno ogni
+    /// file per vecchio usano [`long_after`].
+    #[cfg(test)]
+    pub(crate) fn with_clock(mut self, clock: Clock) -> Self {
+        self.clock = clock;
+        self
     }
 
     /// I byte chiesti al kernel dai file aperti con questo lettore e con le
@@ -142,9 +169,13 @@ impl Ranged {
     /// identità, lo stesso `stat` e lo stesso timbro di cambiamento: la
     /// formula con cui il kernel dice che una lease vale ancora. Un file
     /// riscritto con lo stesso peso e la stessa data ha un timbro nuovo, e la
-    /// revisione si rifà; il timbro però ha la grana dell'orologio del
+    /// revisione si rifà. Il timbro però ha la grana dell'orologio del
     /// filesystem (su Linux un tick del kernel), e una riscrittura dello
-    /// stesso peso nello stesso tick non la distingue nemmeno il kernel.
+    /// stesso peso nella stessa grana non lo cambia: la memoria vale solo se
+    /// il timbro era già più vecchio di una grana quando la lease si è
+    /// aperta ([`change_stamp_settled`]). Altrimenti la revisione si rifà
+    /// dai byte, e si ricorda con l'orologio di adesso: una lettura in più
+    /// solo nei due secondi dopo un cambiamento (#318).
     pub fn revision(&self, doc: &DocId, max: u64) -> Result<Revision, RangedError> {
         let mut file = self.open(doc)?;
         if let Some(revision) = remembered(&file.lease) {
@@ -166,6 +197,10 @@ pub struct RangedFile<'a> {
     window_start: u64,
     read: u64,
     total: Option<Arc<AtomicU64>>,
+    /// L'orologio letto prima di aprire la lease ([`Ranged::open`]); `None`
+    /// per una lease avuta da fuori, di cui non si sa quando è nata: la
+    /// revisione che se ne ricorda non vale mai da sola.
+    observed: Option<u64>,
 }
 
 impl<'a> RangedFile<'a> {
@@ -178,6 +213,7 @@ impl<'a> RangedFile<'a> {
             window_start: 0,
             read: 0,
             total: None,
+            observed: None,
         }
     }
 
@@ -231,7 +267,7 @@ impl<'a> RangedFile<'a> {
             bytes.extend_from_slice(&piece);
         }
         let revision = hasher.finish();
-        remember(&self.lease, &revision);
+        remember(&self.lease, self.observed, &revision);
         Ok(Whole { bytes, revision })
     }
 
@@ -246,7 +282,7 @@ impl<'a> RangedFile<'a> {
             hasher.update(&piece);
         }
         let revision = hasher.finish();
-        remember(&self.lease, &revision);
+        remember(&self.lease, self.observed, &revision);
         Ok(revision)
     }
 
@@ -254,7 +290,7 @@ impl<'a> RangedFile<'a> {
     /// sui byte letti da qui la rende a [`Ranged::revision`] e a
     /// [`Ranged::remembered`] finché il file non cambia.
     pub fn remember(&self, revision: &Revision) {
-        remember(&self.lease, revision);
+        remember(&self.lease, self.observed, revision);
     }
 
     fn check_limit(&self, max: u64) -> Result<u64, RangedError> {
@@ -312,11 +348,13 @@ impl Seek for RangedFile<'_> {
     }
 }
 
-/// Ciò che si ricorda di una revisione: la lease da cui è nata.
+/// Ciò che si ricorda di una revisione: la lease da cui è nata e quando.
 struct Remembered {
     identity: Option<FileIdentity>,
     stat: Stat,
     change: Option<u64>,
+    /// L'orologio preso prima di aprire la lease.
+    observed: Option<u64>,
     revision: Revision,
 }
 
@@ -343,15 +381,21 @@ fn remembered(lease: &ResourceLease) -> Option<Revision> {
             && entry.change.is_some()
             && entry.identity == lease.identity
             && entry.stat == lease.stat
-            && entry.change == lease.change)
-            .then(|| entry.revision.clone())
+            && entry.change == lease.change
+            && change_stamp_settled(entry.change, entry.observed))
+        .then(|| entry.revision.clone())
     })
 }
 
-fn remember(lease: &ResourceLease, revision: &Revision) {
+fn remember(lease: &ResourceLease, observed: Option<u64>, revision: &Revision) {
     // Senza identità o timbro la formula non regge: niente da ricordare (e
     // una lease così il kernel non la apre).
     if lease.identity.is_none() || lease.change.is_none() {
+        return;
+    }
+    // Un timbro nella grana della lettura non dirà mai di una riscrittura
+    // che verrà nella stessa grana: ricordarlo non servirebbe a niente.
+    if !change_stamp_settled(lease.change, observed) {
         return;
     }
     with_memory(|memory| {
@@ -365,6 +409,7 @@ fn remember(lease: &ResourceLease, revision: &Revision) {
                 identity: lease.identity,
                 stat: lease.stat,
                 change: lease.change,
+                observed,
                 revision: revision.clone(),
             },
         );
@@ -384,5 +429,156 @@ mod tests {
             RangedError::from(KernelError::Stale("a".into())),
             RangedError::Stale
         ));
+    }
+
+    use camino::Utf8Path;
+    use fub_kernel::storage::EntryKind;
+    use fub_kernel::{FormatRegistry, Workspace};
+
+    const BIG: u64 = 1024 * 1024;
+
+    /// L'orologio di [`frozen`]: lo fissa la prova che lo usa, e la usa una
+    /// sola prova.
+    static FROZEN: AtomicU64 = AtomicU64::new(0);
+
+    /// Un orologio fermo dove la prova l'ha messo.
+    fn frozen() -> Option<u64> {
+        Some(FROZEN.load(Ordering::SeqCst))
+    }
+
+    /// Un vault con `a.bin` e un lettore a pezzi con l'orologio `clock`.
+    fn ranged(clock: Clock) -> (tempfile::TempDir, Workspace, Ranged) {
+        let dir = tempfile::tempdir().unwrap();
+        let root = Utf8Path::from_path(dir.path()).unwrap().to_owned();
+        std::fs::write(root.join("a.bin"), b"AAAAAAAA").unwrap();
+        let ws = Workspace::new(&root, FormatRegistry::new()).unwrap();
+        let ranged = Ranged::new(ws.resource_reader()).with_clock(clock);
+        (dir, ws, ranged)
+    }
+
+    /// Una lease finta con il timbro `change`: la memoria guarda solo la
+    /// chiave e i campi della formula.
+    fn lease(root: &str, change: u64) -> ResourceLease {
+        ResourceLease {
+            root: Utf8PathBuf::from(root),
+            path: "a.bin".to_string(),
+            identity: Some(FileIdentity { volume: 1, file: 2 }),
+            stat: Stat {
+                kind: EntryKind::File,
+                size: 8,
+                mtime: 1,
+            },
+            change: Some(change),
+            revision: None,
+        }
+    }
+
+    /// **#318: la revisione letta nella grana del timbro non si ricorda.**
+    ///
+    /// Una riscrittura dello stesso peso e della stessa data nella stessa
+    /// grana di `ctime` lascia la lease identica, e la memoria non può
+    /// distinguerla: non si fida quindi di una revisione letta quando il
+    /// timbro era ancora nella grana. Una letta una grana dopo vale.
+    #[test]
+    fn a_revision_read_within_the_grain_of_the_stamp_is_not_trusted() {
+        use fub_kernel::storage::CHANGE_STAMP_GRAIN as GRAIN;
+        let change = 100 * GRAIN;
+        let revision = Revision::new("prova-318");
+
+        // Letta nello stesso tick del timbro: la stessa lease, riscritta o
+        // no, rifà la revisione dai byte.
+        let racy = lease("/prova-318-stesso-tick", change);
+        remember(&racy, Some(change + 1), &revision);
+        assert_eq!(remembered(&racy), None);
+        // Una lease avuta da fuori, senza orologio, nemmeno.
+        let unknown = lease("/prova-318-senza-orologio", change);
+        remember(&unknown, None, &revision);
+        assert_eq!(remembered(&unknown), None);
+        // Letta una grana dopo: ogni riscrittura dopo avrà un timbro nuovo.
+        let settled = lease("/prova-318-dopo", change);
+        remember(&settled, Some(change + GRAIN), &revision);
+        assert_eq!(remembered(&settled), Some(revision.clone()));
+        let rewritten = lease("/prova-318-dopo", change + 1);
+        assert_eq!(remembered(&rewritten), None);
+    }
+
+    /// Una lettura nello stesso tick del timbro (l'orologio fermo sul
+    /// timbro del file): la revisione è giusta ma non si ricorda, la domanda
+    /// dopo la rifà dai byte, e vede il file cambiato anche quando la
+    /// riscrittura ha lasciato peso, data e (nella stessa grana) timbro.
+    #[test]
+    fn a_file_read_in_the_tick_of_its_stamp_is_read_again_from_its_bytes() {
+        let (dir, ws, ranged) = ranged(frozen);
+        let doc = DocId::new("a.bin");
+        let path = Utf8Path::from_path(dir.path()).unwrap().join("a.bin");
+        let stamp = ranged.open(&doc).unwrap().lease().change.unwrap();
+        FROZEN.store(stamp, Ordering::SeqCst);
+        let first = ranged.revision(&doc, BIG).unwrap();
+        assert_eq!(first, ws.document_revision(&doc).unwrap());
+        assert_eq!(ranged.remembered(&doc), None);
+        let read = ranged.bytes_read();
+        assert_eq!(ranged.revision(&doc, BIG).unwrap(), first);
+        assert_eq!(ranged.bytes_read(), read + 8, "la seconda domanda rilegge");
+
+        let modified = std::fs::metadata(&path).unwrap().modified().unwrap();
+        std::fs::write(&path, b"BBBBBBBB").unwrap();
+        std::fs::File::options()
+            .write(true)
+            .open(&path)
+            .unwrap()
+            .set_modified(modified)
+            .unwrap();
+        let second = ranged.revision(&doc, BIG).unwrap();
+        assert_ne!(second, first);
+        assert_eq!(second, ws.document_revision(&doc).unwrap());
+    }
+
+    /// Un timbro già vecchio si ricorda: la seconda domanda non legge
+    /// niente. E la memoria non si fida di peso e data: riscrivere il file
+    /// con lo stesso peso e rimettergli la data cambia il timbro, e la
+    /// revisione si rifà.
+    #[test]
+    fn the_remembered_revision_does_not_trust_size_and_date() {
+        let (dir, ws, ranged) = ranged(long_after);
+        let doc = DocId::new("a.bin");
+        let path = Utf8Path::from_path(dir.path()).unwrap().join("a.bin");
+        let first = ranged.revision(&doc, BIG).unwrap();
+        // La seconda domanda passa dalla memoria, ed è quella che si prova.
+        assert_eq!(ranged.remembered(&doc), Some(first.clone()));
+        let read = ranged.bytes_read();
+        assert_eq!(ranged.revision(&doc, BIG).unwrap(), first);
+        assert_eq!(ranged.bytes_read(), read, "la seconda domanda non legge");
+        let change = |ranged: &Ranged| ranged.open(&doc).unwrap().lease().change;
+        let first_change = change(&ranged);
+        assert!(first_change.is_some());
+        let modified = std::fs::metadata(&path).unwrap().modified().unwrap();
+        // Stesso peso, stessa data, sullo stesso file: resta il timbro di
+        // cambiamento, che è nuovo. Nuovo però solo se l'orologio del
+        // filesystem è andato avanti (#310): l'orologio finto qui dice che
+        // ogni lettura viene dopo la grana, e allora si riscrive finché il
+        // timbro non si muove. Il caso dello stesso tick è la prova sopra.
+        let mut tries = 0;
+        loop {
+            std::fs::write(&path, b"BBBBBBBB").unwrap();
+            std::fs::File::options()
+                .write(true)
+                .open(&path)
+                .unwrap()
+                .set_modified(modified)
+                .unwrap();
+            if change(&ranged) != first_change {
+                break;
+            }
+            tries += 1;
+            assert!(tries < 2000, "il timbro di cambiamento non si muove");
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        }
+        assert_eq!(
+            std::fs::metadata(&path).unwrap().modified().unwrap(),
+            modified
+        );
+        let second = ranged.revision(&doc, BIG).unwrap();
+        assert_ne!(second, first);
+        assert_eq!(second, ws.document_revision(&doc).unwrap());
     }
 }

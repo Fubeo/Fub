@@ -7,6 +7,7 @@ import { SceneEngine } from "../scene/engine";
 import { elementChildren, type ContainerNode, type LeafNode } from "../scene/model";
 import { doc } from "../scene/test-support";
 import { noteElem, noteLabel, promptNote, readNote } from "./note";
+import { WEBKIT_COMPOSING } from "../../../kit/testing";
 
 afterEach(() => {
   for (const dialog of document.querySelectorAll(".shell-dialog")) dialog.remove();
@@ -85,6 +86,11 @@ describe("il dialogo", () => {
     expect(body().getAttribute("aria-invalid")).toBe("true");
     expect(body().getAttribute("aria-describedby")).toBe(error.id);
     body().value = "Adesso sì";
+    // Ctrl+Invio a metà di una composizione è del metodo d'immissione.
+    const composing = new KeyboardEvent("keydown", { key: "Enter", ctrlKey: true, bubbles: true, cancelable: true, ...WEBKIT_COMPOSING });
+    body().dispatchEvent(composing);
+    expect(composing.defaultPrevented).toBe(false);
+    expect(dialog().isConnected).toBe(true);
     body().dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", ctrlKey: true, bubbles: true }));
     expect(await answer).toEqual({ body: "Adesso sì", label: "Adesso sì" });
   });

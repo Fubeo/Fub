@@ -26,6 +26,7 @@ export const DRAW_DIALOGS: PartAnatomy = {
       hooks: [
         "draw-commands-dialog", "draw-commands", "draw-commands-field", "draw-commands-list", "draw-commands-row",
         "draw-commands-label", "draw-commands-path", "draw-commands-key", "draw-commands-why", "draw-commands-empty",
+        "kit-list-highlight",
       ],
     },
     {

@@ -4,7 +4,7 @@
 > stile loro, il corsivo, la spaziatura delle lettere, il sottolineato e il
 > barrato, il testo in area, che va a capo in un riquadro, e il testo su
 > tracciato; come si leggono, come si scrivono e come li cambia l'operazione
-> `text`; i caratteri con cui si disegnano. Versione 1.
+> `text`; i caratteri con cui si disegnano; il testo verticale. Versione 1.
 > **Fonti autorevoli:** `apps/client/src/editors/spatial/scene/classify.ts`
 > e `crates/fub-scene/src/classify.rs`, che leggono allo stesso modo; i
 > valori in `scene/values.ts` e `crates/fub-scene/src/values.rs`; la
@@ -53,8 +53,9 @@ larghe, e la parola «pioggia» è blu, in grassetto e sottolineata.
   delle altre è l'interlinea. Una riga può scrivere gli stessi attributi di
   presentazione, e prende quelli del testo che non scrive.
 - **Fra le righe** il file può avere spazi e a capo, che non sono testo:
-  sono i nodi di soli spazi che il formato conserva. Il testo fuori dai
-  `tspan` rende estraneo il `text`.
+  sono i nodi di soli spazi che il formato conserva. Non entrano nelle
+  parole delle righe: chi apre il file non aggiunge uno spazio in fondo alla
+  riga prima. Il testo fuori dai `tspan` rende estraneo il `text`.
 - **Un testo su tracciato** non ha righe: al loro posto ha un solo
   `textPath` (§5).
 
@@ -136,7 +137,11 @@ secondo è «Fine.».
   un testo in area; altrove non dice niente, e resta scritto.
 - **Il paragrafo** sono le sue righe riunite: con `space` uno spazio fra
   l'una e l'altra, con `word` niente. Le righe tornano il paragrafo senza
-  perdere un carattere.
+  perdere un carattere, e gli spazi di fila restano quanti sono.
+- **Un paragrafo vuoto** è una riga sola il cui testo è uno spazio
+  indivisibile (U+00A0): un `tspan` vuoto non sposterebbe la riga dopo. Si
+  rilegge vuoto; un paragrafo vuoto in fondo, o un testo vuoto, ha la riga
+  vuota.
 - **Gli a capo** li rifà FubDraw quando cambiano il testo, il riquadro o il
   carattere di un pezzo, spaziatura compresa, e solo allora: il colore, le
   decorazioni e l'interlinea non li toccano. Ogni riga prende le parole che
@@ -147,6 +152,12 @@ secondo è «Fine.».
   due grafemi, e soltanto un grafema da solo può andare oltre. Le larghezze
   sono quelle dei caratteri con cui il testo si disegna (§9), come li disegna
   l'esportazione; la spaziatura delle lettere conta dopo ogni grafema.
+- **Scalare un testo in area** non scrive una `transform`: riscrive il
+  testo con `x`, `y`, `fub:wrap`, i `dy` delle righe, `font-size` e
+  `letter-spacing` moltiplicati per la scala, così il passo delle righe
+  resta quello del corpo e gli a capo restano gli stessi. Il contorno delle
+  lettere ha lo spessore che si vede dopo la scala. Una scala diversa in
+  orizzontale e in verticale non si scrive, come una rotazione.
 - **Una riga nuova di un paragrafo** copia gli attributi della prima, tranne
   `id`, e scende dell'interlinea del testo.
 - **Chi non legge `fub:*`**, un browser o un altro programma, vede un testo
@@ -363,3 +374,33 @@ vede è in [Disegni, caratteri del vault](../product/drawing-fonts.md).
   che non si leggono, le facce oltre il tetto e i caratteri la cui licenza
   (`fsType`) non lascia incorporarli: nel PDF il loro testo va a tracciati
   ([esportazione](scene-format-export.md), §5).
+
+## 10. Il testo verticale
+
+```xml
+<text id="o7a8b9c0d" writing-mode="vertical-rl" x="700" y="40" font-size="24">
+  <tspan y="40" dx="0">縦書き</tspan>
+  <tspan y="40" dx="-28.8">二<tspan font-weight="bold">列</tspan></tspan>
+</text>
+```
+
+Un testo che si legge dall'alto in basso, a colonne da destra a sinistra,
+come lo scrive lo strumento Testo verticale del Completo: la prima colonna
+ha la linea di mezzo in `x = 700` e comincia in `y = 40`, la seconda sta
+28,8 più a sinistra.
+
+- **`writing-mode`** sta soltanto sul `text`, con `horizontal-tb`, il
+  verso di serie, o `vertical-rl`. Ogni altro valore, come `tb-rl` o
+  `vertical-lr`, o il verso su un `tspan`, rende estraneo il `text`.
+- **Le righe** di un testo verticale sono colonne: ogni `tspan` ha la sua
+  `y`, dove la colonna comincia, e il suo `dx`, quanto si sposta dalla
+  colonna prima: l'interlinea, negativa perché le colonne vanno verso
+  sinistra. `x` e `dy` su una colonna, o `y` e `dx` su una riga di un testo
+  orizzontale, rendono estraneo il `text`; un pezzo non ha né `y` né `dx`.
+- **Le lettere** stanno come le mette un browser con `vertical-rl`: gli
+  ideogrammi e i kana dritti, le lettere latine e le cifre coricate (UAX
+  #50), come il motore di VectorCraft.
+- **Un testo verticale è da punto:** `fub:wrap` e un `textPath` lo rendono
+  estraneo.
+- **Un lettore di FubDraw più vecchio** lo vede estraneo e lo conserva byte
+  per byte; un browser lo disegna come FubDraw.

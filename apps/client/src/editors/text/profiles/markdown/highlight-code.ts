@@ -8,7 +8,7 @@ import type { Teardown } from "../../../../ui/lifetime";
 export function highlightMarkdownCode(container: HTMLElement): Teardown {
   const race = new Race();
   void race.last(async (expected) => {
-    await Promise.all(Array.from(container.querySelectorAll<HTMLElement>("pre > code")).map(async (code) => {
+    await expected(Promise.all(Array.from(container.querySelectorAll<HTMLElement>("pre > code")).map(async (code) => {
       if (code.closest("[data-ui-slot]")) return;
       const languageName = Array.from(code.classList).find((name) => name.startsWith("language-"))?.slice(9);
       if (!languageName || languageName.toLowerCase() === "mermaid") return;
@@ -31,7 +31,7 @@ export function highlightMarkdownCode(container: HTMLElement): Teardown {
       if (previous < source.length) fragment.append(document.createTextNode(source.slice(previous)));
       code.replaceChildren(fragment);
       container.dispatchEvent(new Event("markdown-resize", { bubbles: true }));
-    }));
+    })));
   });
   return () => race.cancel();
 }

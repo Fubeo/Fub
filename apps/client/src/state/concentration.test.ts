@@ -29,6 +29,8 @@ describe("la concentrazione", () => {
     // Un menu aperto, un dialogo o Vim l'hanno già preso.
     expect(escapeLeavesConcentration(esc({ defaultPrevented: true }))).toBe(false);
     expect(escapeLeavesConcentration(esc({ isComposing: true }))).toBe(false);
+    // WebKit: la composizione appena chiusa, col codice 229.
+    expect(escapeLeavesConcentration(esc({ keyCode: 229 }))).toBe(false);
     expect(escapeLeavesConcentration(esc({ shiftKey: true }))).toBe(false);
     expect(escapeLeavesConcentration(esc({ ctrlKey: true }))).toBe(false);
     expect(escapeLeavesConcentration(esc({ key: "Enter" }))).toBe(false);

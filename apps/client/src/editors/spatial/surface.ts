@@ -67,39 +67,47 @@ import { DrawingFonts, markupFonts, vaultFontsOf, type FontNotes, type VaultFont
 import { VECTOR_EXPORTS, VECTOR_MODES, VECTOR_PROFILE } from "./modes";
 import {
   currentGrid,
+  currentPreciseCursors,
   currentRecentColors,
   currentSuggested,
   currentWorkspace,
   readExportMemory,
   readGrid,
+  readPreciseCursors,
   readRecentColors,
   readSavedPens,
   saveSavedPens,
   currentSavedPens,
   saveExportMemory,
   saveGrid,
+  savePreciseCursors,
   saveRecentColors,
   saveSuggested,
   saveToolbar,
   saveWorkspace,
+  saveSavedWorkspaces,
   switchSuggestions,
   watchWorkspace,
   watchSuggested,
+  type WorkspaceChoice,
 } from "./preferences";
+import { createWorkspaceBand } from "./workspace-band";
 import { SceneEngine } from "./scene/engine";
 import { MAX_EDIT_BYTES, MAX_ELEMENTS, readScene, ReadError, type ReadOnly } from "./scene/read";
 import { href as parseHref } from "./scene/values";
 import { linkTarget, nodeOf } from "./tools/arrange";
-import { createDrawEditor, type DrawEditor, type DrawExport, type DrawImages, type DrawLinks, type DrawPlace } from "./tools/editor";
+import { createDrawEditor, type DrawEditor, type DrawExport, type DrawImages, type DrawLinks, type DrawPlace, type SpazioSalvatoLayout } from "./tools/editor";
 import { cardChrome, inspectorChrome, type InspectorChrome } from "./tools/editor/chrome/hosts";
 import { exportDialog } from "./tools/export-dialog";
-import { asking } from "./tools/export-plan";
-import { featuresFor, type Workspace } from "./tools/registry";
+import { asking, type ExportAsk } from "./tools/export-plan";
+import { featuresFor, type ToolId, type Workspace } from "./tools/registry";
+import { DISEGNO_COMPLETO } from "./tools/editor/chrome/workspace";
 import { imageDataUri, imageRefs, READ_IMAGE_BYTES, type ImageRef } from "./read-images";
 import { fontSheets, picture, type FontSheets } from "./picture";
 import { noteSceneChange, offerStage } from "./live/registry";
 import { motoreDa, type MotoreAperto } from "./motore/gesti";
 import { apriSessione } from "./motore/sessione";
+import { cellaLivelloDi } from "./livello-corrente";
 import { drawStanding, MOTORE_VETTORIALE } from "./motore/standing";
 import { components, onComponents } from "../../state/components";
 import { showComponent } from "../../ui/commands";
@@ -129,6 +137,8 @@ export interface VectorSurfaceOptions {
   vaultFonts?: VaultFontPort;
   /// Apre la finestra «Esporta» della shell.
   onExport?(): void;
+  /// Mostra o nasconde l'ispettore dello Scrittoio, dove stanno i pannelli del disegno.
+  onToggleInspector?(): void;
 }
 
 /// Le immagini del vault di un disegno: `path` è l'`href` com'è scritto nel
@@ -316,7 +326,7 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
   let tabsOffered = false;
   /// Che cosa esportare, chiesto dall'editor per la prossima apertura della
   /// finestra «Esporta».
-  let exportAsked: "selection" | null = null;
+  let exportAsked: ExportAsk | null = null;
   const panelsChanged = (): void => {
     for (const listener of [...panelListeners]) listener();
   };
@@ -343,6 +353,10 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
   /// dell'ultima lettura, finché non arriva quella di questa superficie.
   let workspace = currentWorkspace();
   let grid = currentGrid();
+  /// «Usa cursori di precisione»: la scelta dell'ultima lettura, finché non arriva quella di questa superficie.
+  let preciseCursors = currentPreciseCursors();
+  /// Chi disegna l'ha già scelta qui: la lettura non la riporta indietro.
+  let preciseCursorsChosen = false;
   /// Chi disegna ha già scelto la griglia qui: la lettura non la riporta
   /// indietro.
   let gridChosen = false;
@@ -506,19 +520,75 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
   });
   life.add(() => standing.dispose());
 
+  // --- Lo spazio di lavoro nella banda (T7) --------------------------------
+  // La banda legge lo spazio, gli spazi e le azioni di qui. Chi ascolta si
+  // rilegge quando lo spazio scritto cambia, o quando il Completo arriva o non
+  // arriva.
+  const workspaceListeners = new Set<() => void>();
+  function notifyWorkspace(): void {
+    for (const listener of [...workspaceListeners]) listener();
+  }
+  /// La colonna dello spazio in uso: quella del suo salvataggio, o quella
+  /// dell'utente.
+  function columnOf(choice: WorkspaceChoice): readonly ToolId[] {
+    const salvato = choice.saved.find((each) => each.id === choice.space);
+    return salvato !== undefined ? (salvato.colonna as ToolId[]) : choice.toolbar;
+  }
+  /// Il layout di uno spazio salvato, per l'editor: la colonna e la scheda.
+  function savedLayout(space: string): SpazioSalvatoLayout | null {
+    const salvato = workspace.saved.find((each) => each.id === space);
+    if (salvato === undefined) return null;
+    return { colonna: [...salvato.colonna], scheda: salvato.scheda, sezione: salvato.sezione, righelli: salvato.righelli };
+  }
+  const workspaceBand = createWorkspaceBand({
+    read: () => workspace,
+    componente: () => components()?.on(DISEGNO_COMPLETO) === true,
+    choose: (space) => saveWorkspace(space),
+    writeSaved: (raw) => saveSavedWorkspaces(raw),
+    snapshot: () => editor?.spaceSnapshot() ?? { colonna: [], scheda: "design", sezione: null, righelli: false },
+    reset: () => editor?.resetSpace(),
+    openComponents: () => showComponent(DISEGNO_COMPLETO),
+    failed: () => editor?.completoFailed() ?? false,
+    retry: () => editor?.retryCompleto(),
+    subscribe(listener) {
+      workspaceListeners.add(listener);
+      return () => {
+        workspaceListeners.delete(listener);
+      };
+    },
+  });
+
   const mountEditor = (engine: SceneEngine): DrawEditor => {
     const editorLifetime = openLifetime();
     const drawing = openMotore();
     const made = compact ? null : inspectorChrome();
+    // Il livello corrente è del disegno: gli altri riquadri sullo stesso
+    // documento, e l'editor rimontato, ritrovano lo stesso.
+    const session = documentSessions.get(context.documentId);
     const mounted = createDrawEditor(drawHost, engine, editorLifetime, {
+      ...(session === undefined ? {} : { livello: cellaLivelloDi(session) }),
       ...(made === null
         ? { chrome: cardChrome(), compact: true, workspace: cardWorkspace }
-        : { chrome: made, workspace: workspace.workspace, toolbar: workspace.toolbar, onWorkspace: saveWorkspace, onToolbar: saveToolbar }),
+        : {
+          chrome: made,
+          workspace: workspace.workspace,
+          space: workspace.space,
+          toolbar: columnOf(workspace),
+          onWorkspace: saveWorkspace,
+          onWorkspaceChange: notifyWorkspace,
+          spazioSalvato: savedLayout,
+          onToolbar: saveToolbar,
+        }),
       grid,
       onGridChange: (next) => {
         grid = next;
         gridChosen = true;
         saveGrid(next);
+      },
+      preciseCursors,
+      onPreciseCursorsChange: (on) => {
+        preciseCursorsChosen = true;
+        return savePreciseCursors(on);
       },
       colors,
       onColorsChange: (next) => {
@@ -541,11 +611,12 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
       ...(options.onExport === undefined || compact
         ? {}
         : {
-            onExport: (what?: "selection") => {
-              exportAsked = what ?? null;
+            onExport: (ask?: ExportAsk) => {
+              exportAsked = ask ?? null;
               options.onExport!();
             },
           }),
+      ...(options.onToggleInspector === undefined || compact ? {} : { onToggleInspector: options.onToggleInspector }),
       onFontNotes: sayFonts,
       place,
       ...(drawing === null ? {} : { motore: drawing }),
@@ -875,7 +946,8 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
   if (!compact) {
     life.add(watchWorkspace((next) => {
       workspace = next;
-      editor?.setWorkspace(next.workspace, next.toolbar);
+      editor?.setSpace(next.space, columnOf(next));
+      notifyWorkspace();
       paint();
     }));
   }
@@ -883,6 +955,11 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
     if (life.closed || gridChosen) return;
     grid = next;
     editor?.setGrid(next);
+  });
+  void readPreciseCursors().then((next) => {
+    if (life.closed || preciseCursorsChosen) return;
+    preciseCursors = next;
+    editor?.setPreciseCursors(next);
   });
   void readRecentColors().then((next) => {
     if (life.closed || colorsChosen) return;
@@ -1058,6 +1135,8 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
       },
     },
     standing,
+    // Lo spazio di lavoro, nella banda accanto alla modalità (T7).
+    workspace: workspaceBand,
     reveal: ({ span }) => !drawHost.hidden && editor !== null && editor.reveal(span.start),
     selections: (): EditorSelections | undefined => {
       const [first, ...rest] = selectedRanges();
@@ -1082,7 +1161,7 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
             const next: Workspace = full ? "full" : CARD_WORKSPACE;
             if (next === cardWorkspace) return;
             cardWorkspace = next;
-            editor?.setWorkspace(next);
+            editor?.setSpace(next);
           },
         }
       : {}),

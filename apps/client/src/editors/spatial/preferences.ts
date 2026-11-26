@@ -39,15 +39,20 @@ import { exportMemoryOf, type ExportMemory } from "./tools/export-plan";
 import { isPenId, savedPensOf, type SavedPen } from "../../ink/pens";
 import { DEFAULT_GRID, isBarrelAction, isEraseMode, isFidelity, isPenOutput, validClosed, validStep, validSteady, validSteps, type Grid } from "./tools/grid";
 import { RECENT_COLORS } from "./tools/palette";
-import { isWorkspace, TOOLS, type ToolId, type Workspace } from "./tools/registry";
+import { SPAZI_COMPLETO, TOOLS, type ToolId, type Workspace } from "./tools/registry";
+import { leggiSpazi, spaziUsabili, type SpazioSalvato } from "./tools/saved-workspaces";
 import type { SettingEntry } from "../../host/contract";
 import type { Suggested } from "./tools/suggestions";
 
 /// Il bundle che dichiara lo spazio di lavoro.
 const DRAW_BUNDLE = "fub.draw";
 
-/// L'impostazione dello spazio di lavoro.
+/// L'impostazione dello spazio di lavoro: un id, di serie `full`.
 export const WORKSPACE_KEY = "draw.workspace";
+
+/// L'impostazione degli spazi di lavoro salvati: un elenco di voci JSON, ognuna
+/// con la sua versione (`"v": 1`).
+export const SAVED_WORKSPACES_KEY = "draw.workspaces";
 
 /// L'impostazione degli strumenti della colonna.
 export const TOOLBAR_KEY = "draw.toolbar";
@@ -75,6 +80,10 @@ export const SUGGESTIONS_KEY = "draw.suggestions";
 /// che non servono più.
 export const SUGGESTED_KEY = "draw.suggested";
 
+/// La chiave dello stato di vista che ricorda «Usa cursori di precisione» (K6 T11, cursori): la croce al posto
+/// del cursore degli strumenti che disegnano. Sta nello stato di vista della macchina, come la griglia.
+export const PRECISE_CURSORS_KEY = "draw.preciseCursors";
+
 let lastGrid: Grid = DEFAULT_GRID;
 /// Le scritture della griglia in fila, e quante ne sono partite.
 let saving: Promise<void> = Promise.resolve();
@@ -93,16 +102,31 @@ let suggesting: Promise<void> = Promise.resolve();
 let suggestedSaves = 0;
 /// Le superfici aperte che seguono i suggerimenti.
 const suggestedWatchers = new Set<(suggested: Suggested) => void>();
+/// La scelta dei cursori di precisione dell'ultima lettura o scrittura riuscita, e le scritture in fila (come
+/// la griglia, ma una scrittura che non riesce non la cambia).
+let lastPreciseCursors = false;
+let preciseCursorsSaving: Promise<void> = Promise.resolve();
+let preciseCursorsSaves = 0;
 
 /// Lo spazio di lavoro e gli strumenti della colonna, come li dicono le
 /// impostazioni.
 export interface WorkspaceChoice {
+  /// Lo spazio in uso: `full`, `simple`, un preset o uno salvato. Un id che
+  /// nessuno conosce vale `full`.
+  readonly space: string;
+  /// Lo spazio di base dell'editor: `simple` solo per il Semplice, altrimenti
+  /// `full`. Gli strumenti offerti si decidono da qui.
   readonly workspace: Workspace;
+  /// Gli spazi salvati che si usano, in ordine.
+  readonly saved: readonly SpazioSalvato[];
+  /// Le voci di `draw.workspaces` com'erano lette, per riscriverle senza
+  /// perdere quelle che non si capiscono.
+  readonly savedRaw: readonly string[];
   /// Vuoto: la colonna di serie.
   readonly toolbar: readonly ToolId[];
 }
 
-let lastWorkspace: WorkspaceChoice = { workspace: "full", toolbar: [] };
+let lastWorkspace: WorkspaceChoice = { space: "full", workspace: "full", saved: [], savedRaw: [], toolbar: [] };
 let workspaceReads = 0;
 let workspaceRead = 0;
 
@@ -122,9 +146,24 @@ export function workspaceOf(entries: readonly SettingEntry[]): WorkspaceChoice {
     const one = entry(key);
     return one === undefined || one.source === "default" ? undefined : one.value;
   };
-  const workspaceValue = chosen(WORKSPACE_KEY);
-  const workspace: Workspace = isWorkspace(workspaceValue) ? workspaceValue : "full";
-  return { workspace, toolbar: toolbarOf(chosen(TOOLBAR_KEY)) };
+  const savedRaw = savedRawOf(chosen(SAVED_WORKSPACES_KEY));
+  const saved = spaziUsabili(leggiSpazi(savedRaw));
+  // Uno spazio che nessuno conosce (scritto a mano, o salvato e poi tolto)
+  // vale Completo: il valore resta nel file, come l'ha scritto chi l'ha messo.
+  const stored = chosen(WORKSPACE_KEY);
+  const space = typeof stored === "string" && spaceKnown(stored, saved) ? stored : "full";
+  return { space, workspace: space === "simple" ? "simple" : "full", saved, savedRaw, toolbar: toolbarOf(chosen(TOOLBAR_KEY)) };
+}
+
+/// Le voci di `draw.workspaces` come stringhe: ciò che non è un elenco di
+/// stringhe non conta.
+function savedRawOf(value: unknown): readonly string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+}
+
+/// Vero se `id` è uno spazio che esiste: uno di serie, un preset o uno salvato.
+function spaceKnown(id: string, saved: readonly SpazioSalvato[]): boolean {
+  return id === "full" || id === "simple" || (SPAZI_COMPLETO as readonly string[]).includes(id) || saved.some((each) => each.id === id);
 }
 
 /// Lo spazio e la colonna dell'ultima lettura.
@@ -156,7 +195,7 @@ export function watchWorkspace(apply: (choice: WorkspaceChoice) => void): () => 
       });
   };
   const stop = onEvent("setting_changed", (event) => {
-    if (event.key === WORKSPACE_KEY || event.key === TOOLBAR_KEY) read();
+    if (event.key === WORKSPACE_KEY || event.key === TOOLBAR_KEY || event.key === SAVED_WORKSPACES_KEY) read();
   });
   read();
   return () => {
@@ -165,13 +204,26 @@ export function watchWorkspace(apply: (choice: WorkspaceChoice) => void): () => 
   };
 }
 
-/// Scrive la scelta dello spazio `workspace`, dal menu del disegno; le
-/// superfici aperte la rileggono col suo cambio. Una scrittura che non
-/// riesce lo dice.
-export function saveWorkspace(workspace: Workspace): void {
-  lastWorkspace = { ...lastWorkspace, workspace };
+/// Scrive lo spazio `space` (un id: `full`, `simple`, un preset o uno salvato),
+/// dalla banda del disegno; le superfici aperte la rileggono col suo cambio. Una
+/// scrittura che non riesce lo dice.
+export function saveWorkspace(space: string): void {
+  const workspace: Workspace = space === "simple" ? "simple" : "full";
+  lastWorkspace = { ...lastWorkspace, space, workspace };
   void Promise.resolve()
-    .then(() => api.setSetting(WORKSPACE_KEY, workspace))
+    .then(() => api.setSetting(WORKSPACE_KEY, space))
+    .catch((error: unknown) => notify(t("vector.workspace.save_failed", { reason: errorText(error) }), "guasto"));
+}
+
+/// Scrive l'elenco degli spazi salvati, come le sue voci vanno lette
+/// (`saved-workspaces.ts`). Una scrittura che non riesce lo dice, e l'elenco di
+/// prima resta.
+export function saveSavedWorkspaces(raw: readonly string[]): void {
+  void Promise.resolve()
+    .then(() => api.setSetting(SAVED_WORKSPACES_KEY, [...raw]))
+    .then(() => {
+      lastWorkspace = { ...lastWorkspace, saved: spaziUsabili(leggiSpazi(raw)), savedRaw: [...raw] };
+    })
     .catch((error: unknown) => notify(t("vector.workspace.save_failed", { reason: errorText(error) }), "guasto"));
 }
 
@@ -196,9 +248,9 @@ export function currentGrid(): Grid {
 /// penna com'è. Un passo ricordato che la griglia non accetta non conta.
 function gridOf(value: unknown): Grid | null {
   if (typeof value !== "object" || value === null) return null;
-  const { shown, snap, step, steps, panel, bar, shapes, closed, twist, taps, pen, steady, eraser, penId, barrel, output, fidelity } = value as Record<string, unknown>;
+  const { shown, snap, step, steps, panel, bar, shapes, closed, twist, taps, pen, steady, eraser, penId, barrel, output, fidelity, transparencyGrid, hideEdges, hideBoundingBox, hideArtboards, snapPixel, smartGuidesOff, snapPointOff, snapGlyph, livePaintGaps } = value as Record<string, unknown>;
   if (typeof shown !== "boolean" || typeof snap !== "boolean" || typeof step !== "number" || !validStep(step)) return null;
-  for (const flag of [bar, shapes, twist, taps]) if (flag !== undefined && typeof flag !== "boolean") return null;
+  for (const flag of [bar, shapes, twist, taps, transparencyGrid, hideEdges, hideBoundingBox, hideArtboards, snapPixel, smartGuidesOff, snapPointOff, snapGlyph, livePaintGaps]) if (flag !== undefined && typeof flag !== "boolean") return null;
   if (panel !== undefined && panel !== null && typeof panel !== "boolean") return null;
   if (steps !== undefined && (typeof steps !== "object" || steps === null)) return null;
   const sections = closed === undefined ? DEFAULT_GRID.closed : validClosed(closed);
@@ -226,6 +278,18 @@ function gridOf(value: unknown): Grid | null {
     ...(isBarrelAction(barrel) ? { barrel } : {}),
     ...(isPenOutput(output) ? { output } : {}),
     ...(isFidelity(fidelity) ? { fidelity } : {}),
+    // Gli interruttori della vista: assenti se spenti (K6 T11).
+    ...(transparencyGrid === true ? { transparencyGrid: true } : {}),
+    ...(hideEdges === true ? { hideEdges: true } : {}),
+    ...(hideBoundingBox === true ? { hideBoundingBox: true } : {}),
+    ...(hideArtboards === true ? { hideArtboards: true } : {}),
+    // L'aggancio al pixel (K6 T11): assente se spento, come gli altri interruttori.
+    ...(snapPixel === true ? { snapPixel: true } : {}),
+    // Guide sensibili e agganci del motore (Visualizza): assenti se valgono quelli di serie.
+    ...(smartGuidesOff === true ? { smartGuidesOff: true } : {}),
+    ...(snapPointOff === true ? { snapPointOff: true } : {}),
+    ...(snapGlyph === true ? { snapGlyph: true } : {}),
+    ...(livePaintGaps === true ? { livePaintGaps: true } : {}),
   };
 }
 
@@ -255,6 +319,46 @@ export function saveGrid(grid: Grid): void {
     .catch((error: unknown) => {
       notify(t("vector.grid.save_failed", { reason: errorText(error) }), "guasto");
     });
+}
+
+/// La scelta dei cursori di precisione dell'ultima lettura o scrittura riuscita; di serie spenti.
+export function currentPreciseCursors(): boolean {
+  return lastPreciseCursors;
+}
+
+/// Legge la scelta dei cursori di precisione: spenta se non c'è, o se il valore non è vero o falso. Legge dopo
+/// le scritture in corso, e se la lettura non riesce resta quella di prima.
+export async function readPreciseCursors(): Promise<boolean> {
+  await preciseCursorsSaving;
+  const ticket = preciseCursorsSaves;
+  try {
+    const read = (await api.viewState<unknown>(PRECISE_CURSORS_KEY)) === true;
+    // Una scelta fatta mentre si leggeva è più recente di ciò che si è letto.
+    if (ticket === preciseCursorsSaves) lastPreciseCursors = read;
+  } catch {
+    // Lo stato di vista che non si legge lascia l'ultima scelta.
+  }
+  return lastPreciseCursors;
+}
+
+/// Ricorda `on` per i disegni che si aprono dopo. Conta solo se la scrittura riesce: altrimenti resta la scelta
+/// di prima, e lo si dice. Le scritture vanno in fila.
+export function savePreciseCursors(on: boolean): Promise<boolean> {
+  preciseCursorsSaves += 1;
+  const done = preciseCursorsSaving
+    .then(() => api.setViewState(PRECISE_CURSORS_KEY, on))
+    .then(
+      () => {
+        lastPreciseCursors = on;
+        return true;
+      },
+      (error: unknown) => {
+        notify(t("vector.cursors.save_failed", { reason: errorText(error) }), "guasto");
+        return false;
+      },
+    );
+  preciseCursorsSaving = done.then(() => undefined);
+  return done;
 }
 
 /// `value` come colori recenti, dal più recente: i codici `#rrggbb` del suo

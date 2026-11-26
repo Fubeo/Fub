@@ -351,12 +351,14 @@ pub(super) fn no_resources(_: &str) -> Option<ResourceKind> {
     None
 }
 
-/// Dove sta un elemento: figlio della radice, di una `defs` della radice, o
-/// di un altro contenitore modificabile.
+/// Dove sta un elemento: figlio della radice, di una `defs` della radice, di
+/// un livello (dove un `<g fub:layer>` è un sottolivello), o di un altro
+/// contenitore modificabile.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub(super) enum Place {
     Root,
     Defs,
+    Layer,
     Inside,
 }
 
@@ -449,6 +451,11 @@ pub struct ElementItem {
     /// forma: non si vede. Su un livello ripete `layer`.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub hidden: bool,
+    /// `fub:guide="true"` su una forma (`path`, `rect`, `ellipse`, `circle`,
+    /// `line`, `polyline`, `polygon`): un tracciato-guida (formato della
+    /// scena, guide). Non si disegna né si esporta, con o senza `display`.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub guide: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub stroke: Option<Stroke>,
     /// `x1 y1 x2 y2` di una freccia.

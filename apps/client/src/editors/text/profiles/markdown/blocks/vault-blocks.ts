@@ -12,7 +12,6 @@
 //
 // Il modulo si carica al primo `[[^^` (`completions.ts`): porta con sé il
 // modello dei blocchi.
-import { ensureSyntaxTree } from "@codemirror/language";
 import { closeCompletion } from "@codemirror/autocomplete";
 import { EditorSelection, EditorState, type ChangeSpec } from "@codemirror/state";
 import type { EditorView } from "@codemirror/view";
@@ -23,6 +22,7 @@ import { headingLinkText } from "../kinds";
 import { blockAnchor } from "./anchor";
 import { blockBytes } from "./move-to";
 import { buildBlocks, subtreeEnd, type Block } from "./model";
+import { modelOf } from "./transform";
 import { stateOfSource, syncCandidates } from "./sync-to";
 
 /// Una nota che l'indice ha trovato, col suo testo.
@@ -92,12 +92,6 @@ function ownText(state: EditorState, blocks: readonly Block[], index: number): s
 function oneLine(own: string): string {
   const text = own.split("\n").map((line) => line.replace(MARKER, "").trim()).filter((line) => line !== "").join(" ");
   return text.length > LABEL_MAX ? `${text.slice(0, LABEL_MAX - 1)}…` : text;
-}
-
-/// Il modello dei blocchi di uno stato, con l'albero intero.
-function modelOf(state: EditorState): readonly Block[] {
-  ensureSyntaxTree(state, state.doc.length, 5000);
-  return buildBlocks(state).blocks;
 }
 
 /// I blocchi delle note `notes` che hanno tutte le parole di `words`, nota

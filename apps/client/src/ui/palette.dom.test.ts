@@ -129,6 +129,18 @@ describe("combobox della palette", () => {
     expect(document.activeElement).toBe(input);
   });
 
+  it("Invio della composizione (IME) non lancia il comando", async () => {
+    const { input } = await openPalette();
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, cancelable: true }));
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", isComposing: true, bubbles: true, cancelable: true }));
+    // WebKit: la composizione è già chiusa, il keydown arriva col codice 229.
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", keyCode: 229, bubbles: true, cancelable: true }));
+    await Promise.resolve();
+
+    expect(fake.invokeCommand).not.toHaveBeenCalled();
+    expect(input.isConnected).toBe(true);
+  });
+
   it("Enter attiva il comando evidenziato", async () => {
     const { input } = await openPalette();
     input.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, cancelable: true }));

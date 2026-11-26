@@ -11,6 +11,7 @@ import { livePreview, pageIconsChanged } from "./livepreview";
 import { liveReveal, type RevealPolicy } from "../../live-reveal";
 import { closeContextMenu } from "../../../../ui/menu";
 import { loadLazyParts } from "../../../../ui/lazy-part";
+import { parsedView } from "./test-support";
 
 // I pezzi che arrivano con un `import()` (`ui/lazy-part.ts`) qui ci sono già,
 // come dopo il riscaldamento: i gesti si guardano col loro codice.
@@ -94,6 +95,7 @@ describe("Live ibrida: testo nativo, widget solo non testuali", () => {
       ],
     });
     engine.setDoc(source);
+    parsedView(parent);
     return { parent, engine, cleanup: () => { engine.destroy(); parent.remove(); } };
   }
   it("con «mai» un paragrafo di sole immagini resta testo, con l'immagine figura in riga (D8, K10)", () => {
@@ -117,6 +119,36 @@ describe("Live ibrida: testo nativo, widget solo non testuali", () => {
       engine.revealByteOffset("Testo sopra\n\n![".length);
       expect(parent.querySelectorAll(".cm-markdown-block").length).toBe(0);
     } finally {
+      cleanup();
+    }
+  });
+
+  it("il trascinamento da un blocco reso lascia il documento al rilascio e alla chiusura", () => {
+    const added = vi.spyOn(document, "addEventListener");
+    const removed = vi.spyOn(document, "removeEventListener");
+    const listeners = (spy: typeof added, type: string) =>
+      spy.mock.calls.filter(([name]) => name === type).map(([, listener]) => listener);
+    const press = (parent: HTMLElement) => parent.querySelector<HTMLElement>(".cm-markdown-block")!
+      .dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0 }));
+    const { parent, engine, cleanup } = editorWith("Testo sopra\n\n![Schema](schema.png)\n\nTesto sotto\n", "riga");
+    try {
+      press(parent);
+      expect(listeners(added, "mousemove")).toHaveLength(1);
+      document.dispatchEvent(new MouseEvent("mouseup"));
+      expect(listeners(removed, "mousemove")).toEqual(listeners(added, "mousemove"));
+      expect(listeners(removed, "mouseup")).toEqual(listeners(added, "mouseup"));
+
+      // Un trascinamento ancora aperto quando l'editor si chiude (il clic ha
+      // portato il cursore nel blocco: lo si riporta in cima perché torni reso).
+      engine.revealByteOffset(0);
+      press(parent);
+      expect(listeners(added, "mousemove")).toHaveLength(2);
+      engine.destroy();
+      expect(listeners(removed, "mousemove")).toEqual(listeners(added, "mousemove"));
+      expect(listeners(removed, "mouseup")).toEqual(listeners(added, "mouseup"));
+    } finally {
+      added.mockRestore();
+      removed.mockRestore();
       cleanup();
     }
   });
@@ -273,6 +305,7 @@ describe("wikilink in Live", () => {
     });
     try {
       engine.setDoc('Primo\n\nUn <span class="fub-color-red">rosso</span> e <mark class="fub-bg-blue fub-color-gray">blu</mark> e <span class="altro">x</span>');
+      parsedView(parent);
       const red = parent.querySelector<HTMLElement>("span.fub-color-red");
       expect(red?.textContent).toBe("rosso");
       const blue = parent.querySelector<HTMLElement>("mark.fub-bg-blue");

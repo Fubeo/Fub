@@ -7,8 +7,11 @@
 > di un tratto, come si riscrive un tratto con un'altra penna, come si
 > riproduce un disegno e come si scrive lungo il righello.
 
-La **Penna** (`P`) e l'**Evidenziatore** (`Maiusc+P`) del
-[disegno](drawing.md) scrivono tratti a mano libera. Ogni tratto tiene i suoi
+L'**Inchiostro** (`P`) e l'**Evidenziatore** (`Maiusc+P`) del
+[disegno](drawing.md) scrivono tratti a mano libera. Nel Disegno completo
+c'è anche la **Penna** di Bézier del motore, che fa tracciati punto per punto
+([più sotto](#la-penna-di-bézier-disegno-completo)); qui «la penna» senza
+altro è sempre l'Inchiostro. Ogni tratto tiene i suoi
 campioni grezzi, posizione, pressione, inclinazione e tempo, in `fub:ink`, e
 il pennello con cui è nato in `fub:brush` (il formato è in
 [`scene-format-pens.md`](../reference/scene-format-pens.md)): per questo un tratto si
@@ -16,7 +19,7 @@ può ridisegnare dopo, con un'altra penna, senza perdere niente.
 
 ## Le penne
 
-La Penna ha sei penne, l'Evidenziatore una:
+L'Inchiostro ha sei penne, l'Evidenziatore una:
 
 | Penna | Com'è | Misura di serie |
 |---|---|---|
@@ -97,6 +100,14 @@ sceglie, ma la gomma che la attraversa la toglie intera, in tutti e due i
 modi. Mentre la gomma passa non sbiadisce, perché si disegna insieme alle
 parti estranee vicine: se ne va quando la gomma si alza.
 
+La **Gomma dei punti** (la casella con la gomma, «Pennello gomma punti di
+ancoraggio») toglie i punti di ancoraggio dei tracciati scelti che il tratto
+tocca. Si trascina: il segno tratteggiato dice dove passa, e al rilascio il
+motore riceve un solo comando con tutto il tratto. Esc a metà, o uno strumento
+diverso, non cambia niente. Un clic senza movimento non fa niente. Senza un
+tracciato scelto l'editor dice «Scegli un tracciato.». Se il tratto non tocca
+nessun punto, lo dice e non scrive.
+
 ## Ripennare e levigare
 
 Con dei tratti scelti, cambiare penna, misura, colore o opacità nella riga
@@ -146,3 +157,279 @@ punta rettangolare, il Pennarello la pressione ignorata, l'evidenziatore una
 punta rettangolare trasparente; la penna stessa resta in `fubPen`, che Word
 ignora ([`rich-projection.md`](../reference/rich-projection.md)). Le penne
 salvate non ci sono.
+
+## La Penna di Bézier (Disegno completo)
+
+Nel Disegno completo il gruppo «disegnare» della colonna ha tre caselle, come
+gli altri programmi di disegno vettoriale. Gli strumenti vengono dal motore
+(la famiglia `tracciati`, `crates/fub-disegno/src/famiglie/tracciati.rs`) e
+scrivono tracciati veri, `<path>`, non tratti a mano:
+
+| Casella | Strumenti |
+|---|---|
+| **Penna** | Penna, Penna intelligente, Curvatura, Aggiungi e Elimina punto di ancoraggio, Punto di ancoraggio, Angoli, Fai scorrere il punto di ancoraggio, Estendi tracciato |
+| **Matita** | Matita, poi l'Inchiostro e l'Evidenziatore di Fub, Pennello, Pennello tondo, Smussa, Unisci, Fondi bordo condiviso |
+| **Gomma** | Gomma (Completo), poi la gomma di Fub, Gomma tracciato, Pennello gomma punti, Forbici, Coltello, Specchia e taglia, Taglio linea, Taglio rettangolare |
+
+La tendina di una casella dà i nomi corti degli strumenti anche prima che la
+famiglia sia caricata. Gli strumenti del motore non hanno un tasto: la tendina
+non ne mostra. Con uno strumento del motore scelto, le opzioni dell'Inchiostro
+e della gomma di Fub lasciano la riga: restano il colore, lo spessore e le
+opzioni dello strumento, prima di Modifica.
+
+**La Penna** fa un tracciato clic dopo clic: ogni clic mette un punto,
+trascinare tira le maniglie. Fra un clic e l'altro il tracciato è aperto e si
+vedono i suoi punti, nel colore d'accento del tema; il file non cambia ancora.
+Lo chiudono:
+
+- **Invio** o **Esc**: il tracciato finisce come lo finisce il motore;
+- **un altro strumento**: il tracciato resta com'è, aperto;
+- **il disegno che cambia sotto**, da un altro riquadro o dal file riletto:
+  il tracciato si chiude com'è, aperto, prima che il cambio arrivi al
+  motore, e i punti messi restano.
+
+In tutti i casi il tracciato è **un passo** di Annulla. Un secondo Esc,
+senza niente di aperto, torna alla Selezione. Lo stesso vale per la Penna
+intelligente e la Curvatura.
+
+**Il Pennello** traccia a mano libera come la Matita, ma il tracciato è solo
+contorno, senza riempimento, come in VectorCraft. Col mouse il contorno è
+uniforme; con una penna la pressione resta scritta nel file, ma lo spessore che
+cambia lungo il tratto non si vede ancora.
+
+Gli strumenti dei tracciati non toccano i tratti dell'**Inchiostro**
+(`fub:ink`): Forbici, Coltello o Gomma su un tratto a mano sono spenti, e il
+disegno resta com'è. Per tagliare un tratto a mano c'è la gomma di Fub,
+**Precisa**.
+
+### I punti scelti
+
+I segni sul foglio sono quelli di VectorCraft (licenza MIT):
+
+- ogni tracciato scelto ha il suo **contorno** sottile (Nascondi bordi lo
+  toglie);
+- un tracciato **scelto intero** ha tutti i punti pieni; con uno strumento che
+  cambia i punti (Selezione diretta, Penna, Aggiungi e Elimina punto, Punto di
+  ancoraggio, Curvatura) mostra anche tutte le maniglie (una linea fino a un
+  pallino);
+- uno **scelto in parte** ha pieni solo i punti scelti, con le loro maniglie,
+  e vuoti gli altri;
+- la **cornice** con le maniglie per ridimensionare e girare c'è solo con la
+  Selezione e con gli strumenti delle forme; con gli altri strumenti non c'è.
+- un **rettangolo**, un **cerchio** e un'**ellisse** mostrano i punti del
+  tracciato che VectorCraft ne fa quando legge l'SVG: i quattro angoli del
+  rettangolo (otto, due per angolo, se gli angoli sono tondi) e i quattro punti
+  dell'ellisse a destra, in basso, a sinistra e in alto.
+
+Con la **Selezione diretta**, un clic su un punto lo sceglie da solo (Maiusc
+lo aggiunge o lo toglie) e trascinarlo lo sposta; trascinare un punto di un
+tracciato scelto intero sposta tutto il tracciato. Passando col mouse il
+cursore dice cosa si prende (un punto, un segmento, il tracciato), e un
+trascinamento sul vuoto disegna il riquadro che sceglie i punti dentro.
+Durante il gesto i segni li disegna il motore, a gesto finito l'editor. Un
+tratto d'Inchiostro non mostra punti: gli strumenti dei tracciati non lo
+modificano.
+
+Con la **Selezione diretta** o il **Punto di ancoraggio**, i punti scelti
+sul foglio danno la riga delle opzioni:
+
+- **Converti**: **Angolo** o **Morbido**;
+- **Punto**: **Taglia il tracciato nel punto**, **Unisci i due punti** (due
+  punti finali, di uno o due tracciati aperti), **Elimina il punto**;
+- **Posizione del punto**: X e Y del punto, quando ne è scelto uno solo.
+
+Un pulsante che adesso non vale resta raggiungibile e dice perché: «Scegli
+prima i punti con la Selezione diretta.», o per unire «Scegli i due punti
+finali da unire.». Con un punto solo scelto, X e Y si scrivono: Invio porta il
+punto lì; con più punti i campi si leggono e basta, e dicono di sceglierne uno.
+**Canc** coi punti scelti toglie quei punti, non l'oggetto intero. Ogni comando è un passo di Annulla. I comandi ci
+sono anche nella palette (`Ctrl+/`) e nel menu ≡: con un tracciato scelto e
+nessun punto, Converti e Unisci valgono sul tracciato intero, Taglia ed
+Elimina chiedono i punti. Non toccano i tratti dell'Inchiostro né la carta.
+
+Col Disegno completo acceso, la scheda **Design** dell'ispettore ha anche la
+sezione **Punto di ancoraggio**, con un oggetto o dei punti scelti: lì
+**Converti** in **Angolo** o **Morbido** manda lo stesso comando della riga
+delle opzioni sui punti scelti, e senza punti resta spento col perché. Il
+raggio dell'angolo e l'Elaborazione tracciati del prototipo non ci sono
+ancora: non hanno un comando del motore.
+
+Come ci arrivano i punti, nel contratto: `DrawingToolState.anchors` e il
+`value` dei comandi ([IPC del disegno](../reference/drawing-ipc.md)).
+
+**Angoli** arrotonda un angolo e lo tiene vivo: il raggio si cambia dopo.
+Nel file il tracciato è quello arrotondato, che ogni programma vede, e il
+raggio sta nella ricetta del motore in `<metadata>`
+([ADR del Disegno completo](../architecture/disegno-completo.md)); un
+programma che cambia il tracciato perde solo la ricetta.
+
+### Oggetto › Tracciato
+
+Con dei tracciati scelti, il sottomenu **≡ › Oggetto › Tracciato** (e la
+palette, `Ctrl+/`) fa, in un passo di Annulla e senza finestre. Le voci
+stanno in quattro file, separate da una riga:
+
+- il tracciato intero: **Unisci** e **Rimuovi punti di ancoraggio** (i
+  [punti scelti](#i-punti-scelti)), **Inverti direzione tracciato**,
+  **Contorna tratto**, che fa del tratto una forma piena, **Aggiungi punti
+  di ancoraggio**, uno a metà di ogni segmento, **Dividi oggetti
+  sottostanti**, che taglia ciò che sta sotto col tracciato scelto, che se
+  ne va;
+- il sottomenu **Tracciato composto**, con **Crea** e **Rilascia**: due
+  tracciati diventano uno solo, col buco dove si sovrappongono, e tornano
+  separati;
+- gli strumenti di precisione: **Rendi arrotondato**, **Rendi angolo**,
+  **Uguaglia maniglie**, **Rimuovi punti, mantieni forma** (sui punti
+  scelti), **Chiudi tracciato**, **Aggiungi punti agli incroci** (dove due
+  tracciati si incrociano), **Espandi trattini in tracciati** (un tracciato
+  per trattino);
+- **Chiudi o unisci** della Penna intelligente.
+
+Le file e il sottomenu sono del client (`FILE_TRACCIATO` e
+`RACCOLTE_DEI_MENU` in
+`apps/client/src/editors/spatial/completo/comandi.ts`); il posto
+`menu/oggetto/tracciato` è nella mappa del motore.
+
+Il buco di un tracciato composto viene dal verso dei suoi pezzi, con la
+regola **Diversa da zero** (`nonzero`, quella di SVG), o da ogni pezzo che
+sta dentro un altro, con **Pari-dispari** (`evenodd`). La regola si sceglie
+nella sezione **Attributi** del Design, come nel pannello Attributi di
+VectorCraft: i due pulsanti dicono quella dei tracciati scelti, propria o
+ereditata dal gruppo (nessuno premuto se sono diverse), e il clic la cambia
+in un passo di annulla. Nel file è `fill-rule`, scritto solo dove cambia
+quella del gruppo. Inverti e Rilascia tengono la regola, e il file torna
+uguale dopo due Inverti. Scritta in `style` da un altro programma la regola
+rende il tracciato estraneo: i comandi non lo cambiano e lo dicono. Un
+comando che non trova niente da fare (Dividi gli oggetti sotto senza niente
+sotto, Angolo su punti già angoli) non cambia il file e lo dice. Come gli
+strumenti, i comandi non toccano i tratti dell'Inchiostro: con un tratto a
+mano scelto sono spenti e dicono «Un tratto dell'Inchiostro di Fub non si
+cambia da qui.».
+
+Sei voci aprono una finestra, con l'anteprima sul foglio:
+
+- **Sposta tracciato…**: un tracciato nuovo, parallelo, alla distanza
+  scritta (un numero negativo lo porta dentro), con le giunzioni ad angolo
+  vivo, arrotondate o smussate e il limite dell'angolo vivo;
+- **Semplifica…**: meno punti di ancoraggio, con la soglia degli angoli e
+  la scelta dei soli segmenti dritti;
+- **Smussa…**: curve morbide al posto delle linee spezzate;
+- **Aggiungi punti ai segmenti…**: quanti punti nuovi per segmento, da 1 a
+  100, spaziati in modo uguale: la forma non cambia. Sul tracciato chiuso
+  conta anche il segmento di chiusura. Sul testo e sulle forme primitive
+  (rettangolo, ellisse) la voce è spenta col perché: prima bisogna farne un
+  tracciato;
+- **Dividi in trattini**: trattini della lunghezza scritta, con lo spazio
+  fra l'uno e l'altro;
+- **≡ › Oggetto › Espandi…**: il riempimento e il tratto diventano forme
+  piene, su ogni oggetto scelto e non solo sui tracciati;
+- **≡ › Oggetto › Tracciato › Pulisci…**: toglie i punti isolati, i tracciati
+  senza riempimento né contorno e i testi vuoti. Vale su tutto il disegno, non
+  sulla selezione; le tre caselle sono accese di serie, e un oggetto su un
+  livello nascosto o bloccato resta com'è.
+
+L'anteprima mostra i contorni nuovi mentre si cambiano i valori: parte
+quando un campo prende il valore (Invio, Tab o un clic fuori), non a ogni
+tasto, e non cambia il file. OK fa il comando in un passo di Annulla;
+Annulla ed Esc chiudono la finestra e lasciano il file com'era. Anche qui un
+tratto dell'Inchiostro scelto spegne le voci. I campi, i valori di partenza
+e i limiti vengono dal motore (`FINESTRE_SCRITTE` in
+`crates/fub-disegno/src/catalogo.rs`); le parole della finestra sono della
+famiglia (`completo/famiglie/tracciati/testi.ts`).
+
+**Media…** e **Media e unisci…** stanno nella prima fila di ≡ › Oggetto ›
+Tracciato, dopo Unisci, e aprono anche loro una finestra:
+
+- **Media…** porta i punti nel loro punto medio, sull'asse scelto
+  (orizzontale, verticale o tutti e due). Con i punti scelti con la
+  Selezione diretta muove solo quelli; senza, tutti i punti dei tracciati
+  scelti. Se tutti i punti di un tracciato finirebbero in uno solo, il file
+  non cambia e lo dice;
+- **Media e unisci…** porta due estremi aperti nel loro punto medio e li
+  unisce lì, con un angolo o un punto morbido: i due estremi scelti, o i due
+  tracciati aperti scelti, o un tracciato aperto che si chiude. Altrimenti è
+  spenta e dice «Scegli due tracciati aperti, o un tracciato aperto da
+  chiudere.».
+
+Le altre voci con una finestra (Pulisci, Dividi in griglia…) non ci sono
+ancora: sono spente e dicono perché. Le maschere di ritaglio sono in
+[Ritagli e maschere](drawing-masks.md#maschere-di-ritaglio-nel-completo).
+
+### Elaborazione tracciati
+
+Con due oggetti scelti o più, **≡ › Oggetto › Elaborazione tracciati** (e
+la palette, `Ctrl+/`) combina le loro forme in un passo di Annulla, senza
+finestre. Le voci stanno in due file:
+
+- i **metodi forma**: **Unione**, **Meno davanti** (toglie dalla forma
+  dietro quelle davanti), **Intersezione** (resta solo la parte comune),
+  **Escludi** (resta tutto tranne la parte comune);
+- le **operazioni**: **Dividi** (un pezzo per ogni zona), **Rifila** (toglie
+  le parti coperte), **Fondi** (come Rifila, e unisce i pezzi dello stesso
+  colore), **Ritaglia** (tiene ciò che sta dentro la forma davanti),
+  **Contorno** (le linee dei pezzi), **Meno dietro** (toglie dalla forma
+  davanti quelle dietro).
+
+Le stesse dieci voci sono nella sezione **Elaborazione tracciati** della
+scheda Design, con un oggetto scelto o più: due barre di pulsanti con le
+figure, nello stesso ordine. Con un oggetto solo i pulsanti restano
+raggiungibili col Tab ma sono spenti, e la nota sotto dice «Servono due
+oggetti.»; le frecce si muovono fra i pulsanti di una barra.
+
+Gli oggetti scelti se ne vanno e il risultato prende il posto del più alto,
+con un id nuovo. Un metodo forma dà un tracciato solo (composto, con
+la regola `nonzero`, se ha più pezzi), con lo stile della forma davanti
+(della forma dietro per Meno davanti); un'operazione dà un gruppo di
+tracciati. Un testo entra col contorno delle sue lettere, un gruppo con le
+forme che ha. Il comando non parte, e il file non cambia, quando non
+avrebbe niente di sicuro da fare:
+
+- un oggetto bloccato nella selezione: lo dice, e chiede di sbloccarlo o di
+  toglierlo;
+- un'immagine, una guida, una maschera di ritaglio, un gruppo vuoto o un
+  testo senza i suoi caratteri: se ne andrebbero senza entrare nel
+  risultato;
+- un tratto dell'Inchiostro di Fub;
+- un risultato vuoto (Intersezione di due forme che non si toccano): niente
+  sparisce, e lo dice.
+
+Le voci e il pannello `pathfinder` sono nella mappa del motore
+(`crates/fub-disegno/mappa.tsv`); le file del menu sono del client
+(`FILE_ELABORAZIONE` in `apps/client/src/editors/spatial/completo/comandi.ts`),
+la sezione è `completo/elaborazione.ts`. Trapping e Opzioni di elaborazione
+non ci sono ancora: sono spente e dicono perché.
+
+**Ripeti Elaborazione tracciati** rifà sugli oggetti scelti adesso l'ultima
+voce delle due file andata a buon fine (dal menu, dalla sezione o dai
+tasti), finché il disegno resta aperto nel Completo. Prima della prima è
+spenta e dice «Nessuna elaborazione da ripetere: fanne prima una.». Le forme
+composte non contano.
+
+#### Forme composte
+
+Una **forma composta** tiene i suoi oggetti e li mostra combinati: si può
+cambiare il metodo o rimetterli com'erano. Si fa in due modi:
+
+- un metodo forma con **Alt** nella sezione Elaborazione tracciati: gli
+  oggetti scelti diventano una forma composta in quel metodo (il titolo del
+  pulsante lo dice);
+- **≡ › Oggetto › Elaborazione tracciati › Forma composta › Crea forma
+  composta**, che la fa in Unione.
+
+Con una forma composta fra gli oggetti scelti, anche sola, i metodi forma
+della sezione cambiano il suo metodo invece di toglierne gli oggetti. Nel
+sottomenu **Forma composta** ci sono anche **Metodo forma…** (una finestra
+con il metodo: Unione, Meno davanti, Intersezione, Escludi), **Rilascia
+forma composta** (rimette gli oggetti, ognuno con un id nuovo) ed **Espandi
+forma composta** (lascia il tracciato che si vede). **≡ › Oggetto › Espandi
+forma** fa lo stesso con una forma viva (un rettangolo arrotondato, un
+poligono): diventa un tracciato semplice.
+
+Ogni comando è un passo di Annulla. La forma composta si salva come un
+gruppo col disegno già combinato e la sua ricetta (`scene-format-recipe.md`):
+riaperta nel Completo resta composta, coi metodi dei suoi oggetti; il
+Semplice e gli altri programmi vedono il gruppo. Un comando che non ha
+niente da fare (Crea con un oggetto solo, lo stesso metodo che ha già, un
+risultato vuoto) non parte e dice perché. Il motore è
+`crates/fub-disegno/src/famiglie/forme.rs`; ogni elemento del gruppo salvato
+ha il suo id, come vuole il formato della scena.

@@ -1,7 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { markdown } from "@codemirror/lang-markdown";
-import { ensureSyntaxTree } from "@codemirror/language";
 import { history, undo } from "@codemirror/commands";
 import { EditorState, Prec } from "@codemirror/state";
 import { EditorView, runScopeHandlers } from "@codemirror/view";
@@ -12,6 +11,7 @@ import { propertyList, setProperty } from "../properties";
 import { blocksMode, type BlocksOptions } from "./index";
 import "../../../../../i18n/strings";
 import { pageClassesWith, pageData, subpageLink } from "./page";
+import { parsedView } from "../test-support";
 
 // La testata della pagina in Blocchi (H12) e il suo menu «…» (H13).
 
@@ -36,8 +36,7 @@ function mount(doc: string, options: BlocksOptions = {}, readOnly = false): Edit
       ],
     }),
   });
-  ensureSyntaxTree(view.state, view.state.doc.length, 1000);
-  view.dispatch({});
+  parsedView(view);
   views.push(view);
   return view;
 }
@@ -156,6 +155,32 @@ describe("la testata della pagina", () => {
     field.dispatchEvent(new FocusEvent("blur"));
     await settle();
     expect(rename).not.toHaveBeenCalled();
+  });
+
+  it("Ctrl+Z nel titolo senza modifiche sue annulla la nota, un passo per tasto (IMP-6105)", () => {
+    const view = mount("Testo", { rename: async () => null });
+    const at = view.state.doc.length;
+    view.dispatch({ changes: { from: at, insert: "\n\nUno" }, userEvent: "input" });
+    view.dispatch({ changes: { from: view.state.doc.length, insert: "\n\nDue" }, userEvent: "input" });
+    const field = title(view);
+    field.focus();
+    const chord = (name: string, shiftKey = false) => {
+      const event = new KeyboardEvent("keydown", { key: name, ctrlKey: true, shiftKey, bubbles: true, cancelable: true });
+      field.dispatchEvent(event);
+      return event.defaultPrevented;
+    };
+    expect(chord("z")).toBe(true);
+    expect(view.state.doc.toString()).toBe("Testo\n\nUno");
+    expect(chord("z")).toBe(true);
+    expect(view.state.doc.toString()).toBe("Testo");
+    expect(chord("Z", true)).toBe(true);
+    expect(view.state.doc.toString()).toBe("Testo\n\nUno");
+    expect(chord("y")).toBe(true);
+    expect(view.state.doc.toString()).toBe("Testo\n\nUno\n\nDue");
+    // Con un nome scritto nel titolo, Ctrl+Z è del campo: la nota non cambia.
+    field.value = "Altro";
+    expect(chord("z")).toBe(false);
+    expect(view.state.doc.toString()).toBe("Testo\n\nUno\n\nDue");
   });
 
   it("↑ sulla prima riga porta al titolo", () => {

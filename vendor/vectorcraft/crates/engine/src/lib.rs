@@ -14,6 +14,7 @@ pub mod journal;
 pub mod link_watch;
 pub mod steps;
 pub mod store;
+pub mod tables;
 mod tooling;
 pub mod units;
 

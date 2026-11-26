@@ -1020,3 +1020,86 @@ fn a_partial_path_follows_documents_as_they_come_and_go() {
     graph.remove(&DocId::new("Note/Progetti/Alpha.md"));
     assert!(graph.outgoing(&DocId::new("Note/index.md")).is_empty());
 }
+
+fn doc_with_property(id: &str, key: &str, value: serde_json::Value) -> DocumentModel {
+    let mut m = DocumentModel::empty(DocId::new(id));
+    m.frontmatter.0.insert(key.into(), value);
+    m
+}
+
+fn property_sources(graph: &LinkGraph, target: &str, key: Option<&str>) -> Vec<String> {
+    graph
+        .property_linked(&[DocId::new(target)], key)
+        .into_iter()
+        .map(|d| d.to_string())
+        .collect()
+}
+
+/// #503: i link delle proprietà hanno archi loro. Non sono backlink né
+/// uscenti (quelli restano il corpo, col contesto); si risolvono con le
+/// regole dei wikilink, percorso parziale compreso, e la nota che nomina
+/// sé stessa compare.
+#[test]
+fn property_links_are_their_own_edges() {
+    let target = doc_with_property(
+        "Area/Progetti/Scorte.md",
+        "se",
+        serde_json::json!("[[Scorte]]"),
+    );
+    let by_name = doc_with_property("a.md", "progetto", serde_json::json!("[[Scorte]]"));
+    let partial = doc_with_property(
+        "b.md",
+        "rif",
+        serde_json::json!(["[[Progetti/Scorte]]", "x"]),
+    );
+    let in_text = doc_with_property("c.md", "nota", serde_json::json!("vedi [[Scorte]]"));
+    let body = doc_with_links("d.md", &["Scorte"]);
+    let graph = LinkGraph::build([&target, &by_name, &partial, &in_text, &body]);
+
+    assert_eq!(
+        property_sources(&graph, "Area/Progetti/Scorte.md", None),
+        ["Area/Progetti/Scorte.md", "a.md", "b.md"]
+    );
+    assert_eq!(
+        property_sources(&graph, "Area/Progetti/Scorte.md", Some("rif")),
+        ["b.md"]
+    );
+    assert_eq!(sources(&graph, "Area/Progetti/Scorte.md"), ["d.md"]);
+    assert!(graph.outgoing(&DocId::new("a.md")).is_empty());
+}
+
+/// L'incrementale segue i link delle proprietà come il rebuild: una nota più
+/// vicina alla radice ruba il nome, toglierla lo restituisce, rinominare il
+/// bersaglio lo lascia senza chi lo nominava per nome.
+#[test]
+fn property_links_follow_documents_as_they_come_and_go() {
+    let by_name = doc_with_property("Note/a.md", "progetto", serde_json::json!("[[Scorte]]"));
+    let deep = DocumentModel::empty(DocId::new("x/Scorte.md"));
+    let mut graph = LinkGraph::build([&by_name, &deep]);
+    assert_eq!(property_sources(&graph, "x/Scorte.md", None), ["Note/a.md"]);
+
+    let root = DocumentModel::empty(DocId::new("Scorte.md"));
+    graph.upsert(&root);
+    assert!(property_sources(&graph, "x/Scorte.md", None).is_empty());
+    assert_eq!(property_sources(&graph, "Scorte.md", None), ["Note/a.md"]);
+
+    graph.remove(&DocId::new("Scorte.md"));
+    assert_eq!(property_sources(&graph, "x/Scorte.md", None), ["Note/a.md"]);
+
+    // Il sorgente cambia il valore: l'arco vecchio se ne va.
+    graph.upsert(&doc_with_property(
+        "Note/a.md",
+        "progetto",
+        serde_json::json!("[[Altro]]"),
+    ));
+    assert!(property_sources(&graph, "x/Scorte.md", None).is_empty());
+
+    let oracle = LinkGraph::build([
+        &doc_with_property("Note/a.md", "progetto", serde_json::json!("[[Altro]]")),
+        &deep,
+    ]);
+    assert_eq!(
+        graph.property_linked(&[DocId::new("x/Scorte.md")], None),
+        oracle.property_linked(&[DocId::new("x/Scorte.md")], None)
+    );
+}

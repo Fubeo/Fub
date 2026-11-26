@@ -19,6 +19,7 @@
 import { identifier } from "../ui/a11y";
 import type { Lifetime } from "../ui/lifetime";
 import { evaluate, type QuantityProblem } from "./quantity";
+import { composingKey } from "./ime";
 
 /// Quanti pixel di trascinamento fanno un passo.
 export const SCRUB_PX = 4;
@@ -52,6 +53,9 @@ export interface NumberFieldOptions {
   /// Un valore confermato. Una stringa è il motivo per cui non è stato
   /// preso: il campo resta com'era scritto e la dice.
   onCommit: (value: number) => string | void;
+  /// Il campo svuotato e confermato: chi la dà accetta il vuoto (un trattino che chiude la serie), e
+  /// come `onCommit` una stringa dice perché non l'ha preso. Senza, il vuoto è un errore.
+  onClear?: () => string | void;
   /// I valori mentre si tira l'etichetta, prima della conferma.
   onPreview?: (value: number) => void;
   /// Possiede gli ascolti. Senza, stanno sugli elementi e vivono quanto loro.
@@ -66,6 +70,9 @@ export interface NumberField {
   /// Scrive il valore senza confermarlo: è il programma, non l'utente. Ciò
   /// che si sta scrivendo resta, finché il campo ha il fuoco.
   setValue(value: number | null): void;
+  /// Mette o toglie l'errore del campo con la sua frase: chi conferma un valore che
+  /// il campo non prende (un valore di partenza fuori dai limiti) lo dice così.
+  setError(message: string | null): void;
   setDisabled(disabled: boolean): void;
   focus(): void;
 }
@@ -194,6 +201,17 @@ export function numberField(options: NumberFieldOptions): NumberField {
       if (input.value === shown) showError(null);
       return;
     }
+    if (options.onClear !== undefined && input.value.trim() === "") {
+      const failure = options.onClear();
+      if (typeof failure === "string") {
+        showError(failure);
+        return;
+      }
+      value = null;
+      showError(null);
+      paint();
+      return;
+    }
     const next = typed();
     if (typeof next === "string") {
       showError(next);
@@ -230,7 +248,7 @@ export function numberField(options: NumberFieldOptions): NumberField {
   };
 
   listen(input, "keydown", (event) => {
-    if (event.isComposing) return;
+    if (composingKey(event)) return;
     if (event.key === "Enter") {
       event.preventDefault();
       commitTyped();
@@ -296,6 +314,7 @@ export function numberField(options: NumberFieldOptions): NumberField {
     element,
     input,
     value: () => value,
+    setError: showError,
     setValue(next) {
       value = next;
       const drafting = document.activeElement === input && input.value !== shown;

@@ -97,7 +97,8 @@ fn drawing() -> Vec<(&'static str, &'static str, Vec<u8>)> {
 
 /// Una cartella di due fogli visibili e uno nascosto: valori di ogni tipo con i
 /// loro formati, l'aspetto, una matrice dinamica versata, una formula senza
-/// valore salvato, una cella unita, colonne e righe con le loro dimensioni, e
+/// valore salvato che si calcola e una (una funzione di una macro) che resta
+/// vuota, una cella unita, colonne e righe con le loro dimensioni, e
 /// un disegno con un'immagine, una casella di testo e un grafico. Il
 /// riempimento della riga del totale è il giallo chiaro `#FFF2CC` di Excel, col
 /// testo automatico: la cella che l'aspetto adattato porta in coppia.
@@ -111,7 +112,7 @@ fn workbook() -> Vec<u8> {
 <row r="5"><c r="F5"><v>2</v></c></row>
 <row r="6" hidden="1"><c r="F6"><v>3</v></c></row>
 </sheetData><mergeCells count="1"><mergeCell ref="G1:H1"/></mergeCells><drawing r:id="rD"/>"#;
-    let note = r#"<sheetData><row r="1"><c r="A1" s="7" t="inlineStr"><is><t>Una nota</t></is></c><c r="B1"><f>A1&amp;"!"</f></c></row></sheetData>"#;
+    let note = r#"<sheetData><row r="1"><c r="A1" s="7" t="inlineStr"><is><t>Una nota</t></is></c><c r="B1"><f>A1&amp;"!"</f></c><c r="C1"><f>_xludf.CALCOLA(A1)</f></c></row></sheetData>"#;
     let segreto = r#"<sheetData><row r="1"><c r="A1"><v>42</v></c></row></sheetData>"#;
     Package {
         sheets: vec![
@@ -233,17 +234,20 @@ fn fixture() -> Value {
 fn la_fixture_della_shell_è_la_superficie_della_cartella() {
     let fixture = fixture();
     let path = client("__fixtures__/xlsx-grid.json");
+    let mut out = serde_json::to_string_pretty(&fixture).unwrap();
+    out.push('\n');
     if std::env::var_os("UPDATE_MIRROR").is_some() {
-        let mut out = serde_json::to_string_pretty(&fixture).unwrap();
-        out.push('\n');
         std::fs::write(&path, out).expect("scrive la fixture");
         return;
     }
     let raw = std::fs::read_to_string(&path)
         .unwrap_or_else(|error| panic!("{}: {error}", path.display()));
-    let value: Value = serde_json::from_str(&raw).expect("fixture JSON");
+    // Il confronto è sul testo: rileggere un numero come `-0.15384615384615385`
+    // senza `float_roundtrip` può dare un altro `f64`, e il testo è quello
+    // che la shell legge.
     assert_eq!(
-        value, fixture,
+        raw.replace("\r\n", "\n"),
+        out,
         "la fixture della shell è stantia: rigenerala con \
          `UPDATE_MIRROR=1 cargo test -p fub-format-xlsx --test ts_grid`"
     );

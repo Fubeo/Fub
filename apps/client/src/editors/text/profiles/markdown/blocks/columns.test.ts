@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { markdown } from "@codemirror/lang-markdown";
-import { ensureSyntaxTree } from "@codemirror/language";
+import { parsed } from "../test-support";
 import { EditorState, type TransactionSpec } from "@codemirror/state";
 import { markdownGrammar } from "../grammar";
 import { renderMarkdown } from "../render";
@@ -11,9 +11,7 @@ import { columnCount, columnsRun, dropAsColumn, intoColumns } from "./columns";
 // destro di un altro, a byte esatti; il risultato si legge in griglia.
 
 function stateOf(doc: string): EditorState {
-  const state = EditorState.create({ doc, extensions: [markdown({ base: markdownGrammar }), blockModel] });
-  ensureSyntaxTree(state, state.doc.length, 5000);
-  return state;
+  return parsed(EditorState.create({ doc, extensions: [markdown({ base: markdownGrammar }), blockModel] }));
 }
 const blocksOf = (state: EditorState) => state.field(blockModel).blocks;
 const at = (state: EditorState, text: string) => blocksOf(state).findIndex((block) => state.sliceDoc(block.from, block.to).startsWith(text));

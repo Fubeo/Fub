@@ -32,6 +32,7 @@
 // - **Allineare e distribuire** spostano soltanto, sui riquadri che si vedono,
 //   contorno compreso; gli spostamenti si arrotondano come quelli a mano.
 
+import { outsideTree } from "./hit/unit";
 import type { Bounds } from "../scene/geometry";
 import type { IdKind } from "../scene/ids";
 import { compose, IDENTITY, invert, type Matrix } from "../scene/matrix";
@@ -115,7 +116,7 @@ export class Plan {
   parentOf(node: ElementPart): string {
     const parent = node.parent!;
     if (parent === this.model.root) return ROOT;
-    return this.idOf(parent, parent.parent === this.model.root && parent.details?.role === "layer" ? "layer" : "object");
+    return this.idOf(parent, parent.details?.role === "layer" ? "layer" : "object");
   }
 
   /// La chiave di `node` dopo il comando: il suo id, anche quello che gli
@@ -130,7 +131,8 @@ export class Plan {
 }
 
 /// Il nodo del modello di `unit`, o di una voce della scena col suo percorso.
-export function nodeOf(model: DocumentModel, unit: { readonly path: readonly number[] }): ElementPart {
+export function nodeOf(model: DocumentModel, unit: { readonly path: readonly number[]; readonly node?: ElementPart }): ElementPart {
+  if (unit.node !== undefined && outsideTree(unit)) return unit.node;
   let node: ElementPart = model.root;
   for (const at of unit.path) node = elementChildren(node as ContainerNode)[at]!;
   return node;
@@ -191,7 +193,7 @@ export function fubAttributes(node: ElementPart): Map<string, string> {
 }
 
 /// I valori di `href` e di `xlink:href` di `node`; `null` quello che manca.
-function hrefAttributes(node: ElementPart): { readonly plain: string | null; readonly xlink: string | null } {
+export function hrefAttributes(node: ElementPart): { readonly plain: string | null; readonly xlink: string | null } {
   const read = readHead(node);
   let plain: string | null = null;
   let xlink: string | null = null;

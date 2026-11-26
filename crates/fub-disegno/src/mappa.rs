@@ -15,8 +15,39 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use fub_scene::Role;
-use vectorcraft_doc::{Document, Node, NodeId};
+use vectorcraft_doc::{Document, Node, NodeId, NodeKind};
 use vectorcraft_geom::Affine;
+
+/// La lunghezza massima del nome di un livello di Fub, in caratteri
+/// (`fub:layer`, `docs/reference/scene-format.md` §3).
+pub const MAX_NOME_LIVELLO: usize = 80;
+
+/// Il nome di serie di un livello nuovo, seguito dal suo numero: un documento
+/// nuovo ha «Livello 1» (formato della scena, §3).
+pub const NOME_DI_SERIE: &str = "Livello";
+
+/// Perché `nome` non può essere il nome di un livello di Fub, o `None` se
+/// può: vuoto (o di soli spazi), più lungo di [`MAX_NOME_LIVELLO`] caratteri,
+/// o con un carattere che l'attributo non tiene com'è (un carattere di
+/// controllo, che XML rifiuta o che la lettura di un attributo cambia in uno
+/// spazio, e i non caratteri U+FFFE e U+FFFF).
+pub fn nome_di_livello_sbagliato(nome: &str) -> Option<&'static str> {
+    if nome.trim().is_empty() {
+        return Some("Il nome del livello è vuoto: scrivi almeno un carattere.");
+    }
+    if nome.chars().count() > MAX_NOME_LIVELLO {
+        return Some("Il nome del livello è troppo lungo: al massimo 80 caratteri.");
+    }
+    if nome
+        .chars()
+        .any(|c| c.is_control() || matches!(c, '\u{FFFE}' | '\u{FFFF}'))
+    {
+        return Some(
+            "Il nome del livello ha un carattere che il file non tiene: togli a capo, tabulazioni e caratteri di controllo.",
+        );
+    }
+    None
+}
 
 /// Un elemento di Fub che il motore potrebbe modificare.
 #[derive(Clone, Debug)]
@@ -29,6 +60,9 @@ pub struct Elemento {
     pub id: Option<String>,
     /// Il nome nel motore: l'id del file o quello sintetico.
     pub nome: String,
+    /// Il nome di un livello di Fub (`fub:layer`, formato della scena §3);
+    /// `None` per ogni altro elemento.
+    pub livello: Option<String>,
     /// L'elemento che lo contiene, fra quelli della mappa; `None` sotto la
     /// radice.
     pub genitore: Option<usize>,
@@ -41,10 +75,63 @@ pub struct Elemento {
     pub bloccato: bool,
     /// `display="none"`.
     pub nascosto: bool,
+    /// `fub:guide="true"`: un tracciato-guida (formato della scena, guide).
+    /// Nel motore è un tracciato con `guide` e visibile, qualunque sia il
+    /// suo `display`.
+    pub guida: bool,
     /// L'oggetto del motore, se l'elemento è mappato.
     pub nodo: Option<NodeId>,
     /// Perché non è mappato, quando si sa prima dell'import.
     pub motivo: Option<&'static str>,
+    /// Le righe di un `<text>` e come sono scritte; `None` per gli altri.
+    pub testo: Option<InfoTesto>,
+    /// L'elemento ha l'attributo `clip-path`: Rilascia lo toglie con un
+    /// `set`. Un ritaglio scritto in `style` o dato da un foglio di stile
+    /// non si toglie così.
+    pub clip_path: bool,
+    /// L'id del `clipPath` che l'attributo `clip-path` nomina
+    /// (`url(#id)`), se lo nomina così.
+    pub ritaglio: Option<String>,
+    /// `fub:role="private"`: una risorsa di FubDraw, che se ne va con
+    /// l'ultimo riferimento.
+    pub privato: bool,
+    /// La forma del `clipPath` privato di un gruppo di ritaglio, legata al
+    /// tracciato che ritaglia del motore ([`Mappa::lega_i_ritagli`]).
+    pub ritaglia: bool,
+    /// La `fill-rule` in vigore è `evenodd`: scritta sull'elemento o, se
+    /// non c'è, ereditata dal genitore.
+    pub evenodd: bool,
+}
+
+/// Ciò che la differenza sa di un `<text>` del file per scriverne le parole
+/// e il carattere (K6 T16): le righe come sono scritte e che cosa dicono i
+/// `<tspan>` dentro.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct InfoTesto {
+    /// Una riga per `<tspan>`, come l'operazione `text` le sostituisce.
+    pub righe: Vec<String>,
+    /// Un testo di punto: niente `fub:wrap`, niente tracciato, niente
+    /// etichetta di un connettore.
+    pub di_punto: bool,
+    /// Più `<tspan>` che righe: una riga ha pezzi con un aspetto loro.
+    pub pezzi: bool,
+    /// I nomi degli attributi dei `<tspan>` oltre a `x`, `dy` e `fub:join`:
+    /// un attributo del `<text>` non arriva dove una riga ne scrive uno suo.
+    pub attributi_delle_righe: std::collections::BTreeSet<String>,
+    /// Gli attributi del `<text>`, nell'ordine del file e con le entità
+    /// sciolte: un testo che si riscrive intero (in area, con un'altra
+    /// interlinea) li tiene.
+    pub attributi: Vec<(String, String)>,
+    /// `fub:wrap` letto: la larghezza di un testo in area.
+    pub wrap: Option<f64>,
+    /// L'id del tracciato privato che il `textPath` di un testo su tracciato segue (formato del
+    /// testo, §5); `None` per gli altri testi e per l'etichetta di un connettore.
+    pub tracciato: Option<String>,
+    /// Il `fub:join` di ogni `<tspan>`, come è scritto.
+    pub unioni: Vec<Option<String>>,
+    /// Il `dx` di ogni `<tspan>`: in un testo verticale, quanto la colonna
+    /// si sposta da quella prima (formato del testo, §10).
+    pub scarti: Vec<Option<f64>>,
 }
 
 impl Elemento {
@@ -59,6 +146,11 @@ impl Elemento {
     }
 }
 
+/// Il motivo del `clipPath` privato di una maschera la cui forma è legata
+/// ([`Mappa::lega_i_ritagli`]): non è un oggetto del motore, ma non è una
+/// perdita, perché un cambio della forma lo riscrive.
+pub(crate) const RITAGLIO_LEGATO: &str = "il ritaglio di una maschera, che la maschera riscrive";
+
 /// Oggetti del motore ↔ elementi di Fub.
 #[derive(Clone, Debug, Default)]
 pub struct Mappa {
@@ -69,6 +161,8 @@ pub struct Mappa {
     /// Ogni id del file, anche di elementi fuori dalla mappa: gli id nuovi
     /// non devono esserne uguali.
     ids: HashSet<String>,
+    /// Le ricette del file ([`crate::ricetta`]).
+    pub(crate) ricette: crate::ricetta::Ricette,
 }
 
 impl Mappa {
@@ -87,6 +181,7 @@ impl Mappa {
         let mut per_id = HashMap::new();
         let mut ids = HashSet::new();
         let mut bloccati = Vec::new();
+        let mut guide = Vec::new();
         for (i, e) in elementi.iter_mut().enumerate() {
             if let Some(id) = &e.id {
                 per_id.insert(id.clone(), i);
@@ -99,8 +194,13 @@ impl Mappa {
                 Some([nodo]) => {
                     e.nodo = Some(*nodo);
                     per_nodo.insert(*nodo, i);
-                    if e.bloccato {
+                    // La carta non si sceglie né si sposta: per gli
+                    // strumenti del motore è bloccata come un `fub:locked`.
+                    if e.bloccato || e.ruolo == Role::Paper {
                         bloccati.push(*nodo);
+                    }
+                    if e.guida {
+                        guide.push(*nodo);
                     }
                 }
                 Some([_, _, ..]) => {
@@ -115,6 +215,18 @@ impl Mappa {
                 n.locked = true;
             }
         }
+        // Un tracciato-guida: nel motore la bandierina del tracciato, e
+        // visibile, come in VectorCraft (il `display="none"` è per chi non
+        // conosce `fub:guide`). Una forma che il motore non fa tracciato
+        // resta com'è.
+        for nodo in guide {
+            if let Some(n) = doc.node_mut(nodo) {
+                if let NodeKind::Path { guide, .. } = &mut n.kind {
+                    *guide = true;
+                    n.visible = true;
+                }
+            }
+        }
         let radici = doc
             .layers
             .iter()
@@ -127,6 +239,109 @@ impl Mappa {
             per_id,
             radici,
             ids,
+            ricette: Default::default(),
+        }
+    }
+
+    /// Lega le facce e i bordi di ogni gruppo della Pittura dinamica agli
+    /// elementi figli del suo elemento, per posizione: il file li scrive come
+    /// il motore li tiene, senza il gruppo nascosto delle sorgenti, e il
+    /// figlio `k` del file (contando anche gli estranei) è il pezzo `k`. Così
+    /// la Selezione pittura li sceglie con l'id del file, e i comandi (il
+    /// colore, Elimina) li trovano come ogni altro oggetto. Gli elementi
+    /// restano [`crate::ricetta::COPERTO`]: la ricetta del gruppo li riscrive,
+    /// e non sono perdite. Un bordo che la scena tiene estraneo non è un
+    /// elemento e resta senza legame.
+    /// Se un figlio sta oltre i pezzi del motore (un file cambiato a mano)
+    /// non se ne lega nessuno, e il gruppo si sceglie intero.
+    pub(crate) fn lega_le_facce(&mut self, doc: &Document) {
+        use vectorcraft_tools::builder::{is_live_paint, SOURCES_NAME};
+        let gruppi: Vec<(usize, NodeId)> = self.per_nodo.iter().map(|(n, i)| (*i, *n)).collect();
+        for (i, nodo) in gruppi {
+            let Some(n) = doc.node(nodo).filter(|n| is_live_paint(n)) else {
+                continue;
+            };
+            let pezzi: Vec<NodeId> = n
+                .children()
+                .into_iter()
+                .flatten()
+                .filter(|c| c.name.as_deref() != Some(SOURCES_NAME))
+                .map(|c| c.id)
+                .collect();
+            let figli: Vec<(usize, usize)> = (0..self.elementi.len())
+                .filter(|j| self.elementi[*j].genitore == Some(i))
+                .filter_map(|j| Some((j, *self.elementi[j].percorso.last()?)))
+                .collect();
+            if figli.iter().any(|(_, k)| *k >= pezzi.len()) {
+                continue;
+            }
+            for (j, k) in figli {
+                self.elementi[j].nodo = Some(pezzi[k]);
+                self.per_nodo.insert(pezzi[k], j);
+            }
+        }
+    }
+
+    /// Lega la forma del `clipPath` privato di ogni gruppo di ritaglio al
+    /// tracciato che ritaglia del motore (il primo figlio del gruppo), come
+    /// [`Mappa::lega_le_facce`]: così «Modifica maschera» la sceglie con
+    /// l'id del file, e un cambio della forma si scrive sul posto. Vale
+    /// solo per un `clipPath` privato, nominato da un gruppo solo, con una
+    /// forma sola che ha un id (formato della scena, risorse). La forma
+    /// sta nello spazio del gruppo (`userSpaceOnUse`): il suo genitore,
+    /// per le matrici, è il gruppo.
+    pub(crate) fn lega_i_ritagli(&mut self, doc: &Document) {
+        let mut usi: HashMap<&str, usize> = HashMap::new();
+        for e in &self.elementi {
+            if let Some(r) = e.ritaglio.as_deref() {
+                *usi.entry(r).or_default() += 1;
+            }
+        }
+        let mut legami = Vec::new();
+        for (i, e) in self.elementi.iter().enumerate() {
+            let (Some(r), Some(nodo)) = (e.ritaglio.as_deref(), e.nodo) else {
+                continue;
+            };
+            if usi.get(r) != Some(&1) {
+                continue;
+            }
+            let Some(c) = doc
+                .node(nodo)
+                .filter(|n| n.clips())
+                .and_then(|n| n.children())
+                .and_then(|f| f.first())
+            else {
+                continue;
+            };
+            if self.per_nodo.contains_key(&c.id) {
+                continue;
+            }
+            let Some(&k) = self.per_id.get(r) else {
+                continue;
+            };
+            let risorsa = &self.elementi[k];
+            if risorsa.tag != "clipPath" || !risorsa.privato {
+                continue;
+            }
+            let figli: Vec<usize> = (0..self.elementi.len())
+                .filter(|j| self.elementi[*j].genitore == Some(k))
+                .collect();
+            let [j] = figli[..] else { continue };
+            if self.elementi[j].id.is_none() || self.elementi[j].nodo.is_some() {
+                continue;
+            }
+            legami.push((i, j, k, c.id, e.ctm()));
+        }
+        for (i, j, k, nodo, ctm) in legami {
+            // Il `clipPath` non è una perdita: la maschera lo riscrive.
+            self.elementi[k].motivo = Some(RITAGLIO_LEGATO);
+            let f = &mut self.elementi[j];
+            f.nodo = Some(nodo);
+            f.motivo = None;
+            f.genitore = Some(i);
+            f.ctm_genitore = ctm;
+            f.ritaglia = true;
+            self.per_nodo.insert(nodo, j);
         }
     }
 
@@ -140,14 +355,22 @@ impl Mappa {
         self.elementi.get(i)
     }
 
-    /// Quanti elementi sono mappati.
+    /// Quanti elementi sono mappati: quelli che il motore ha, più la carta che Fub tiene fuori dal
+    /// motore apposta ([`crate::apertura::CARTA_FUORI`]), che non è una perdita.
     pub fn mappati(&self) -> usize {
-        self.per_nodo.len()
+        self.per_nodo.len() + self.carte_fuori()
     }
 
     /// Quanti elementi non lo sono.
     pub fn non_mappati(&self) -> usize {
-        self.elementi.len() - self.per_nodo.len()
+        self.elementi.len() - self.mappati()
+    }
+
+    fn carte_fuori(&self) -> usize {
+        self.elementi
+            .iter()
+            .filter(|e| e.motivo == Some(crate::apertura::CARTA_FUORI))
+            .count()
     }
 
     /// L'indice dell'elemento da cui viene l'oggetto `nodo`.
@@ -163,6 +386,40 @@ impl Mappa {
     /// Vero se `nodo` è un livello del motore che sta per la radice.
     pub fn e_radice(&self, nodo: NodeId) -> bool {
         self.radici.contains(&nodo)
+    }
+
+    /// L'id della carta del file (il `rect` della radice con
+    /// `fub:role="paper"`), se c'è: dentro il motore o fuori.
+    pub fn carta(&self) -> Option<&str> {
+        self.elementi
+            .iter()
+            .find(|e| e.ruolo == Role::Paper && e.genitore.is_none())
+            .and_then(Elemento::id_del_file)
+    }
+
+    /// Le ricette del file.
+    pub fn ricette(&self) -> &crate::ricetta::Ricette {
+        &self.ricette
+    }
+
+    /// Il nome di un livello nuovo: «Livello N» col primo N, dal numero dei
+    /// livelli di Fub più uno, che nessun livello porta già (come
+    /// `freshLayerName` del client).
+    pub fn nome_libero(&self) -> String {
+        let livelli: Vec<&str> = self
+            .elementi
+            .iter()
+            .filter_map(|e| e.livello.as_deref())
+            .collect();
+        let mut n = livelli.len() + 1;
+        let presi: HashSet<&str> = livelli.into_iter().collect();
+        loop {
+            let nome = format!("{NOME_DI_SERIE} {n}");
+            if !presi.contains(nome.as_str()) {
+                return nome;
+            }
+            n += 1;
+        }
     }
 
     /// Vero se `id` è già un id del file.

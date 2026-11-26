@@ -1,7 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { markdown } from "@codemirror/lang-markdown";
-import { ensureSyntaxTree } from "@codemirror/language";
 import { Compartment, EditorState, Prec } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { openLifetime, type Lifetime } from "../../../../../ui/lifetime";
@@ -10,11 +9,12 @@ import { markdownGrammar } from "../grammar";
 import { livePreview } from "../livepreview";
 import { MathEditor, type MathPreferences } from "./editor";
 import { attachPalette } from "./palette";
-import { loadLazyParts } from "../../../../../ui/lazy-part";
+import { drawn, MATH_READY_MS, mathReady } from "./test-drawn";
+import { parsedView } from "../test-support";
 
-// I pezzi che arrivano con un `import()` (`ui/lazy-part.ts`) qui ci sono già,
-// come dopo il riscaldamento: i gesti si guardano col loro codice.
-beforeAll(loadLazyParts);
+// KaTeX e i pezzi che arrivano con un `import()` (`ui/lazy-part.ts`) qui ci
+// sono già, come dopo il riscaldamento: i gesti si guardano col loro codice.
+beforeAll(mathReady, MATH_READY_MS);
 
 // «Mostra il LaTeX», la scrittura veloce e le tre misure di aiuto (T63, E27):
 // il campo del LaTeX sotto la formula, la formula che si tocca coi suoi tasti
@@ -52,14 +52,9 @@ afterEach(() => {
   Reflect.deleteProperty(document, "compatMode");
 });
 
-/// KaTeX si carica a parte e disegna al fotogramma dopo.
+/// Un giro del ciclo degli eventi: il salvataggio finto delle impostazioni
+/// risponde con una promessa già risolta.
 const settle = () => new Promise((done) => setTimeout(done, 40));
-/// Finché KaTeX non ha disegnato ogni formula aperta: la prima volta si carica,
-/// e su una macchina carica ci mette più di un fotogramma.
-async function drawn(): Promise<void> {
-  await settle();
-  for (let i = 0; i < 100 && document.querySelector(".cm-fub-mx-surface[data-state=loading]"); i++) await settle();
-}
 
 interface Open {
   readonly preferences?: MathPreferences;
@@ -88,7 +83,7 @@ async function open(tex: string, options: Open = {}) {
   attachPalette(editor, life);
   document.body.append(editor.element);
   editor.focus();
-  await drawn();
+  await drawn(".cm-fub-mx-surface", editor.element);
   const root = editor.element;
   const $ = <T extends HTMLElement = HTMLElement>(selector: string) => root.querySelector<T>(selector);
   const field = () => root.querySelector<HTMLTextAreaElement>("textarea")!;
@@ -385,8 +380,7 @@ function mount(doc: string, anchor: number, source: boolean, help: MathHelp, com
       ],
     }),
   });
-  ensureSyntaxTree(view.state, view.state.doc.length, 1000);
-  view.dispatch({});
+  parsedView(view);
   views.push(view);
   return view;
 }
@@ -397,7 +391,7 @@ describe("nella nota", () => {
     const preferences = new Compartment();
     const view = mount(doc, 0, true, "piene", preferences);
     view.dispatch({ selection: { anchor: doc.indexOf("x") } });
-    await drawn();
+    await drawn(".cm-fub-mx-block .cm-fub-mx .cm-fub-mx-surface");
     const editor = document.querySelector<HTMLElement>(".cm-fub-mx-block .cm-fub-mx")!;
     expect(editor.dataset.mode).toBe("source");
     expect(editor.querySelector("textarea")!.value).toBe("x^{2}");
@@ -413,7 +407,7 @@ describe("nella nota", () => {
     const doc = "a\n\n$$\nx\n$$\n";
     const view = mount(doc, 0, true, "piene");
     view.dispatch({ selection: { anchor: doc.indexOf("x") } });
-    await drawn();
+    await drawn(".cm-fub-mx-block .cm-fub-mx .cm-fub-mx-surface");
     const editor = document.querySelector<HTMLElement>(".cm-fub-mx-block .cm-fub-mx")!;
     editor.querySelector<HTMLElement>(".cm-fub-mx-more")!.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1 }));
     editor.querySelector<HTMLElement>("[data-help=discrete]")!.dispatchEvent(new MouseEvent("click", { bubbles: true }));

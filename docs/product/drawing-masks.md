@@ -8,12 +8,55 @@
 Un **ritaglio** mostra soltanto una parte di un'immagine, che resta intera
 nel file. Le **maschere** fanno lo stesso con ogni oggetto: una forma
 ritaglia gli oggetti di un gruppo, o ne fa la trasparenza col suo chiaro e il
-suo scuro. Fub li mostra e li rispetta quando un disegno li porta, scritti da
-un altro programma o da una versione precedente, ma non li crea, non li
-cambia e non li toglie: i comandi «Maschera» se ne sono andati col livello
+suo scuro. Fuori dal livello Completo, Fub li mostra e li rispetta quando
+un disegno li porta, scritti da un altro programma o da una versione
+precedente, ma non li crea, non li cambia e non li toglie: i comandi
+«Maschera» se ne sono andati col livello
 Esperto, e «Ritaglia…» e «Togli il ritaglio» col livello Standard (decisione
-0231). La parte che si vede, per la selezione e i riquadri, è in
+0231). Il livello Completo crea e rilascia le maschere di ritaglio (sotto).
+La parte che si vede, per la selezione e i riquadri, è in
 `apps/client/src/editors/spatial/tools/clips.ts`.
+
+## Maschere di ritaglio nel Completo
+
+Con il livello Completo, **≡ › Oggetto › Maschera di ritaglio** torna a
+crearle, in un passo di Annulla ciascuna:
+
+- **Crea**: il tracciato più in alto fra gli oggetti scelti ritaglia gli
+  altri, che vanno in un gruppo al suo posto. Servono almeno due oggetti, e
+  quello in cima deve essere un tracciato o una forma: con un testo in cima
+  la voce è spenta e dice perché;
+- **Rilascia**: il gruppo perde il ritaglio, e il tracciato che ritagliava
+  torna primo nel gruppo, senza colore, perché si possa riprendere;
+- **Modifica contenuto**: sceglie gli oggetti dentro la maschera;
+- **Modifica maschera**: sceglie il tracciato che ritaglia, dal gruppo o da
+  un oggetto dentro. Si sposta, si ruota e si scala
+  come ogni oggetto, e il ritaglio segue. Non si elimina da
+  solo, perché il gruppo resterebbe con un ritaglio vuoto: lo dice e indica
+  Rilascia. Sul foglio la forma ha la sua cornice e le sue maniglie, e le
+  frecce, il trascinamento e le maniglie la cambiano dentro il `clipPath`;
+  un clic sulla zona ritagliata sceglie ancora il gruppo. La voce è spenta,
+  e dice perché, se il ritaglio viene da un
+  altro programma o è condiviso: la sua forma allora non ha un id;
+- **≡ › Selezione › Oggetto › Maschere di ritaglio** sceglie tutte le
+  maschere del disegno.
+
+Nel file la maschera è SVG semplice: un `<g clip-path="url(#…)">` con gli
+oggetti e un `clipPath` fra le risorse col tracciato che ritaglia, quindi un
+altro programma la legge com'è e Fub la riapre uguale. Si aprono e si
+rilasciano anche le maschere scritte da Inkscape, col loro `clipPath` in
+`<defs>`, che resta nel file. Un ritaglio scritto sull'oggetto stesso e non
+su un gruppo, come lo scrive Illustrator, si vede e si tiene, ma Rilascia
+non lo toglie ancora e lo dice. Il ritaglio di un livello non c'è ancora:
+è spento e dice perché.
+
+**Maschera di opacità.** Il comando Crea maschera di opacità, nel pannello
+Trasparenza, prende il più alto dei due o più oggetti scelti come maschera
+degli altri: la luminanza della maschera fa da opacità, e il file la scrive
+con una `mask`. Con un oggetto solo, con una maschera che non ritaglia o
+invertita, e con un oggetto bloccato il comando non parte e dice perché.
+Rilascia, Disattiva, Scollega, le opzioni, la modifica della maschera e le
+impostazioni delle nuove maschere non ci sono ancora (K6 T15 giro maschere).
 
 ## Ciò che si vede è ciò che si tocca
 

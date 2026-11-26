@@ -159,6 +159,40 @@ fn that_that_and_changed_ad_app_closed_not_results_a_place() {
     assert_eq!(search(&idx, "cane").len(), 0);
 }
 
+/// Il crash fra consegna e commit (#522): ciò che è stato consegnato e non
+/// committato non è durevole, e alla riapertura la nota si rilegge. Con la
+/// coda le consegne aspettano il commit più a lungo di prima, e questo test
+/// tiene fermo il verso giusto: perderle costa una rilettura, non un
+/// documento vecchio dato per nuovo.
+#[test]
+fn a_delivery_without_flush_is_not_up_to_date_on_reopen() {
+    let (_g, path) = tmp();
+    let mut host = MemoryHost::new();
+    {
+        let mut idx = open(&path, &mut host);
+        round(&mut idx, &[("a.md", "il gatto")]);
+        idx.flush(&mut host).unwrap();
+    }
+    {
+        let mut idx = open(&path, &mut host);
+        let already = round(&mut idx, &[("a.md", "il topo")]);
+        assert!(already.is_empty(), "the changed note is delivered");
+        // Nessun flush: l'indice muore qui, come l'app.
+    }
+
+    let idx = open(&path, &mut host);
+    assert!(
+        idx.up_to_date(&[entry("a.md", Some("il topo"))]).is_empty(),
+        "the delivery never reached a commit: the note must be read again"
+    );
+    assert_eq!(search(&idx, "topo").len(), 0);
+    assert_eq!(
+        search(&idx, "gatto").len(),
+        1,
+        "the committed text is still there"
+    );
+}
+
 #[test]
 fn without_fingerprint_declared_not_is_responds() {
     // Il kernel non calcola l'impronta di ciò che non deve leggere: chi non
@@ -221,6 +255,8 @@ fn a_write_a_session_open_not_inherits_the_revision_of_first() {
     {
         let mut idx = open(&path, &mut host);
         round(&mut idx, &[("a.md", "il gatto")]);
+        // L'apertura finisce come la finisce il kernel.
+        let _ = idx.reconcile(&[DocId::new("a.md")]);
         // Salvataggio a sessione aperta: nessuna domanda prima.
         let _ = idx.on_documents_indexed(std::slice::from_ref(&doc("a.md", "il cane")));
         idx.close(&mut host).unwrap();
@@ -232,6 +268,57 @@ fn a_write_a_session_open_not_inherits_the_revision_of_first() {
 
     let idx = open(&path, &mut host);
     assert!(idx.up_to_date(&[entry("a.md", Some("il cane"))]).is_empty());
+}
+
+#[test]
+fn a_document_said_current_but_delivered_anyway_keeps_its_revision() {
+    // Accanto c'è un indice prudente che non ha niente: il kernel consegna
+    // anche `a.md`, che la ricerca aveva detto di avere. Il manifest scritto
+    // dopo (`b.md` è cambiato, l'opstamp sale) deve tenere la sua revisione,
+    // o alla prossima apertura `a.md` si rilegge.
+    let (_g, path) = tmp();
+    let mut host = MemoryHost::new();
+    {
+        let mut idx = open(&path, &mut host);
+        round(&mut idx, &[("a.md", "il gatto"), ("b.md", "il cane")]);
+        idx.flush(&mut host).unwrap();
+    }
+    {
+        let mut idx = open(&path, &mut host);
+        let entries = [
+            entry("a.md", Some("il gatto")),
+            entry("b.md", Some("il criceto")),
+        ];
+        assert_eq!(idx.up_to_date(&entries), [DocId::new("a.md")]);
+        let _ = idx.on_documents_indexed(&[doc("a.md", "il gatto"), doc("b.md", "il criceto")]);
+        let _ = idx.reconcile(&[DocId::new("a.md"), DocId::new("b.md")]);
+        idx.flush(&mut host).unwrap();
+    }
+    let sources = manifest_of(&host).sources;
+    assert_eq!(sources.get("a.md"), Some(&Revision::of("il gatto").0));
+    assert_eq!(sources.get("b.md"), Some(&Revision::of("il criceto").0));
+}
+
+#[test]
+fn a_question_without_fingerprint_withdraws_the_declaration() {
+    // Un'apertura interrotta: il kernel ha chiesto, non consegna, e ritira
+    // chiedendo di nuovo senza impronta. Il salvataggio a sessione aperta
+    // che arriva dopo non si prende la revisione di prima.
+    let (_g, path) = tmp();
+    let mut host = MemoryHost::new();
+    {
+        let mut idx = open(&path, &mut host);
+        round(&mut idx, &[("a.md", "il gatto")]);
+        idx.flush(&mut host).unwrap();
+    }
+    {
+        let mut idx = open(&path, &mut host);
+        assert_eq!(idx.up_to_date(&[entry("a.md", Some("il gatto"))]).len(), 1);
+        assert!(idx.up_to_date(&[entry("a.md", None)]).is_empty());
+        let _ = idx.on_documents_indexed(std::slice::from_ref(&doc("a.md", "il cane")));
+        idx.close(&mut host).unwrap();
+    }
+    assert!(!manifest_of(&host).sources.contains_key("a.md"));
 }
 
 #[test]

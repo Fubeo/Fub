@@ -14,8 +14,10 @@
 
 import type { SurfacePanel, SurfacePanels } from "../../../../core/registry";
 
-/// Le schede dei pannelli, con gli id che l'ispettore ricorda.
-export type DrawPanelId = "design" | "layers" | "history" | "accessibility";
+/// Le schede dei pannelli, con gli id che l'ispettore ricorda. `resources` è
+/// la scheda Risorse del Disegno completo (T10), che c'è solo col Completo
+/// aperto.
+export type DrawPanelId = "design" | "layers" | "resources" | "history" | "accessibility";
 
 /// Un pannello dell'editor, come lo sposta una cromatura.
 export interface DrawPanelPiece {
@@ -66,6 +68,8 @@ export interface DrawChrome {
   reveal?(id: DrawPanelId): void;
   /// Gli strumenti offerti possono essere cambiati: le schede si rileggono.
   refresh?(): void;
+  /// Con i pannelli fuori dall'editor: vero se una loro scheda si vede adesso.
+  panelsShown?(): boolean;
 }
 
 /// La barra sopra, poi la colonna, il foglio e, se c'è, il dock in fila.
@@ -194,6 +198,7 @@ export function inspectorChrome(): InspectorChrome {
     reveal(id) {
       for (const listener of [...reveals]) listener(`draw.${id}`);
     },
+    panelsShown: () => [...mounted.values()].some((at) => at.sheet.isConnected && at.sheet.getClientRects().length > 0),
     refresh() {
       if (!parts || disposed) return;
       for (const part of parts.panels) arrange(part);

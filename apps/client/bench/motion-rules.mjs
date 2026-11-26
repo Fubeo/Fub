@@ -406,6 +406,26 @@ const cursorLine = (text, yes) => (page) =>
     const line = (node instanceof Element ? node : node?.parentElement)?.closest(".pane.focus .pane-editor .cm-line");
     return !!line && line.textContent.includes(want) === inside;
   }, [text, yes]);
+/// Il cursore disegnato sta dove andrà la prima lettera: il suo riquadro e
+/// quello che CodeMirror dà alla posizione del cursore coincidono (entro un
+/// pixel). Una riga ancora in corsa quando il livello dei cursori si misura
+/// lascia il cursore dove la riga stava in quel momento, finché qualcosa non
+/// lo ridisegna.
+const caretOnHead = (page) =>
+  page.evaluate(async () => {
+    const { findTextEditorOrThrow } = await import("/src/editors/text/test-support.ts");
+    const host = document.querySelector(".pane.focus .pane-editor .cm-editor")?.parentElement;
+    if (!host) return false;
+    const view = findTextEditorOrThrow(host);
+    const drawn = view.dom.querySelector(".cm-cursor-primary")?.getBoundingClientRect();
+    const head = view.coordsAtPos(view.state.selection.main.head);
+    return !!drawn && !!head && Math.abs(drawn.left - head.left) <= 1.5 && Math.abs(drawn.top - head.top) <= 1;
+  });
+/// Tutte le condizioni insieme.
+const every = (...checks) => async (page) => {
+  for (const check of checks) if (!(await check(page))) return false;
+  return true;
+};
 /// Il blocco «Il treno» preso per la maniglia e portato 90 px più giù, col
 /// tasto ancora premuto.
 const liftBlock = async (page) => {
@@ -449,11 +469,11 @@ async function gripOf(page, selector) {
 /// mezzo metro di schermo al secondo, è una mano che trascina svelta.
 const STEP_PX = 8;
 
-/// Il puntatore da dov'è a `to`, un fotogramma per passo di al più `STEP_PX`.
-async function sweep(page, to) {
+/// Il puntatore da dov'è a `to`, un fotogramma per passo di al più `stepPx` (di norma `STEP_PX`).
+async function sweep(page, to, stepPx = STEP_PX) {
   const state = pointers.get(page);
   const from = state.at;
-  const steps = Math.max(1, Math.ceil(Math.hypot(to.x - from.x, to.y - from.y) / STEP_PX));
+  const steps = Math.max(1, Math.ceil(Math.hypot(to.x - from.x, to.y - from.y) / stepPx));
   for (let step = 1; step <= steps; step += 1) {
     const at = { x: from.x + ((to.x - from.x) * step) / steps, y: from.y + ((to.y - from.y) * step) / steps };
     await page.mouse.move(at.x, at.y);
@@ -838,9 +858,21 @@ export const CHOREOGRAPHIES = [
     sources: ["src/shells/scrittoio/views-motion.ts"],
     scene: "inspector",
     // L'indice è la prima scheda dell'ispettore; un titolo è già scelto, così
-    // il gesto sposta la sagoma invece di farla nascere.
+    // il gesto sposta la sagoma invece di farla nascere. L'indice è quello
+    // della nota davanti: Sintassi di Fub, che ha i titoli per il gesto.
     setup: async (page) => {
+      await press(page, '#file-list li[data-path="Guida"] > .tree-row');
+      // La cartella si apre scorrendo: finché corre, le righe sotto passano
+      // sopra la nota e il clic prende «Benvenuto».
+      await page.waitForFunction(() => {
+        const list = document.querySelector("#file-list");
+        return !!list?.querySelector('li[data-path="Guida/Sintassi di Fub.md"]') &&
+          list.getAnimations({ subtree: true }).every((animation) => animation.playState !== "running");
+      });
+      await press(page, '#file-list li[data-path="Guida/Sintassi di Fub.md"] > .tree-row');
+      await page.waitForFunction(() => document.querySelector('.tab[aria-selected="true"] .tab-name')?.textContent?.includes("Sintassi di Fub") ?? false);
       await press(page, "#right-pane .inspector-tab >> nth=0");
+      await page.waitForFunction(() => document.querySelectorAll("#right-pane .ui-tree-label").length > 4);
       await page.waitForSelector("#right-pane .ui-tree-label");
       await press(page, OUTLINE(1));
       await page.waitForFunction(() => document.querySelector('#right-pane .ui-tree-item[aria-selected="true"]') !== null);
@@ -1143,7 +1175,8 @@ export const CHOREOGRAPHIES = [
       await page.keyboard.press("End");
     },
     act: (page) => page.keyboard.press("Enter"),
-    arrived: cursorLine("Il treno", false),
+    // Arrivata la riga, il cursore è sulla riga nuova e dove andrà il testo.
+    arrived: every(cursorLine("Il treno", false), caretOnHead),
     undo: (page) => page.keyboard.press("Backspace"),
     returned: cursorLine("Il treno", true),
     exit: true,
@@ -1208,8 +1241,12 @@ export const CHOREOGRAPHIES = [
     act: async (page) => {
       const grip = await pick(page, ".cm-fub-code-line:has-text('const giorni')");
       await sweep(page, { x: grip.x, y: grip.y + 200 });
-      // Meno di un blocco indietro: il posto resta dopo la tabella.
-      await sweep(page, { x: grip.x, y: grip.y + 170 });
+      // Meno di un blocco indietro, in un fotogramma solo: il posto resta dopo
+      // la tabella e non riparte. Lo scivolare cominciato all'andata è ancora
+      // in corsa a metà, ed è quello che l'inversione interrompe: il posto
+      // scivola una volta per cambio, e quattro fotogrammi di ritorno lo
+      // lasciavano già fermo.
+      await sweep(page, { x: grip.x, y: grip.y + 170 }, 30);
     },
     arrived: held(false),
     undo: backTo(),

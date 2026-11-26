@@ -2,15 +2,9 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { markdownUnder, selfTestDocFiles } from "./doc-files.mjs";
 
 const root = process.cwd();
-
-function walk(dir) {
-  return fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
-    const full = path.join(dir, entry.name);
-    return entry.isDirectory() ? walk(full) : [full];
-  });
-}
 
 function findings(relative, text) {
   const issues = [];
@@ -41,11 +35,19 @@ if (process.argv.includes("--self-test")) {
     console.error("Autoprova di check-prose fallita.");
     process.exit(1);
   }
+  // Anche l'elenco dei documenti che questa e le altre guardie leggono: niente
+  // `.md` delle cartelle nascoste (`docs/.fub/` di un vault locale, P-35).
+  try {
+    selfTestDocFiles();
+  } catch (error) {
+    console.error(`Autoprova di check-prose fallita: ${error.message}`);
+    process.exit(1);
+  }
   console.log("Autoprova di check-prose riuscita.");
   process.exit(0);
 }
 
-const files = walk(path.join(root, "docs")).filter((file) => file.endsWith(".md"));
+const files = markdownUnder(path.join(root, "docs"));
 const errors = [];
 for (const file of files) {
   const relative = path.relative(root, file).split(path.sep).join("/");

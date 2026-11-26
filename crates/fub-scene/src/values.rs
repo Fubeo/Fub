@@ -98,6 +98,12 @@ pub(crate) fn non_negative_length(value: &str) -> Option<f64> {
     length(value).filter(|&n| n >= 0.0)
 }
 
+/// `stroke-miterlimit`: un numero non minore di 1 (SVG rifiuta i valori
+/// più piccoli).
+pub(crate) fn miterlimit(value: &str) -> Option<f64> {
+    number(value).filter(|&n| n >= 1.0)
+}
+
 /// Un'opacità: un numero da 0 a 1, senza percentuale.
 pub(crate) fn opacity(value: &str) -> Option<f64> {
     number(value).filter(|n| (0.0..=1.0).contains(n))
@@ -188,6 +194,7 @@ pub(crate) fn keyword(name: &str, value: &str) -> bool {
         ],
         "font-style" => &["normal", "italic", "oblique"],
         "text-anchor" => &["start", "middle", "end"],
+        "writing-mode" => &["horizontal-tb", "vertical-rl"],
         // Le risorse del disegno (formato della scena, risorse).
         "spreadMethod" => &["pad", "reflect", "repeat"],
         "gradientUnits"
@@ -200,7 +207,7 @@ pub(crate) fn keyword(name: &str, value: &str) -> bool {
         "markerUnits" => &["strokeWidth", "userSpaceOnUse"],
         "primitiveUnits" => &["userSpaceOnUse"],
         "color-interpolation-filters" => &["auto", "sRGB", "linearRGB"],
-        "clip-rule" => &["nonzero", "evenodd"],
+        "clip-rule" | "fill-rule" => &["nonzero", "evenodd"],
         _ => &[],
     };
     allowed.contains(&value)

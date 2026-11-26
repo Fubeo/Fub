@@ -16,7 +16,9 @@
 //!
 //! Il motore del disegno non ha oggi cache raggiungibili da fuori che valga
 //! contare: [`MotoreDisegno::byte`] è zero e svuotare rende la memoria al
-//! sistema.
+//! sistema. Con la feature `completo`, [`Disegni`] tiene anche le famiglie
+//! ([`crate::famiglie`]): nascono al loro primo comando, contano nei byte del
+//! motore e si liberano con lui.
 
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, OnceLock};
@@ -26,6 +28,7 @@ use fub_abi::{
     DrawingRefusal, DrawingSync, DrawingSynced, PluginError, MAX_DRAWING_TEXT_BYTES,
 };
 use fub_motori::{rilascia_al_sistema, Caratteri, ErroreMotore, Motori, Pigro, Servizi, Voce};
+use serde_json::Value;
 use vectorcraft_doc::{Document, NodeId};
 
 use crate::apertura::{importa, Copia, ErroreApertura};
@@ -45,10 +48,13 @@ pub struct MotoreDisegno {
 }
 
 impl MotoreDisegno {
-    /// Prende i caratteri del processo e prepara il catalogo dei comandi del
+    /// Confina il motore fuori dal disco ([`crate::disco::confina`]), prende
+    /// i caratteri del processo e prepara il catalogo dei comandi del
     /// motore. Senza caratteri il motore non si costruisce: l'host li dà
-    /// con `Servizi::fornisci_caratteri` prima della prima apertura.
+    /// con `Servizi::fornisci_caratteri` prima della prima apertura. Se il
+    /// processo ha già altre radici per i file, il motore non nasce.
     fn crea(servizi: &Arc<Servizi>) -> Result<MotoreDisegno, ErroreMotore> {
+        crate::disco::confina().map_err(|e| ErroreMotore::creazione(e.to_string()))?;
         let caratteri = servizi.caratteri().ok_or_else(|| {
             ErroreMotore::creazione("il motore del disegno non ha i caratteri: l'host li dà con Servizi::fornisci_caratteri")
         })?;
@@ -96,6 +102,13 @@ pub struct Disegni {
     pigro: Arc<Pigro<MotoreDisegno>>,
     servizi: Arc<Servizi>,
     aperte: AtomicUsize,
+    /// Le famiglie del Completo, sugli stessi servizi.
+    #[cfg(feature = "completo")]
+    famiglie: Arc<crate::famiglie::Famiglie>,
+    /// Vero se si eseguono anche le righe da fare della mappa (solo le
+    /// prove: [`Disegni::filtra`]).
+    #[cfg(feature = "completo")]
+    tutte: std::sync::atomic::AtomicBool,
 }
 
 impl Disegni {
@@ -119,6 +132,10 @@ impl Disegni {
     pub fn nuovi(servizi: Arc<Servizi>) -> Arc<Disegni> {
         Arc::new(Disegni {
             pigro: Arc::new(Pigro::nuovo(MotoreDisegno::crea)),
+            #[cfg(feature = "completo")]
+            famiglie: crate::famiglie::Famiglie::nuove(Arc::clone(&servizi)),
+            #[cfg(feature = "completo")]
+            tutte: std::sync::atomic::AtomicBool::new(false),
             servizi,
             aperte: AtomicUsize::new(0),
         })
@@ -150,6 +167,42 @@ impl Disegni {
         self.aperte.load(Ordering::SeqCst)
     }
 
+    /// Le famiglie del Completo.
+    #[cfg(feature = "completo")]
+    pub fn famiglie(&self) -> &Arc<crate::famiglie::Famiglie> {
+        &self.famiglie
+    }
+
+    /// Quali righe della mappa si eseguono. [`crate::famiglie::Filtro::Tutte`]
+    /// è una configurazione delle prove: l'IPC non la accende.
+    #[cfg(feature = "completo")]
+    #[doc(hidden)]
+    pub fn filtra(&self, filtro: crate::famiglie::Filtro) {
+        let tutte = filtro == crate::famiglie::Filtro::Tutte;
+        self.tutte.store(tutte, Ordering::SeqCst);
+    }
+
+    #[cfg(feature = "completo")]
+    fn filtro(&self) -> crate::famiglie::Filtro {
+        if self.tutte.load(Ordering::SeqCst) {
+            crate::famiglie::Filtro::Tutte
+        } else {
+            crate::famiglie::Filtro::Fatte
+        }
+    }
+
+    /// Libera le famiglie nate; zero senza la feature `completo`.
+    fn libera_le_famiglie(&self) -> u64 {
+        #[cfg(feature = "completo")]
+        {
+            self.famiglie.libera_tutte()
+        }
+        #[cfg(not(feature = "completo"))]
+        {
+            0
+        }
+    }
+
     fn prendi(self: &Arc<Self>, motore: Arc<MotoreDisegno>) -> Presa {
         self.aperte.fetch_add(1, Ordering::SeqCst);
         Presa {
@@ -162,6 +215,7 @@ impl Disegni {
     /// al sistema. Il motore resta, finché il budget non lo libera.
     fn chiusa_l_ultima(&self, motore: &MotoreDisegno) {
         motore.svuota();
+        self.libera_le_famiglie();
         self.servizi.memoria().rispetta();
         rilascia_al_sistema();
     }
@@ -178,22 +232,33 @@ impl Voce for Disegni {
     }
 
     fn svuota(&self) -> u64 {
-        let reso = self.se_acceso().map_or(0, |motore| motore.svuota());
+        let reso = self.se_acceso().map_or(0, |motore| motore.svuota()) + self.libera_le_famiglie();
         rilascia_al_sistema();
         reso
     }
 
-    /// Spegne il motore. Le istanze aperte tengono il loro: se ne va con
-    /// l'ultima.
+    /// Spegne il motore, e con lui le famiglie. Le istanze aperte tengono il
+    /// loro: se ne va con l'ultima.
     fn libera(&self) -> bool {
         if let Some(motore) = self.se_acceso() {
             motore.svuota();
         }
+        self.libera_le_famiglie();
         self.pigro.libera()
     }
 
     fn byte(&self) -> u64 {
-        self.se_acceso().map_or(0, |motore| motore.byte())
+        let famiglie = {
+            #[cfg(feature = "completo")]
+            {
+                self.famiglie.byte()
+            }
+            #[cfg(not(feature = "completo"))]
+            {
+                0
+            }
+        };
+        self.se_acceso().map_or(0, |motore| motore.byte()) + famiglie
     }
 }
 
@@ -222,6 +287,9 @@ pub struct Disegno {
     copia: Copia,
     banco: Banco,
     servizi: Arc<Servizi>,
+    /// Le preferenze del motore che i comandi hanno cambiato e che l'host
+    /// non ha ancora preso ([`Disegno::prendi_le_preferenze_cambiate`]).
+    preferenze: crate::preferenze::CambioPreferenze,
     // Ultima: cade dopo la sessione, e con l'ultima istanza svuota le cache.
     _presa: Presa,
 }
@@ -245,6 +313,18 @@ impl Disegno {
         disegni: &Arc<Disegni>,
         testo: &str,
     ) -> Result<(Disegno, DrawingOpen), PluginError> {
+        let (disegno, aperto, _) = Self::apri_con_preferenze(disegni, testo, &Default::default())?;
+        Ok((disegno, aperto))
+    }
+
+    /// [`Disegno::apri_con`] con le preferenze del motore salvate in
+    /// `draw.motore` ([`crate::preferenze::componi`]): una chiave che non
+    /// vale si salta e torna fra gli avvisi, il disegno si apre lo stesso.
+    pub fn apri_con_preferenze(
+        disegni: &Arc<Disegni>,
+        testo: &str,
+        preferenze: &serde_json::Map<String, Value>,
+    ) -> Result<(Disegno, DrawingOpen, Vec<String>), PluginError> {
         if testo.len() > MAX_DRAWING_TEXT_BYTES {
             return Err(PluginError::BadArgs(
                 format!(
@@ -263,7 +343,8 @@ impl Disegno {
             .lavori()
             .installa(|| importa(testo, 0))
             .map_err(errore_di_apertura)?;
-        let banco = Banco::nuovo(&mut copia).map_err(|panico| {
+        let (prefs, avvisi) = crate::preferenze::componi(preferenze);
+        let banco = Banco::nuovo(&mut copia, prefs).map_err(|panico| {
             PluginError::Internal(format!("il motore si è fermato: {panico}").into())
         })?;
         let istanza = format!("disegno-{}", ISTANZE.fetch_add(1, Ordering::Relaxed) + 1);
@@ -282,9 +363,11 @@ impl Disegno {
                 copia,
                 banco,
                 servizi,
+                preferenze: Default::default(),
                 _presa: presa,
             },
             aperto,
+            avvisi,
         ))
     }
 
@@ -363,23 +446,232 @@ impl Disegno {
     }
 
     /// I comandi del disegno sulla selezione, accesi o spenti sulla copia di
-    /// adesso ([`crate::comandi`]).
+    /// adesso ([`crate::comandi`]): i tre di K5 e, con la feature
+    /// `completo`, le righe «fatto» della mappa ([`crate::famiglie`]).
     pub fn comandi(&self, selezione: &[String]) -> Vec<DrawingCommandInfo> {
-        crate::comandi::elenco(&self.copia, selezione)
+        #[allow(unused_mut)]
+        let mut comandi = crate::comandi::elenco(&self.copia, selezione);
+        #[cfg(feature = "completo")]
+        comandi.extend(crate::famiglie::elenco(&self.copia, selezione));
+        // Riseleziona ripete l'ultimo comando di selezione del banco: senza, è spento col
+        // suo perché (il rifiuto `empty` non dice niente).
+        if self.banco.ultimo_di_selezione.is_none() {
+            for info in comandi
+                .iter_mut()
+                .filter(|i| i.id == "disegno.select.reselect")
+            {
+                info.enabled = false;
+                info.disabled_reason = Some(fub_abi::DrawingDisabledReason::Other {
+                    text: "Prima scegli un comando di selezione, per esempio Uguale o Oggetto."
+                        .into(),
+                });
+            }
+        }
+        comandi
     }
 
     /// Un comando sulla selezione ([`crate::comandi`]): un valore che non
     /// vale è `BadArgs`, un id che il motore non serve `unsupported`.
+    ///
+    /// Le preferenze del motore che il comando cambia (`prefs.set`, le
+    /// opzioni di uno strumento, i preset di una famiglia) restano per i
+    /// gesti che vengono e si mettono da parte per l'host
+    /// ([`Disegno::prendi_le_preferenze_cambiate`]).
     pub fn comando(
         &mut self,
         richiesta: DrawingCommandRequest,
     ) -> Result<DrawingOutcome, PluginError> {
+        if e_preferenza(&richiesta.id) && !richiesta.preview {
+            self.preferenze_del_disegno();
+        }
+        let prima = crate::preferenze::json_di(&self.banco.sessione.prefs);
+        let esito = self.comando_e_basta(richiesta);
+        let dopo = crate::preferenze::json_di(&self.banco.sessione.prefs);
+        if prima != dopo {
+            let cambi = crate::preferenze::differenza(&prima, &dopo);
+            self.banco.prefs = crate::preferenze::con(&self.banco.prefs, &cambi);
+            self.preferenze.aggiungi(&prima, &dopo);
+        }
+        esito
+    }
+
+    /// Le preferenze del motore che i comandi hanno cambiato dall'ultima
+    /// volta, chiave per chiave: l'host le salva in `draw.motore`.
+    pub fn prendi_le_preferenze_cambiate(&mut self) -> crate::preferenze::CambioPreferenze {
+        std::mem::take(&mut self.preferenze)
+    }
+
+    /// Rimette queste preferenze del motore (i valori di prima di un cambio
+    /// che l'host non è riuscito a salvare): l'istanza torna a ciò che
+    /// `draw.motore` dice ancora.
+    pub fn rimetti_le_preferenze(&mut self, valori: &serde_json::Map<String, Value>) {
+        if valori.is_empty() {
+            return;
+        }
+        self.banco.prefs = crate::preferenze::con(&self.banco.prefs, valori);
+        let prefs = crate::preferenze::con(&self.banco.sessione.prefs, valori);
+        let sessione = &mut self.banco.sessione;
+        if vectorcraft_engine::guard::catch_panic(|| sessione.apply_prefs(prefs)).is_err() {
+            self.banco.ripristina(&self.copia);
+        }
+    }
+
+    /// Le preferenze del motore della sessione, senza le cartelle.
+    pub fn preferenze(&self) -> serde_json::Map<String, Value> {
+        crate::preferenze::json_di(&self.banco.sessione.prefs)
+    }
+
+    /// `prefs.get`, `prefs.set`, `prefs.reset` e `prefs.list` sulle
+    /// preferenze del disegno (non su quelle che uno strumento di K5 ha
+    /// cambiato per il suo gesto). Non toccano il documento: non aspettano
+    /// la copia, e la lettura torna senza le cartelle.
+    fn preferenza(
+        &mut self,
+        id: &str,
+        richiesta: &DrawingCommandRequest,
+    ) -> Result<DrawingOutcome, PluginError> {
+        if richiesta.preview {
+            return Ok(rifiutato(richiesta.revision, DrawingRefusal::NoPreview));
+        }
+        // [`Disegno::comando`] ha già rimesso le preferenze del disegno.
+        let sessione = &mut self.banco.sessione;
+        let valore = richiesta.value.clone();
+        let fatto = vectorcraft_engine::guard::catch_panic(|| sessione.execute(id, &valore));
+        // `unitsGeneral` cambia anche le unità del documento: il documento
+        // resta quello della copia (le unità di un disegno sono nel file).
+        if id == "prefs.set" {
+            self.banco.ripristina(&self.copia);
+        }
+        let lettura = match fatto {
+            Ok(Ok(lettura)) => lettura,
+            Ok(Err(vectorcraft_engine::EngineError::BadParams { msg, .. })) => {
+                return Err(PluginError::BadArgs(msg.into()))
+            }
+            Ok(Err(e)) => return Err(PluginError::BadArgs(e.to_string().into())),
+            Err(panico) => {
+                return Err(PluginError::Internal(
+                    format!("il motore si è fermato: {panico}").into(),
+                ))
+            }
+        };
+        let mut esito = esito_vuoto(richiesta.revision);
+        esito.selection = richiesta.selection.clone();
+        esito.reading = Some(crate::preferenze::lettura_senza_cartelle(lettura));
+        esito.validate()?;
+        Ok(esito)
+    }
+
+    /// La sessione torna alle preferenze del disegno, senza ciò che uno
+    /// strumento di K5 ha cambiato per il suo gesto, come prima di un gesto
+    /// con uno strumento del motore: le opzioni tenute degli strumenti
+    /// restano. Un gesto lasciato a metà si annulla.
+    fn preferenze_del_disegno(&mut self) {
+        if self.banco.in_corso.is_some() {
+            self.banco.ripristina(&self.copia);
+        }
+        let sessione = &mut self.banco.sessione;
+        let tenute = std::mem::take(&mut sessione.prefs.tool_settings);
+        let raggio = sessione.prefs.corner_radius;
+        sessione.prefs = self.banco.prefs.clone();
+        sessione.prefs.tool_settings = tenute;
+        sessione.prefs.corner_radius = raggio;
+    }
+
+    fn comando_e_basta(
+        &mut self,
+        richiesta: DrawingCommandRequest,
+    ) -> Result<DrawingOutcome, PluginError> {
         richiesta.validate()?;
+        match richiesta.id.as_str() {
+            // L'opzione di uno strumento non cambia il documento: non
+            // aspetta la copia e non ha anteprima.
+            fub_abi::DRAWING_COMMAND_TOOL_OPTION if richiesta.preview => {
+                return Ok(rifiutato(richiesta.revision, DrawingRefusal::NoPreview));
+            }
+            fub_abi::DRAWING_COMMAND_TOOL_OPTION => {
+                // `validate()` ha già controllato la forma del valore.
+                let campo = |k: &str| richiesta.value.get(k);
+                let strumento = campo("strumento")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default();
+                let chiave = campo("chiave").and_then(Value::as_str).unwrap_or_default();
+                let valore = campo("valore").cloned().unwrap_or(Value::Null);
+                let esito = crate::gesti::strumento::opzione(
+                    &mut self.banco,
+                    &self.copia,
+                    richiesta.revision,
+                    strumento,
+                    chiave,
+                    &valore,
+                );
+                esito.validate()?;
+                return Ok(esito);
+            }
+            // Lo stato di uno strumento non cambia niente: niente copia da
+            // aspettare, niente anteprima.
+            fub_abi::DRAWING_COMMAND_TOOL_STATE if richiesta.preview => {
+                return Ok(rifiutato(richiesta.revision, DrawingRefusal::NoPreview));
+            }
+            fub_abi::DRAWING_COMMAND_TOOL_STATE => {
+                let strumento = richiesta
+                    .value
+                    .get("strumento")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default();
+                let esito = crate::gesti::strumento::stato_dello_strumento(
+                    &mut self.banco,
+                    &self.copia,
+                    richiesta.revision,
+                    strumento,
+                );
+                esito.validate()?;
+                return Ok(esito);
+            }
+            // Preparare una famiglia non ha anteprima.
+            fub_abi::DRAWING_COMMAND_FAMILY_PREPARE if richiesta.preview => {
+                return Ok(rifiutato(richiesta.revision, DrawingRefusal::NoPreview));
+            }
+            // Non tocca il documento: non aspetta la copia. Senza la feature
+            // `completo` non ci sono famiglie, ed è `unsupported` sotto.
+            #[cfg(feature = "completo")]
+            fub_abi::DRAWING_COMMAND_FAMILY_PREPARE => {
+                let esito = crate::famiglie::prepara(self._presa.disegni.famiglie(), &richiesta)?;
+                esito.validate()?;
+                return Ok(esito);
+            }
+            _ => {}
+        }
+        // Un percorso, un comando escluso o uno che fa Fub (le righe `fub`
+        // di disco.tsv) si rifiutano prima del motore, sull'id del motore.
+        let id_del_motore = richiesta
+            .id
+            .strip_prefix("disegno.")
+            .unwrap_or(&richiesta.id);
+        crate::disco::controlla(id_del_motore, &richiesta.value)?;
+        if e_preferenza(id_del_motore) {
+            let id = id_del_motore.to_string();
+            return self.preferenza(&id, &richiesta);
+        }
         let azione = crate::comandi::Azione::di(&richiesta)?;
         if let Err(rifiuto) = self.pronta(richiesta.revision, ATTESA_MASSIMA) {
             return Ok(rifiutato(richiesta.revision, rifiuto));
         }
         let Some(azione) = azione else {
+            // Ogni altro `disegno.<id>`: la sua famiglia, nel motore.
+            #[cfg(feature = "completo")]
+            {
+                let disegni = &self._presa.disegni;
+                let esito = crate::famiglie::esegui(
+                    disegni.famiglie(),
+                    disegni.filtro(),
+                    &mut self.banco,
+                    &self.copia,
+                    &richiesta,
+                )?;
+                esito.validate()?;
+                return Ok(esito);
+            }
+            #[cfg(not(feature = "completo"))]
             return Ok(rifiutato(richiesta.revision, DrawingRefusal::Unsupported));
         };
         let esito = crate::comandi::esegui(
@@ -422,6 +714,14 @@ impl Disegno {
         }
         Ok(fuori)
     }
+}
+
+/// Un comando delle preferenze del motore, con o senza `disegno.`.
+fn e_preferenza(id: &str) -> bool {
+    matches!(
+        id.strip_prefix("disegno.").unwrap_or(id),
+        "prefs.get" | "prefs.set" | "prefs.reset" | "prefs.list"
+    )
 }
 
 fn rifiutato(revisione: u64, rifiuto: DrawingRefusal) -> DrawingOutcome {

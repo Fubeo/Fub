@@ -295,7 +295,7 @@ export function createSlashPanel(events: SlashPanelEvents, deps: SlashPanelDeps)
     }
     // Scrivendo, l'ultima scelta cerca fra tutti i comandi; senza risultati
     // è l'unica, ed è accesa.
-    if (results.filtering && !transform) {
+    if (results.filtering && !transform && events.palette) {
       const all = createRow({ label: t("context.search.all", { query }), icon: "search", keys: displayBinding("Mod-/"), className: "slash-row slash-all" });
       option(all.element, items.length);
       list.append(all.element);
@@ -542,7 +542,7 @@ export function createSlashPanel(events: SlashPanelEvents, deps: SlashPanelDeps)
   /// Cerca fra tutti i comandi, con ciò che si è scritto.
   const toPalette = (): void => {
     events.dismiss();
-    events.palette(query);
+    events.palette?.(query);
   };
 
   function choose(below: boolean): void {
@@ -605,7 +605,7 @@ export function createSlashPanel(events: SlashPanelEvents, deps: SlashPanelDeps)
     key(event) {
       if (life.closed) return false;
       if ((event.ctrlKey || event.metaKey) && event.key === "/") {
-        toPalette();
+        if (events.palette) toPalette();
         return true;
       }
       if (step) {

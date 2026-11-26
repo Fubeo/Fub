@@ -9,7 +9,8 @@ import { t } from "../../i18n/strings";
 import { gridJournalText, parseGridJournal, recordGridJournal } from "../../state/grid-journal";
 import { fillTarget, openSpan, typingOpens, type GridHost } from "./engine";
 import { previewSizes, resizeLabelAt } from "./engine-geometry";
-import { bytesHost, cellAt, frames, mounted, settle, shownMarks, shownRanges, SURFACE, typeInActiveCell, workbookHost, workbookMounted, written } from "./test-support";
+import structureCss from "../../theme/scrittoio/structure.css?raw";
+import { bytesHost, cellAt, frames, mounted, scrollWrites, settle, shownMarks, shownRanges, SURFACE, typeInActiveCell, workbookHost, workbookMounted, written } from "./test-support";
 
 vi.mock("../../platform/clipboard", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../platform/clipboard")>()),
@@ -19,6 +20,15 @@ vi.mock("../../platform/clipboard", async (importOriginal) => ({
 afterEach(() => {
   document.body.replaceChildren();
 });
+
+/// Le dichiarazioni di `structure.css` per `selector`, da tutte le regole
+/// che lo nominano da solo nella loro lista di selettori.
+function structureOf(selector: string): string {
+  return [...structureCss.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+    .filter(([, selectors]) => selectors!.replace(/\/\*[\s\S]*?\*\//g, "").split(",").map((part) => part.trim()).includes(selector))
+    .map(([, , body]) => body!)
+    .join("\n");
+}
 
 /// Il provider con il foglio che cambia sotto la griglia: ogni finestra letta
 /// passa da `read`, che la riscrive come farebbe un file cambiato altrove.
@@ -76,6 +86,23 @@ describe("GridEngine", () => {
     await frames();
     expect(drawn().minRow).toBe(Math.floor((1_400 - span.rows) / 28));
     expect(drawn().maxRow).toBe(Math.floor((1_400 + 2 * span.rows) / 28));
+    engine.destroy();
+  });
+
+  it("il campo della cella aperta nasce alla prima cella aperta, non con la cartella", async () => {
+    const { engine, host, viewport } = await mounted();
+    const field = host.querySelector<HTMLElement>(".grid-cell-editor")!;
+    // La cartella si guarda: un solo CodeMirror, quello della barra della formula.
+    expect(engine.cellEditorMounted()).toBe(false);
+    expect(field.querySelector(".cm-editor")).toBeNull();
+    expect(host.querySelectorAll(".cm-editor")).toHaveLength(1);
+    engine.setTheme("dark");
+    engine.setReadOnly(true);
+    engine.setReadOnly(false);
+    expect(engine.cellEditorMounted()).toBe(false);
+    typeInActiveCell(host, viewport, "42");
+    expect(engine.cellEditorMounted()).toBe(true);
+    expect(findTextEditorOrThrow(field).state.doc.toString()).toBe("42");
     engine.destroy();
   });
 
@@ -137,11 +164,11 @@ describe("GridEngine", () => {
   it("la carta sotto le righe ha un filo per ogni colonna disegnata, e la sua copia nelle fasce ferme", async () => {
     const { engine, host, viewport } = await mounted();
     const plane = host.querySelector<HTMLElement>(".grid-plane")!;
-    const paper = plane.querySelector<HTMLElement>(":scope > .grid-paper")!;
+    const paper = viewport.querySelector<HTMLElement>(":scope > .grid-paper")!;
     expect(paper.getAttribute("aria-hidden")).toBe("true");
     expect(plane.querySelector(".grid-head > .grid-paper-top")).not.toBeNull();
     expect(plane.querySelector<HTMLElement>(":scope > .grid-paper-left")!.hidden).toBe(false);
-    expect(plane.style.getPropertyValue("--grid-row")).toBe("28px");
+    expect(viewport.style.getPropertyValue("--grid-row")).toBe("28px");
     const rules = () => [...paper.querySelectorAll<HTMLElement>(".grid-rule-column")].map((rule) => rule.style.left);
     const columns = new Set([...host.querySelectorAll<HTMLElement>(".grid-cell")].map((cell) => cell.dataset.column));
     expect(rules()).toHaveLength(columns.size);
@@ -152,6 +179,116 @@ describe("GridEngine", () => {
     viewport.dispatchEvent(new Event("scroll"));
     expect(rules()).toContain(`${52 + 25 * 120 - 1}px`);
     expect(rules()).not.toContain(`${52 + 120 - 1}px`);
+    engine.destroy();
+  });
+
+  // IMP-6600: WebKitGTK dà un livello del compositore a un elemento
+  // `sticky` che scorre, e uno suo a ogni elemento posato che si dipinge dopo
+  // di lui nello stesso contesto e lo copre. La carta, `sticky`, sta sotto
+  // le celle: nel piano, ogni riga aggiunta o tolta ridipingeva migliaia di
+  // livelli a ogni passo. Sta nel riquadro, prima del piano, e non occupa
+  // posto né prende il puntatore.
+  it("la carta sta nel riquadro prima del piano, non dentro, senza occupare posto né prendere il puntatore", async () => {
+    const { engine, host, viewport } = await mounted();
+    const plane = host.querySelector<HTMLElement>(".grid-plane")!;
+    const paper = host.querySelector<HTMLElement>(".grid-paper")!;
+    expect(paper.parentElement).toBe(viewport);
+    expect(paper.nextElementSibling).toBe(plane);
+    expect(plane.querySelector(".grid-paper")).toBeNull();
+    expect(paper.style.height).toBe("300px");
+    expect(paper.style.marginBottom).toBe("-300px");
+    expect(structureOf(".grid-paper")).toMatch(/position:\s*sticky/);
+    expect(structureOf(".grid-paper")).toMatch(/pointer-events:\s*none/);
+    engine.destroy();
+  });
+
+  // IMP-6600: WebKit, quando un figlio entra o esce, ridipinge tutto il
+  // riquadro del genitore. Con il corpo grande quanto il foglio, ogni riga
+  // aggiunta o tolta ai bordi dello scorrimento ridipingeva il foglio intero.
+  // Il corpo è senza misura, come i livelli dei segni: entra ed esce solo la
+  // riga, posata dal corpo con `top` e `left`.
+  it("le righe che lo scorrimento aggiunge e toglie stanno in un corpo senza misura", async () => {
+    const { engine, host } = await mounted();
+    const body = host.querySelector<HTMLElement>(".grid-plane > .grid-rows")!;
+    const rows = [...body.children].filter((element): element is HTMLElement => element.classList.contains("grid-row"));
+    expect(rows.length).toBeGreaterThan(0);
+    for (const row of rows) expect(row.style.position).toBe("absolute");
+    const rule = structureOf(".grid-rows");
+    expect(rule).toMatch(/position:\s*relative/);
+    expect(rule).toMatch(/(^|[;\s])width:\s*0(px)?\s*;/);
+    expect(rule).toMatch(/(^|[;\s])height:\s*0(px)?\s*;/);
+    engine.destroy();
+  });
+
+  // IMP-6600: a ogni passo dello scorrimento la griglia riscriveva gli
+  // attributi dei gruppi di righe e del riquadro, anche uguali, e il nome
+  // della cella.
+  it("scorrendo in giù aggiunge e toglie solo le righe ai bordi, e su ciò che resta scrive solo la fase della carta", async () => {
+    const { engine, host, viewport } = await mounted(bytesHost({ rows: 400, cells: { "0,0": "1", "29,1": "trenta", "45,2": "quarantasei" } }));
+    // Una cella scelta in fondo al riquadro, che resta sullo schermo: il suo
+    // segno e il suo nome restano mentre si scorre. Dalla tastiera, che
+    // porta il riquadro fin lì: un clic senza rilascio sarebbe un gesto in
+    // corso, che lo scorrimento allunga.
+    for (const key of [...Array<string>(29).fill("ArrowDown"), "ArrowRight"]) {
+      viewport.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));
+    }
+    await settle();
+    await frames();
+    const start = viewport.scrollTop;
+    expect(start).toBeGreaterThan(2 * 272);
+    const headerRow = host.querySelector(".grid-column-header-row");
+    expect(host.querySelector(".grid-cell-name")!.textContent).toBe("B30");
+    const drawn = () => [...host.querySelectorAll<HTMLElement>(".grid-rows > .grid-row")].map((row) => Number(row.dataset.row));
+    const first = drawn();
+
+    // Diciotto passi di mezza riga: nove righe entrano nel margine in fondo
+    // e nove escono da quello in cima. Della carta, ferma nel riquadro e
+    // fuori dal piano, cambia a ogni passo la fase dei fili; nient'altro si
+    // tocca.
+    const writes = await scrollWrites(host, viewport, 18, 14);
+    expect(viewport.scrollTop).toBe(start + 252);
+    const paperWrites = writes.kept.filter((write) => /^style \.grid-paper(-left-head|-left-cells)?$/.test(write));
+    expect(writes.kept.filter((write) => !paperWrites.includes(write))).toEqual([]);
+    expect(paperWrites.length).toBeLessThanOrEqual(3 * 18);
+    const last = drawn();
+    const entered = last.filter((row) => !first.includes(row)).sort((a, b) => a - b);
+    const left = first.filter((row) => !last.includes(row)).sort((a, b) => a - b);
+    expect(entered).toHaveLength(9);
+    expect(left).toHaveLength(9);
+    expect([...writes.added].sort((a, b) => a - b)).toEqual(entered);
+    expect([...writes.removed].sort((a, b) => a - b)).toEqual(left);
+
+    // Ciò che si vede è giusto: le celle, la carta, la scelta, le intestazioni.
+    expect(cellAt(host, 45, 2)!.textContent).toBe("quarantasei");
+    expect(cellAt(host, 29, 1)!.textContent).toBe("trenta");
+    expect(cellAt(host, 29, 1)!.classList.contains("active")).toBe(true);
+    expect(viewport.getAttribute("aria-activedescendant")).toBe(cellAt(host, 29, 1)!.id);
+    expect(host.querySelector(".grid-cell-name")!.textContent).toBe("B30");
+    expect(host.querySelector(".grid-column-header-row")).toBe(headerRow);
+    expect(host.querySelector(".grid-rows")!.getAttribute("role")).toBe("rowgroup");
+    engine.destroy();
+  });
+
+  // Le celle che lo scorrimento aggiunge non si serializzano: l'HTML serve
+  // solo a confrontare una cella che resta con quella rifatta, e costava
+  // un `outerHTML` per cella nuova a ogni passo.
+  it("scorrendo non serializza le celle che entrano", async () => {
+    const cells: Record<string, string> = {};
+    for (let row = 0; row < 400; row += 1) for (let column = 0; column < 4; column += 1) cells[`${row},${column}`] = `r${row}c${column}`;
+    const { engine, host, viewport } = await mounted(bytesHost({ rows: 400, cells }));
+    await frames();
+    const descriptor = Object.getOwnPropertyDescriptor(Element.prototype, "outerHTML")!;
+    let serialized = 0;
+    const spy = vi.spyOn(Element.prototype, "outerHTML", "get").mockImplementation(function (this: Element) {
+      if (this.classList.contains("grid-cell")) serialized += 1;
+      return descriptor.get!.call(this);
+    });
+    const writes = await scrollWrites(host, viewport, 18, 14);
+    spy.mockRestore();
+    expect(writes.added.length).toBeGreaterThan(0);
+    expect(serialized).toBe(0);
+    const last = writes.added[writes.added.length - 1];
+    expect(cellAt(host, last, 2)!.textContent).toBe(`r${last}c2`);
     engine.destroy();
   });
 
@@ -389,7 +526,9 @@ describe("GridEngine", () => {
   });
 
   it("barra delle formule ed editor di cella sono campi, non documenti", async () => {
-    const { engine, host } = await mounted();
+    const { engine, host, viewport } = await mounted();
+    // Il campo della cella nasce con la prima cella aperta.
+    viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "F2", bubbles: true }));
     for (const selector of [".grid-formula-editor", ".grid-cell-editor"]) {
       const field = host.querySelector<HTMLElement>(selector)!;
       expect(field.querySelector(".cm-lineNumbers")).toBeNull();
@@ -791,6 +930,9 @@ describe("GridEngine", () => {
     expect(typingOpens(event({ key: "a", isTrusted: true }))).toBe("browser");
     expect(typingOpens(event({ key: "Dead", isTrusted: true }))).toBe("browser");
     expect(typingOpens(event({ key: "Process", isTrusted: true }))).toBe("browser");
+    // WebKit: la composizione che parte su una cella chiusa ha il codice 229,
+    // e il tasto può non avere nome.
+    expect(typingOpens(event({ key: "Unidentified", keyCode: 229, isTrusted: true }))).toBe("browser");
     expect(typingOpens(event({ key: "a" }))).toBe("seed");
     expect(typingOpens(event({ key: "Dead" }))).toBeNull();
     expect(typingOpens(event({ key: "a", ctrlKey: true, isTrusted: true }))).toBeNull();

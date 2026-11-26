@@ -99,6 +99,7 @@ mod entities;
 mod export;
 mod glyph;
 mod import;
+mod recipe;
 
 pub use css::{CssOptions, CssRule, CssSheet, CssUnits, css_rules};
 
@@ -419,7 +420,7 @@ pub fn editing_data(svg: &str) -> Option<String> {
 /// `<metadata>` (`parts`, in order): FNV-1a of the text with whitespace between tags dropped and
 /// other whitespace runs read as one space, so re-indenting or other line endings don't count as
 /// edits.
-pub(crate) fn body_hash(parts: &[&str]) -> String {
+pub fn body_hash(parts: &[&str]) -> String {
     let mut h = FNV_SEED;
     // The last byte hashed and whether whitespace came after it.
     let (mut last, mut gap) = (None, false);
@@ -550,6 +551,10 @@ pub fn import_with_report(svg: &str) -> Result<(Document, Vec<String>), SvgError
 
 pub use glyph::glyph_art;
 pub use import::{MAX_ELEMENT_DEPTH, MAX_FOREIGN, MAX_FOREIGN_VALUE, MAX_NESTED_SVG_IMAGES, MAX_NODES};
+pub use recipe::{
+    RECIPE_VERSION, RecipeEntry, RecipeError, apply_recipe, base64_decode, element_hash, node_from_recipe, node_recipe, recipe_element, recipe_of,
+    recipes,
+};
 
 /// Import an SVG document reading the files it links to as `opts` says, also returning warnings.
 pub fn import_with(svg: &str, opts: &ImportOptions) -> Result<(Document, Vec<String>), SvgError> {

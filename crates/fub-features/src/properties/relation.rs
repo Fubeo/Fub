@@ -1,16 +1,15 @@
 //! La relazione inversa: le note che legano questa con una Relazione
-//! («Collegata da»), lette dai loro link, senza scrivere niente.
+//! («Collegata da»), lette dall'indice, senza scrivere niente.
 //!
-//! I link del frontmatter non sono archi del grafo dei link (il Markdown li
-//! estrae dal corpo), quindi i backlink non bastano: si leggono le Relazioni
-//! dichiarate nel registro di tutte le note che le hanno, e ogni link si
-//! risolve con le regole del vault (`IndexQuery::Resolve`), come lo
-//! risolverebbe il clic. Niente si scrive nelle altre note: la relazione
-//! inversa è una lettura.
+//! I link del frontmatter non sono archi del corpo (il Markdown li estrae dal
+//! corpo), quindi i backlink non bastano: il grafo del kernel li tiene a
+//! parte, con la loro chiave, e la foglia
+//! [`PROPERTY_LINK_PREDICATE_NS`](fub_abi::query::PROPERTY_LINK_PREDICATE_NS)
+//! di `query_index` ne è la via inversa. «Collegata da» è quella domanda,
+//! una per ogni chiave che il registro dichiara Relazione: costa i link che
+//! arrivano alla nota, non il vault. Niente si scrive nelle altre note.
 
-use std::collections::BTreeMap;
-
-use fub_abi::query::{QueryClause, QueryLiteral};
+use fub_abi::query::PropertyLinkPredicate;
 
 use super::*;
 
@@ -31,105 +30,35 @@ pub struct LinkedFrom {
 /// bersaglio non conta: restringe la scelta nell'editor, non il valore.
 pub fn linked_from(host: &dyn ReadApi, doc: &DocId) -> Result<Vec<LinkedFrom>, PluginError> {
     let types = property_types(host);
-    let keys: Vec<String> = types.relations().map(str::to_string).collect();
-    if keys.is_empty() {
-        return Ok(Vec::new());
-    }
-    let matching = QueryExpr {
-        any: keys
-            .iter()
-            .map(|key| QueryClause {
-                all: vec![QueryLiteral {
-                    negated: false,
-                    predicate: QueryPredicate::Property {
-                        filter: PropertyFilter {
-                            key: key.clone(),
-                            test: PropertyTest::Exists,
-                        },
-                    },
-                }],
-            })
-            .collect(),
-    };
-    let candidates = host
-        .query_index(IndexQuery::Documents {
-            matching,
+    let mut out = Vec::new();
+    for key in types.relations() {
+        let leaf = PropertyLinkPredicate {
+            targets: vec![doc.clone()],
+            key: Some(key.to_string()),
+        };
+        let rows = match host.query_index(IndexQuery::Documents {
+            matching: QueryExpr::of(leaf.into_predicate()),
             sort: None,
-            select: PropertySelect::Keys { keys: keys.clone() },
+            select: PropertySelect::None,
             page: None,
             excerpts: Excerpts::Omit,
-        })?
-        .documents()?
-        .items;
-    // Un wikilink si risolve allo stesso modo da ogni nota: una domanda per
-    // pagina basta. Un link per path dipende da chi lo scrive.
-    let mut wiki: BTreeMap<String, Option<DocId>> = BTreeMap::new();
-    let mut out = Vec::new();
-    for candidate in candidates {
-        for property in &candidate.properties {
-            if !keys.contains(&property.key) {
-                continue;
+        })? {
+            IndexResult::Documents(rows) => rows.items,
+            other => {
+                return Err(PluginError::Internal(Text::message(
+                    E_LINKED_FROM,
+                    vec![Arg::text("kind", other.kind_name())],
+                )))
             }
-            for target in relation_links(&property.value) {
-                let resolved = match target {
-                    LinkTarget::Wiki { page, .. } => match wiki.get(page) {
-                        Some(found) => found.clone(),
-                        None => {
-                            let found = resolve(host, target, &candidate.doc)?;
-                            wiki.insert(page.clone(), found.clone());
-                            found
-                        }
-                    },
-                    LinkTarget::Path(_) => resolve(host, target, &candidate.doc)?,
-                    LinkTarget::Url(_) => None,
-                };
-                if resolved.as_ref() == Some(doc) {
-                    out.push(LinkedFrom {
-                        doc: candidate.doc.clone(),
-                        key: property.key.clone(),
-                    });
-                    break;
-                }
-            }
-        }
+        };
+        out.extend(rows.into_iter().map(|row| LinkedFrom {
+            doc: row.doc,
+            key: key.to_string(),
+        }));
     }
     out.sort();
     out.dedup();
     Ok(out)
-}
-
-/// I link di un valore di Relazione: la lista di link della proiezione
-/// dichiarata, o il link solo che la lettura senza registro dà a una stringa
-/// `[[…]]`. Una voce che non è un link non lega niente.
-pub(super) fn relation_links(value: &PropertyValue) -> Vec<&LinkTarget> {
-    match value {
-        PropertyValue::Link(target) => vec![target],
-        PropertyValue::List(items) => items
-            .iter()
-            .filter_map(|item| match item {
-                PropertyScalar::Link(target) => Some(target),
-                _ => None,
-            })
-            .collect(),
-        _ => Vec::new(),
-    }
-}
-
-fn resolve(
-    host: &dyn ReadApi,
-    target: &LinkTarget,
-    from: &DocId,
-) -> Result<Option<DocId>, PluginError> {
-    match host.query_index(IndexQuery::Resolve {
-        target: target.clone(),
-        from: Some(from.clone()),
-    })? {
-        IndexResult::Resolved(found) => Ok(found.map(|found| found.doc)),
-        other => Err(PluginError::Internal(Text::message(
-            E_LINKED_FROM,
-            vec![Arg::text("kind", other.kind_name())],
-        ))),
-    }
 }
 
 #[cfg(test)]

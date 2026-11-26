@@ -211,7 +211,12 @@ mod con_il_motore {
                 std::slice::from_ref(&nuovo),
             )
             .expect("i comandi");
-        let ids: Vec<&str> = comandi.iter().map(|c| c.id.as_str()).collect();
+        // Prima i tre di K5, poi le righe «fatto» delle famiglie del Completo.
+        let ids: Vec<&str> = comandi
+            .iter()
+            .take(DRAWING_COMMANDS.len())
+            .map(|c| c.id.as_str())
+            .collect();
         assert_eq!(ids, DRAWING_COMMANDS);
         let comando = host
             .drawing_command(
@@ -222,6 +227,7 @@ mod con_il_motore {
                     id: DRAWING_COMMAND_WIDTH.into(),
                     selection: vec![nuovo],
                     value: serde_json::json!(2),
+                    preview: false,
                 },
             )
             .expect("il comando risponde");
@@ -268,6 +274,7 @@ mod con_il_motore {
                 id: DRAWING_COMMAND_WIDTH.into(),
                 selection: vec![],
                 value: serde_json::json!(-1),
+                preview: false,
             },
         );
         assert!(matches!(colore, Err(PluginError::BadArgs(_))), "{colore:?}");
@@ -469,13 +476,15 @@ mod con_il_motore {
         assert!(esito.applicato, "{esito:?}");
     }
 
+    /// Spegne il motore, e con lui il Disegno completo che lo richiede
+    /// («anche questi»), quando la build lo ha.
     fn spegni(host: &Host, vault: Option<&str>) {
         applica(
             host,
             vault,
             Azione::Spegni {
                 id: MOTORE.into(),
-                anche_questi: false,
+                anche_questi: cfg!(feature = "drawing-complete"),
                 orfani: Orfani::Chiedi,
             },
         );

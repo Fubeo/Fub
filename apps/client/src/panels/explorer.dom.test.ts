@@ -199,6 +199,22 @@ describe("«Tutte le note» sopra l'albero", () => {
     expect(countOf("Guida")?.textContent).toBe("3");
   });
 
+  it("un file nuovo scritto da fuori entra nell'albero e nel totale, senza riaprire (IMP-6501)", async () => {
+    const host = await start();
+    expect(allCount().textContent).toBe("6");
+    // Il lotto del rilevatore, come lo consegna il ponte vero: il documento
+    // nuovo e poi `index_updated` (fuori da un lotto non arriva `batch_ended`).
+    host.writeFromOutside("Nuova fuori.md", "# Nuova fuori\n");
+    host.emit({ type: "index_updated" });
+    await waitFor("la riga nuova", () => row("Nuova fuori.md") !== null);
+    expect(allCount().textContent).toBe("7");
+    // Anche dentro una cartella aperta che ancora non c'era.
+    host.writeFromOutside("Cartella fuori/Dentro.md", "# Dentro\n");
+    host.emit({ type: "index_updated" });
+    await waitFor("la cartella nuova", () => row("Cartella fuori") !== null);
+    expect(allCount().textContent).toBe("8");
+  });
+
   it("un vault senza note: il titolo c'è, il numero no", async () => {
     await start({ file: {}, resources: {} });
     await waitFor("l'albero vuoto", () => document.querySelector("#file-list .tree-empty") !== null);
@@ -512,5 +528,265 @@ describe("le azioni del titolo", () => {
     await quiet();
     const submenu = [...document.querySelectorAll<HTMLElement>('.context-menu [role="menuitem"]')].find((b) => b.textContent?.includes("Ordina"));
     expect(submenu).toBeDefined();
+  });
+});
+
+describe("«Sposta in…» con molte note scelte", () => {
+  /// Più schede di quante ne arrivavano (14 su 60, IMP-3804) alla radice, e la
+  /// cartella che le aspetta.
+  const NAMES = Array.from({ length: 24 }, (_, i) => `Cliente ${String(i + 1).padStart(2, "0")}.md`);
+  const many = (): Record<string, string> => {
+    const files: Record<string, string> = { "Clienti/Indice.md": "# Indice\n" };
+    for (const name of NAMES) files[name] = `# ${name}\n`;
+    return files;
+  };
+  const ctrlClick = (path: string): void => {
+    row(path)!.querySelector<HTMLElement>(".row-name")!.dispatchEvent(
+      new MouseEvent("click", { bubbles: true, cancelable: true, button: 0, ctrlKey: true, detail: 1 }),
+    );
+  };
+  const picker = () => document.querySelector<HTMLInputElement>('.shell-dialog input[role="combobox"]');
+  /// Gli avvisi detti finora, dal più vecchio.
+  const notices = async (): Promise<string[]> => (await import("../ui/notify")).recentNotices().map((n) => n.text).reverse();
+
+  async function moveAllInto(folder: string): Promise<void> {
+    for (const name of NAMES) ctrlClick(name);
+    await quiet();
+    expect(document.querySelector(".tree-selection-count")!.textContent).toContain("24");
+    document.querySelector<HTMLElement>(".tree-selection-move")!.click();
+    await waitFor("il selettore della cartella", () => picker() !== null);
+    picker()!.value = folder;
+    picker()!.dispatchEvent(new Event("input"));
+    picker()!.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+  }
+
+  it("le sposta tutte, e alla fine lo dice una volta", async () => {
+    const host = await start({ file: many(), resources: {} });
+    await moveAllInto("Clienti");
+    await waitFor("il racconto finale", () => document.body.textContent!.includes("24 note spostate in Clienti"), 15_000);
+    expect(NAMES.filter((name) => !(`Clienti/${name}` in host.files()))).toEqual([]);
+    expect(Object.keys(host.files()).filter((path) => !path.includes("/"))).toEqual([]);
+    const said = await notices();
+    expect(said.filter((text) => text.startsWith("Sposto 24 note"))).toHaveLength(1);
+    expect(said.filter((text) => text.includes("note spostate"))).toEqual(["24 note spostate in Clienti"]);
+  });
+
+  it("una nota che non si sposta resta dov'è, intera, e si dice col suo nome", async () => {
+    const files = many();
+    // La destinazione di una è già occupata: quella non può arrivare.
+    files["Clienti/Cliente 07.md"] = "# Un'altra scheda\n";
+    const host = await start({ file: files, resources: {} });
+    await moveAllInto("Clienti");
+    await waitFor("il racconto finale", () => document.body.textContent!.includes("23 note su 24 spostate in Clienti"), 15_000);
+    expect(host.files()["Cliente 07.md"]).toBe("# Cliente 07.md\n");
+    expect(host.files()["Clienti/Cliente 07.md"]).toBe("# Un'altra scheda\n");
+    expect(NAMES.filter((name) => name !== "Cliente 07.md" && !(`Clienti/${name}` in host.files()))).toEqual([]);
+    const said = await notices();
+    expect(said.filter((text) => text.startsWith("Non riesco a spostare"))).toEqual([
+      expect.stringContaining("Non riesco a spostare Cliente 07.md in Clienti:"),
+    ]);
+  });
+});
+
+describe("la scelta dopo uno spostamento (IMP-1803)", () => {
+  /// Il vault della tester: quattordici progetti alla radice, la cartella
+  /// Progetti che ha già una nota, e una nota sola da archiviare.
+  const PROJECTS = Array.from({ length: 14 }, (_, i) => `Progetto ${String(i + 1).padStart(2, "0")}.md`);
+  const vault = (): Record<string, string> => {
+    const files: Record<string, string> = { "Progetti/Magazzino ricambi 2025.md": "# Magazzino\n", "Home.md": "# Home\n" };
+    for (const name of PROJECTS) files[name] = `# ${name}\n`;
+    return files;
+  };
+  const clickRow = (path: string, init: MouseEventInit = {}): void => {
+    row(path)!.querySelector<HTMLElement>(".row-name")!.dispatchEvent(
+      new MouseEvent("click", { bubbles: true, cancelable: true, button: 0, detail: 1, ...init }),
+    );
+  };
+  const picker = () => document.querySelector<HTMLInputElement>('.shell-dialog input[role="combobox"]');
+  const prompt = () => document.querySelector<HTMLInputElement>('.shell-dialog input[type="text"]');
+  const count = () => document.querySelector<HTMLElement>(".tree-selection-count")!;
+  const bar = () => document.querySelector<HTMLElement>(".tree-selection")!;
+
+  async function moveVia(folder: string): Promise<void> {
+    document.querySelector<HTMLElement>(".tree-selection-move")!.click();
+    await waitFor("il selettore della cartella", () => picker() !== null);
+    picker()!.value = folder;
+    picker()!.dispatchEvent(new Event("input"));
+    picker()!.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+  }
+
+  async function groupVia(name: string, where = "Nuova cartella in Progetti"): Promise<void> {
+    document.querySelector<HTMLElement>(".tree-selection-group")!.click();
+    await waitFor("il nome della cartella nuova", () => prompt() !== null);
+    expect(prompt()!.closest("label")!.textContent, "il dialogo dice dove nasce la cartella").toBe(where);
+    prompt()!.value = name;
+    prompt()!.form!.requestSubmit();
+  }
+
+  /// Ciò che la tester ha fatto: clic sulla nota (la apre), Ctrl-clic (la sceglie).
+  async function pickAlone(path: string): Promise<void> {
+    await waitFor(`la riga di ${path}`, () => row(path) !== null);
+    clickRow(path);
+    await quiet();
+    clickRow(path, { ctrlKey: true });
+    await quiet();
+  }
+
+  it("dopo «Sposta in…» la cartella nuova nasce accanto alla nota scelta e prende solo lei", async () => {
+    const host = await start({ file: vault(), resources: {} });
+    for (const name of PROJECTS) clickRow(name, { ctrlKey: true });
+    await quiet();
+    expect(count().textContent).toBe("14 scelte");
+    await moveVia("Progetti");
+    await waitFor("il racconto finale", () => document.body.textContent!.includes("14 note spostate in Progetti"), 15_000);
+    await quiet();
+    expect(bar().hidden, "le note spostate non restano scelte").toBe(true);
+
+    await pickAlone("Progetti/Magazzino ricambi 2025.md");
+    expect(count().textContent).toBe("1 scelte");
+    await groupVia("Archivio");
+    await waitFor("la nota nella cartella nuova", () => "Progetti/Archivio/Magazzino ricambi 2025.md" in host.files());
+    await quiet();
+    const files = host.files();
+    expect(Object.keys(files).filter((path) => path.startsWith("Progetti/Archivio/"))).toEqual(["Progetti/Archivio/Magazzino ricambi 2025.md"]);
+    expect(PROJECTS.filter((name) => !(`Progetti/${name}` in files)), "i progetti restano dove li ha messi il primo spostamento").toEqual([]);
+  });
+
+  it("uno spostamento lento non cancella la scelta fatta mentre va, e non la mescola con la sua", async () => {
+    const host = await start({ file: vault(), resources: {} });
+    // Progetti aperta: la nota da archiviare si vede mentre i progetti viaggiano.
+    clickRow("Progetti");
+    await quiet();
+    for (const name of PROJECTS) clickRow(name, { ctrlKey: true });
+    await quiet();
+    const release = host.throttle("invokeCommand");
+    await moveVia("Progetti");
+    await waitFor("lo spostamento è partito", () => host.atGate("invokeCommand").length > 0);
+    await quiet();
+    // Il comando ha preso le sue note: la barra non le offre a un secondo gesto.
+    expect(bar().hidden, "le note in viaggio non restano nella scelta").toBe(true);
+
+    await pickAlone("Progetti/Magazzino ricambi 2025.md");
+    expect(count().textContent).toBe("1 scelte");
+    release();
+    await waitFor("il racconto finale", () => document.body.textContent!.includes("14 note spostate in Progetti"), 15_000);
+    await quiet();
+    expect(bar().hidden, "la scelta nuova sopravvive alla fine del primo spostamento").toBe(false);
+    expect(count().textContent).toBe("1 scelte");
+
+    await groupVia("Archivio");
+    await waitFor("la nota nella cartella nuova", () => "Progetti/Archivio/Magazzino ricambi 2025.md" in host.files());
+    await quiet();
+    const files = host.files();
+    expect(Object.keys(files).filter((path) => path.startsWith("Progetti/Archivio/"))).toEqual(["Progetti/Archivio/Magazzino ricambi 2025.md"]);
+    expect(PROJECTS.filter((name) => !(`Progetti/${name}` in files))).toEqual([]);
+  });
+
+  it("la scelta non tiene percorsi spariti: spostata, rinominata o cestinata, una nota ne esce subito", async () => {
+    const host = await start({ file: vault(), resources: {} });
+    const [moved, renamed, trashed, kept] = PROJECTS as [string, string, string, string];
+    for (const name of [moved, renamed, trashed, kept]) clickRow(name, { ctrlKey: true });
+    await quiet();
+    expect(count().textContent).toBe("4 scelte");
+
+    // Spostata e rinominata da un altro programma: la scelta lo sa quando il
+    // kernel lo dice, prima che l'albero si ridisegni.
+    host.renameFromOutside(moved, `Progetti/${moved}`);
+    expect(count().textContent, "spostata").toBe("3 scelte");
+    host.renameFromOutside(renamed, "Nome nuovo.md");
+    expect(count().textContent, "rinominata").toBe("2 scelte");
+    await quiet();
+
+    // Cestinata con Canc dalla sua riga: il gesto di una nota sola.
+    const li = document.querySelector<HTMLElement>(`#file-list li[data-path="${CSS.escape(trashed)}"]`)!;
+    li.focus();
+    li.dispatchEvent(new KeyboardEvent("keydown", { key: "Delete", bubbles: true, cancelable: true }));
+    await waitFor("la nota nel cestino", () => !(trashed in host.files()));
+    await quiet();
+
+    expect(count().textContent).toBe("1 scelte");
+    // Ciò che resta nella scelta esiste: «Sposta in…» porta solo quella.
+    await moveVia("Progetti");
+    await waitFor("la nota rimasta scelta in Progetti", () => `Progetti/${kept}` in host.files());
+    await quiet();
+    const files = host.files();
+    expect(files["Nome nuovo.md"], "la rinominata resta dov'è").toBeDefined();
+    expect(files[`Progetti/${moved}`]).toBeDefined();
+    expect(Object.keys(files).filter((path) => path.startsWith("Progetti/Progetti/")), "niente si sposta due volte").toEqual([]);
+  });
+});
+
+describe("F2 mette il nome dove lo mette il titolo (IMP-2800)", () => {
+  /// Rinomina con F2 la voce `path` (dentro una cartella aperta) in `typed`.
+  const renameWithF2 = async (path: string, typed: string): Promise<void> => {
+    const li = document.querySelector<HTMLElement>(`#file-list li[data-path="${CSS.escape(path)}"]`)!;
+    li.focus();
+    li.dispatchEvent(new KeyboardEvent("keydown", { key: "F2", bubbles: true, cancelable: true }));
+    const input = row(path)!.querySelector<HTMLInputElement>("input")!;
+    input.value = typed;
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+  };
+  const open = async (folder: string): Promise<void> => {
+    row(folder)!.click();
+    await waitFor(`${folder} aperta`, () => row(`${folder}/Sintassi.md`) !== null || row(`${folder}/Banco.md`) !== null);
+  };
+
+  it("la cartella scritta in testa è quella di partenza, non una dentro", async () => {
+    const host = await start();
+    await open("Guida");
+    await renameWithF2("Guida/Sintassi.md", "Guida/Regole");
+    await waitFor("la nota rinominata in Guida", () => "Guida/Regole.md" in host.files());
+    expect(Object.keys(host.files()).filter((path) => path.startsWith("Guida/Guida/"))).toEqual([]);
+  });
+
+  it("uno «/» in testa parte dalla radice", async () => {
+    const host = await start();
+    await open("Progetti");
+    await renameWithF2("Progetti/Banco.md", "/Banco radice");
+    await waitFor("la nota alla radice", () => "Banco radice.md" in host.files());
+  });
+});
+
+describe("Invio durante la composizione (IME) non conferma i campi dell'albero", () => {
+  const enter = (field: HTMLElement, init: KeyboardEventInit = {}) =>
+    field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true, ...init }));
+
+  it("la cartella nuova aspetta la fine della composizione", async () => {
+    const host = await start();
+    const registry = await import("../ui/commands");
+    registry.newEntries().find((entry) => entry.kind === "folder")!.run();
+    await quiet();
+    const field = document.querySelector<HTMLInputElement>("#file-list > input.new-folder")!;
+    field.value = "日本";
+    enter(field, { isComposing: true });
+    // WebKit chiude la composizione prima del keydown di Invio, che arriva col
+    // codice 229 e `isComposing` falso.
+    enter(field, { keyCode: 229 });
+    await quiet();
+    expect(field.isConnected).toBe(true);
+    expect(field.disabled).toBe(false);
+    expect(Object.keys(host.files()).some((path) => path.startsWith("日本"))).toBe(false);
+
+    enter(field);
+    await waitFor("il campo chiuso dopo l'Invio vero", () => !field.isConnected);
+  });
+
+  it("la rinomina in posto aspetta la fine della composizione", async () => {
+    const host = await start();
+    const li = document.querySelector<HTMLElement>('#file-list li[data-path="Benvenuto.md"]')!;
+    li.focus();
+    li.dispatchEvent(new KeyboardEvent("keydown", { key: "F2", bubbles: true, cancelable: true }));
+    const input = row("Benvenuto.md")!.querySelector<HTMLInputElement>("input")!;
+    expect(input).not.toBeNull();
+    input.value = "日本語";
+    enter(input, { isComposing: true });
+    enter(input, { keyCode: 229 });
+    await quiet();
+    expect(input.isConnected).toBe(true);
+    expect(input.disabled).toBe(false);
+    expect("Benvenuto.md" in host.files()).toBe(true);
+
+    enter(input);
+    await waitFor("la nota rinominata", () => "日本語.md" in host.files());
   });
 });

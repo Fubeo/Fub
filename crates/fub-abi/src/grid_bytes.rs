@@ -1330,6 +1330,12 @@ impl GridSurfaceSpec {
 pub trait GridBytesProvider: Send + Sync {
     fn surfaces(&self) -> Vec<GridSurfaceSpec>;
     /// Apre `source` alla sua revisione e vi applica `journal`.
+    ///
+    /// `revision` è `Revision::of_bytes(source)`: la calcola una volta chi
+    /// legge i byte (l'host, prima di confrontarla con la base della
+    /// sessione del documento), e il registro del kernel la passa così. Il
+    /// provider non la ricalcola: per una cartella di qualche MB era un
+    /// secondo SHA-256 dei byte a ogni apertura.
     fn open(
         &mut self,
         surface: &str,

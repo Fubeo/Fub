@@ -14,6 +14,7 @@ import { attachHoverCard, textButton, type HoverCardHandle } from "../../kit";
 import { identifier } from "../../ui/a11y";
 import { openLifetime, type Lifetime } from "../../ui/lifetime";
 import { t } from "../../i18n/strings";
+import { composingKey } from "../../kit/ime";
 
 /// Il selettore delle celle che hanno una scheda.
 export const COMMENT_CELL = ".grid-cell[data-comment]";
@@ -122,7 +123,7 @@ export function attachCommentCards(host: CommentCardHost): HoverCardHandle {
       });
       // Invio manda, Maiusc+Invio va a capo, come nei commenti di Excel.
       life.listen(field, "keydown", (event) => {
-        if (event.key !== "Enter" || event.shiftKey || event.isComposing) return;
+        if (event.key !== "Enter" || event.shiftKey || composingKey(event)) return;
         event.preventDefault();
         form.requestSubmit();
       });

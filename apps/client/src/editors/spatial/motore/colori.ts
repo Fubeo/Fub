@@ -27,7 +27,7 @@
 //   (le operazioni portano gli id); la selezione resta quella che si è scelta
 //   dopo.
 
-import { DRAWING_COMMAND_FILL_COLOR, DRAWING_COMMAND_STROKE_COLOR, DRAWING_COMMAND_WIDTH, type DrawingOutcome, type DrawingRefusal } from "../../../host/contract";
+import { DRAWING_COMMAND_FILL_COLOR, DRAWING_COMMAND_STROKE_COLOR, DRAWING_COMMAND_WIDTH, type DrawingOutcome } from "../../../host/contract";
 import type { LengthUnit } from "../scene/rulers";
 import { t, type DrawKey } from "../strings";
 import type { EditorContext } from "../tools/editor/context";
@@ -36,7 +36,12 @@ import { customColor } from "../tools/palette";
 import type { FieldId, FieldState, PropertiesView } from "../tools/properties";
 import { fromUnit } from "../tools/rulers";
 import { ATTESA_APERTURA_MS, opsDellEsito } from "./gesti";
+import { motivoDelRifiuto } from "./rifiuto";
 import type { SessioneMotore } from "./sessione";
+
+// Il motivo di un rifiuto sta in `rifiuto.ts`, senza i gesti: qui resta per chi
+// lo prendeva dai colori.
+export { motivoDelRifiuto };
 
 /// I campi del pannello che sono comandi del motore, col loro id.
 export const COMANDI_DEI_CAMPI = {
@@ -64,27 +69,6 @@ export function valoreDelComando(id: CampoDelMotore, value: number | string | bo
       const width = fromUnit(value, lookUnit(unit));
       return Number.isFinite(width) && width >= 0 ? width : undefined;
     }
-  }
-}
-
-/// Il motivo a parole di un comando che il motore non ha fatto; `null` se
-/// non c'è niente da dire (non cambiava niente).
-export function motivoDelRifiuto(refused: DrawingRefusal): DrawKey | null {
-  switch (refused) {
-    case "empty":
-      return null;
-    case "locked":
-    case "hidden":
-      return "draw.reason.locked";
-    case "unmapped":
-    case "unsupported":
-      return "draw.reason.foreign";
-    case "too_large":
-      return "draw.reason.limit";
-    case "stale":
-    case "closed":
-    case "not_ready":
-      return "draw.reason.invalid";
   }
 }
 
@@ -199,6 +183,13 @@ export function installColoriMotore(ctx: EditorContext, scriviDaSe: (id: FieldId
       }
       const esito = await sessione.comando({ id: command, selection, value: valore });
       if (ctx.disposed) return;
+      // Un valore che il motore non prende si dice con la sua frase, come un
+      // rifiuto: non si scrive da sé, il motore ha detto perché no.
+      if (esito !== null && "kind" in esito && esito.kind === "argomenti") {
+        ctx.announce(esito.message);
+        rinfresca();
+        return;
+      }
       if (esito === null || "kind" in esito || esito.refused === "closed") {
         daSe();
         return;

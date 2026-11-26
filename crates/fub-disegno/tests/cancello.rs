@@ -436,6 +436,7 @@ fn colore(disegno: &mut Disegno, scene: &Scene) -> Result<(ElementItem, DrawingO
                     id: DRAWING_COMMAND_STROKE_COLOR.into(),
                     selection: sel.clone(),
                     value: json!(c),
+                    preview: false,
                 })
                 .map_err(|e| format!("il comando: {e}"))?;
             let vuoto = esito.refused == Some(DrawingRefusal::Empty);

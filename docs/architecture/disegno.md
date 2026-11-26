@@ -2,10 +2,8 @@
 
 > **Domanda:** come un gesto in un disegno passa dal motore vettoriale e
 > torna nel file, e chi possiede che cosa fra client, motore, penna e file?
-> **Fonti autorevoli:** `crates/fub-disegno/`,
-> `crates/fub-host/src/drawing.rs`,
-> `apps/client/src/editors/spatial/motore/`,
-> `crates/fub-abi/src/drawing.rs`.
+> **Fonti autorevoli:** `crates/fub-disegno/`, `crates/fub-host/src/drawing.rs`,
+> `apps/client/src/editors/spatial/motore/`, `crates/fub-abi/src/drawing.rs`.
 > **Decisioni:** [ADR 0239](../decisions/0239-il-disegno-sul-motore-vettoriale.md),
 > [ADR 0231](../decisions/0231-la-chiusura-di-fubdraw.md),
 > [ADR 0204](../decisions/0204-nucleo-inchiostro.md).
@@ -37,9 +35,8 @@ sequenceDiagram
 ```
 
 Il motore non scrive mai il file: restituisce operazioni, e il file cambia
-solo quando il client le applica. Il giro finisce con il motore che rilegge
-il testo, così la copia segue il file anche quando lo cambia un'altra
-superficie.
+solo quando il client le applica. Il giro finisce con il motore che rilegge il
+testo, così la copia segue il file anche quando lo cambia un'altra superficie.
 
 I passi, uno per uno:
 
@@ -75,17 +72,16 @@ I passi, uno per uno:
 
 Un gesto a una revisione diversa da quella del testo tenuto dal motore è
 rifiutato come `Stale`: la sessione rimanda il testo intero e riprova una
-volta. Un gesto che arriva prima del reimport aspetta la revisione giusta
-(al più 30 secondi, poi `NotReady`). Le modifiche valgono solo su una
-revisione più nuova e solo se la lunghezza di prima e il testo cancellato
-tornano, altrimenti il `sync` è `BadArgs`: la copia non è più certa, e la
-sessione si ferma come ogni altro errore (il chip offre «Riprova», che apre
-un'istanza nuova col testo di quel momento). Il testo intero vale a
-qualunque revisione. Un reimport che fallisce (XML rotto)
-lascia la copia alla revisione vecchia, e i gesti sono `Stale` finché non
-arriva un testo buono; il risultato di un reimport superato da un testo più
-nuovo si butta. Le richieste della
-sessione vanno in fila, una alla volta, con un tempo limite per ciascuna.
+volta. Un gesto che arriva prima del reimport aspetta la revisione giusta (al
+più 30 secondi, poi `NotReady`). Le modifiche valgono solo su una revisione
+più nuova e solo se la lunghezza di prima e il testo cancellato tornano,
+altrimenti il `sync` è `BadArgs`: la copia non è più certa, e la sessione si
+ferma come ogni altro errore (il chip offre «Riprova», che apre un'istanza
+nuova col testo di quel momento). Il testo intero vale a qualunque revisione.
+Un reimport che fallisce (XML rotto) lascia la copia alla revisione vecchia, e
+i gesti sono `Stale` finché non arriva un testo buono; il risultato di un
+reimport superato da un testo più nuovo si butta. Le richieste della sessione
+vanno in fila, una alla volta, con un tempo limite per ciascuna.
 
 ## Chi possiede che cosa
 
@@ -123,53 +119,54 @@ nome, nascosto se lo è, così ci si può disegnare. Un documento che `fub_scene
 lo stesso, con una parte `Unsupported` di nome `svg`, e ogni gesto è
 `Unsupported`; un import che il motore rifiuta apre una copia vuota.
 
-L'import cuoce tutte le `transform` nella geometria del motore. La
-differenza (`crates/fub-disegno/src/differenza.rs`) le rimette: per ogni
-elemento conosce la sua `transform` T e la matrice G dal suo genitore al
-documento del motore (le `transform` degli antenati, il `viewBox` della
-radice e la scala delle unità, 0,75 per un file in unità fisiche). Un cambio
-di posto, misura o rotazione è una matrice M che si trova dai punti
-dell'oggetto e si **verifica**, muovendo l'oggetto di prima con M; l'elemento
-riceve `transform = G⁻¹·M·G·T`. Nella Selezione la ricevono gli oggetti scelti,
-come nel client; altrimenti un gruppo mosso tutto se ha più figli o uno
-estraneo, se no il figlio; un livello mai. I colori pieni e lo spessore
-diventano `fill`, `stroke` e `stroke-width`, un tracciato cambiato punto per
-punto `d`; i nuovi sono `add` (`rect`, `ellipse`, `line` o `path`, geometria
-con due decimali), i tolti `remove` e l'ordine `move`, uno per ogni oggetto
-fuori dalla sottosequenza crescente più lunga dei fratelli. Ciò che non si
-scrive così è `Unsupported`; un oggetto fuori dalla mappa toccato è `Unmapped`.
+L'import cuoce tutte le `transform` nella geometria del motore. La differenza
+(`crates/fub-disegno/src/differenza.rs`) le rimette: per ogni elemento conosce
+la sua `transform` T e la matrice G dal suo genitore al documento del motore (le
+`transform` degli antenati, il `viewBox` della radice e la scala delle unità,
+0,75 per un file in unità fisiche). Un cambio di posto, misura o rotazione è una
+matrice M che si trova dai punti dell'oggetto e si **verifica**, muovendo
+l'oggetto di prima con M; l'elemento riceve `transform = G⁻¹·M·G·T`. Nella
+Selezione la ricevono gli oggetti scelti, come nel client; altrimenti un gruppo
+mosso tutto se ha più figli o uno estraneo, se no il figlio; un livello mai. I
+colori pieni e lo spessore diventano `fill`, `stroke` e `stroke-width`, un
+tracciato cambiato punto per punto `d`, e una forma deformata un `set` con `tag:
+"path"`. Se cambiano i punti (Selezione diretta, strumenti e comandi dei
+tracciati) M vale solo come spostamento. I nuovi sono `add` (`rect`, `ellipse`,
+`line` o `path`, geometria con due decimali), i tolti `remove` e l'ordine
+`move`, uno per ogni oggetto fuori dalla sottosequenza crescente più lunga dei
+fratelli. Il resto è `Unsupported`; un oggetto fuori dalla mappa toccato è
+`Unmapped`.
+
+Il client scrive le misure nella scena (le unità del `viewBox`); prima del
+motore ogni comando le porta nel suo documento con la radice (`copia.radice`):
+un punto la prende intera, uno spostamento o una misura la scala del suo asse,
+uno spessore o una distanza la scala media. I comandi con misure semplici sono
+in `src/famiglie/scala.rs`, che riporta anche ciò che `document.node` legge;
+gli altri punti passano nella loro famiglia.
 
 Dopo ogni gesto la sessione del motore torna alla copia: lo stato vero è il
-file. Un panico del motore lo prende `vectorcraft_engine::guard::catch_panic`:
-il gesto è `Unsupported`, la sessione si ricarica dalla copia e l'istanza
-resta viva. Gli strumenti stanno in `crates/fub-disegno/src/gesti/`, uno per
-strumento di Fub (il Testo crea al clic il `<text>` di `textElem`). Ogni evento
-passa prima dallo strumento di Fub (`Strumento::evento`), che applica le
-regole di Fub che il motore farebbe a modo suo.
+file. Un panico (`vectorcraft_engine::guard::catch_panic`) rende il gesto
+`Unsupported` e ricarica la sessione dalla copia; l'istanza resta viva. Gli
+strumenti (`src/gesti/`, il Testo crea il `<text>` di `textElem`) passano ogni
+evento prima dalle regole di Fub (`Strumento::evento`).
 
-Le forme (`gesti/forme.rs`) usano lo strumento forma del motore: `rectangle`,
-`ellipse` e `lineSegment`, che fa anche la freccia. Prima del motore la
-griglia aggancia la pressione e ogni punto dopo (Ctrl/⌘ la scioglie), Maiusc
-fa il quadrato, il cerchio o i passi di 15° nello spazio del livello, e
-Maiusc, Alt e Ctrl/⌘ si tolgono: nel motore varrebbero passi di 45°, il
-disegno dal centro e la selezione prestata. Il livello è quello del gesto, o
-il più alto né nascosto né bloccato (`hidden`, `locked`); il motore riceve lo
-stile del gesto e niente guide magnetiche sue. L'elemento nuovo è quello di
-`shapeElem` del client (la freccia è un `path` con `fub:shape="arrow"`);
-sotto i 4 pixel sullo schermo, o con un lato nullo, non c'è forma (`Empty`), e
-disegnare non cambia la selezione. L'anteprima è l'`Elem` della forma
-provvisoria nello spazio del livello.
+Le forme (`gesti/forme.rs`) usano lo strumento forma del motore (`rectangle`,
+`ellipse`, `lineSegment` anche per la freccia). Prima del motore la griglia
+aggancia ogni punto (Ctrl/⌘ la scioglie), Maiusc fa il quadrato, il cerchio o i
+passi di 15°, e i modificatori si tolgono (nel motore varrebbero 45°, il centro
+e la selezione prestata). Il livello è quello del gesto o il più alto libero;
+niente guide magnetiche del motore. L'elemento è quello di `shapeElem` del
+client (la freccia un `path` con `fub:shape="arrow"`); sotto i 4 pixel, o con
+un lato nullo, non c'è forma (`Empty`); l'anteprima è l'`Elem` provvisorio.
 
 La selezione (`gesti/selezione.rs`) decide il gesto con le regole di Fub,
 dalla pressione come l'ha mandata Fub e dalla selezione di prima: una
 maniglia della cornice ridimensiona o ruota, un oggetto (il più esterno del
 livello, con Ctrl/⌘ il più dentro, o quello scelto dentro un gruppo) si
 sceglie e si sposta (la soglia di trascinamento, passata, resta passata), il
-vuoto comincia un riquadro, che sceglie ciò che contiene per intero. Spostare usa la
-Selezione del motore (`selection`), ruotare il suo `rotate`, ridimensionare una
-cornice dritta senza contorno la sua maniglia: gli eventi arrivano già con la
-griglia, le proporzioni, la misura minima e la calamita degli angoli di Fub,
-senza i modificatori che il motore leggerebbe a modo suo. Dove il motore
+vuoto comincia un riquadro, che sceglie ciò che contiene per intero. Spostare,
+ruotare e ridimensionare una cornice dritta usano il motore, con gli eventi già
+agganciati alle regole di Fub e senza i modificatori. Dove il motore
 farebbe altro (una cornice girata, inclinata o col contorno, una sua maniglia
 sotto la pressione, la carta) la matrice la calcola Fub, va sugli oggetti del
 documento del motore e la differenza la scrive come sempre. La selezione
@@ -193,36 +190,35 @@ i suoi strumenti TypeScript ([ADR 0231](../decisions/0231-la-chiusura-di-fubdraw
 §3), e la lavagna non usa il motore.
 
 Senza motore la sessione è `MotoreAssente`, e il disegno usa gli strumenti
-semplici, quelli TypeScript del client: Selezione, forme e Testo funzionano
-lo stesso, nello stesso ordine. Il chip (`motore/standing.ts`) lo dice:
-**spento** (riga spenta o `unserved`), segno vuoto, con «Accendi…» che apre
-la riga del motore nella pagina Componenti (`showComponent`); **fermo** (un
-errore), segno rosso, con «Riprova» che chiama `riapri()`, mai da sé; nella
-**build senza motore** (riga assente dalla mappa) senza azioni. Mentre una
-sessione nuova si apre resta il chip di prima; in Lettura e in sola lettura
-parla l'avviso. Mano, Lente, Penna, Evidenziatore e Gomma non passano mai dal
-motore. I vettori dei gesti sono l'oracolo delle due strade
-(`motore/due-strade.test.ts`: stesso file, annulla e selezione).
+semplici, quelli TypeScript del client: Selezione, forme e Testo funzionano lo
+stesso, nello stesso ordine. Il chip (`motore/standing.ts`) lo dice: **spento**
+(riga spenta o `unserved`), segno vuoto, con «Accendi…» che apre la riga del
+motore nella pagina Componenti (`showComponent`); **fermo** (un errore), segno
+rosso, con «Riprova» che chiama `riapri()`, mai da sé; nella **build senza
+motore** (riga assente dalla mappa) senza azioni. Mentre una sessione nuova si
+apre resta il chip di prima; in Lettura e in sola lettura parla l'avviso. Mano,
+Lente, Penna, Evidenziatore e Gomma non passano mai dal motore. I vettori dei
+gesti sono l'oracolo delle due strade (`motore/due-strade.test.ts`: stesso file,
+annulla e selezione).
 
 ### Quando il motore manca
 
 `motoreDa` (`motore/gesti.ts`) sa perché il motore manca: **spento** (la riga
-spenta, che la superficie sente da `onComponents` e chiude subito la
-sessione, o un `unserved` a metà sessione: spento in un vault, l'host chiude
-le sue istanze e libera il motore se non ne resta nessuna) o **fermo** (ogni
-altro errore, o 10 s senza risposta).
-**Riacceso**, o con «Riprova» del chip, `riapri()` apre un'istanza
-nuova col testo di quel momento, senza rimontare l'editor e una alla volta.
-Un gesto a metà quando il motore manca si annulla senza scrivere e lo si
-annuncia; il gesto dopo usa gli strumenti semplici. La sessione finisce col
-riquadro e con la `DocumentSession` (file cancellato, vault chiuso o
-cambiato); col file rinominato resta.
+spenta, che la superficie sente da `onComponents` e chiude subito la sessione, o
+un `unserved` a metà sessione: spento in un vault, l'host chiude le sue istanze
+e libera il motore se non ne resta nessuna) o **fermo** (ogni altro errore, o 10
+s senza risposta; un `bad_args` no: [la sessione resta
+aperta](disegno-completo.md#argomenti-rifiutati)). **Riacceso**, o con «Riprova»
+del chip, `riapri()` apre un'istanza nuova col testo di quel momento, senza
+rimontare l'editor e una alla volta. Un gesto a metà quando il motore manca si
+annulla senza scrivere e lo si annuncia; il gesto dopo usa gli strumenti
+semplici. La sessione finisce col riquadro e con la `DocumentSession` (file
+cancellato, vault chiuso o cambiato); col file rinominato resta.
 
 ## I comandi IPC
 
 Sei comandi tipati, nella forma di quelli dei fogli, con le forme in
-`crates/fub-abi/src/drawing.rs` e i comandi in
-`crates/fub-app/src/lib.rs`:
+`crates/fub-abi/src/drawing.rs` e i comandi in `crates/fub-app/src/lib.rs`:
 
 | Comando | Fa |
 |---|---|
@@ -230,15 +226,15 @@ Sei comandi tipati, nella forma di quelli dei fogli, con le forme in
 | `drawing_sync` | porta all'istanza le modifiche del testo, o il testo intero |
 | `drawing_gesture` | manda gli eventi nuovi di un gesto e riceve anteprima o operazioni |
 | `drawing_commands` | dice quali comandi sono attivi per una selezione |
-| `drawing_command` | esegue colore del tratto, colore del riempimento o spessore |
+| `drawing_command` | esegue un comando del disegno sulla selezione |
 | `close_drawing` | chiude l'istanza |
 
-I tre comandi (`crates/fub-disegno/src/comandi.rs`) sono `paint.setStroke`,
-`paint.setFill` e `stroke.set` del motore, sugli oggetti che colora il
-pannello del client; l'esito è la differenza scritta come la scrive il client,
-punta delle frecce e `stroke-dasharray` dei tratteggi compresi. Su una linea a
-spessore variabile lo spessore riscala il profilo e ricalcola il contorno pieno
-(`src/profilo/`, come `widthTo` del client).
+`drawing_command` serve due insiemi. I tre di base (`fub_abi::DRAWING_COMMANDS`,
+`src/comandi.rs`), anche col Completo spento, sono `paint.setStroke`,
+`paint.setFill` e `stroke.set`: l'esito è la differenza scritta come il client,
+punte e tratteggi compresi, e su una linea a spessore variabile riscala il
+profilo (`src/profilo/`). Gli altri, delle famiglie, solo col Completo acceso
+(`complete_serves`): [il percorso](disegno-completo.md#il-percorso-di-un-comando).
 
 Ogni richiesta passa da `validate()` prima del motore. Le istanze stanno
 nell'host per vault, sotto un lucchetto preso per trovare l'istanza e lasciato
@@ -270,21 +266,28 @@ parte per elemento della mappa, con una frase breve in italiano. I tre tipi:
 | Tipo | Vuol dire | Che cosa succede |
 |---|---|---|
 | non mappato (`Unmapped`) | il motore non ha un oggetto per l'elemento: le risorse dentro `<defs>`, le istanze `<use>` che il motore scioglie | l'elemento si vede e si salva com'è; un gesto che lo cambierebbe in altro che una `transform` è rifiutato |
-| approssimato (`Approximated`) | l'oggetto c'è, ma un attributo non tornerebbe uguale: un filtro o una maschera (attributo o `style`), un testo su tracciato | si sposta con una `transform`; ogni altro cambio è rifiutato `Unmapped` |
+| approssimato (`Approximated`) | l'oggetto c'è, ma un attributo non tornerebbe uguale: un filtro o una maschera (attributo o `style`), un testo su tracciato che Fub non scrive così (pezzi con un aspetto loro, `startOffset` in percento) | si sposta con una `transform`; ogni altro cambio è rifiutato `Unmapped` |
 | non supportato (`Unsupported`) | il documento non è modificabile, per esempio troppo grande o con id ripetuti | la copia si apre, ma ogni gesto è rifiutato |
 
 Ciò che non si scrive come attributi dell'elemento originale non si fa: il
-motore non riscrive mai un elemento intero. Fub salva da sé, quindi la perdita
-evitata si dice all'apertura e al gesto: il chip «N parti restano come sono»
-(`motore/standing.ts`, dalle parti di `perdite()` di `motoreDa`) apre «Che cosa
-manca?», un posto per parte col suo «Vai»; manca col motore spento o fermo, in
-Lettura e in sola lettura. Gli elementi estranei della scena (`<style>`, `<foreignObject>`,
-gli elementi di altre app) non sono nella mappa e non sono parti: nessuno
-strumento li modifica, e un gesto sul loro oggetto del motore è rifiutato
-`Unmapped`. L'elenco per ogni file del corpus e dei modelli sta in
-`crates/fub-disegno/tests/corpus/perdite.tsv`: la prova
-`cargo test -p fub-disegno --test corpus` lo confronta, e
-`UPDATE_PERDITE=1` lo riscrive.
+motore non riscrive mai un elemento intero, salvo la [ricetta](#la-ricetta) e
+la linea a spessore variabile (`fub:shape="width"`), che nel motore è un
+tracciato col solo contorno a profilo e torna nel file intera a ogni cambio
+che non è una `transform` ([formato](../reference/scene-format-width.md#5-lettura-e-scrittura),
+`src/profilo/motore.rs`). Fub salva da sé, quindi la perdita evitata si dice
+all'apertura e al gesto: il chip «N parti restano come sono»
+(`motore/standing.ts`) apre «Che cosa manca?», un posto per parte col suo
+«Vai»; manca col motore spento o fermo, in Lettura e in sola lettura. Gli
+elementi estranei (`<style>`, `<foreignObject>`, quelli di altre app) non sono
+parti: nessuno strumento li modifica, e un gesto sul loro oggetto è `Unmapped`.
+L'elenco del corpus e dei modelli è `crates/fub-disegno/tests/corpus/perdite.tsv`
+(`cargo test -p fub-disegno --test corpus`; `UPDATE_PERDITE=1` lo riscrive).
+
+## La ricetta
+
+Ciò che la scena non sa dire (un effetto dal vivo, un aspetto impilato, una forma dal vivo) torna uguale dopo un salvataggio grazie alla ricetta, la forma nativa dell'oggetto in un `<vectorcraft:recipe>` dentro `<metadata>`, accanto al corpo espanso, la grafica che il motore disegna scritta dalla sua esportazione (`crates/fub-disegno/src/espansa.rs`). La possiede il ponte, `crates/fub-disegno/src/ricetta.rs`, con la tabella dei costrutti (`Corpo`, `Scena`, `Ricetta`) che le famiglie leggono: l'apertura la applica dopo l'import, la mappa la tiene accanto agli id, la differenza la scrive. È l'unico caso in cui il motore riscrive un elemento intero: un oggetto che diventa ricco, o che ha la ricetta e cambia altrimenti che con la `transform`, `display` o `fub:locked`, si toglie e torna con lo stesso id come corpo espanso, con lo stato in un `set`. L'impronta è per elemento senza la sua `transform`, il suo `display` e il suo `fub:locked`: spostare, nascondere e bloccare tengono la ricetta, ogni altro cambio fuori dal motore la fa cadere con un avviso fra le parti. Il formato: [la ricetta di un oggetto](../reference/scene-format-recipe.md).
+
+Dentro un oggetto con la ricetta i figli che il file mostra si chiamano per ruolo, non per id. Il nome di un gruppo che il motore riconosce dal nome (il gruppo della Pittura dinamica, le sue sorgenti) si tiene nella ricetta e torna dopo l'import (`ricetta::nomi_di_ruolo`), così il gruppo riaperto resta vivo. Le facce e i bordi di un gruppo della Pittura dinamica si legano per posizione ai figli del suo elemento (`Mappa::lega_le_facce`): una faccia ha l'id del file e si sceglie e si colora da sola. Un bordo che la scena tiene estraneo (il motore lo scrive con `stroke-miterlimit`) resta senza legame; se i figli sono più dei pezzi del motore (un file cambiato a mano) nessuno si lega e il gruppo si sceglie intero.
 
 ## Dove sta il codice
 
@@ -292,6 +295,7 @@ strumento li modifica, e un gesto sul loro oggetto del motore è rifiutato
 |---|---|
 | `vendor/vectorcraft/` | la copia di VectorCraft, con le patch numerate e `UPSTREAM.md` |
 | `crates/fub-disegno/` | l'adattatore: apertura, mappa, sincronia, differenza, gesti, comandi, perdite |
+| `crates/fub-disegno/mappa.tsv`, `tools/disegno-mappa/` | la mappa delle funzioni di VectorCraft (non `src/mappa.rs`, che lega gli elementi agli oggetti), il suo estrattore e, in `.github/scripts/check-disegno-mappa.mjs`, la sua guardia: [colonne, stati e regole](../../tools/disegno-mappa/README.md) |
 | `crates/fub-host/src/drawing.rs` | le istanze per vault e i sei comandi lato host |
 | `crates/fub-abi/src/drawing.rs` | le forme condivise e i limiti |
 | `apps/client/src/editors/spatial/motore/` | la sessione, i gesti, i colori e il chip delle perdite e del motore che manca (`standing.ts`) |
@@ -301,8 +305,7 @@ strumento li modifica, e un gesto sul loro oggetto del motore è rifiutato
 `Cargo.toml` e nei sorgenti (`.github/scripts/check-engine-boundary.mjs` e
 `VECTORCRAFT_OWNERS` in `crates/fub-abi/tests/dependency_invariant.rs`). La prova
 che il motore fa ciò che facevano gli strumenti TypeScript sono i vettori di
-`apps/client/src/__fixtures__/disegno-gesti/`; quella
-senza perdite è il cancello, `node tools/disegno-cancello/cancello.mjs`
+`apps/client/src/__fixtures__/disegno-gesti/`; quella senza perdite è il cancello, `node tools/disegno-cancello/cancello.mjs`
 ([come funziona](../../tools/disegno-cancello/README.md), [le misure di K5](../misure/2026-11-12-disegno-linux-13600kf.md)).
 
 Il motore entra senza le feature di serie di `vectorcraft-engine`: niente
@@ -322,9 +325,7 @@ dipendenze normali, quelli tratteggiati le sole dipendenze di prova.
 ```mermaid
 flowchart LR
     %% @grafo-dipendenze
-    %% Il seguito del grafo: fub-disegno, chi lo prende (l'host, con la
-    %% feature `engine-drawing`), i crate di Fub da cui dipende e quelli di
-    %% VectorCraft che nomina.
+    %% Il seguito del grafo: fub-disegno, chi lo prende e che cosa nomina.
 
     host["fub-host"]
     disegno["fub-disegno"]
@@ -332,6 +333,7 @@ flowchart LR
     motori["fub-motori"]
     scene["fub-scene"]
     testkit["fub-testkit"]
+    vcolor["vectorcraft-color"]
     vdoc["vectorcraft-doc"]
     vengine["vectorcraft-engine"]
     vgeom["vectorcraft-geom"]
@@ -343,6 +345,7 @@ flowchart LR
     disegno --> abi
     disegno --> motori
     disegno --> scene
+    disegno --> vcolor
     disegno --> vdoc
     disegno --> vengine
     disegno --> vgeom
@@ -443,7 +446,4 @@ flowchart LR
     vtrace --> vgeom
 ```
 
-Per l'inchiostro e gli strumenti della superficie vedi
-[Inchiostro e strumenti](ink-and-tools.md); per le superfici e le sessioni
-dei documenti [Superfici dell'editor](editor-surfaces.md); per le operazioni
-che il motore restituisce [le operazioni sulla scena](../reference/scene-operations.md).
+Per l'inchiostro e gli strumenti della superficie vedi [Inchiostro e strumenti](ink-and-tools.md); per le superfici e le sessioni dei documenti [Superfici dell'editor](editor-surfaces.md); per le operazioni che il motore restituisce [le operazioni sulla scena](../reference/scene-operations.md); per lo spazio Completo, con tutte le funzioni del motore, e il disco che il motore non tocca [Il disegno completo](disegno-completo.md) e [il disco](disegno-completo.md#il-disco).

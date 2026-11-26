@@ -35,6 +35,25 @@ describe("gli oggetti della scena", () => {
     ]);
   });
 
+  it("in un sottolivello si scelgono uno per uno, e il sottolivello ne eredita blocco, visibilità e spostamento", () => {
+    const { index } = open(doc(
+      '<g id="l1" fub:layer="Uno" transform="translate(10 0)">' +
+        '<rect id="a" x="0" y="0" width="10" height="10"/>' +
+        '<g id="l2" fub:layer="Sotto" transform="translate(0 5)"><rect id="b" x="0" y="0" width="10" height="10"/></g>' +
+        "</g>" +
+        '<g id="l3" fub:layer="Fermo" fub:locked="true"><g id="l4" fub:layer="Sotto fermo"><rect id="c" width="1" height="1"/></g></g>',
+    ));
+    expect(index.units.map((unit) => unit.key)).toEqual(["a", "b"]);
+    expect(index.get("b")?.layer).toBe("l2");
+    expect(index.get("b")?.bounds).toEqual({ min: [10, 5], max: [20, 15] });
+    expect(index.layers.map((layer) => [layer.id, layer.locked, layer.hidden])).toEqual([
+      ["l1", false, false],
+      ["l2", false, false],
+      ["l3", true, false],
+      ["l4", true, false],
+    ]);
+  });
+
   it("hanno il riquadro di ciò che si vede, contorno e trasformazioni compresi", () => {
     const { index } = open(SHAPES);
     expect(index.get("r")?.bounds).toEqual({ min: [9, 9], max: [31, 31] });
@@ -409,6 +428,18 @@ describe("il riquadro di un elemento nuovo", () => {
     expect(geometryBox(elem)).toEqual({ min: [10, 10], max: [30, 30] });
     expect(geometryBox({ tag: "rect", attrs: { width: "0", height: "5" } })).toBeNull();
   });
+
+  it("un testo verticale sta in colonne da destra a sinistra, un em per lettera", () => {
+    const elem = {
+      tag: "text",
+      attrs: { "writing-mode": "vertical-rl", x: "100", y: "10", "font-size": "20" },
+      children: [
+        { tag: "tspan", attrs: { y: "10", dx: "0" }, text: "abc" },
+        { tag: "tspan", attrs: { y: "10", dx: "-24" }, text: "de" },
+      ],
+    };
+    expect(elemBounds(elem, [1, 0, 0, 1, 0, 0])).toEqual({ min: [66, 10], max: [110, 70] });
+  });
 });
 
 describe("che cosa si vede in un punto", () => {
@@ -416,7 +447,12 @@ describe("che cosa si vede in un punto", () => {
     `${LAYER}<rect id="r" x="0" y="0" width="40" height="40" fill="#0072b2" stroke="#000000" stroke-width="4"/>` +
       // Il buco gira al contrario: con `nonzero` non si riempie.
       '<path id="o" d="M50 0 H90 V40 H50 Z M60 10 V30 H80 V10 Z" fill="#d55e00"/>' +
-      '<g id="g" transform="translate(0 50)"><path id="n" d="M0 0 H40 V40 H0 Z"/><polyline id="p" points="50 0 90 0 90 40" fill="none" stroke="#000000" stroke-width="2"/></g></g>',
+      '<g id="g" transform="translate(0 50)"><path id="n" d="M0 0 H40 V40 H0 Z"/><polyline id="p" points="50 0 90 0 90 40" fill="none" stroke="#000000" stroke-width="2"/></g>' +
+      // Il buco gira nello stesso verso: lo fa la regola `evenodd`, scritta
+      // sul tracciato o ereditata dal gruppo.
+      '<path id="e" d="M100 0 H140 V40 H100 Z M110 10 H130 V30 H110 Z" fill="#d55e00" fill-rule="evenodd"/>' +
+      '<g id="h" fill-rule="evenodd"><path id="i" d="M150 0 H190 V40 H150 Z M160 10 H180 V30 H160 Z"/></g>' +
+      '<path id="z" d="M200 0 H240 V40 H200 Z M210 10 H230 V30 H210 Z" fill-rule="nonzero"/></g>',
   );
   const at = (key: string, p: [number, number], tolerance = 0): [string | null, string] | null => {
     const sampled = open(SEEN).index.get(key)!.sampleAt(p, tolerance);
@@ -436,6 +472,14 @@ describe("che cosa si vede in un punto", () => {
     expect(at("o", [70, 20])).toBeNull();
     expect(at("o", [61, 20], 2)).toEqual(["o", "fill"]);
     expect(at("g", [20, 70])).toEqual(["n", "fill"]);
+  });
+
+  it("con la regola evenodd, scritta o ereditata, un buco nello stesso verso lascia vedere sotto", () => {
+    expect(at("e", [105, 20])).toEqual(["e", "fill"]);
+    expect(at("e", [120, 20])).toBeNull();
+    expect(at("h", [155, 20])).toEqual(["i", "fill"]);
+    expect(at("h", [170, 20])).toBeNull();
+    expect(at("z", [220, 20])).toEqual(["z", "fill"]);
   });
 
   it("il contorno di una spezzata aperta non ha il lato che la chiude, e dà la sua geometria", () => {

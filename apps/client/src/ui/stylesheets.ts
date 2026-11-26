@@ -24,7 +24,9 @@
 //   `style.cssText` sono stile scritto da uno script, e la CSP non lo guarda.
 //   `styledElement` la offre a chi descrive un elemento invece di crearlo
 //   (il `toDOM` di uno schema ProseMirror, che un `style` fra gli attributi
-//   lo scriverebbe con `setAttribute`).
+//   lo scriverebbe con `setAttribute`), e `cssomStyleDescendants` al
+//   contenitore dove una libreria scrive lo `style` dei suoi elementi con
+//   `setAttribute` (Mermaid, dove misura).
 //
 // `.github/scripts/check-inline-styles.mjs` impedisce che torni un
 // `<style>` creato da uno script o un `style` scritto come markup; il banco
@@ -86,6 +88,151 @@ export function styledElement(
   for (const [name, value] of Object.entries(style)) dom.style.setProperty(name, value);
   return { dom, contentDOM: dom };
 }
+
+/**
+ * Un contenitore dove una libreria monta degli elementi e poi scrive il loro
+ * stile con `setAttribute("style", …)`, che la CSP rifiuta: Mermaid, dove
+ * misura. Lì d3 scrive lo `style` sul `<div>` che monta (`appendDivSvgG`,
+ * `font-family`) e sui discendenti dell'SVG di prova: `style A
+ * font-size:30px`, `linkStyle`, gli stili di un `classDef`. Il rifiuto non si
+ * vede nei colori del disegno finale (l'attributo resta scritto, e l'immagine
+ * non è sotto la CSP della pagina), ma si vede nelle misure: un'etichetta
+ * misurata senza il suo `font-size` esce dal riquadro (#528).
+ *
+ * Per ogni elemento che entra nel contenitore, a qualunque profondità, lo
+ * `style` scritto come attributo diventa CSSOM (`style.cssText`): lo stesso
+ * stile, che la CSP lascia valere, senza allentarla. Le strade da cui un
+ * elemento entra sono quelle di d3 e di Mermaid: `appendChild`,
+ * `insertBefore` e `innerHTML`. Quest'ultima è il `.html()` di d3: le
+ * etichette HTML dei flussi (`addHtmlSpan`, spente da `htmlLabels: false` in
+ * `mermaid.ts`), ma anche il testo a capo e le formule dei diagrammi di
+ * sequenza, le icone di architettura e degli alberi, che arrivano come markup
+ * e possono portare un `style="…"`. Uno `style` che l'elemento portava già
+ * quando è entrato, o che il markup gli ha scritto, si riscrive allo stesso
+ * modo.
+ *
+ * Il resto della pagina non cambia: niente prototipi toccati, soltanto
+ * cinque proprietà proprie sugli elementi del contenitore, che spariscono
+ * con loro. Le funzioni sono le stesse per tutti gli elementi (nessuna
+ * chiusura per elemento): un diagramma da migliaia di nodi paga una
+ * `defineProperties` a elemento.
+ *
+ * Lo stile che passa da `cssText` torna nell'attributo come il motore lo
+ * scrive (`fill: rgb(255, 153, 255)` per `fill:#f9f`): il disegno finale, che
+ * Mermaid serializza da questi elementi, lo porta così, e i doppioni che
+ * Mermaid scrive (`linkStyle`) diventano uno. Una dichiarazione che il
+ * motore non accetta sparisce anche dall'attributo, ma è la stessa che
+ * l'immagine, disegnata dallo stesso motore, ignorerebbe. Misurato nel banco
+ * (#528) su flussi con `style`, `classDef` e `linkStyle`, sequenza, gantt,
+ * stati e classi: fra prima e dopo, nel disegno finale cambia solo la forma
+ * del testo, e manca soltanto una proprietà inventata (`foo:bar`).
+ */
+export function cssomStyleDescendants(element: Element): void {
+  if (prepared.has(element)) return;
+  prepared.add(element);
+  if (hasInlineStyle(element)) {
+    Object.defineProperties(element, OWN);
+    const written = element.getAttribute("style");
+    if (written !== null) writeAsCssom(element, written);
+  } else {
+    // Un elemento senza `style` (MathML dove manca): i figli possono averlo.
+    Object.defineProperties(element, INSERTIONS);
+  }
+  for (const child of Array.from(element.children)) cssomStyleDescendants(child);
+}
+
+type Styled = Element & ElementCSSInlineStyle;
+
+function hasInlineStyle(element: Element): element is Styled {
+  return element instanceof HTMLElement || element instanceof SVGElement
+    || (typeof MathMLElement !== "undefined" && element instanceof MathMLElement);
+}
+
+/** Gli elementi già preparati: uno spostato dentro il contenitore non si prepara due volte. */
+const prepared = new WeakSet<Element>();
+
+/**
+ * Gli elementi a cui si sta scrivendo `cssText`. Un DOM che riflette `cssText`
+ * sull'attributo chiamando `setAttribute` (happy-dom, nei test) torna qui:
+ * quella volta l'attributo si scrive e basta.
+ */
+const reflecting = new WeakSet<Element>();
+
+// I metodi del prototipo si leggono a ogni chiamata, non una volta sola:
+// così chi li osserva (i test, un profilo) vede anche queste scritture, e il
+// modulo si carica anche dove il DOM non c'è (i test senza ambiente DOM).
+
+function writeAsCssom(element: Styled, value: string): void {
+  reflecting.add(element);
+  try {
+    element.style.cssText = String(value);
+  } finally {
+    reflecting.delete(element);
+  }
+}
+
+function setAttribute(this: Styled, name: string, value: string): void {
+  if (reflecting.has(this) || name.toLowerCase() !== "style") Element.prototype.setAttribute.call(this, name, value);
+  else writeAsCssom(this, value);
+}
+
+function setAttributeNS(this: Styled, namespace: string | null, name: string, value: string): void {
+  // Per il DOM un namespace vuoto è nessun namespace: `style` è lo stesso.
+  if (reflecting.has(this) || (namespace !== null && namespace !== "") || name.toLowerCase() !== "style") {
+    Element.prototype.setAttributeNS.call(this, namespace, name, value);
+  } else {
+    writeAsCssom(this, value);
+  }
+}
+
+function prepareInserted(node: Node): void {
+  // Un frammento si svuota entrando: i suoi figli si preparano prima.
+  if (node instanceof DocumentFragment) {
+    for (const child of Array.from(node.children)) cssomStyleDescendants(child);
+  } else if (node instanceof Element) {
+    cssomStyleDescendants(node);
+  }
+}
+
+function appendChild<T extends Node>(this: Element, child: T): T {
+  prepareInserted(child);
+  return Node.prototype.appendChild.call(this, child) as T;
+}
+
+function insertBefore<T extends Node>(this: Element, child: T, reference: Node | null): T {
+  prepareInserted(child);
+  return Node.prototype.insertBefore.call(this, child, reference) as T;
+}
+
+/**
+ * Il markup scritto con `innerHTML` arriva già nel DOM, col suo `style`
+ * come attributo che la CSP non ha lasciato valere: i figli nuovi si
+ * preparano dopo, e il loro `style` diventa CSSOM.
+ */
+function innerHTMLOf(): PropertyDescriptor {
+  return Object.getOwnPropertyDescriptor(Element.prototype, "innerHTML")!;
+}
+
+function getInnerHTML(this: Element): string {
+  return innerHTMLOf().get!.call(this) as string;
+}
+
+function setInnerHTML(this: Element, markup: string): void {
+  innerHTMLOf().set!.call(this, markup);
+  for (const child of Array.from(this.children)) cssomStyleDescendants(child);
+}
+
+const INSERTIONS: PropertyDescriptorMap = {
+  appendChild: { configurable: true, writable: true, value: appendChild },
+  insertBefore: { configurable: true, writable: true, value: insertBefore },
+  innerHTML: { configurable: true, get: getInnerHTML, set: setInnerHTML },
+};
+
+const OWN: PropertyDescriptorMap = {
+  ...INSERTIONS,
+  setAttribute: { configurable: true, writable: true, value: setAttribute },
+  setAttributeNS: { configurable: true, writable: true, value: setAttributeNS },
+};
 
 let stamping = 0;
 

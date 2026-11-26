@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:fub="https://fubeo.github.io/ns/scene/1" fub:version="1" viewBox="0 0 400 300" width="400" height="300">
+  <defs id="fub-defs">
+    <symbol id="r4k7m2p9q" overflow="visible">
+      <title>Presa</title>
+      <circle id="o1a2b3c4d" cx="0" cy="0" r="20" fill="#ffffff" stroke="#1a1a1a" stroke-width="2"/>
+      <line id="o5e6f7g8h" x1="-8" y1="-6" x2="-8" y2="6" stroke="#1a1a1a" stroke-width="2"/>
+    </symbol>
+    <symbol id="r9x8w7v6u" overflow="visible">
+      <title>Vite</title>
+      <rect id="ob2b2b2b2" x="-6" y="-6" width="12" height="12" fill="#3366cc"/>
+    </symbol>
+  </defs>
+  <rect id="fub-paper" fub:role="paper" x="0" y="0" width="400" height="300" fill="#ffffff"/>
+  <g id="l1a2b3c4d" fub:layer="Livello 1">
+    <rect id="oa1a1a1a1" x="100" y="100" width="100" height="50" fill="#ff0000"/>
+    <use id="o2n3p4q5r" transform="translate(320 180)" href="#r9x8w7v6u"/>
+    <use id="o6s7t8u9v" transform="matrix(0 1 -1 0 60 60)" href="#r4k7m2p9q"/>
+  </g>
+</svg>

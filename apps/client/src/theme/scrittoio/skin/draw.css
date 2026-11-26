@@ -208,6 +208,41 @@
   stroke: var(--accent);
   stroke-width: 1.5px;
 }
+/* I segni del motore del Completo (`motore/tracciati.ts`): il tracciato aperto
+   della Penna, i punti e le maniglie, nel colore d'accento. Un punto vuoto ha
+   il fondo del tema, uno pieno l'accento. */
+.draw-engine-line {
+  fill: none;
+  stroke: var(--accent);
+}
+.draw-engine-point {
+  fill: var(--bg);
+  stroke: var(--accent);
+}
+.draw-engine-point-pieno {
+  fill: var(--accent);
+}
+.draw-engine-handle {
+  fill: var(--accent);
+}
+/* Le scritte del motore (misure accanto al puntatore, etichette delle guide,
+   distanze): il testo del tema. Le etichette delle guide nel colore d'accento. */
+.draw-engine-text {
+  fill: var(--fg);
+  font-family: var(--font-ui);
+}
+.draw-engine-label {
+  fill: var(--accent);
+}
+.draw-engine-highlight {
+  fill: color-mix(in oklch, var(--accent) 30%, transparent);
+}
+.draw-engine-swatch {
+  stroke: var(--fg);
+}
+.draw-engine-swatch-scelto {
+  stroke: var(--accent);
+}
 .draw-zoom-box {
   border: 1px dashed var(--accent);
   background: color-mix(in oklch, var(--accent) 8%, transparent);
@@ -222,6 +257,25 @@
   box-shadow:
     0 0 0 1px var(--border),
     0 1px 3px rgb(0 0 0 / 0.18);
+}
+/* La griglia di trasparenza (K6 T11): la carta a scacchi, come un foglio che
+   non ha un fondo, anche le tavole. La carta resta bianca nei due temi, e lo
+   scacchiere è fisso come lei. Quadretti di 8 px, con quattro gradienti lineari
+   sfalsati (il sanitizzatore dei temi non ammette `conic-gradient`). */
+/* Il foglio del documento (il suo rettangolo nel disegno) non ha più il riempimento
+   bianco: lo scacchiere si vede dove il foglio non ha un fondo suo. */
+.draw-surface[data-transparency] [data-paper] {
+  fill: none;
+}
+.draw-surface[data-transparency] .draw-page {
+  background-color: #ffffff;
+  background-image:
+    linear-gradient(45deg, #e6e6e6 25%, transparent 25%),
+    linear-gradient(-45deg, #e6e6e6 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #e6e6e6 75%),
+    linear-gradient(-45deg, transparent 75%, #e6e6e6 75%);
+  background-size: 16px 16px;
+  background-position: 0 0, 0 8px, 8px -8px, -8px 0;
 }
 /* Il nome di una tavola, sul tavolo sopra di lei: quello della tavola
    scelta più scuro. */
@@ -510,6 +564,22 @@ button.draw-isolation-crumb:hover {
   border-radius: var(--radius-sm);
   font-size: var(--text-sm);
 }
+/* Alti quanto i campi del kit, nella stessa riga; col dito 44 px. Il
+   selettore è doppio perché la struttura della shell fissa `min-height: 44px`
+   a questi due, da sola. */
+.draw-objects-filter .draw-objects-search,
+.draw-objects-filter .draw-objects-kind {
+  box-sizing: border-box;
+  height: var(--control-h);
+  min-height: 0;
+  padding: 0 var(--space-3);
+}
+@media (pointer: coarse) {
+  .draw-objects-filter .draw-objects-search,
+  .draw-objects-filter .draw-objects-kind {
+    min-height: 44px;
+  }
+}
 .draw-object-rename {
   padding: var(--space-1) var(--space-2);
   border-radius: var(--radius-sm);
@@ -535,6 +605,17 @@ button.draw-isolation-crumb:hover {
 .draw-object[aria-disabled="true"] {
   color: var(--muted);
   font-style: italic;
+}
+/* Il livello corrente: un puntino nel segno, nel colore del tema. Non ha
+   parole: a voce il nome dice che è quello corrente. */
+.draw-object[data-current] > .draw-object-mark::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  vertical-align: middle;
 }
 /* Col filtro, una riga che c'è per ciò che contiene è in grigio: la sua
    freccia aperta dice che i trovati sono sotto. */
@@ -1042,4 +1123,864 @@ button.draw-isolation-crumb:hover {
 .live-follow[aria-pressed="true"] {
   background: var(--bg-active);
   box-shadow: var(--shadow-sm);
+}
+
+/* ── K6 · I campioni nella scheda Risorse (T10) ─────────────────────────── */
+.draw-resources-corpo {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+}
+.draw-resources-swatches {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  width: auto;
+  padding: 0;
+}
+
+
+
+/* ── K6 · Il cassetto «Tutti gli strumenti» (T8) ────────────────────────── */
+.kit-popover.draw-drawer-popover {
+  padding: 0;
+}
+.draw-drawer-head {
+  gap: var(--space-1);
+  padding: var(--space-6) var(--space-6) var(--space-3);
+}
+.draw-drawer-title {
+  margin: 0;
+  color: var(--text);
+  font-size: var(--text-md);
+  font-weight: var(--weight-bold);
+  line-height: var(--leading-tight);
+}
+.draw-drawer-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+.draw-drawer-field {
+  padding: 0 var(--space-6) var(--space-4);
+}
+.draw-drawer-groups {
+  gap: var(--space-5);
+  padding: 0 var(--space-4) var(--space-6);
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+.draw-drawer-group {
+  gap: var(--space-2);
+}
+.draw-drawer-heading {
+  margin: 0;
+  padding: 0 var(--space-2);
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  letter-spacing: 0;
+  text-transform: none;
+}
+.draw-drawer-grid {
+  gap: var(--space-1);
+}
+.draw-drawer-tool {
+  gap: var(--space-3);
+  padding: var(--space-1) var(--space-2);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  font-family: inherit;
+  font-size: var(--text-sm);
+}
+.draw-drawer-tool:hover {
+  background: var(--overlay-hover);
+}
+.draw-drawer-tool[aria-pressed="true"] {
+  background: var(--accent-wash);
+  color: var(--accent);
+}
+.draw-drawer-tool:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: -1px;
+}
+.draw-drawer-icon {
+  color: var(--muted);
+}
+.draw-drawer-tool[aria-pressed="true"] .draw-drawer-icon {
+  color: inherit;
+}
+.draw-drawer-icon svg {
+  width: 20px;
+  height: 20px;
+}
+.draw-drawer-keys {
+  color: var(--muted);
+  font-family: var(--font-ui);
+  font-size: var(--text-xs);
+}
+.draw-drawer-empty {
+  margin: 0;
+  padding: var(--space-6);
+  color: var(--muted);
+  text-align: center;
+}
+
+/* Il pulsante «Modifica la colonna…» in fondo al cassetto: un testo del
+   kit, col colore dell'accento e il fuoco del kit. */
+.draw-drawer-edit {
+  align-self: flex-start;
+  margin: 0 var(--space-6) var(--space-6);
+  padding: var(--space-1) var(--space-3);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--accent);
+  font-family: inherit;
+  font-size: var(--text-sm);
+}
+.draw-drawer-edit:hover {
+  background: var(--overlay-hover);
+}
+.draw-drawer-edit:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: -1px;
+}
+
+/* La scatola del cassetto: una colonna che tiene ferma la testa e il campo
+   (scorrono solo i gruppi), e il nome dello strumento che va a capo. */
+.draw-drawer {
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  width: min(720px, calc(100vw - 32px));
+  max-height: min(560px, calc(100vh - 32px));
+}
+.draw-drawer-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* ── K6 · Il menu dello zoom della banda (T11) ───────────────────────────── */
+/* Un popover del kit con le voci del menu di contesto, e sotto il campo della
+   percentuale. Le voci hanno la faccia delle voci del menu: il fondo al passaggio
+   e l'anello del fuoco. */
+/* Il fondo, il raggio e l'ombra sono quelli del menu di contesto: il menu dello
+   zoom sta accanto alle altre scelte della banda. */
+.kit-popover.draw-zoom-popover {
+  min-width: 220px;
+  border-radius: calc(var(--radius-menu) + var(--space-2));
+  background: var(--sheet);
+  box-shadow: var(--shadow-pop, 0 0 0 1px color-mix(in oklab, var(--text) 8%, transparent), var(--shadow-3));
+}
+.draw-zoom-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.draw-zoom-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.draw-zoom-item {
+  display: flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 var(--space-3);
+  border: none;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+.draw-zoom-item:hover {
+  background: var(--bg-hover);
+}
+.draw-zoom-item:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: -1px;
+}
+.draw-zoom-separator {
+  height: 1px;
+  margin: 0 var(--space-3);
+  background: var(--border);
+}
+.draw-zoom-field {
+  padding: 0 var(--space-3) var(--space-1);
+}
+/* ── K6 · Il punto nella fila delle opzioni (T12) ───────────────────────── */
+.draw-point-place {
+  gap: var(--space-4);
+}
+.kit-number.draw-point-coord {
+  grid-template-columns: auto 5.5rem;
+  column-gap: var(--space-2);
+}
+.draw-point-coord .kit-number-box {
+  height: 28px;
+}
+/* La sezione Allinea (T13, giro 2): le due scelte di «Allinea a» e i gruppi dei pulsanti. */
+.draw-align-to {
+  display: flex;
+  gap: var(--space-1);
+  margin-block-end: var(--space-2);
+}
+.draw-align-to > .draw-button {
+  flex: 1 1 0;
+  min-width: 0;
+}
+.draw-align-group {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-1);
+  margin-block-end: var(--space-2);
+}
+.draw-align-group > p {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-weight: 600;
+}
+/* La sezione Trasforma (K6 T13, giro 3): i campi X, Y, larghezza, altezza, rotazione e inclinazione, una riga piena per campo. */
+.draw-transform-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-1);
+  margin-block-end: var(--space-2);
+}
+.draw-align-group > .kit-button {
+  min-width: 0;
+  width: 100%;
+  padding: var(--space-1) var(--space-2);
+  white-space: normal;
+  text-align: center;
+}
+
+/* ── K6 · La sezione Colore del Design (T14, giro 1) ─────────────────────── */
+/* Riempimento e contorno uno sotto l'altro, ognuno col suo nome a sinistra
+   come le righe di Trasforma; il lato attivo ha il bordo accento e il nome in
+   grassetto. Sotto, Scambia, Nessuno e Di serie in una riga. */
+.draw-color {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-block-end: var(--space-2);
+}
+.draw-color-wells {
+  display: grid;
+  grid-template-columns: minmax(0, max-content) minmax(0, 1fr);
+  gap: var(--space-1) var(--space-3);
+  align-items: center;
+}
+.draw-color-label {
+  color: var(--text);
+  font-size: var(--text-sm);
+}
+.draw-color-label.draw-color-active {
+  font-weight: var(--weight-bold);
+}
+.draw-color-wells .kit-color-well,
+.draw-color-wells .kit-color-well-button {
+  width: 100%;
+  min-width: 0;
+}
+.draw-color-wells .kit-color-well-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.draw-color-wells .draw-color-active .kit-color-well-button {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+.draw-color-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-1);
+}
+.draw-color-actions > .kit-button {
+  min-width: 0;
+  padding: var(--space-1) var(--space-2);
+  white-space: normal;
+  text-align: center;
+}
+
+/* ── K6 · La sezione Sfumatura del Design (T15, giro 5) ──────────────────── */
+/* Il colore da sfumare, il tipo e l'angolo, la striscia dei colori e i punti:
+   per ognuno il pozzo, «Togli», la posizione e l'opacità. Il punto
+   scelto ha il bordo accento, come il lato attivo del Colore. */
+.draw-gradient {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.draw-gradient-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+  color: var(--text);
+  font-size: var(--text-sm);
+}
+.draw-gradient-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.draw-gradient-bar {
+  height: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background-color: var(--bg);
+}
+.draw-gradient-stops {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.draw-gradient-stop {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) max-content;
+  gap: var(--space-1);
+  align-items: center;
+  padding: var(--space-1);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+}
+.draw-gradient-stop.draw-gradient-stop-chosen {
+  border-color: var(--accent);
+}
+/* Il pozzo e «Togli» in una riga; posizione e opacità sotto, larghe quanto la
+   sezione, come lo spessore del Contorno: in mezza colonna non ci stanno. */
+.draw-gradient-stop > .kit-number {
+  grid-column: 1 / -1;
+}
+.draw-gradient-stop > .kit-button {
+  grid-row: 1;
+  grid-column: 2;
+}
+.draw-gradient-stop .kit-color-well,
+.draw-gradient-stop .kit-color-well-button {
+  width: 100%;
+  min-width: 0;
+}
+.draw-gradient-stop .kit-color-well-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.draw-gradient-stop > .kit-button,
+.draw-gradient-actions > .kit-button,
+.draw-gradient-create {
+  min-width: 0;
+  padding: var(--space-1) var(--space-2);
+}
+.draw-gradient-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-1);
+}
+/* Le preimpostate (giro 6), in fondo alla sezione e chiuse di serie: il filo
+   le stacca dai punti; dentro la scelta, la striscia, «Applica» ed «Elimina»,
+   il nome e «Salva» in una riga, l'avviso. */
+/* Un `details` non fa da flex in ogni WebView: lo spazio fra i figli è un
+   margine. */
+.draw-gradient-presets {
+  display: block;
+  min-width: 0;
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--border);
+}
+.draw-gradient-presets > :nth-child(n + 2) {
+  margin-top: var(--space-2);
+}
+.draw-gradient-presets-title {
+  display: list-item;
+  padding: var(--space-1) 0;
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+}
+.draw-gradient-presets-title:hover {
+  background: var(--overlay-hover);
+}
+.draw-gradient-presets-title:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: calc(-1 * var(--focus-ring-width));
+}
+.draw-gradient-save {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) max-content;
+  gap: var(--space-1);
+  align-items: stretch;
+}
+.draw-gradient-save > :first-child,
+.draw-gradient-save-name {
+  min-width: 0;
+}
+.draw-gradient-save > .kit-button,
+.draw-gradient-presets-retry {
+  min-width: 0;
+  padding: var(--space-1) var(--space-2);
+}
+.draw-gradient-presets-error {
+  color: var(--danger);
+}
+
+/* ── K6 · Le guide del righello (`guide-linee.ts`) ───────────────────────── */
+/* Sopra il disegno e sotto i righelli di bordo; il puntatore le attraversa (i gesti
+   li prende la superficie). Il colore di serie delle guide di VectorCraft (#4affff,
+   linee piene), più scuro di poco perché si legga anche sulla carta bianca; una
+   guida bloccata nel file è tratteggiata, quella che si prende o si trascina più
+   spessa. */
+.draw-guides {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+  overflow: hidden;
+  pointer-events: none;
+}
+.draw-guide-line {
+  stroke: #1fc8e0;
+  stroke-width: 1px;
+  vector-effect: non-scaling-stroke;
+}
+.draw-guide-line-locked {
+  stroke-dasharray: 4 3;
+}
+.draw-guide-line-hot {
+  stroke-width: 2px;
+}
+/* Una guida scelta (clic con le Selezioni): Canc la toglie, le frecce la spostano. */
+.draw-guide-line-scelta {
+  stroke: var(--accent);
+  stroke-width: 2px;
+}
+/* Un tracciato-guida (Crea guide): la sua forma, senza riempimento. */
+.draw-guide-path {
+  fill: none;
+}
+/* Ritaglia immagine (`tools/editor/ritaglio-immagine.ts`): l'immagine fuori dal riquadro
+   scurita come in VectorCraft (nero al 43%), il riquadro e le maniglie nel ciano dei
+   segni dello strumento, la misura sotto l'angolo in basso a sinistra. I gesti li prende
+   la radice: il puntatore attraversa il disegno. */
+.draw-ritaglio {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 2;
+  overflow: hidden;
+  pointer-events: none;
+}
+.draw-ritaglio-ombra {
+  fill: rgb(0 0 0 / 43%);
+}
+.draw-ritaglio-bordo {
+  fill: none;
+  stroke: #1fc8e0;
+  stroke-width: 1px;
+  vector-effect: non-scaling-stroke;
+}
+.draw-ritaglio-maniglia {
+  fill: #ffffff;
+  stroke: #1fc8e0;
+  stroke-width: 1px;
+}
+.draw-ritaglio-misura {
+  fill: #1fc8e0;
+  font: 11px var(--font-ui, sans-serif);
+  stroke: rgb(0 0 0 / 60%);
+  stroke-width: 2px;
+}
+.draw-surface[data-ritaglio="move"] {
+  cursor: move !important;
+}
+.draw-surface[data-ritaglio="ns"] {
+  cursor: ns-resize !important;
+}
+.draw-surface[data-ritaglio="ew"] {
+  cursor: ew-resize !important;
+}
+.draw-surface[data-ritaglio="nwse"] {
+  cursor: nwse-resize !important;
+}
+.draw-surface[data-ritaglio="nesw"] {
+  cursor: nesw-resize !important;
+}
+/* Sopra una guida che si prende il cursore dice dove va, anche sopra quello dello
+   strumento (scritto sulla superficie da `motore/gesti.ts`). */
+.draw-surface[data-guida-sotto="x"] {
+  cursor: ew-resize !important;
+}
+.draw-surface[data-guida-sotto="y"] {
+  cursor: ns-resize !important;
+}
+
+/* ── K6 · I righelli di bordo del foglio (T11, giro E) ───────────────────── */
+/* Due righe dentro il foglio, sul suo bordo in alto e a sinistra: sopra il disegno,
+   e il puntatore le attraversa. Le misure, 20 px la riga e 28 px la colonna, sono
+   quelle di `edge-rulers.ts`. */
+.draw-ruler-x,
+.draw-ruler-y {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 1;
+  overflow: hidden;
+  pointer-events: none;
+  background: var(--bg-elev);
+}
+.draw-ruler-x {
+  width: 100%;
+  height: 20px;
+  box-shadow: inset 0 -1px 0 var(--border);
+}
+.draw-ruler-y {
+  width: 28px;
+  height: 100%;
+  box-shadow: inset -1px 0 0 var(--border);
+}
+.draw-ruler-x[hidden],
+.draw-ruler-y[hidden] {
+  display: none;
+}
+.draw-ruler-tick {
+  stroke: var(--muted);
+  stroke-width: 1;
+}
+.draw-ruler-label {
+  fill: var(--muted);
+  font-family: var(--font-ui);
+  font-size: var(--text-xs);
+}
+
+/* ── K6 · Carattere e Paragrafo del Design (T16, giro 1) ─────────────────── */
+/* Carattere: la famiglia a riga piena, sotto lo stile, poi corpo e spaziatura
+   affiancati. Paragrafo: i tre allineamenti in una barra, come nel pannello. */
+.draw-type {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-block-end: var(--space-2);
+}
+.draw-type-family > .kit-font-button {
+  width: 100%;
+  max-width: none;
+  min-width: 0;
+}
+.draw-type-family,
+.draw-type-style,
+.draw-type-align {
+  min-width: 0;
+}
+/* Corpo e spaziatura una riga piena per campo, come Trasforma. */
+.draw-type-sizes {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-1);
+}
+.draw-type-align {
+  margin-block-end: var(--space-2);
+}
+
+/* ── K6 · Risorse › Campioni: scelta, azioni e finestre (T14, giro 2) ────── */
+/* La griglia è quella del prototipo (`kit-color-swatches`); sotto, le azioni
+   in due colonne che vanno a capo. La finestra «Nuovo campione» tiene il
+   selettore del kit a tutta larghezza. */
+.draw-resources-swatches-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-1);
+}
+.draw-resources-swatches-actions > .kit-button {
+  min-width: 0;
+  padding: var(--space-1) var(--space-2);
+  white-space: normal;
+  text-align: center;
+}
+.draw-resources-swatches-label {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+.kit-color.draw-resources-swatches-picker {
+  width: auto;
+  padding: 0;
+}
+
+/* Le caselle della copia del Contagocce (K6 T14, giro 8): una fila con lo spazio del kit fra
+   una casella e la parola dopo, nel menu «…» come in linea nella testata. */
+.draw-contagocce-copia {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+/* Ricolora grafica (K6 T14, giro 3): una riga per colore della scelta, il colore attuale a sinistra e
+   il colore nuovo (il selettore del kit) a destra. La lista scorre se i colori sono tanti. */
+.draw-recolor-list {
+  display: grid;
+  gap: var(--space-1);
+  max-height: 40vh;
+  overflow-y: auto;
+  padding: var(--space-1);
+  border: 1px solid var(--border);
+}
+.draw-recolor-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--space-2);
+}
+.draw-recolor-current {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+}
+.draw-recolor-chip {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+}
+.draw-recolor-code {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.85em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.draw-recolor-arrow {
+  color: var(--muted);
+}
+
+/* Dati del grafico (K6, grafici): i pulsanti della tabella, poi la tabella che scorre nei due versi;
+   la prima riga ha i nomi delle serie, la prima colonna le categorie. */
+.draw-graph-data-body {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.draw-graph-data-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+.draw-graph-data-scroll {
+  max-height: 45vh;
+  overflow: auto;
+  border: 1px solid var(--border);
+}
+.draw-graph-data-table {
+  border-collapse: collapse;
+}
+.draw-graph-data-table td,
+.draw-graph-data-table th {
+  padding: 0;
+  border: 1px solid var(--border);
+}
+.draw-graph-data-cell {
+  width: 7em;
+  min-width: 0;
+  border: 0;
+  border-radius: 0;
+}
+
+/* Guida colori (K6 T14, guida): la sezione del Design e le sue finestre. Una riga per armonia-colore,
+   il colore di partenza al centro con il suo bordo. Con Senza scelta i campioni sono spenti. */
+.draw-guide-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+.draw-guide-rule-name {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.draw-guide-note {
+  margin: 0;
+  color: var(--muted);
+}
+.draw-guide-grid {
+  display: grid;
+  gap: 2px;
+  overflow-x: auto;
+}
+.draw-guide-row {
+  display: flex;
+  gap: 2px;
+}
+.draw-guide-swatch {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+}
+.draw-guide-swatch[data-base] {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.draw-guide-swatch:disabled {
+  opacity: 0.5;
+}
+.draw-guide-field {
+  display: grid;
+  gap: var(--space-1);
+}
+.draw-guide-rule {
+  min-width: 0;
+}
+
+/* ── K6 · La sezione «Tavole» del Design ─────────────────────────────────── */
+/* La sezione «Aspetto»: la pila degli effetti, una riga per effetto con
+   l'occhio, il nome (pulsante quando ha opzioni) e i pulsanti di posto. */
+.draw-appearance-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.draw-appearance-head {
+  margin-top: var(--space-2);
+}
+.draw-appearance-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: 28px;
+}
+.draw-appearance-eye {
+  flex: none;
+  margin: 0;
+}
+.draw-appearance-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: start;
+}
+.draw-appearance-name[data-hidden="true"] {
+  color: var(--text-muted);
+  text-decoration: line-through;
+}
+.draw-appearance-button {
+  flex: none;
+}
+.draw-appearance-expand {
+  margin-top: var(--space-2);
+}
+
+.draw-artboards {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+}
+.draw-artboards-list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 180px;
+  overflow-y: auto;
+}
+.draw-artboards-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  min-height: 28px;
+  padding: 0 var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+.draw-artboards-item:hover {
+  background: var(--bg-hover);
+}
+.draw-artboards-item[aria-pressed="true"] {
+  background: var(--bg-active);
+}
+.draw-artboards-number {
+  min-width: 2ch;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.draw-artboards-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.draw-artboards-current {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+.draw-artboards-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+.draw-artboards-fields[hidden] {
+  display: none;
+}
+.draw-artboards-name-field {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.draw-artboards-art {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.draw-artboards-bar {
+  gap: var(--space-1);
+}
+
+/* ── K6 · Nascondi tavole da disegno (Visualizza) ────────────────────────── */
+/* Le carte delle tavole restano (sono il fondo del disegno), ma senza bordo
+   né ombra e senza nome: si confondono col resto del tavolo. */
+.draw-surface[data-boards-hidden] .draw-page {
+  box-shadow: none;
+}
+.draw-surface[data-boards-hidden] .draw-sheet-name {
+  visibility: hidden;
+}
+.draw-view-goto-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
 }

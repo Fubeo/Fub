@@ -6,6 +6,7 @@
 // intero, e chi rinomina non la sceglie.
 import type { KnownVault } from "../host/contract";
 import { t } from "../i18n/strings";
+import { composingKey } from "../kit/ime";
 
 /// L'etichetta col nome e il pulsante «Rinomina»: il pulsante mette al posto
 /// dell'etichetta un campo, e solo Invio salva. Uscire dal campo lascia
@@ -57,6 +58,7 @@ export function vaultNameEditor(
       else rename.focus();
     };
     input.addEventListener("keydown", (event) => {
+      if (composingKey(event)) return;
       if (event.key === "Enter") {
         event.preventDefault();
         finish(true);

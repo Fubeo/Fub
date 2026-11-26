@@ -42,7 +42,8 @@ export function styleOf(parent: Style, attrs: readonly PaintAttr[]): Style {
   const family = attr(attrs, "font-family");
   const weight = attr(attrs, "font-weight");
   const spacing = attr(attrs, "letter-spacing");
-  if (fill === undefined && stroke === undefined && width === undefined && size === undefined && anchor === undefined && family === undefined && weight === undefined && spacing === undefined) {
+  const rule = attr(attrs, "fill-rule");
+  if (fill === undefined && stroke === undefined && width === undefined && size === undefined && anchor === undefined && family === undefined && weight === undefined && spacing === undefined && rule === undefined) {
     return parent;
   }
   return {
@@ -55,6 +56,7 @@ export function styleOf(parent: Style, attrs: readonly PaintAttr[]): Style {
     family: family === undefined ? parent.family : family.trim(),
     weight: weight === undefined ? parent.weight : weight.trim(),
     color: fill === undefined ? parent.color : fill.trim(),
+    evenodd: rule === undefined ? parent.evenodd : rule.trim() === "evenodd",
   };
 }
 
@@ -181,6 +183,7 @@ function lineMeasure(parts: readonly (string | TextPiece)[], chars: number, size
 /// suo riquadro, dalla cima della prima riga al fondo dell'ultima; uno su
 /// tracciato ha le lettere lungo `track`.
 export function textSegments(attrs: readonly PaintAttr[], runs: readonly TextRun[], style: Style, wrap: number | null = null, track: Track | null = null): Segment[] {
+  if (attr(attrs, "writing-mode")?.trim() === "vertical-rl") return columnSegments(attrs, runs, style);
   const x = len(attrs, "x") ?? 0;
   let y = len(attrs, "y") ?? 0;
   const segments: Segment[] = [];
@@ -204,6 +207,29 @@ export function textSegments(attrs: readonly PaintAttr[], runs: readonly TextRun
     segments.push(...rectPath(lineStart(lineX, line.width, anchor), y - ASCENT_EM * line.size, line.width, (ASCENT_EM + DESCENT_EM) * line.size, 0, 0));
   }
   if (wrap !== null && top !== null) segments.push(...rectPath(lineStart(x, wrap, style.anchor), top, wrap, bottom - top, 0, 0));
+  return segments;
+}
+
+/// Le colonne di un testo verticale (formato della scena, testo §10) come
+/// rettangoli: ogni colonna ha la sua linea di mezzo in `x`, spostata di `dx`
+/// da quella prima, comincia in `y` ed è larga un em; la sua altezza è la
+/// misura delle righe orizzontali.
+function columnSegments(attrs: readonly PaintAttr[], runs: readonly TextRun[], style: Style): Segment[] {
+  let x = len(attrs, "x") ?? 0;
+  const y = len(attrs, "y") ?? 0;
+  const segments: Segment[] = [];
+  for (const run of runs) {
+    if (run.kind !== "span") continue;
+    const size = len(run.attrs, "font-size") ?? style.fontSize;
+    x += len(run.attrs, "dx") ?? 0;
+    const chars = readable(run.text);
+    if (chars === 0) continue;
+    const line = lineMeasure(run.parts ?? [run.text], chars, size, spacingOf(run.attrs, style.spacing));
+    // In verticale una lettera dritta, come un ideogramma, occupa un em, non 0,6.
+    const height = line.width / CHAR_EM;
+    const anchor = attr(run.attrs, "text-anchor")?.trim() ?? style.anchor;
+    segments.push(...rectPath(x - line.size / 2, lineStart(len(run.attrs, "y") ?? y, height, anchor), line.size, height, 0, 0));
+  }
   return segments;
 }
 

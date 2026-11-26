@@ -33,7 +33,7 @@ import type { PdfEngineLoader } from "../media/pdf-view";
 import type { Spring } from "../../moto/spring";
 import { t, onLanguage, plural, resolvedLanguage, type Key } from "../../i18n/strings";
 import { writeClipboardText } from "../../platform/clipboard";
-import { createTabs, textButton, type TabsHandle } from "../../kit";
+import { composingKey, createTabs, textButton, type TabsHandle } from "../../kit";
 import { openLifetime, type Lifetime } from "../../ui/lifetime";
 import { createTextEngine, type TextEngine } from "../text/engine";
 import { createFormulaProfile, formulaReferences, operandSlot, type FormulaMove } from "../text/profiles/formula";
@@ -103,7 +103,7 @@ import {
 } from "./marks";
 import { drawObject, GridMediaCache, objectLabel } from "./objects";
 import { hasBorders, horizontalOf, iconOf, paintBorders, paintCell, spills } from "./paint";
-import { morphChildren, placeInOrder, syncAttributes } from "./dom-sync";
+import { morphChildren, placeInOrder, setAttributeIfChanged, syncAttributes } from "./dom-sync";
 import { currencyFormat, namedKey, shortcutCommand, shortcutDialog } from "./shortcuts";
 import {
   cellKey,
@@ -435,7 +435,7 @@ function joinNotices(...parts: readonly (string | null)[]): string {
 export type GridEditMode = "ready" | "insert" | "edit";
 
 /// Che cosa fa una battuta su una cella scelta. Un tasto vero (`isTrusted`)
-/// stampabile, morto o di composizione (`Process`, `isComposing`) apre la
+/// stampabile, morto o di composizione (`Process`, `composingKey`) apre la
 /// cella e lascia che il browser ci scriva: così passano tasti morti e IME.
 /// Un evento sintetico non scrive niente da sé, e la cella si apre col suo
 /// carattere. Le scorciatoie (Ctrl, Cmd, Alt senza AltGr) non aprono.
@@ -443,7 +443,7 @@ export function typingOpens(event: KeyboardEvent): "browser" | "seed" | null {
   const altGraph = event.getModifierState?.("AltGraph") ?? false;
   if (event.ctrlKey && !altGraph) return null;
   if (event.metaKey || (event.altKey && !altGraph)) return null;
-  const composing = event.isComposing || event.key === "Process" || event.key === "Dead";
+  const composing = composingKey(event) || event.key === "Process" || event.key === "Dead";
   if (event.isTrusted && (composing || event.key.length === 1)) return "browser";
   return !composing && event.key.length === 1 ? "seed" : null;
 }
@@ -511,13 +511,16 @@ interface TouchPress {
 type Drawing = Map<HTMLElement, HTMLElement[]>;
 /// Una cella disegnata in una riga che resta: l'elemento, il suo bordo, la
 /// firma di ciò che mostra (`#cellSignature`), il suo HTML senza la
-/// selezione e le classi senza la selezione.
+/// selezione e le classi senza la selezione. L'HTML si legge solo quando la
+/// firma cambia (`#drawRow`): una cella appena entrata non ce l'ha
+/// (`null`), perché serializzarla a ogni riga che lo scorrimento aggiunge
+/// costa e serve soltanto a un confronto che forse non verrà mai.
 interface DrawnCell {
   readonly cell: HTMLElement;
   border: HTMLElement | null;
   place: string;
   signature: string;
-  html: string;
+  html: string | null;
   base: string;
 }
 /// Le misure del riquadro lette una volta, prima di scrivere (`#renderRows`).
@@ -573,13 +576,18 @@ export class GridEngine {
   readonly #fixed: HTMLElement;
   /// La carta sotto le righe, coi suoi fili: dove una riga non è ancora
   /// disegnata si vede la griglia vuota, mai il bianco. È grande quanto il
-  /// riquadro e ci sta ferma; i fili delle colonne in `#paperRulesHost`. La
+  /// riquadro e ci sta ferma; i fili delle colonne in `#paperRulesHost`. Sta
+  /// nel riquadro prima del piano, non nel piano: vedi `structure.css`. La
   /// sua copia nelle fasce ferme: la testa, la colonna ferma e l'angolo.
   readonly #sheetPaper: HTMLElement;
   readonly #paperRulesHost: HTMLElement;
   readonly #paperTop: HTMLElement;
   readonly #paperLeft: HTMLElement;
   readonly #paperCorner: HTMLElement;
+  /// Le carte coi fili delle righe, che prendono la fase (`#placePaper`): la
+  /// carta del corpo e le due strisce della colonna ferma, non i fili delle
+  /// colonne che ci stanno accanto.
+  readonly #paperStrips: readonly HTMLElement[];
   /// Ciò che la carta ha scritto l'ultima volta (`#placePaper`): la misura,
   /// la fase dei fili delle righe e lo spostamento di quelli delle colonne.
   #paperPlaced = "";
@@ -614,7 +622,11 @@ export class GridEngine {
   readonly #ribbonHost: HTMLElement;
   readonly #sheetBar: HTMLElement;
   readonly #formulaEditor: TextEngine;
-  readonly #cellEditor: TextEngine;
+  /// Il campo della cella aperta, creato la prima volta che una cella si
+  /// apre (`#cellEditor`): una cartella che si guarda soltanto non monta un
+  /// secondo CodeMirror. Il tema e la sola lettura arrivano con lui.
+  #cellEngine: TextEngine | null = null;
+  #cellTheme: Theme | undefined;
   readonly #options: GridEngineOptions;
   readonly #stopLanguage: () => void;
   readonly #abort = new AbortController();
@@ -624,6 +636,10 @@ export class GridEngine {
   /// La sessione aperta; `null` mentre si apre o se non si è aperta.
   #bytes: BytesState | null = null;
   #bytesOpening = false;
+  /// Annulla e ripeti arrivati mentre il giornale si scriveva, quando la
+  /// scrittura ha fatto riaprire la cartella: vanno alla sessione nuova appena
+  /// aperta, prima delle celle che la riapertura riporta (`#openBytes`).
+  #heldHistory: GridCommand[] = [];
   /// L'ultima sessione mostrata e le finestre lette: restano mentre la
   /// cartella si riapre, così la griglia non si svuota.
   #shownSession: GridBytesSession | null = null;
@@ -638,6 +654,16 @@ export class GridEngine {
   /// Cresce quando una modifica non entra: quelle in coda partivano da lei.
   #editEpoch = 0;
   #bytesTickets = 0;
+  /// Le celle scritte a comandi il cui giornale il provider non ha ancora
+  /// confermato e pubblicato alla sessione: soltanto il provider le tiene.
+  /// Una riapertura che tiene il documento (dopo un salvataggio, un altro
+  /// riquadro) le riscrive sulla sessione nuova invece di perderle (IMP-512).
+  #unpublished: GridRequestPatch[] = [];
+  /// Quelle portate da una riapertura, finché una non riesce e le riscrive.
+  #carried: GridRequestPatch[] = [];
+  /// Il biglietto dell'ultima scrittura prima della riapertura: quelle
+  /// scritte mentre si riapre hanno il loro, e pubblicano dopo.
+  #carriedTicket = 0;
   #bytesConflicts = 0;
   /// L'ultima frase di un gesto rifiutato o di un guasto, sotto gli avvisi.
   #bytesMessage: string | null = null;
@@ -874,7 +900,9 @@ export class GridEngine {
     this.#paperTop = part("grid-paper-top");
     this.#paperCorner = part("grid-paper-corner");
     this.#paperLeft = part("grid-paper-left");
-    this.#paperLeft.append(part("grid-paper-left-head", false), part("grid-paper-left-cells", false));
+    const leftStrips = [part("grid-paper-left-head", false), part("grid-paper-left-cells", false)];
+    this.#paperLeft.append(...leftStrips);
+    this.#paperStrips = [this.#sheetPaper, ...leftStrips];
     // La testa prima del corpo, per chi legge: `sticky` e `z-index` la tengono
     // sopra comunque. La sua carta sta sotto le sue righe, i suoi livelli
     // dopo.
@@ -889,8 +917,9 @@ export class GridEngine {
     this.#cellEditorFrame = part("grid-cell-editor-frame");
     this.#cellEditorField = part("grid-cell-editor-text", false);
     this.#cellEditorHost.append(this.#cellEditorFrame, this.#cellEditorField);
-    this.#plane.append(this.#sheetPaper, this.#head, this.#body, body, this.#paperLeft, this.#layers.left, this.#lifts.left, this.#fixed, this.#cellEditorHost);
-    this.#viewport.append(this.#plane);
+    this.#plane.append(this.#head, this.#body, body, this.#paperLeft, this.#layers.left, this.#lifts.left, this.#fixed, this.#cellEditorHost);
+    // La carta prima del piano, nel riquadro: `structure.css` dice perché.
+    this.#viewport.append(this.#sheetPaper, this.#plane);
     this.#objectsSummary = document.createElement("p");
     this.#objectsSummary.className = "grid-objects-summary sr-only";
     this.#objectsSummary.id = `grid-${options.surfaceId}-objects`;
@@ -931,23 +960,7 @@ export class GridEngine {
       field: true,
       extensions: () => formulaProfile.extensions(),
     });
-    const cellProfile = createFormulaProfile({
-      singleLine: false,
-      callbacks: {
-        commit: (_value, move, arrow) => this.#commitAndMove(move, arrow),
-        cancel: () => this.#finishEditing(false, "input"),
-        arrowsCommit: () => this.#editing?.mode === "insert",
-        toggleMode: () => this.#toggleEditMode(),
-        point: (move, extend) => this.#pointByKey(move, extend),
-      },
-    });
-    this.#cellEditor = createTextEngine(this.#cellEditorField, {
-      onChange: (change) => this.#draftFromEditor("cell", change.text),
-      onSelectionChange: () => {},
-      theme: options.theme,
-      field: true,
-      extensions: () => cellProfile.extensions(),
-    });
+    this.#cellTheme = options.theme;
 
     // Le righe si disegnano nel gestore dello scorrimento, non in un
     // fotogramma dopo: quelle nuove ci sono già nel fotogramma che le mostra.
@@ -1034,9 +1047,8 @@ export class GridEngine {
         if (object.dataset.object) this.#beginObjectText(object.dataset.object);
         return;
       }
-      const cell = target.closest<HTMLElement>(".grid-cell");
-      const position = cell ? this.#positionOf(cell) : null;
-      if (position) this.#beginEditing("cell", position, undefined, "edit");
+      const position = this.#pressedCell(target, event.clientX, event.clientY);
+      if (position) this.#beginEditing("cell", this.#anchorOf(position), undefined, "edit");
     }), { signal });
     this.#formulaHost.addEventListener("focusin", () => {
       // Dalla cella aperta alla barra la bozza passa con lei.
@@ -1084,6 +1096,40 @@ export class GridEngine {
   setDoc(source: string): void {
     if (this.#destroyed) return;
     this.#openWorkbook(source, true);
+  }
+
+  /// Il campo della cella aperta, creato adesso se non c'è ancora: soltanto
+  /// chi apre una cella lo chiede.
+  get #cellEditor(): TextEngine {
+    this.#cellEngine ??= this.#createCellEditor();
+    return this.#cellEngine;
+  }
+
+  /// Se il campo della cella aperta è già nato (le prove lo guardano).
+  cellEditorMounted(): boolean {
+    return this.#cellEngine !== null;
+  }
+
+  #createCellEditor(): TextEngine {
+    const profile = createFormulaProfile({
+      singleLine: false,
+      callbacks: {
+        commit: (_value, move, arrow) => this.#commitAndMove(move, arrow),
+        cancel: () => this.#finishEditing(false, "input"),
+        arrowsCommit: () => this.#editing?.mode === "insert",
+        toggleMode: () => this.#toggleEditMode(),
+        point: (move, extend) => this.#pointByKey(move, extend),
+      },
+    });
+    const engine = createTextEngine(this.#cellEditorField, {
+      onChange: (change) => this.#draftFromEditor("cell", change.text),
+      onSelectionChange: () => {},
+      theme: this.#cellTheme,
+      field: true,
+      extensions: () => profile.extensions(),
+    });
+    if (this.#readOnly) engine.setReadOnly(true);
+    return engine;
   }
 
   syncDoc(update: { readonly text: string; readonly operation: TextOperation | null } | string): void {
@@ -1202,7 +1248,7 @@ export class GridEngine {
     const changed = readOnly !== this.#readOnly;
     this.#readOnly = readOnly;
     this.#formulaEditor.setReadOnly(readOnly);
-    this.#cellEditor.setReadOnly(readOnly);
+    this.#cellEngine?.setReadOnly(readOnly);
     this.#root.dataset.readOnly = String(readOnly);
     if (readOnly) this.#finishEditing(false, "input");
     // Quali comandi si danno cambia con la sola lettura: la barra si rilegge.
@@ -1211,7 +1257,8 @@ export class GridEngine {
 
   setTheme(theme: Theme): void {
     this.#formulaEditor.setTheme(theme);
-    this.#cellEditor.setTheme(theme);
+    this.#cellTheme = theme;
+    this.#cellEngine?.setTheme(theme);
     this.#root.dataset.theme = theme;
   }
 
@@ -1513,7 +1560,7 @@ export class GridEngine {
       return "object";
     }
     if (!this.#viewport.contains(element)) return null;
-    const cell = this.#eventPosition({ target: element } as unknown as Event);
+    const cell = this.#pressedCell(element, x, y);
     const hit = cell ?? this.#hit(x, y, false);
     if (!hit) return null;
     if (this.#selectedObject !== null) this.#selectObject(null);
@@ -1668,6 +1715,17 @@ export class GridEngine {
       done?.(run);
     };
     this.#enqueueProtocol(async () => {
+      // Mentre il giornale si scrive, annullare un comando lo toglierebbe da
+      // un testo che il disco ha già, e il salvataggio non lo riporterebbe
+      // sui byte nuovi (IMP-6400). Il passo aspetta la scrittura, con la coda
+      // ferma dietro di lui; se la scrittura ha fatto riaprire la cartella va
+      // alla sessione nuova, che ritrova la cronologia, appena si apre.
+      if (history && await this.#awaitWriting()) {
+        // La riapertura azzera i comandi in coda (`#pendingCommandMode`).
+        if (!this.#destroyed) this.#holdHistory([command]);
+        finish({ ok: false, error: null });
+        return;
+      }
       // Annulla e ripeti valgono per la sessione che c'è quando arrivano al
       // provider: anche quella riaperta dopo un salvataggio, che ritrova la
       // cronologia del documento.
@@ -1690,6 +1748,30 @@ export class GridEngine {
       }
       answered?.(!this.#destroyed && this.#bytes !== null && this.#bytes.session.revision !== revision);
     });
+  }
+
+  /// Aspetta la scrittura del giornale in volo, se c'è (`writing`). Vero se
+  /// intanto la cartella si è riaperta sui byte scritti (o la griglia è
+  /// smontata): un passo della cronologia non va più alla sessione di prima.
+  /// Falso se non c'era una scrittura, o se non ha cambiato i byte (è
+  /// fallita): il passo va avanti sulla sessione di adesso.
+  async #awaitWriting(): Promise<boolean> {
+    const writing = this.#options.writing?.();
+    if (!writing) return false;
+    const epoch = this.#bytesEpoch;
+    await writing.catch(() => {});
+    return this.#destroyed || epoch !== this.#bytesEpoch;
+  }
+
+  /// Tiene annulla e ripeti `commands` per la sessione che si sta aprendo,
+  /// prima di quelli già tenuti (sono stati dati prima). Se nessuna apertura è
+  /// in coda, vanno in coda adesso, nell'ordine.
+  #holdHistory(commands: readonly GridCommand[]): void {
+    if (this.#bytesOpening) {
+      this.#heldHistory = [...commands, ...this.#heldHistory];
+      return;
+    }
+    for (const command of commands) this.#give(command.id, command.params, true);
   }
 
   /// Un comando che riempie (`FILL_COMMANDS`): le formiche attorno a ciò che
@@ -1953,7 +2035,8 @@ export class GridEngine {
     this.#sheetTabs?.lifetime.close();
     this.#sheetTabs = null;
     this.#formulaEditor.destroy();
-    this.#cellEditor.destroy();
+    this.#cellEngine?.destroy();
+    this.#cellEngine = null;
     this.#media.clear();
     this.#life.close();
     this.#root.remove();
@@ -1998,11 +2081,18 @@ export class GridEngine {
     if (reset) {
       this.#undo = [];
       this.#redo = [];
+      this.#heldHistory = [];
     }
     // Una sessione nuova del provider non ha la history di quella di prima:
     // i passi si annullano con le loro patch (un salvataggio ha messo il
     // giornale nei byte, o un altro riquadro l'ha cambiato).
     this.#foldHistory();
+    // I passi in coda della sessione di prima non valgono più: le celle che
+    // soltanto il provider teneva si riscrivono sulla sessione nuova. Un
+    // documento nuovo non le porta.
+    this.#carried = reset ? [] : [...this.#carried, ...this.#unpublished];
+    this.#carriedTicket = this.#bytesTickets;
+    this.#unpublished = [];
     this.#enqueueProtocol(() => this.#openBytes(journal, reset, epoch, shown));
   }
 
@@ -2069,6 +2159,25 @@ export class GridEngine {
       this.#showView(sheet.id, top);
       this.#afterRewrite(top, shown);
       this.#followMedia();
+      // Annulla e ripeti dati mentre il giornale si scriveva vengono prima
+      // delle celle riportate: sono stati dati prima di loro. Se un'altra
+      // scrittura riapre di nuovo la cartella, aspettano quella sessione.
+      const held = this.#heldHistory;
+      this.#heldHistory = [];
+      for (const [index, command] of held.entries()) {
+        if (!(await this.#awaitWriting()) && !this.#destroyed && epoch === this.#bytesEpoch) {
+          await this.#giveNow(command, true, epoch, this.#editEpoch, this.#carriedTicket);
+          continue;
+        }
+        if (!this.#destroyed) this.#holdHistory(held.slice(index));
+        return;
+      }
+      if (this.#destroyed || epoch !== this.#bytesEpoch) return;
+      // Dentro il passo della riapertura, prima di ciò che si è scritto
+      // mentre si riapriva: l'ordine delle scritture resta quello dato.
+      const carried = this.#carried;
+      this.#carried = [];
+      if (carried.length) await this.#rewriteCarried(carried, epoch);
     } catch (error) {
       if (this.#destroyed || epoch !== this.#bytesEpoch) return;
       this.#openFailed(journal, isErrorKind(error, "conflict")
@@ -2090,6 +2199,7 @@ export class GridEngine {
     this.#publishJournal(journal, "input");
     this.#undo = [];
     this.#redo = [];
+    this.#heldHistory = [];
     this.#showNotice();
   }
 
@@ -2436,8 +2546,33 @@ export class GridEngine {
     const epoch = this.#bytesEpoch;
     const edits = this.#editEpoch;
     const ticket = ++this.#bytesTickets;
+    if (commanding) this.#unpublished.push(...request);
     this.#enqueueProtocol(() => this.#applyBytes(request, history, disks, origin, epoch, edits, ticket, commanding));
     return true;
+  }
+
+  /// Riscrive sulla sessione appena aperta le celle che la sessione di
+  /// prima teneva soltanto nel provider: la riapertura le ha tolte dalla
+  /// coda prima che il loro giornale arrivasse alla sessione del documento.
+  /// Senza preimmagine, perché sono le ultime scritte; una cella scritta due
+  /// volte va con l'ultima.
+  async #rewriteCarried(carried: readonly GridRequestPatch[], epoch: number): Promise<void> {
+    const last = new Map<string, GridRequestPatch>();
+    for (const patch of carried) {
+      const key = `${patch.cell.sheet}\u0000${patch.cell.row}\u0000${patch.cell.column}`;
+      last.delete(key);
+      last.set(key, { cell: { ...patch.cell }, before: null, after: patch.after });
+    }
+    const patches = [...last.values()];
+    const sheet = this.#sheet();
+    for (const patch of patches) {
+      const position = patch.cell.sheet === sheet.id ? positionOf(sheet, patch.cell) : null;
+      if (position) this.#showWritten(position, patch.after);
+    }
+    this.#showView(sheet.id, false);
+    this.#pendingCommandMode += 1;
+    this.#unpublished.push(...patches);
+    await this.#applyBytes(patches, [], [], "input", epoch, this.#editEpoch, this.#carriedTicket, true);
   }
 
   /// Se la sessione è a comandi, o lo sarà quando la coda arriva al provider.
@@ -2500,6 +2635,7 @@ export class GridEngine {
       if (!current()) return;
       // Le modifiche in coda partivano da questa: non entrano neanche loro.
       this.#editEpoch++;
+      this.#unpublished = [];
       // Una cella che il provider dice bloccata lo era in una finestra che la
       // shell non aveva ancora riletto: lo dice come il blocco che si vede.
       this.#bytesMessage = isErrorKind(error, "permission_denied")
@@ -2522,7 +2658,10 @@ export class GridEngine {
     }
     // Il giornale ottimistico si corregge soltanto quando non resta niente in
     // coda: prima, la conferma non contiene ancora le modifiche che seguono.
-    if (ticket === this.#bytesTickets) this.#publishJournal(this.#confirmedJournal, origin);
+    if (ticket === this.#bytesTickets) {
+      this.#unpublished = [];
+      this.#publishJournal(this.#confirmedJournal, origin);
+    }
     // Il passo nuovo si annulla, e niente si ripete più: annulla e ripeti
     // del menu lo dicono dal catalogo riletto.
     const stale = (id: string, enabled: boolean) => this.#commands.some((command) => command.id === id && command.enabled !== enabled);
@@ -2686,7 +2825,7 @@ export class GridEngine {
     // La carta: l'altezza di serie delle righe su cui ripete i fili, e la
     // misura delle intestazioni, per la sua copia nelle fasce ferme.
     this.#paperPeriod = commonSize(this.#rows, Math.round(DEFAULT_ROW_HEIGHT * zoom));
-    plane.setProperty("--grid-row", `${this.#paperPeriod}px`);
+    this.#viewport.style.setProperty("--grid-row", `${this.#paperPeriod}px`);
     this.#paperPlaced = "";
     plane.setProperty("--grid-head-h", `${this.#frame.columnHeader}px`);
     plane.setProperty("--grid-head-w", `${this.#frame.rowHeader}px`);
@@ -2812,13 +2951,14 @@ export class GridEngine {
     }
     const active = this.#active();
     if (this.#isVisiblePosition(active) && this.#findCell(active)) {
-      this.#viewport.setAttribute("aria-activedescendant", this.#cellId(active));
+      setAttributeIfChanged(this.#viewport, "aria-activedescendant", this.#cellId(active));
     } else {
       this.#viewport.removeAttribute("aria-activedescendant");
     }
     const name = this.#root.querySelector<HTMLElement>(".grid-cell-name");
     if (name) {
-      name.textContent = this.#isVisiblePosition(active) ? cellA1(active) : "";
+      const label = this.#isVisiblePosition(active) ? cellA1(active) : "";
+      if (name.textContent !== label) name.textContent = label;
     }
   }
 
@@ -2922,8 +3062,9 @@ export class GridEngine {
     placeInOrder(this.#head, head, this.#layers.top, (element) => element.classList.contains("grid-row"));
     placeInOrder(this.#body, bodyRows, null, (element) => element.classList.contains("grid-row"));
     // Un gruppo di righe vuoto non è un gruppo, per chi legge.
+    // Solo quando cambia: a ogni passo dello scorrimento conta ogni scrittura.
     for (const [group, rows] of [[this.#head, head], [this.#body, bodyRows]] as const) {
-      if (rows.length) group.setAttribute("role", "rowgroup");
+      if (rows.length) setAttributeIfChanged(group, "role", "rowgroup");
       else group.removeAttribute("role");
     }
     this.#placePaper(view);
@@ -3054,11 +3195,15 @@ export class GridEngine {
         const fresh = this.#cellElement(position, merge, row);
         if (!fresh) return;
         if (!drawn) {
-          drawn = { cell: fresh.cell, border: fresh.border, place, signature, html: fresh.html, base: fresh.cell.className };
+          drawn = { cell: fresh.cell, border: fresh.border, place, signature, html: null, base: fresh.cell.className };
           state.cells.set(slot, drawn);
           if (fresh.measure) measures.push(fresh.cell);
         } else {
-          if (drawn.html !== fresh.html) {
+          // La cella nuova com'è, prima di ogni selezione e misura: se è
+          // uguale a quella disegnata, la disegnata resta com'è. Una cella
+          // senza HTML (mai confrontata) si rifà: il risultato è lo stesso.
+          const html = fresh.cell.outerHTML;
+          if (drawn.html !== html) {
             this.#refillCell(drawn.cell, fresh.cell);
             if (fresh.measure) measures.push(drawn.cell);
           }
@@ -3070,7 +3215,7 @@ export class GridEngine {
           }
           drawn.place = place;
           drawn.signature = signature;
-          drawn.html = fresh.html;
+          drawn.html = html;
           drawn.base = fresh.cell.className;
         }
       }
@@ -3169,7 +3314,9 @@ export class GridEngine {
   /// dei fili delle righe dalla prima riga che si vede, i fili delle colonne
   /// spostati di quanto si è scorso di lato. Lo scrive il gestore dello
   /// scorrimento: fra lo scorrimento e lui, dove una riga non c'è ancora, i
-  /// fili sono quelli di un fotogramma prima.
+  /// fili sono quelli di un fotogramma prima. La carta sta nel flusso del
+  /// riquadro, prima del piano: il margine sotto, negativo quanto lei, non le
+  /// lascia occupare posto.
   #placePaper(view: PaperView): void {
     const frame = this.#frame;
     const { scrollTop, scrollLeft } = view;
@@ -3181,11 +3328,18 @@ export class GridEngine {
     const placed = `${width}|${height}|${phase}|${scrollLeft}|${this.#bands().left}`;
     if (placed === this.#paperPlaced) return;
     this.#paperPlaced = placed;
-    this.#sheetPaper.style.width = `${width}px`;
-    this.#paperLeft.style.width = `${Math.min(width, this.#bands().left)}px`;
-    for (const paper of [this.#sheetPaper, this.#paperLeft]) paper.style.height = `${height}px`;
-    for (const strip of [this.#sheetPaper, ...this.#paperLeft.children] as HTMLElement[]) strip.style.backgroundPositionY = `${phase}px`;
-    this.#paperRulesHost.style.transform = scrollLeft ? `translateX(${-scrollLeft}px)` : "";
+    const paper = this.#sheetPaper.style;
+    const write = (style: CSSStyleDeclaration, property: "width" | "height" | "marginBottom" | "backgroundPositionY", value: string) => {
+      if (style[property] !== value) style[property] = value;
+    };
+    write(paper, "width", `${width}px`);
+    write(paper, "height", `${height}px`);
+    write(paper, "marginBottom", `${-height}px`);
+    write(this.#paperLeft.style, "width", `${Math.min(width, this.#bands().left)}px`);
+    write(this.#paperLeft.style, "height", `${height}px`);
+    for (const strip of this.#paperStrips) write(strip.style, "backgroundPositionY", `${phase}px`);
+    const shift = scrollLeft ? `translateX(${-scrollLeft}px)` : "";
+    if (this.#paperRulesHost.style.transform !== shift) this.#paperRulesHost.style.transform = shift;
   }
 
   /// I fili delle colonne della carta, uno per colonna disegnata, sull'ultimo
@@ -4061,6 +4215,9 @@ export class GridEngine {
     field.style.fontSize = `${(object.shape.font_size * (96 / 72) * WORKBOOK_SCALE * this.#frame.zoom).toFixed(2)}px`;
     field.addEventListener("keydown", (event) => {
       event.stopPropagation();
+      // Esc e Ctrl+Invio a metà di una composizione sono del metodo
+      // d'immissione: scartano o confermano il candidato, non il testo.
+      if (composingKey(event)) return;
       if (event.key === "Escape") {
         event.preventDefault();
         this.#finishObjectText(false);
@@ -4102,7 +4259,7 @@ export class GridEngine {
     position: GridPosition,
     merge: GridMerge | null,
     hostRow: number,
-  ): { cell: HTMLElement; border: HTMLElement | null; measure: boolean; html: string } | null {
+  ): { cell: HTMLElement; border: HTMLElement | null; measure: boolean } | null {
     const { row, column } = position;
     const frame = this.#frame;
     const workbookCell = this.#workbookCell(position);
@@ -4206,9 +4363,7 @@ export class GridEngine {
       paintBorders(border, borders);
       put(border, this.#columnLeft(column) - 1, top - 1, width + 1, height + 1);
     }
-    // Ciò che la cella è senza la selezione: `#drawRow` tiene quella
-    // disegnata se è uguale, e le dà la selezione.
-    return { cell: element, border, measure, html: element.outerHTML };
+    return { cell: element, border, measure };
   }
 
   /// I bordi da disegnare attorno alla cella, o all'unione che finisce in
@@ -5189,12 +5344,15 @@ export class GridEngine {
   /// cella, la mostra e la veste come la cella. Spostandola, il fuoco resta
   /// nel campo.
   #mountCellEditor(position: GridPosition, cell: HTMLElement): void {
+    // Il campo prima delle misure: la veste legge il carattere dal suo
+    // `.cm-content`.
+    const field = this.#cellEditor;
     const host = this.#cellEditorHost;
     const lift = this.#lifts[this.#editorZone(position)];
     if (host.parentElement !== lift) {
       const focused = host.contains(document.activeElement);
       lift.append(host);
-      if (focused) this.#cellEditor.focus();
+      if (focused) field.focus();
     }
     host.dataset.row = String(position.row);
     host.dataset.column = String(position.column);
@@ -6172,12 +6330,23 @@ export class GridEngine {
     return { row, column };
   }
 
-  #eventPosition(event: Event): GridPosition | null {
-    const target = event.target instanceof Element ? event.target.closest<HTMLElement>(".grid-cell") : null;
+  /// La cella sotto il punto `x`, `y`, a partire dall'elemento premuto. Un
+  /// testo che deborda (`.spill`) sta sopra le celle vuote accanto, e il
+  /// browser gli dà il puntatore anche lì: per lui vale il punto, non la
+  /// cella del testo, o il clic sceglierebbe la cella sbagliata (IMP-512).
+  #pressedCell(element: EventTarget | null, x: number, y: number): GridPosition | null {
+    const target = element instanceof Element ? element.closest<HTMLElement>(".grid-cell") : null;
     if (!target) return null;
-    const row = Number(target.dataset.row);
-    const column = Number(target.dataset.column);
-    return Number.isInteger(row) && Number.isInteger(column) ? { row, column } : null;
+    // Un evento senza punto (uno sintetico, da tastiera) vale per la cella.
+    if (target.classList.contains("spill") && Number.isFinite(x) && Number.isFinite(y)) {
+      const hit = this.#hit(x, y, false);
+      if (hit && hit.row !== null && hit.column !== null) return { row: hit.row, column: hit.column };
+    }
+    return this.#positionOf(target);
+  }
+
+  #eventPosition(event: MouseEvent): GridPosition | null {
+    return this.#pressedCell(event.target, event.clientX, event.clientY);
   }
 
   /// Scorre fino a `position`. Una riga o una colonna bloccata si vede

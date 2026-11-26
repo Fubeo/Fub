@@ -1,0 +1,72 @@
+{
+  "$generato": "File generato da crates/fub-disegno/tests/ts_indice.rs, non modificare a mano; rigenera con UPDATE_MIRROR=1 cargo test -p fub-disegno --test ts_indice",
+  "famiglia": "livelli",
+  "finestre": [
+    {
+      "fonte": "motore",
+      "id": "layer.new",
+      "campi": [
+        {
+          "nome": "name",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "visible",
+          "tipo": "sino",
+          "facoltativo": false,
+          "predefinito": true
+        },
+        {
+          "nome": "locked",
+          "tipo": "sino",
+          "facoltativo": false,
+          "predefinito": false
+        }
+      ]
+    },
+    {
+      "fonte": "motore",
+      "id": "layer.newSublayer",
+      "campi": [
+        {
+          "nome": "parent",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "bottom",
+          "tipo": "sino",
+          "facoltativo": true
+        },
+        {
+          "nome": "name",
+          "tipo": "testo",
+          "facoltativo": true
+        }
+      ],
+      "aperto": true
+    },
+    {
+      "fonte": "motore",
+      "id": "layer.setProps",
+      "campi": [
+        {
+          "nome": "name",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "visible",
+          "tipo": "sino",
+          "facoltativo": true
+        },
+        {
+          "nome": "locked",
+          "tipo": "sino",
+          "facoltativo": true
+        }
+      ]
+    }
+  ]
+}

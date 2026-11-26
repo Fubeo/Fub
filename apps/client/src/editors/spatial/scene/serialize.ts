@@ -230,7 +230,7 @@ export function escapeText(value: string): string {
 // Ordine degli attributi.
 // ---------------------------------------------------------------------------
 
-const FUB_ORDER = ["layer", "role", "name", "source", "repeat", "style", "marker", "board", "tool", "shape", "geom", "from", "to", "along", "inside", "wrap", "join", "leading", "locked", "at", "brush"];
+const FUB_ORDER = ["layer", "role", "name", "source", "repeat", "style", "marker", "board", "tool", "shape", "geom", "from", "to", "along", "inside", "wrap", "join", "leading", "locked", "guide", "at", "brush"];
 const GEOMETRY_ORDER = [
   "x",
   "y",
@@ -294,12 +294,15 @@ const RESOURCE_ORDER = [
 const PRESENTATION_ORDER = [
   "fill",
   "fill-opacity",
+  "fill-rule",
   "stroke",
   "stroke-width",
   "stroke-opacity",
   "stroke-linecap",
   "stroke-linejoin",
   "stroke-dasharray",
+  "stroke-dashoffset",
+  "stroke-miterlimit",
   "marker-start",
   "marker-mid",
   "marker-end",
@@ -324,6 +327,7 @@ const PRESENTATION_ORDER = [
   "letter-spacing",
   "text-decoration",
   "text-anchor",
+  "writing-mode",
   "preserveAspectRatio",
 ];
 

@@ -51,7 +51,18 @@ qualunque altro. Un compito già fatto (`- [x]`) non compare.
 
 Un compito ricorrente (`🔁 every week`, e le altre forme del plugin Tasks)
 mostra la sua scadenza, come è scritta nella nota. Quando lo si spunta, la riga fatta resta nella
-nota e la successiva nasce sopra di lei, come fa il plugin Tasks.
+nota e la successiva nasce sopra di lei, come fa il plugin Tasks. Vale da
+qualunque punto lo si spunti: la vista dei compiti, un recinto ```` ```tasks ````,
+il dialogo dei promemoria, e nella nota la casella (in Scrittura e in Lettura),
+la voce «Fatto» del menu del compito e `Ctrl+Invio`.
+
+Nella nota la spunta è una modifica del testo aperto, non una scrittura del
+file: l'editor chiede la riga successiva al componente dei compiti (la stessa
+regola di `note.task.toggle`, dal canale dati) e scrive spunta e riga nuova
+insieme, come una battuta. Si salvano con il resto della nota, e un solo
+`Ctrl+Z` le toglie tutte e due. Togliere la spunta non cancella la riga nata.
+Se il componente dei compiti è spento la casella si spunta lo stesso, senza
+riga nuova.
 
 ## Come si spunta
 
@@ -187,7 +198,9 @@ azioni per voce, e gli avvisi sono al più tre e le loro azioni spariscono con
 loro.
 
 L'indice dei promemoria sta in memoria e si ricostruisce dalle note a ogni
-apertura del vault (`crates/fub-features/src/tasks/reminders.rs`); la notifica
+apertura del vault (`crates/fub-features/src/tasks/reminders.rs`). Li tiene
+anche in ordine d'ora, così la domanda di ogni minuto costa i promemoria di
+quel minuto e non quelli del vault; la notifica
 la mostra l'app (`crates/fub-app/src/promemoria.rs`), con `notify-rust`.
 Provato su Linux; macOS e Windows usano la stessa libreria, senza una prova a
 mano.

@@ -1,0 +1,1258 @@
+// L'ingresso del Disegno completo (piano K6, T5;
+// `docs/architecture/disegno-completo.md`, «L'indice e i pezzi pigri»).
+//
+// `chrome/workspace.ts` lo porta con un `import()` quando si entra nel
+// Completo col componente «Disegno completo» acceso; Vite lo mette nel chunk
+// `drawing-completo`, che nessuna pagina carica all'avvio. Terrà i pezzi della
+// cornice del Completo (lo spazio, la colonna, le opzioni, i tasti e le
+// sezioni), e dà l'indice dei comandi e il caricatore delle famiglie. Oggi
+// `apri` porta l'indice e prepara il nucleo, e basta.
+
+import { caricatore, type Caricatore, type ContestoCompleto, type OpzioniCaricatore } from "./carica";
+import { STRUMENTO_PENNELLO } from "../motore/pennello-tondo";
+import { costruisciFila, type CostruisciFila, type FilaOpzioni } from "./opzioni";
+import { creaSezioni, type Sezioni, type VoceDelCompleto } from "./sezioni";
+import type { Indice, VoceIndice } from "./indice";
+// I comandi nel menu ≡ e nella ricerca Ctrl+/ (T9a): le voci, il perché e l'avvio.
+import { menuComando, menuNonCaricato, motivoDelComando, nomeVoce, statoComandi, METODI_FORMA, OPERAZIONI_ELABORAZIONE, vociRicerca, type StatoComandi, type VoceRicerca } from "./comandi";
+import type { CampoFinestra, ModuloFinestra, ValoreCampo } from "../motore/finestre";
+import type { DrawingAnchor, DrawingPreview, DrawingToolState } from "../../../host/contract";
+import type { MenuItem } from "../../../ui/menu";
+// Blocco degli spazi del Completo (T7): i preset e la loro applicazione.
+import { applicaSpazio, presetDi, type EffettiSpazio } from "./spazi";
+export type { EffettiSpazio, SchedaSpazio, SpazioPreset } from "./spazi";
+// La colonna (K6 T8): le caselle e il cassetto, con il suo pezzo col `import()`.
+import { COMANDO_DEL_CLIC, iconaMotore, layoutCompleto, MOTORE_PRONTO, TIPO_DEL_GRAFICO, type GruppoLayout } from "./colonna";
+import { registraAllinea } from "./allinea";
+import { registraElaborazione } from "./elaborazione";
+import { pileDaLettura, postoDel3D, registraAspetto } from "./aspetto-sezione";
+import { infoDaLettura, registraFusione, COMANDI_FUSIONE } from "./fusione-sezione";
+import { regolaDaLettura, registraAttributi, COMANDO_REGOLA } from "./attributi-sezione";
+import { eGruppoSulTracciato, registraOggettiSulTracciato, STRUMENTO_OGGETTI_SUL_TRACCIATO } from "./oggetti-sul-tracciato-sezione";
+import { registraTrasforma } from "./trasforma-sezione";
+// La Quota (K6, tavole): la sezione del Design delle quote scelte.
+import { eQuota, registraQuota } from "./quota";
+import { registraColore, type ColoriVisti, type LatoAttivo } from "./colore-sezione";
+// «Selettore colore…» (K6 T14, selettore): il selettore del pozzo da una voce del menu e della ricerca.
+import { VOCE_SELETTORE_COLORE, voceSelettoreColore } from "./selettore-colore";
+// «Nuovo gruppo colori…» (K6 T14, gruppi): la finestra del nome e dei campioni, dalla ricerca.
+import { VOCE_NUOVO_GRUPPO, voceNuovoGruppo } from "./nuovo-gruppo";
+import { registraCampioni } from "./campioni-sezione";
+import { apriModoDisegno, type ModoDisegno, type PortaModoDisegno } from "./modo-disegno";
+import { apriRicolora, motivoRicolora, VOCE_RICOLORA } from "./ricolora";
+import { chiediAngoli, formaDa, VOCE_ANGOLI } from "./forma-viva";
+import { registraGuidaColori } from "./guida-colori-sezione";
+import { registraContorno } from "./contorno-sezione";
+import { registraSfumatura } from "./sfumatura-sezione";
+import { creaPortaPreimpostate } from "./sfumature-preimpostate";
+import { registraTrasparenza } from "./trasparenza-sezione";
+import { creaPortaTemi } from "./temi-porta";
+import { registraTemi } from "./temi-sezione";
+import { filaSimbolismo, STRUMENTI_SIMBOLISMO } from "./fila-simbolismo";
+import { registraSimboli, simboloCorrente as nuovoSimboloCorrente, type SimboloCorrente } from "./simboli-sezione";
+import { passoSulTesto, VOCI_DI_STILE } from "./facce-testo";
+import { ALLINEA_TESTO, registraTesto } from "./testo-sezioni";
+import type { Teardown } from "../../../ui/lifetime";
+import { languageCurrent } from "../../../i18n/strings";
+import { confirm } from "../../../platform/confirm";
+import type { ToolSpec } from "../tools/registry";
+import { openLifetime, type Lifetime } from "../../../ui/lifetime";
+import type { CassettoOptions } from "../tools/editor/chrome/drawer";
+import { openPopover } from "../../../kit/popover";
+import { keyboardPlatform, type KeyChord } from "../../../ui/commands";
+import { t, type DrawKey } from "../strings";
+import { COLONNA_IT } from "../strings/completo";
+// I tasti del motore (K6 T9b): il montaggio sulla radice dell'editor, e il
+// percorso di un comando che fanno partire.
+import { applicaEsito, applicaRisposta, chiama, conValori, etichettaDi, eseguiVoce, type AzioniEsito, type DipendenzeComando, type OpzioniFinestraComando } from "./esegui";
+// Gli appunti del motore (K6 T11): copia, taglia e incolla passano dal motore.
+import { creaAppuntiCompleto } from "./appunti";
+import { creaPortaLivelli, type PortaLivelli } from "./livelli-porta";
+import { apriFinestraLibrerie, creaPortaLibrerie } from "./librerie-finestra";
+import { apriTrovaCarattere, creaPortaTrovaCarattere } from "./trova-carattere";
+import { apriFinestraDatiGrafico, creaPortaDatiGrafico } from "./grafico-dati-finestra";
+export type { EsitoLivello, PortaLivelli, RichiestaLivello } from "./livelli-porta";
+import { registraAppuntiCompleto } from "../tools/clipboard";
+import { PARTENZE_LETTE } from "./partenze";
+import { montaTasti } from "./montaggio-tasti";
+import { seguiTastiUtente } from "./segui-tasti";
+import { strumentoDelTasto, tastiPremuti, type ModificheTasti, type Piattaforma } from "./tasti";
+export type { GruppoLayout } from "./colonna";
+
+export type { Caricatore, ContestoCompleto, StatoFamiglia, PercheErrore, ModuloFamiglia } from "./carica";
+export type { Indice, VoceIndice } from "./indice";
+export { registraSezione, type ContestoSezione, type Scheda, type Selezione, type Sezione, type Sezioni } from "./sezioni";
+
+/// La famiglia che ogni Completo aperto prepara subito.
+export const NUCLEO = "nucleo";
+
+export interface Completo {
+  /// L'indice dei comandi: lo stesso per ogni chiamata finché arriva; se non
+  /// è arrivato, la chiamata dopo («Riprova») lo chiede di nuovo.
+  indice(): Promise<Indice>;
+  readonly carica: Caricatore;
+  /// Le sezioni dell'ispettore che le famiglie registrano (T10); il pannello
+  /// Risorse e le sezioni del Design le leggono di qui.
+  readonly sezioni: Sezioni;
+  /// I comandi di livello dell'albero nativo che passano dal motore (K6 T15, giro 4:
+  /// `livelli-porta.ts`); `null` senza motore o senza editor.
+  readonly livelli: PortaLivelli | null;
+  /// Il disegno si chiude: gli esiti in volo si buttano.
+  chiudi(): void;
+  /// Applica lo spazio `space` del Completo (un preset, o `full` per i dati di
+  /// serie): la scheda, la sezione, e le famiglie da preparare.
+  spazio(space: string, effetti: EffettiSpazio): void;
+  /// La colonna del Completo per gli strumenti offerti (T8): sei gruppi, le
+  /// caselle che hanno strumenti pronti, nell'ordine del prototipo.
+  colonna(offerti: readonly ToolSpec[]): readonly GruppoLayout[];
+  /// Lo strumento del motore `strumento` come lo mostra la colonna (T11): il
+  /// nome nella lingua di adesso, l'icona e lo stato della sua famiglia.
+  /// `null` finché l'indice non dice la sua famiglia, o se non ce l'ha: la
+  /// casella non lo mostra (mai un id al posto del nome).
+  strumentoMotore(strumento: string): StrumentoMotoreColonna | null;
+  /// Avvisa quando ciò che `strumentoMotore` dice può essere cambiato: l'indice
+  /// è arrivato, o una famiglia ha cambiato stato. Il ritorno smette.
+  ascoltaColonna(ascolto: () => void): Teardown;
+  /// Apre il cassetto «Tutti gli strumenti» dalla sua casella (T8). Il suo
+  /// pezzo arriva con un `import()`, la prima volta.
+  cassetto(anchor: HTMLElement, opzioni: Omit<CassettoOptions, "anchor" | "lifetime">, lifetime: Lifetime): void;
+  /// Il menu ≡ con le voci dell'indice (T9a): i sottomenu `menu/<sottomenu>`,
+  /// le voci spente col loro perché. Se l'indice non arriva, lo dice, con
+  /// «Riprova» (`azioni.riprova`).
+  menu(selezione: () => readonly string[], azioni: AzioniVoci): Promise<MenuItem[]>;
+  /// Le voci della ricerca Ctrl+/ (T9a), con il tasto, il posto e il perché.
+  /// `null` se l'indice non arriva: chi cerca lo dice, con «Riprova».
+  ricerca(selezione: () => readonly string[], azioni: AzioniVoci): Promise<VoceRicerca[] | null>;
+  /// La famiglia dello strumento del motore `strumento` (dall'indice) si prepara:
+  /// risolve `true` se è pronta. Uno strumento senza famiglia nell'indice, o una
+  /// famiglia che non arriva, risolve `false`: il gesto non parte (K6 T8).
+  preparaStrumento(strumento: string): Promise<boolean>;
+  /// Il clic senza trascinare di uno strumento del motore (T13, giro 2 e 5): se la forma
+  /// ha una finestra delle misure, la apre col punto del clic; una trasformazione apre la
+  /// sua finestra sulla selezione, e senza selezione dice perché. Altrimenti non fa niente.
+  /// Con `doppio` (il doppio clic o l'Alt+clic della Fusione) apre la finestra
+  /// delle opzioni dello strumento, sulla selezione di adesso.
+  clicStrumento(strumento: string, punto: { readonly x: number; readonly y: number }, doppio?: boolean): void;
+  /// Un trascinamento di uno strumento del motore che ha cambiato il disegno: dopo uno strumento
+  /// Grafico si aprono i Dati del grafico nuovo, come VectorCraft. Altrimenti non fa niente.
+  gestoFinito(strumento: string): void;
+  /// Canc con dei punti scelti (Selezione diretta, Punto di ancoraggio): toglie quei
+  /// punti (`path.deleteAnchors`), non l'oggetto. `true` se c'erano punti scelti e il
+  /// comando è partito; `false` senza punti, e Canc resta quello dell'editor.
+  cancellaPunti(): boolean;
+  /// Lo strumento del motore che il tasto `evento` sceglie, come in VectorCraft: nel
+  /// Completo vince sullo strumento di Fub con la stessa lettera, e un segno vale per
+  /// il suo tasto fisico (`tastiPremuti`). `null` se nessuno strumento pronto ha quel
+  /// tasto, o finché l'indice non arriva: il tasto resta a Fub (`tasti.ts`, `strumentoDelTasto`).
+  strumentoDelTasto(evento: KeyChord): string | null;
+  /// Il motore c'è e l'indice è arrivato: la colonna e i tasti sono solo quelli di VectorCraft.
+  conMotore(): boolean;
+  /// Fa partire il comando `id` del motore coi suoi valori, senza la sua finestra.
+  eseguiComando(id: string, valori?: Readonly<Record<string, unknown>>): void;
+  /// Le parole `testo` per il testo in area `elemento`, dal campo «Testo»
+  /// dell'ispettore: passano da `text.editRange`, che rifà gli a capo nel
+  /// riquadro, con un passo d'annulla solo e i rifiuti detti come per ogni
+  /// comando (`eseguiVoce`).
+  parole(elemento: string, testo: string): void;
+  /// La fila delle opzioni dello strumento `strumento` con le sue etichette, quando
+  /// la sua famiglia è pronta (`carica.testi`); `null` prima, o se lo stato non ha
+  /// controlli da mostrare. Le etichette non si inventano: senza famiglia pronta non
+  /// c'è fila. Una famiglia pronta che ha registrato una fila propria per lo
+  /// strumento (`registraFila`, T12: i punti della Selezione diretta) dà quella:
+  /// legge lo stato intero di `ambiente`, e dopo un suo comando lo fa rileggere.
+  fila(
+    strumento: string,
+    opzioni: unknown,
+    cambia: (chiave: string, valore: unknown) => void,
+    vita: Lifetime,
+    ambiente?: AmbienteFila,
+  ): FilaOpzioni | null;
+}
+
+/// Ciò che la testata dà a una fila propria: lo stato intero dello strumento, e
+/// come farlo rileggere al motore dopo un comando che lo cambia.
+export interface AmbienteFila {
+  readonly stato: DrawingToolState | null;
+  readonly rileggi: () => void;
+}
+
+/// Le famiglie che uno strumento porta con sé, oltre alla sua: la Selezione
+/// diretta e il Punto di ancoraggio sceglie i punti, e i comandi sui punti
+/// stanno nei tracciati (T12). Una famiglia in più che non arriva non ferma lo
+/// strumento: la sua fila non c'è.
+const FAMIGLIE_IN_PIU: Readonly<Record<string, readonly string[]>> = {
+  directSelection: ["tracciati"],
+};
+
+/// Quanto un comando di una fila propria aspetta la sessione del motore, come
+/// in `esegui.ts`.
+const ATTESA_MOTORE_FILA_MS = 2_000;
+
+/// Uno strumento del motore nella colonna (T11): il nome (dai testi della sua
+/// famiglia, o dall'indice finché la famiglia non è pronta), l'icona del
+/// prototipo, e la sua famiglia: pronta, in arrivo, in errore o non chiesta.
+export interface StrumentoMotoreColonna {
+  readonly nome: string;
+  readonly icona: string;
+  readonly famiglia: "pronta" | "in-arrivo" | "errore" | "assente";
+}
+
+/// Ciò che l'editor dà a una voce del menu o della ricerca: lo strumento del
+/// motore, e «Riprova». Un comando del motore non passa di qui: parte da
+/// `eseguiVoce`, con le dipendenze del Completo (`esegui.ts`).
+export interface AzioniVoci {
+  /// Lo strumento del motore: lo sceglie l'editor.
+  readonly strumento: (id: string) => void;
+  /// Una voce del client (K6 T11, la vista della banda): la fa l'editor, con il suo id.
+  readonly client: (id: string) => void;
+  /// Rifà l'indice, per chi lo mostra («Riprova»).
+  readonly riprova: () => void;
+}
+
+export interface OpzioniCompleto {
+  /// Chi porta l'indice; di serie `indice()` di `./indice`, nel suo chunk.
+  readonly indice?: () => Promise<Indice>;
+  readonly moduli?: OpzioniCaricatore["moduli"];
+  readonly prepara?: OpzioniCaricatore["prepara"];
+  /// Le voci del client che l'editor fa (`comandi.ts`, `statoVoce`): `null` se si
+  /// fanno, il perché se sono spente, `undefined` se non le conosce.
+  readonly clientVoce?: (id: string) => string | null | undefined;
+  /// La spunta delle voci del client (K6 T11, giro E), `undefined` se una voce non ne ha.
+  readonly clientStato?: (id: string) => boolean | undefined;
+  /// I tasti del motore nell'editor (K6 T9b). Senza, nessun tasto del motore
+  /// parte: il Semplice e i suoi tasti restano com'erano.
+  readonly tasti?: OpzioniTastiCompleto;
+}
+
+/// Ciò che l'editor dà al Completo per i tasti del motore: il suo root, la
+/// selezione e la cronologia (`AzioniEsito`), lo stato dello strumento, e le
+/// modifiche dell'utente quando ci sono.
+export interface OpzioniTastiCompleto extends AzioniEsito {
+  readonly radice: HTMLElement;
+  /// Il Completo è acceso adesso (non il Semplice): spento, nessun tasto del motore parte.
+  readonly attivo?: () => boolean;
+  /// Sceglie lo strumento del motore `id`, come la colonna (`sceltaMotore`): un tasto di strumento lo usa.
+  readonly strumento?: (id: string) => void;
+  readonly selezione: () => readonly string[];
+  readonly anteprima: (anteprima: DrawingPreview | null) => void;
+  readonly stato: () => { readonly vuoleTesto: boolean; readonly componendo: boolean };
+  /// I punti scelti con lo strumento del motore di adesso (`DipendenzeComando.punti`).
+  readonly punti?: () => readonly DrawingAnchor[];
+  /// L'id di Fub del livello corrente (`DipendenzeComando.livello`).
+  readonly livello?: () => string | null;
+  /// Fa rileggere al motore lo stato dello strumento di adesso, dopo un comando
+  /// sui punti scelti (i punti cambiano, o non ci sono più).
+  readonly rileggiStato?: () => void;
+  /// Fa una voce del client dell'editor (la banda, ≡ › Visualizza) quando parte dal suo tasto,
+  /// come `AzioniVociCompleto.client` dalla ricerca e dal menu.
+  readonly client?: (id: string) => void;
+  /// Le modifiche dell'utente; senza, il Completo segue `draw.keys` da sé
+  /// (`segui-tasti.ts`), e un cambio vale subito.
+  readonly modifiche?: () => ModificheTasti;
+  readonly piattaforma?: Piattaforma;
+  /// I comandi del motore che l'editor fa con la regola di Fub
+  /// (`DipendenzeComando.diFub`).
+  readonly diFub?: (id: string) => boolean;
+}
+
+/// La piattaforma per i tasti: Cmd su macOS, altrove Ctrl (come la shell). Senza
+/// `navigator` (i test del Completo) è `other`.
+const piattaformaDi = (): Piattaforma =>
+  typeof navigator !== "undefined" && keyboardPlatform(navigator.platform) === "mac" ? "mac" : "other";
+
+/// Dice che il cassetto non si è aperto (il suo pezzo non è arrivato), con
+/// «Riprova», che lo apre di nuovo. Sta qui, non nel pezzo del cassetto: il
+/// pezzo è quello che non è arrivato.
+export function apriErroreCassetto(anchor: HTMLElement, lifetime: Lifetime, riprova: () => void): void {
+  const testo = document.createElement("div");
+  testo.className = "draw-drawer-failed";
+  const messaggio = document.createElement("p");
+  messaggio.className = "draw-drawer-note";
+  messaggio.setAttribute("role", "alert");
+  messaggio.textContent = t("draw.chrome.drawer.failed");
+  const retry = document.createElement("button");
+  retry.type = "button";
+  retry.className = "draw-drawer-edit";
+  retry.textContent = t("draw.window.retry");
+  testo.append(messaggio, retry);
+  const popover = openPopover({
+    anchor,
+    content: testo,
+    placement: "right",
+    align: "start",
+    label: t("draw.chrome.drawer.failed"),
+    className: "kit-rail-popover draw-drawer-popover",
+    lifetime,
+  });
+  retry.addEventListener("click", () => {
+    popover.close("manual");
+    riprova();
+  });
+}
+
+/// L'indice vero, dal suo chunk (`drawing-indice`).
+const indiceVero = (): Promise<Indice> => import("./indice").then((m) => m.indice());
+
+// La sezione «Disegno completo» di Impostazioni › Scorciatoie (T9c,
+// `panels/settings-disegno.ts`) porta questo modulo con un `import()` quando la
+// si apre, e ne prende l'indice, la regola dei tasti e il valore di `draw.keys`:
+// gli stessi pezzi dell'editor, non una copia.
+/// L'indice dei comandi, per chi non apre un disegno (le Impostazioni).
+export const indiceDeiComandi = (): Promise<Indice> => indiceVero();
+export { risolviTasti, tastoFub, type ModificheTasti, type Piattaforma, type RegolaTasti } from "./tasti";
+export { percorsoPosto } from "./comandi";
+export * as tastiUtente from "./tasti-utente";
+
+/// Un campo come lo scrive lo schema della famiglia (`schema.generated.json`).
+interface CampoSchema {
+  readonly nome: string;
+  readonly tipo: string;
+  readonly facoltativo?: boolean;
+  readonly valori?: readonly string[];
+  /// Il minimo di un numero (T13, giro 2): sotto, OK resta spento.
+  readonly minimo?: number;
+  /// Il massimo di un numero (T12 e T13, giro 3): sopra, OK resta spento.
+  readonly massimo?: number;
+  /// Il valore di partenza che il motore dà al campo (`sides=6`).
+  readonly predefinito?: string | number | boolean;
+}
+
+/// Lo schema di una famiglia: le sue finestre, per id del comando.
+interface SchemaFamiglia {
+  readonly finestre: readonly { readonly id: string; readonly campi: readonly CampoSchema[] }[];
+}
+
+/// Un campo dello schema come lo legge la finestra di T6: un colore col selettore di
+/// colore. I tipi che la finestra non conosce (`cella`, `json`) si leggono come testo.
+function campoDi(campo: CampoSchema): CampoFinestra {
+  if (campo.tipo === "numero") {
+    return {
+      nome: campo.nome,
+      tipo: "numero",
+      ...(campo.minimo === undefined ? {} : { min: campo.minimo }),
+      ...(campo.massimo === undefined ? {} : { max: campo.massimo }),
+    };
+  }
+  if (campo.tipo === "scelta") return { nome: campo.nome, tipo: "scelta", valori: campo.valori ?? [] };
+  if (campo.tipo === "sino") return { nome: campo.nome, tipo: "sino" };
+  if (campo.tipo === "colore") return { nome: campo.nome, tipo: "colore" };
+  return { nome: campo.nome, tipo: "testo", facoltativo: campo.facoltativo === true };
+}
+
+/// Il modulo della finestra del comando `id`, dallo schema della sua famiglia
+/// (il suo chunk). `null` se lo schema non arriva o non ha il comando.
+async function moduloDi(
+  famiglia: string,
+  id: string,
+): Promise<{ readonly modulo: ModuloFinestra; readonly predefiniti: Readonly<Record<string, string | number | boolean>> } | null> {
+  try {
+    const file = (await import(`./famiglie/${famiglia}/schema.generated.json`)) as { readonly default?: unknown };
+    const schema = (file.default ?? file) as SchemaFamiglia;
+    const finestra = schema.finestre.find((one) => one.id === id);
+    if (finestra === undefined) return null;
+    // Il valore di partenza che lo schema dà a un campo (`sides=6`), per nome.
+    const predefiniti: Record<string, string | number | boolean> = {};
+    for (const campo of finestra.campi) if (campo.predefinito !== undefined) predefiniti[campo.nome] = campo.predefinito;
+    return { modulo: { campi: finestra.campi.map(campoDi) }, predefiniti };
+  } catch {
+    return null;
+  }
+}
+
+/// Il nome corto dello strumento del motore `strumento` dalle parole della
+/// colonna (`draw.engine.name.<id>`, K6 T12): c'è per gli strumenti che la
+/// colonna mostra prima che la loro famiglia arrivi. `null` per gli altri, che
+/// lo prendono dai testi della famiglia pronta o dall'indice.
+export function nomeCortoColonna(strumento: string): string | null {
+  const chiave = `draw.engine.name.${strumento}`;
+  return Object.prototype.hasOwnProperty.call(COLONNA_IT, chiave) ? t(chiave as DrawKey) : null;
+}
+
+/// Apre il Completo di un disegno: chiede l'indice e prepara il nucleo. Un
+/// indice che non arriva non ferma niente: chi lo mostra (≡, Ctrl+/) lo
+/// richiede e dice che non si è caricato, con «Riprova».
+export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila" | "esegui">, opzioni: OpzioniCompleto = {}): Completo {
+  const indice = opzioni.indice ?? indiceVero;
+  const sezioni = creaSezioni();
+  // Le file proprie che le famiglie registrano, per strumento (T12).
+  const fileProprie = new Map<string, CostruisciFila>();
+  const registraFila = (strumento: string, costruisci: CostruisciFila): void => {
+    fileProprie.set(strumento, costruisci);
+  };
+  // Un comando dell'indice con altri valori fissi, dal percorso unico (`eseguiVoce`): la
+  // sezione «Allinea» lo usa per i suoi pulsanti. Il primo clic porta la famiglia della voce
+  // (chunk e preparazione), come la finestra di un comando; dopo un errore il clic la riprova.
+  // Il comando parte solo da una famiglia pronta. Chiuso il Completo, non parte.
+  const eseguiPerId = (id: string, valori: Readonly<Record<string, unknown>> = {}, opzioni: { readonly senzaFinestra?: boolean } = {}): Promise<void> => {
+    if (chiuso) return Promise.resolve();
+    return indice().then(async (pronto) => {
+      if (chiuso) return;
+      const voce = pronto.voci.find((one) => one.id === id);
+      if (voce === undefined || !("comando" in voce.chiamata)) return;
+      const stato =
+        carica.stato(voce.famiglia).kind === "errore" ? await carica.riprova(voce.famiglia) : await carica.famiglia(voce.famiglia);
+      if (chiuso) return;
+      if (stato.kind !== "pronta") {
+        // Il nome della voce, non della sezione: lo stesso percorso serve Allinea,
+        // Elaborazione tracciati e Trasforma, ognuna con la sua famiglia.
+        const chiave = stato.kind === "errore" && stato.perche === "no-memory" ? "draw.comando.nonPronto.memoria" : "draw.comando.nonPronto";
+        dipendenze.annuncia(t(chiave, { comando: nomeVoce(voce) }));
+        return;
+      }
+      const fisso = (voce.chiamata as { readonly valore?: unknown }).valore;
+      const base = typeof fisso === "object" && fisso !== null ? (fisso as Readonly<Record<string, unknown>>) : {};
+      // Una sezione che manda il comando lo manda senza la finestra della voce (la rotazione, K6 T13 giro 3).
+      const senza = opzioni.senzaFinestra === true ? { ...voce, finestra: false } : voce;
+      await lancia({ ...senza, chiamata: { comando: voce.chiamata.comando, valore: conValori(voce, base, valori) } });
+    });
+  };
+  // L'ultima elaborazione andata (`object.pathfinder.*`, dalla sezione, dal menu o dai
+  // tasti), che Ripeti Elaborazione tracciati rifà sugli oggetti scelti adesso (K6 T13,
+  // come VectorCraft): le forme composte non contano. Vale finché il Completo è aperto.
+  let ultimaElaborazione: string | null = null;
+  const ripetibili = new Set([...METODI_FORMA, ...OPERAZIONI_ELABORAZIONE]);
+  // L'ultimo effetto applicato dal menu Effetto, coi valori della sua finestra (vuoti per un effetto
+  // senza finestra): «Applica ultimo effetto» lo rifà sugli oggetti scelti adesso, «Ultimo effetto…»
+  // ne riapre la finestra (che parte dai valori ricordati), come VectorCraft. Le opzioni di un effetto
+  // già applicato (la sezione Aspetto) non lo cambiano. Vale finché il Completo è aperto.
+  let ultimoEffetto: { readonly id: string; readonly valori: Readonly<Record<string, ValoreCampo>> } | null = null;
+  /// Canc con dei punti scelti con la Selezione diretta (o il Punto di ancoraggio)
+  /// toglie quei punti, non l'oggetto intero, come VectorCraft (K6 T12, punti): i
+  /// punti vanno nel `value` (`SUI_PUNTI_SCELTI`). `false` senza punti scelti.
+  const cancellaPunti = (): boolean => {
+    if (chiuso || (dipendenze.punti?.() ?? []).length === 0) return false;
+    void eseguiPerId("path.deleteAnchors", {}, { senzaFinestra: true });
+    return true;
+  };
+  /// Il modo di disegno che il motore ha accettato per ultimo (K6 T11): il segno della scelta. Ogni
+  /// apertura del Completo parte da Normale, come la sessione del motore.
+  let modoDiDisegno: ModoDisegno = "normal";
+  const portaModoDisegno: PortaModoDisegno = {
+    leggi: () => modoDiDisegno,
+    imposta: (modo) => eseguiPerId("view.drawMode", { mode: modo }, { senzaFinestra: true }).then(() => modoDiDisegno === modo),
+  };
+  /// Il percorso unico dei comandi (`eseguiVoce`), che ricorda l'ultima elaborazione andata.
+  // I comandi in volo, per voce, valori e selezione: un secondo clic identico mentre il primo è in
+  // volo (il doppio clic) non manda un altro comando al motore, che lo riceverebbe con la stessa copia.
+  // Un comando diverso (altri valori, altra selezione) parte lo stesso.
+  const inVolo = new Set<string>();
+  /// I Dati del grafico scelto (`grafico-dati-finestra.ts`), con le parole della famiglia
+  /// «grafici», che arriva prima di aprire la finestra.
+  const apriDatiGrafico = async (): Promise<void> => {
+    const stato = await carica.famiglia("grafici");
+    if (chiuso) return;
+    const testi = stato.kind === "pronta" ? carica.testi("grafici") : null;
+    const inglese = languageCurrent().startsWith("en");
+    const parola = (chiave: string, valori: Readonly<Record<string, string>> = {}): string => {
+      const una = testi?.[chiave];
+      const testo = una === undefined ? chiave : inglese ? una.en : una.it;
+      return testo.replace(/\{(\w+)\}/g, (tutto, nome: string) => valori[nome] ?? tutto);
+    };
+    apriFinestraDatiGrafico(creaPortaDatiGrafico(dipendenze, parola("dati:titolo")), parola, ctx.life);
+  };
+  // Le opzioni di un effetto già applicato: la sua finestra coi valori che ha, e OK manda
+  // `effect.setParams` coi soli valori cambiati (la finestra non legge ogni valore, un colore, e
+  // uno che non tocca resta com'è). La usano la sezione Aspetto e la domanda di «Effetto…».
+  const modificaEffetto = (voce: VoceIndice, posto: Readonly<Record<string, unknown>>, params: Readonly<Record<string, unknown>>): Promise<boolean> => {
+    if (chiuso) return Promise.resolve(false);
+    const iniziali = Object.fromEntries(
+      Object.entries(params).filter((coppia): coppia is [string, string | number | boolean] => ["string", "number", "boolean"].includes(typeof coppia[1])),
+    );
+    return eseguiVoce(voce, dipendenze, {
+      id: "disegno.effect.setParams",
+      iniziali,
+      valore: (valori, partenza) => ({
+        ...posto,
+        params: Object.fromEntries(Object.entries(valori).filter(([nome, valore]) => valore !== partenza[nome])),
+      }),
+    });
+  };
+  const lancia = async (scelta: VoceIndice): Promise<void> => {
+    let voce = scelta;
+    // «Modalità di disegno» (K6 T11): la voce senza modo apre la scelta; il comando parte col modo scelto.
+    if (voce.id === "view.drawMode" && (voce.chiamata as { readonly valore?: unknown }).valore === undefined) {
+      if (!chiuso) await apriModoDisegno(portaModoDisegno);
+      return;
+    }
+    // Dati del grafico: la tabella dei dati al posto della finestra dello schema.
+    if (voce.id === "graph.setData" && (voce.chiamata as { readonly valore?: unknown }).valore === undefined) {
+      if (!chiuso) await apriDatiGrafico();
+      return;
+    }
+    // Predefinito illuminazione 3D (menu Effetto): la finestra chiede il preset; il posto
+    // dell'effetto 3D nella pila degli oggetti scelti lo trova il client, come lo vuole il motore.
+    if (voce.id === "effect.lightingPreset" && (voce.chiamata as { readonly valore?: unknown }).valore === undefined) {
+      const esito = await chiama(dipendenze, "disegno.effect.list", {}, false).catch(() => null);
+      const pile = esito === null || esito.refused !== null ? null : pileDaLettura(esito.reading);
+      const posto = pile === null ? "nessuno" : postoDel3D(pile);
+      if (chiuso) return;
+      if (typeof posto === "string") {
+        dipendenze.annuncia(t(posto === "nessuno" ? "draw.lightingPreset.none" : "draw.lightingPreset.mixed"));
+        return;
+      }
+      voce = { ...voce, chiamata: { ...voce.chiamata, valore: posto } } as VoceIndice;
+    }
+    // Effetto… (`effect.dialog` di VectorCraft): un effetto che la pila del primo oggetto scelto ha
+    // già chiede prima se modificarlo (la sua finestra coi valori che ha, `effect.setParams`, su
+    // ogni oggetto che lo ha nello stesso posto) o aggiungerne un altro (la finestra coi valori di
+    // serie). Rifare l'ultimo effetto non chiede: rifà.
+    if (voce.fonte === "effetto" && voce.finestra && !rifacendo) {
+      const esito = await chiama(dipendenze, "disegno.effect.list", {}, false).catch(() => null);
+      const pile = esito === null || esito.refused !== null ? null : pileDaLettura(esito.reading);
+      const prima = pile?.[0];
+      const index = prima === undefined ? -1 : prima.effetti.findIndex((effetto) => effetto.id === voce.id);
+      if (chiuso) return;
+      if (prima !== undefined && index >= 0) {
+        const effetto = etichettaDi(voce).replace(/…$/u, "");
+        const modifica = await confirm(t("draw.effectExists.question", { effetto }), {
+          title: t("draw.effectExists.title"),
+          okLabel: t("draw.effectExists.edit"),
+          cancelLabel: t("draw.effectExists.addNew"),
+        });
+        if (chiuso) return;
+        if (modifica) {
+          await modificaEffetto(voce, { index, item: null, ...((pile?.length ?? 0) > 1 ? { aligned: true } : {}) }, prima.effetti[index]!.params);
+          return;
+        }
+      }
+    }
+    const chiave = JSON.stringify([voce.id, voce.chiamata, dipendenze.selezione()]);
+    if (inVolo.has(chiave)) return;
+    inVolo.add(chiave);
+    try {
+      // ≡ › Modifica › Cancella con dei punti scelti toglie quei punti, come Canc.
+      if (voce.id === "edit.clear" && cancellaPunti()) return;
+      const coiPunti = (dipendenze.punti?.() ?? []).length > 0;
+      const andata = await eseguiVoce(voce, dipendenze);
+      if (andata && ripetibili.has(voce.id)) ultimaElaborazione = voce.id;
+      if (andata && voce.fonte === "effetto" && !voce.finestra && !rifacendo) ultimoEffetto = { id: voce.id, valori: {} };
+      // Il segno del modo è quello che il motore ha accettato: un rifiuto non lo cambia (K6 T11).
+      const modo = (voce.chiamata as { readonly valore?: { readonly mode?: unknown } }).valore?.mode;
+      if (andata && voce.id === "view.drawMode" && (modo === "normal" || modo === "behind")) modoDiDisegno = modo;
+      // I punti scelti possono essere cambiati: lo stato dello strumento si rilegge.
+      if (andata && coiPunti && !chiuso) opzioni.tasti?.rileggiStato?.();
+    } finally {
+      inVolo.delete(chiave);
+    }
+  };
+  // La sezione «Allinea» (T13, giro 2): dall'indice, senza caricare la famiglia `trasforma`,
+  // che parte solo al clic di un suo comando.
+  registraAllinea(sezioni, eseguiPerId);
+  // La sezione «Elaborazione tracciati» (K6 T12, giro 5): le dieci voci dall'indice, senza
+  // finestra; la famiglia `tracciati` parte al primo clic. I metodi forma fanno e cambiano
+  // le forme composte (K6 T13): se ce n'è una fra gli oggetti scelti lo dice il motore.
+  registraElaborazione(sezioni, {
+    esegui: (id, valori = {}) => void eseguiPerId(id, valori, { senzaFinestra: true }),
+    composta: async () => {
+      const stato = await statoComandi(ctx.motore, dipendenze.selezione());
+      return stato.per?.get("disegno.object.compoundShape.setMode")?.enabled === true;
+    },
+  });
+  // La sezione «Fusione» (K6 T17, pannello): le opzioni lette dal motore (`object.blend.info`) e i
+  // comandi accesi; ogni cambio passa dal percorso unico, senza finestra.
+  registraFusione(sezioni, {
+    esegui: (id, valori = {}) => eseguiPerId(id, valori, { senzaFinestra: true }),
+    leggi: async () => {
+      const selezione = dipendenze.selezione();
+      const [esito, stato] = await Promise.all([
+        chiama(dipendenze, "disegno.object.blend.info", {}, false).catch(() => null),
+        statoComandi(ctx.motore, selezione),
+      ]);
+      const info = esito === null || esito.refused !== null ? null : infoDaLettura(esito.reading);
+      if (info === null) return null;
+      const accesi = new Set(COMANDI_FUSIONE.filter((id) => stato.per?.get(`disegno.${id}`)?.enabled === true));
+      return { info, accesi };
+    },
+  });
+  // La sezione «Attributi»: la regola di riempimento dei tracciati scelti, letta dal motore
+  // (`attributes.info`, propria o ereditata) e cambiata con `path.setFillRule`, senza finestra.
+  registraAttributi(sezioni, {
+    esegui: (id, valori) => eseguiPerId(id, valori, { senzaFinestra: true }),
+    leggi: async () => {
+      const selezione = dipendenze.selezione();
+      const [esito, stato] = await Promise.all([
+        chiama(dipendenze, "disegno.attributes.info", {}, false).catch(() => null),
+        statoComandi(ctx.motore, selezione),
+      ]);
+      if (esito === null || esito.refused !== null) return null;
+      return { regola: regolaDaLettura(esito.reading), acceso: stato.per?.get(`disegno.${COMANDO_REGOLA}`)?.enabled === true };
+    },
+  });
+  // La sezione «Aspetto»: la pila degli effetti degli oggetti scelti (`effect.list`), coi nomi delle
+  // voci degli effetti dall'indice, che la lettura porta con sé. Le opzioni di un effetto aprono la
+  // sua finestra coi valori che ha e mandano `effect.setParams` coi soli valori cambiati: la
+  // finestra non legge ogni valore (un colore), e uno che non tocca resta com'è.
+  let effettiDellIndice = new Map<string, VoceIndice>();
+  registraAspetto(sezioni, {
+    esegui: (id, valori) => eseguiPerId(id, valori, { senzaFinestra: true }),
+    leggi: async () => {
+      const [pronto, esito] = await Promise.all([
+        indice().catch(() => null),
+        chiama(dipendenze, "disegno.effect.list", {}, false).catch(() => null),
+      ]);
+      if (pronto !== null) effettiDellIndice = new Map(pronto.voci.filter((voce) => voce.fonte === "effetto").map((voce) => [voce.id, voce]));
+      return esito === null || esito.refused !== null ? null : esito.reading;
+    },
+    nome: (id) => {
+      const voce = effettiDellIndice.get(id);
+      return voce === undefined ? id : etichettaDi(voce).replace(/…$/u, "");
+    },
+    haOpzioni: (id) => effettiDellIndice.get(id)?.finestra === true,
+    opzioni: (id, posto, params) => {
+      const voce = effettiDellIndice.get(id);
+      if (voce !== undefined) void modificaEffetto(voce, posto, params);
+    },
+  });
+  // La sezione «Oggetti sul tracciato»: perno e rotazione dei gruppi scelti, letti col record di
+  // ogni oggetto (`document.node`, con l'id del file); c'è solo se ogni oggetto scelto è un gruppo.
+  registraOggettiSulTracciato(sezioni, {
+    esegui: (id, valori) => eseguiPerId(id, valori, { senzaFinestra: true }),
+    leggi: async () => {
+      const ids = [...dipendenze.selezione()];
+      const nodo = async (id: string): Promise<unknown> => {
+        const esito = await chiama(dipendenze, "disegno.document.node", { id }, false).catch(() => null);
+        return esito === null || esito.refused !== null ? null : esito.reading;
+      };
+      // Il primo oggetto prima: se non è un gruppo (il caso di quasi ogni selezione) la sezione
+      // non c'è, e gli altri non si chiedono.
+      const primo = ids.length === 0 ? null : await nodo(ids[0]!);
+      if (!eGruppoSulTracciato(primo)) return null;
+      const altri = await Promise.all(ids.slice(1).map(nodo));
+      return { ids, nodi: [primo, ...altri] };
+    },
+  });
+  registraQuota(sezioni, {
+    esegui: (id, valori) => eseguiPerId(id, valori, { senzaFinestra: true }),
+    leggi: async () => {
+      const ids = [...dipendenze.selezione()];
+      const nodo = async (id: string): Promise<unknown> => {
+        const esito = await chiama(dipendenze, "disegno.document.node", { id }, false).catch(() => null);
+        return esito === null || esito.refused !== null ? null : esito.reading;
+      };
+      // Il primo oggetto prima: se non è una quota (il caso di quasi ogni selezione) la sezione
+      // non c'è, e gli altri non si chiedono.
+      const primo = ids.length === 0 ? null : await nodo(ids[0]!);
+      if (!eQuota(primo)) return null;
+      const altri = await Promise.all(ids.slice(1).map(nodo));
+      return { ids, nodi: [primo, ...altri] };
+    },
+  });
+  // La sezione «Trasforma», come il pannello Transform di VectorCraft: il riquadro della selezione lo
+  // legge dal motore (`document.inspect`), e le sue preferenze (`prefs.get`, `prefs.set`) restano
+  // per i disegni dopo. Il punto di riferimento vale finché il Completo è aperto.
+  registraTrasforma(sezioni, {
+    esegui: eseguiPerId,
+    leggi: () => chiama(dipendenze, "disegno.document.inspect", { depth: 0 }, false).then((esito) => (esito === null || esito.refused !== null ? null : esito.reading)),
+    preferenze: () => chiama(dipendenze, "disegno.prefs.get", {}, false).then((esito) => (esito === null || esito.refused !== null ? null : esito.reading)),
+    imposta: (chiave, valore) => void comandoDellaFila("disegno.prefs.set", { key: chiave, value: valore }, t("draw.trasforma.titolo"), undefined),
+    riferimento: { indice: 4 },
+  });
+  // La sezione «Colore» (K6 T14, giro 1): riempimento e contorno, scambia, nessuno e di serie.
+  // Il lato attivo che Colore cambia e Risorse › Campioni usa (K6 T14, giro 2).
+  const latoAttivo: LatoAttivo = { lato: "fill" };
+  // I colori che la sezione Colore ha visto (la vista del pozzo), per il selettore. Le finestre dei
+  // colori si chiudono col Completo (`chiudi`) e col disegno (`ctx.life`).
+  const coloriVisti: ColoriVisti = { valore: null };
+  const vitaFinestreColori = openLifetime();
+  ctx.life.add(() => vitaFinestreColori.close());
+  // Le voci del client che il Completo fa da sé, con una sua sezione: le altre vanno all'editor.
+  const vociDelCompleto = new Map<string, VoceDelCompleto>();
+  vociDelCompleto.set("pathfinder.repeat", {
+    stato: () => (ultimaElaborazione === null ? t("draw.disabled.nothing_to_repeat") : null),
+    esegui: () => {
+      if (ultimaElaborazione !== null) void eseguiPerId(ultimaElaborazione, {}, { senzaFinestra: true });
+    },
+  });
+  let rifacendo = false;
+  vociDelCompleto.set("effect.applyLast", {
+    stato: () => (ultimoEffetto === null ? t("draw.disabled.no_last_effect") : null),
+    esegui: () => {
+      const ultimo = ultimoEffetto;
+      if (ultimo === null) return;
+      // Rifatto senza finestra: non è un effetto nuovo, e i suoi valori restano quelli.
+      rifacendo = true;
+      void eseguiPerId(ultimo.id, ultimo.valori, { senzaFinestra: true }).finally(() => {
+        rifacendo = false;
+      });
+    },
+  });
+  vociDelCompleto.set("effect.last", {
+    stato: () => (ultimoEffetto === null ? t("draw.disabled.no_last_effect") : null),
+    esegui: () => {
+      const ultimo = ultimoEffetto;
+      if (ultimo === null || chiuso) return;
+      void indice().then((pronto) => {
+        const voce = pronto.voci.find((una) => una.id === ultimo.id);
+        if (voce !== undefined && !chiuso) void lancia(voce);
+      });
+    },
+  });
+  // Allinea a sinistra, al centro, a destra (Ctrl+Maiusc+L, C, R di VectorCraft): il comando della
+  // sezione Paragrafo sui testi scelti, acceso come lui. Giustifica resta fuori: il file non scrive il
+  // testo giustificato.
+  // Grassetto, Corsivo e Sottolineato (menu Testo, Ctrl+Maiusc+U): il carattere del primo testo
+  // scelto, letto dal motore, e `text.setRangeStyle` con la faccia della famiglia o il sottolineato
+  // inverso, come VectorCraft. Una famiglia senza la faccia resta com'è, e la voce dice perché.
+  for (const id of VOCI_DI_STILE) {
+    vociDelCompleto.set(id, {
+      comando: "disegno.text.setRangeStyle",
+      stato: () => null,
+      esegui: () =>
+        void passoSulTesto(dipendenze, id).then((passo) => {
+          if (passo === null || dipendenze.vita.closed) return;
+          if ("perche" in passo) {
+            if (passo.perche === "famiglia") dipendenze.annuncia(t("draw.testo.facciaMancante", { famiglia: passo.famiglia, faccia: passo.faccia }));
+            else
+              void indice().then((pronto) => {
+                const voce = pronto.voci.find((una) => una.id === id);
+                if (voce !== undefined && !chiuso) dipendenze.annuncia(t("draw.comando.nonPronto", { comando: nomeVoce(voce) }));
+              });
+            return;
+          }
+          return eseguiPerId("text.setRangeStyle", passo.valore, { senzaFinestra: true });
+        }),
+    });
+  }
+  for (const [id, justify] of ALLINEA_TESTO) {
+    vociDelCompleto.set(id, {
+      comando: "disegno.text.setStyle",
+      stato: () => null,
+      esegui: () => void eseguiPerId("text.setStyle", { justify }, { senzaFinestra: true }),
+    });
+  }
+  // Trova carattere… (menu Testo): la finestra dei caratteri del disegno, con Trova, Cambia e
+  // Cambia tutto (`trova-carattere.ts`).
+  vociDelCompleto.set("type.findFont", { stato: () => null, esegui: () => apriTrovaCarattere(creaPortaTrovaCarattere(dipendenze), ctx.life) });
+  // Ricolora grafica (K6 T14): la voce di Modifica › Modifica colori apre la sua finestra. Il suo
+  // stato è quello del comando che la finestra scrive (`conVociClient`).
+  vociDelCompleto.set(VOCE_RICOLORA, { stato: () => null, esegui: () => void apriRicolora(dipendenze) });
+  // Angoli… (`ui.corners`, VectorCraft: Corners…): tipo e raggio degli angoli del primo tracciato
+  // scelto, letti dal motore; OK manda `object.setLiveShape` su tutti gli angoli. Lo stato è quello
+  // del comando: spento senza un tracciato con angoli.
+  vociDelCompleto.set(VOCE_ANGOLI, {
+    comando: "disegno.object.setLiveShape",
+    stato: () => null,
+    esegui: () =>
+      void chiama(dipendenze, "disegno.document.inspect", { depth: 0 }, false).then(async (esito) => {
+        if (esito === null || esito.refused !== null || dipendenze.vita.closed) return;
+        const angoli = formaDa(esito.reading)?.angoli ?? null;
+        if (angoli === null) {
+          dipendenze.annuncia(t("draw.forma.finestra.senzaAngoli"));
+          return;
+        }
+        const scena = { unita: "px", decimali: 2, allaScena: (v: number) => v, dallaScena: (v: number) => v };
+        const scelta = await chiediAngoli(angoli, scena);
+        if (scelta === null || dipendenze.vita.closed) return;
+        await eseguiPerId("object.setLiveShape", { kind: scelta.tipo, radius: scelta.raggio }, { senzaFinestra: true });
+      }),
+  });
+  registraColore(sezioni, (id, valori) => void eseguiPerId(id, valori, { senzaFinestra: true }), ctx.life, latoAttivo, coloriVisti);
+  // La «Guida colori» del Design (K6 T14, giro 3): le armonie del lato attivo, lette dal motore.
+  registraGuidaColori(sezioni, (id, valori) => void eseguiPerId(id, valori, { senzaFinestra: true }), () => dipendenze, ctx.life, latoAttivo);
+  // La sezione «Campioni» di Risorse (K6 T14, giro 2): la griglia, la scelta, le finestre del kit.
+  registraCampioni(sezioni, (id, valori) => void eseguiPerId(id, valori, { senzaFinestra: true }), ctx.life, latoAttivo, vociDelCompleto);
+  // La finestra «Librerie di campioni» (K6 T14, finestra): la voce `window.swatchLibrary` apre il dialogo,
+  // che parla col motore attraverso `dipendenze` (le letture e Aggiungi, col passo di Annulla).
+  vociDelCompleto.set("window.swatchLibrary", {
+    stato: () => null,
+    esegui: () => apriFinestraLibrerie(creaPortaLibrerie(dipendenze, t("draw.libraries.undo")), ctx.life),
+  });
+  // La sezione «Contorno» (K6 T15, giro 5), come il pannello Stroke di VectorCraft: legge dal motore
+  // il contorno di ogni oggetto scelto (`document.node`, con l'id del file).
+  registraContorno(sezioni, {
+    esegui: eseguiPerId,
+    leggi: () =>
+      Promise.all(
+        [...dipendenze.selezione()].map(async (id) => {
+          // Il riassunto del solo oggetto (senza i figli): ha lo spessore e le opzioni del contorno.
+          const esito = await chiama(dipendenze, "disegno.document.node", { id, summary: true, depth: 0 }, false).catch(() => null);
+          return esito === null || esito.refused !== null ? null : esito.reading;
+        }),
+      ),
+  });
+  // La sezione «Sfumatura» (K6 T15, giro 5): tipo, angolo e punti della sfumatura lineare o radiale.
+  // Le preimpostate (giro 6) leggono dal motore con le famiglie del caricatore, che nasce qui sotto:
+  // la porta lo chiede solo quando le preimpostate si aprono.
+  const preimpostate =
+    ctx.motore === null
+      ? undefined
+      : creaPortaPreimpostate({
+          motore: ctx.motore,
+          carica: { famiglia: (id) => carica.famiglia(id) },
+          vita: ctx.life,
+          selezione: opzioni.tasti?.selezione ?? (() => []),
+        });
+  registraSfumatura(sezioni, (id, valori) => void eseguiPerId(id, valori, { senzaFinestra: true }), ctx.life, latoAttivo, preimpostate);
+  registraTrasparenza(sezioni, eseguiPerId);
+  // Il pannello «Temi di colore» della scheda Risorse (K6 T14, temi): la lista e i comandi passano dal
+  // motore, con la famiglia `colore`, che il caricatore porta quando il pannello si apre.
+  registraTemi(sezioni, creaPortaTemi({ motore: ctx.motore, carica: { famiglia: (id) => carica.famiglia(id) }, vita: ctx.life }), ctx.life);
+  // La sezione «Simboli» di Risorse: la lista è una lettura del motore, ogni pulsante un comando del
+  // percorso unico. Il simbolo scelto è il simbolo corrente di Spruzzo e Simbolismo.
+  const simboloCorrente: SimboloCorrente = nuovoSimboloCorrente();
+  // Lo Spruzzo e il Simbolismo: la loro fila, col simbolo corrente della sezione «Simboli».
+  for (const strumento of STRUMENTI_SIMBOLISMO) {
+    registraFila(strumento, (stato, azioni, vita) => filaSimbolismo(strumento, simboloCorrente, stato, azioni, vita));
+  }
+  registraSimboli(
+    sezioni,
+    {
+      leggi: async (id, valore) => {
+        const stato = await carica.famiglia("simboli");
+        if (stato.kind !== "pronta" || chiuso) return null;
+        const esito = await chiama(dipendenze, `disegno.${id}`, valore, false).catch(() => null);
+        return esito === null || esito.refused !== null ? null : esito.reading;
+      },
+      esegui: (id, valori) => eseguiPerId(id, valori, { senzaFinestra: true }),
+    },
+    simboloCorrente,
+  );
+  // Le sezioni «Carattere» e «Paragrafo» (K6 T16, giro 1): il testo scelto, un comando per cambio.
+  registraTesto(sezioni, (id, valori) => void eseguiPerId(id, valori, { senzaFinestra: true }), ctx.life);
+  const carica = caricatore({ ctx: { ...ctx, sezioni, registraFila, esegui: eseguiPerId }, moduli: opzioni.moduli, prepara: opzioni.prepara });
+  // I valori di partenza che una finestra legge dal disegno (`partenze.ts`): `null` se non ne
+  // legge, o se il motore non risponde (la finestra parte allora dai valori di serie).
+  const partenzaDalDisegno = async (id: string): Promise<Readonly<Record<string, ValoreCampo>> | null> => {
+    const partenza = PARTENZE_LETTE[id];
+    if (partenza === undefined || ctx.motore === null) return null;
+    const sessione = await ctx.motore.pronta(ATTESA_MOTORE_FILA_MS);
+    if (ctx.life.closed || sessione === null) return null;
+    const esito = await sessione.comando({ id: partenza.lettura, selection: [...(opzioni.tasti?.selezione() ?? [])], value: {} });
+    if (esito === null || "kind" in esito || esito.reading === undefined || esito.reading === null) return null;
+    return partenza.campi(esito.reading);
+  };
+  // La finestra di un comando con parametri (T6): il modulo dello schema della sua
+  // famiglia. `null` se la famiglia non ha la finestra di quel comando.
+  const finestraDi = async (voce: VoceIndice): Promise<OpzioniFinestraComando | null> => {
+    const schema = await moduloDi(voce.famiglia, voce.id);
+    if (schema === null) return null;
+    // Ciò che il comando ha già (il punto del clic) non si chiede: la finestra non lo
+    // manda, e il comando lo prende dalla voce.
+    const valore = (voce.chiamata as { readonly valore?: unknown }).valore;
+    const dati = typeof valore === "object" && valore !== null ? Object.keys(valore) : [];
+    const campi = schema.modulo.campi.filter((campo) => !dati.includes(campo.nome));
+    // Le parole della finestra sono della famiglia: ci sono quando è pronta; prima il
+    // nome del campo, e niente frase, verbo, parole delle scelte né unità.
+    const stato = await carica.famiglia(voce.famiglia);
+    const testi = stato.kind === "pronta" ? carica.testi(voce.famiglia) : null;
+    const inglese = languageCurrent().startsWith("en");
+    const parola = (chiave: string): string | undefined => {
+      const una = testi?.[chiave];
+      return una === undefined ? undefined : inglese ? una.en : una.it;
+    };
+    // Il nome di un campo: quello del comando (`campo:<id>:<nome>`) se c'è, poi quello
+    // della famiglia (`campo:<nome>`): lo stesso `level` è la semplificazione o la smussatura.
+    const etichette = Object.fromEntries(
+      campi.map((campo): [string, string] => [campo.nome, parola(`campo:${voce.id}:${campo.nome}`) ?? parola(`campo:${campo.nome}`) ?? campo.nome]),
+    );
+    const scelte: Record<string, Readonly<Record<string, string>>> = {};
+    const unita: Record<string, string> = {};
+    for (const campo of campi) {
+      if (campo.tipo === "scelta") {
+        const parole = campo.valori.flatMap((valore): [string, string][] => {
+          const una = parola(`scelta:${campo.nome}:${valore}`);
+          return una === undefined ? [] : [[valore, una]];
+        });
+        if (parole.length > 0) scelte[campo.nome] = Object.fromEntries(parole);
+      }
+      const sigla = campo.tipo === "numero" ? parola(`unita:${campo.nome}`) : undefined;
+      if (sigla !== undefined) unita[campo.nome] = sigla;
+    }
+    const descrizione = parola(`descrizione:${voce.id}`);
+    const azione = parola(`azione:${voce.id}`);
+    const iniziali = Object.fromEntries(Object.entries(schema.predefiniti).filter(([nome]) => campi.some((campo) => campo.nome === nome)));
+    const dalDisegno = await partenzaDalDisegno(voce.id);
+    return {
+      modulo: { campi },
+      campi: etichette,
+      iniziali,
+      ...(dalDisegno === null ? {} : { dalDisegno }),
+      ...(descrizione === undefined ? {} : { descrizione }),
+      ...(azione === undefined ? {} : { azione }),
+      ...(Object.keys(scelte).length === 0 ? {} : { scelte }),
+      ...(Object.keys(unita).length === 0 ? {} : { unita }),
+    };
+  };
+  // Le finestre dei comandi aperte adesso, per id: una finestra per comando (`esegui.ts`).
+  const finestreAperte = new Set<string>();
+  // Il percorso unico di un comando del motore (`esegui.ts`): il menu ≡, Ctrl+/ e
+  // i tasti lo usano con queste stesse dipendenze, costruite qui una volta sola.
+  const dipendenze: DipendenzeComando = {
+    motore: ctx.motore,
+    carica,
+    vita: ctx.life,
+    selezione: opzioni.tasti?.selezione ?? (() => []),
+    punti: opzioni.tasti?.punti ?? (() => []),
+    ...(opzioni.tasti?.livello === undefined ? {} : { livello: opzioni.tasti.livello }),
+    anteprima: opzioni.tasti?.anteprima ?? (() => undefined),
+    finestra: finestraDi,
+    finestreAperte,
+    leggi: opzioni.tasti?.leggi ?? (() => null),
+    commit: opzioni.tasti?.commit ?? (() => false),
+    seleziona: opzioni.tasti?.seleziona ?? (() => undefined),
+    annuncia: opzioni.tasti?.annuncia ?? (() => undefined),
+    ...(opzioni.tasti?.diFub === undefined ? {} : { diFub: opzioni.tasti.diFub }),
+    effettoApplicato: (voce, valori) => {
+      ultimoEffetto = { id: voce.id, valori };
+    },
+  };
+  // Modifica › Modifica colori › «Selettore colore…» (K6 T14, selettore): il selettore del pozzo, con il
+  // lato attivo e i colori che la sezione Colore ha visto. Le sue finestre passano da `dipendenze`.
+  vociDelCompleto.set(VOCE_SELETTORE_COLORE, voceSelettoreColore({ dipendenze, lato: latoAttivo, colori: coloriVisti, vita: vitaFinestreColori }));
+  // Ricerca › «Nuovo gruppo colori…» (K6 T14, gruppi): il nome e i campioni, un comando solo a OK.
+  vociDelCompleto.set(VOCE_NUOVO_GRUPPO, voceNuovoGruppo({ dipendenze, vita: vitaFinestreColori }));
+  // Gli appunti del motore (K6 T11): mentre il Completo è aperto, copiare e incollare
+  // passano dal motore, e il Semplice li cede qui (`tools/clipboard.ts`). Senza
+  // motore o senza tasti non ci sono.
+  if (ctx.motore !== null && opzioni.tasti !== undefined) {
+    const appunti = creaAppuntiCompleto({
+      motore: ctx.motore,
+      vita: ctx.life,
+      selezione: dipendenze.selezione,
+      applica: (esito, etichetta) => applicaEsito(esito, etichetta, dipendenze),
+      annuncia: dipendenze.annuncia,
+    });
+    dipendenze.appunti = appunti;
+    ctx.life.add(registraAppuntiCompleto(ctx.motore, appunti));
+  }
+  /// Un comando di una fila propria (T12: i comandi sui punti), col suo valore:
+  /// l'esito passa da `applicaEsito` come i comandi del menu, in un passo, e
+  /// lo stato dello strumento si rilegge, perché i punti scelti cambiano.
+  /// La lettura di un comando per la fila (K6 T14, giro 7): come `comandoDellaFila`, ma
+  /// senza cambiare niente e col valore che il motore legge; `null` se non risponde.
+  const leggiPerLaFila = async (id: string, valore: unknown): Promise<unknown> => {
+    const sessione = ctx.motore === null ? null : await ctx.motore.pronta(ATTESA_MOTORE_FILA_MS);
+    if (ctx.life.closed || sessione === null) return null;
+    const esito = await sessione.comando({ id, selection: [], value: valore });
+    if (esito === null || "kind" in esito) return null;
+    return esito.reading ?? null;
+  };
+  const comandoDellaFila = async (id: string, valore: unknown, etichetta: string, rileggi: (() => void) | undefined): Promise<void> => {
+    const sessione = ctx.motore === null ? null : await ctx.motore.pronta(ATTESA_MOTORE_FILA_MS);
+    if (ctx.life.closed) return;
+    if (sessione === null) {
+      dipendenze.annuncia(t("draw.window.unanswered"));
+      return;
+    }
+    const esito = await sessione.comando({ id, selection: [...dipendenze.selezione()], value: valore });
+    if (ctx.life.closed) return;
+    if (esito === null || ("kind" in esito && esito.kind === "assente")) {
+      dipendenze.annuncia(t("draw.window.unanswered"));
+      return;
+    }
+    // Gli argomenti rifiutati si dicono con la frase del motore; lo stato si rilegge lo stesso.
+    applicaRisposta(esito, etichetta, dipendenze);
+    rileggi?.();
+  };
+  // Una voce del menu o della ricerca: uno strumento lo sceglie l'editor; un
+  // comando del motore parte dal percorso unico.
+  const avvia = (voce: VoceIndice, azioni: AzioniVoci): void => {
+    // Il comando del pennello (`path.blob`) vuole il suo tratto, che solo lo strumento dà: la voce della
+    // ricerca sceglie lo strumento Pennello tondo (K6 T12, giro 2).
+    if (voce.id === "path.blob") {
+      azioni.strumento(STRUMENTO_PENNELLO);
+      return;
+    }
+    // Attacca degli Oggetti sul tracciato senza un tracciato sceglie lo strumento, il cui clic su un
+    // tracciato vi attacca gli oggetti scelti (come `attach` senza `path` in VectorCraft).
+    if (voce.id === "object.objectsOnPath.attach") {
+      azioni.strumento(STRUMENTO_OGGETTI_SUL_TRACCIATO);
+      return;
+    }
+    const chiamata = voce.chiamata;
+    if ("strumento" in chiamata) {
+      azioni.strumento(chiamata.strumento);
+      return;
+    }
+    if ("client" in chiamata) {
+      const propria = vociDelCompleto.get(chiamata.client);
+      if (propria !== undefined) propria.esegui();
+      else azioni.client(chiamata.client);
+      return;
+    }
+    void lancia(voce);
+  };
+  /// Lo stato dei comandi con le voci del client dell'editor: la regola di
+  /// `statoVoce` le legge da qui.
+  const conVociClient = (stato: StatoComandi): StatoComandi => ({
+    ...stato,
+    clientVoce: (id) => {
+      if (id === VOCE_RICOLORA) return motivoRicolora(stato);
+      const propria = vociDelCompleto.get(id);
+      if (propria === undefined) return opzioni.clientVoce?.(id);
+      return propria.comando !== undefined ? motivoDelComando(stato, propria.comando) : propria.stato();
+    },
+    clientStato: opzioni.clientStato,
+  });
+  let chiuso = false;
+  // I tasti dell'utente (`draw.keys`, T9c): con un editor e senza modifiche
+  // date da chi apre, il Completo li segue, e rifà la regola a ogni cambio.
+  // La lettura arriva sempre dopo il montaggio (è una promessa).
+  const modificheUtente: () => ModificheTasti =
+    opzioni.tasti === undefined
+      ? () => ({})
+      : (opzioni.tasti.modifiche ?? seguiTastiUtente(ctx.life, () => montaggio.aggiorna()));
+  // La regola dei tasti (T9b, `montaggio-tasti.ts`): il menu e la tavolozza la
+  // leggono da qui, senza un secondo calcolo. Ascolta i tasti solo con un editor
+  // (la radice); senza, la regola c'è lo stesso.
+  const montaggio = montaTasti({
+    radice: opzioni.tasti?.radice ?? null,
+    ...(opzioni.tasti?.attivo !== undefined ? { attivo: opzioni.tasti.attivo } : {}),
+    vita: ctx.life,
+    indice,
+    modifiche: modificheUtente,
+    stato: opzioni.tasti?.stato ?? (() => ({ vuoleTesto: false, componendo: false })),
+    piattaforma: opzioni.tasti?.piattaforma ?? piattaformaDi(),
+    esegui: (voce) => {
+      if (chiuso) return;
+      // Uno strumento del motore con tasto (Maiusc+B) lo sceglie l'editor, come dalla colonna.
+      if ("strumento" in voce.chiamata) {
+        opzioni.tasti?.strumento?.(voce.chiamata.strumento);
+        return;
+      }
+      // Una voce del client col tasto di VectorCraft (Righelli Ctrl+R, Applica ultimo effetto
+      // Ctrl+Maiusc+E…): parte se è accesa, come dal menu; una spenta non fa niente.
+      if ("client" in voce.chiamata) {
+        const id = voce.chiamata.client;
+        const propria = vociDelCompleto.get(id);
+        if (propria?.comando !== undefined) {
+          // Lo stato del suo comando, letto adesso: spento, il perché va detto e niente parte.
+          const comando = propria.comando;
+          void statoComandi(ctx.motore, dipendenze.selezione()).then((stato) => {
+            if (chiuso) return;
+            const motivo = motivoDelComando(stato, comando);
+            if (motivo === null) propria.esegui();
+            else dipendenze.annuncia(motivo);
+          });
+        } else if (propria !== undefined) {
+          if (propria.stato() === null) propria.esegui();
+        } else if (opzioni.clientVoce?.(id) === null) opzioni.tasti?.client?.(id);
+        return;
+      }
+      void lancia(voce);
+    },
+  });
+  // La famiglia di uno strumento del motore, dall'indice: si chiede una volta
+  // sola per strumento (la voce dell'indice non cambia). Uno strumento senza
+  // voce, o un indice che non arriva, non ha famiglia.
+  const famiglie = new Map<string, string>();
+  /// L'indice, quando è arrivato: la colonna ne legge i nomi senza aspettare.
+  let indiceArrivato: Indice | null = null;
+  const voceStrumento = (pronto: Indice, strumento: string): VoceIndice | undefined =>
+    pronto.voci.find((one) => "strumento" in one.chiamata && one.chiamata.strumento === strumento);
+  const famigliaDi = async (strumento: string): Promise<string | null> => {
+    const nota = famiglie.get(strumento);
+    if (nota !== undefined) return nota;
+    let pronto: Indice;
+    try {
+      pronto = await indice();
+    } catch {
+      return null;
+    }
+    const voce = voceStrumento(pronto, strumento);
+    if (voce === undefined) return null;
+    famiglie.set(strumento, voce.famiglia);
+    return voce.famiglia;
+  };
+  /// Chi ascolta i cambi della colonna (`ascoltaColonna`).
+  const ascoltiColonna = new Set<() => void>();
+  const avvisaColonna = (): void => {
+    if (chiuso) return;
+    for (const ascolto of [...ascoltiColonna]) if (ascoltiColonna.has(ascolto)) ascolto();
+  };
+  ctx.life.add(carica.quandoCambia(() => avvisaColonna()));
+  /// Il motore c'è (aperto o in apertura, non spento né fermo) e l'indice è
+  /// arrivato: allora la colonna e i tasti sono solo quelli di VectorCraft.
+  /// Spento o fermo, tornano gli strumenti semplici, che senza motore
+  /// funzionano: una colonna di strumenti morti non serve a nessuno.
+  const motoreAttivo = (): boolean => ctx.motore !== null && ctx.motore.assente() === null && indiceArrivato !== null;
+  let attivo = false;
+  /// La colonna si rifà solo quando `motoreAttivo()` cambia davvero.
+  const ricontrollaMotore = (): void => {
+    const adesso = motoreAttivo();
+    if (adesso === attivo) return;
+    attivo = adesso;
+    avvisaColonna();
+  };
+  /// Il motore si ascolta dal primo che ascolta la colonna (`ascoltaColonna`):
+  /// prima nessuno la rifà.
+  let ascoltoMotore = false;
+  const completo: Completo = {
+    indice,
+    carica,
+    sezioni,
+    // I comandi di livello dell'albero nativo (K6 T15, giro 4): con un editor e un motore.
+    livelli:
+      ctx.motore === null || opzioni.tasti === undefined
+        ? null
+        : creaPortaLivelli({ motore: ctx.motore, carica, vita: ctx.life, leggi: dipendenze.leggi }),
+    cancellaPunti,
+    parole(elemento, testo) {
+      void eseguiPerId("text.editRange", { element: elemento, text: testo }, { senzaFinestra: true });
+    },
+    clicStrumento(strumento, punto, doppio = false) {
+      if (chiuso) return;
+      const clic = COMANDO_DEL_CLIC[strumento];
+      if (clic === undefined || indiceArrivato === null) return;
+      if ((clic.soloDoppio === true) !== doppio) return;
+      const voce = indiceArrivato.voci.find((one) => one.id === clic.comando);
+      if (voce === undefined || !("comando" in voce.chiamata)) return;
+      if (clic.soloDoppio === true) {
+        void eseguiVoce(voce, dipendenze);
+        return;
+      }
+      // Una trasformazione lavora sulla selezione di adesso: senza, la finestra non si
+      // apre e si dice perché (il motivo che la finestra usa già).
+      if (clic.sullaSelezione === true) {
+        if (dipendenze.selezione().length === 0) {
+          dipendenze.annuncia(t("draw.disabled.no_selection"));
+          return;
+        }
+        void eseguiVoce(voce, dipendenze);
+        return;
+      }
+      // La finestra parte dal punto del clic e senza selezione: una forma nuova non la
+      // usa, e la selezione di prima non entra nel comando.
+      const campi = { ...clic.fissi, ...(clic.x !== undefined && clic.y !== undefined ? { [clic.x]: punto.x, [clic.y]: punto.y } : {}) };
+      const derivata: VoceIndice = { ...voce, chiamata: { comando: voce.chiamata.comando, valore: campi } };
+      void eseguiVoce(derivata, { ...dipendenze, selezione: () => [] }).then((andata) => {
+        // Il grafico nuovo è scelto: si aprono i suoi dati, come dopo il trascinamento.
+        if (andata && !chiuso && strumento in TIPO_DEL_GRAFICO) void apriDatiGrafico();
+      });
+    },
+    gestoFinito(strumento) {
+      if (!chiuso && strumento in TIPO_DEL_GRAFICO) void apriDatiGrafico();
+    },
+    async preparaStrumento(strumento) {
+      const famiglia = await famigliaDi(strumento);
+      if (famiglia === null) return false;
+      // Le famiglie in più arrivano insieme; il loro esito non conta qui.
+      const inPiu = (FAMIGLIE_IN_PIU[strumento] ?? []).map((altra) => (carica.stato(altra).kind === "errore" ? carica.riprova(altra) : carica.famiglia(altra)));
+      // Una famiglia in errore si riprova: chi sceglie lo strumento di nuovo
+      // chiede di nuovo la famiglia.
+      const stato = carica.stato(famiglia).kind === "errore" ? await carica.riprova(famiglia) : await carica.famiglia(famiglia);
+      await Promise.all(inPiu);
+      return stato.kind === "pronta";
+    },
+    fila(strumento, opzioni, cambia, vita, ambiente) {
+      const propria = fileProprie.get(strumento);
+      if (propria !== undefined && ctx.motore !== null) {
+        const azioni = {
+          esegui: (id: string, valore: unknown, etichetta: string) => void comandoDellaFila(id, valore, etichetta, ambiente?.rileggi),
+          leggi: (id: string, valore: unknown) => leggiPerLaFila(id, valore),
+          annuncia: dipendenze.annuncia,
+          opzione: cambia,
+        };
+        return propria(ambiente?.stato ?? null, azioni, vita);
+      }
+      const famiglia = famiglie.get(strumento);
+      if (famiglia === undefined) return null;
+      // Le etichette ci sono solo con la famiglia pronta (`carica.testi`).
+      const testi = carica.testi(famiglia);
+      if (testi === null) return null;
+      return costruisciFila(testi, opzioni, cambia, vita);
+    },
+    chiudi() {
+      if (chiuso) return;
+      chiuso = true;
+      vitaFinestreColori.close();
+      carica.chiudi();
+      sezioni.chiudi();
+    },
+    spazio(space, effetti) {
+      // Il Completo di serie non apre niente: una scheda aperta farebbe
+      // cambiare il fuoco dell'editor appena il Completo arriva.
+      const preset = presetDi(space);
+      if (preset === null) return;
+      applicaSpazio(preset, effetti, carica);
+    },
+    // Col motore attivo solo i suoi strumenti; spento o fermo, solo quelli
+    // di Fub, perché i suoi non farebbero niente.
+    colonna: (offerti) => (motoreAttivo() ? layoutCompleto(offerti, MOTORE_PRONTO, true) : layoutCompleto(offerti)),
+    strumentoMotore(strumento) {
+      // Senza motore uno strumento del motore non fa niente: non si mostra.
+      if (ctx.motore === null || indiceArrivato === null) return null;
+      const voce = voceStrumento(indiceArrivato, strumento);
+      if (voce === undefined) return null;
+      const inglese = languageCurrent().startsWith("en");
+      const corto = carica.testi(voce.famiglia)?.[`strumento:${strumento}`];
+      const nome = corto !== undefined ? (inglese ? corto.en : corto.it) : (nomeCortoColonna(strumento) ?? (inglese ? voce.etichetta.en : voce.etichetta.it));
+      const stato = carica.stato(voce.famiglia).kind;
+      return { nome, icona: iconaMotore(strumento), famiglia: stato };
+    },
+    conMotore() {
+      return motoreAttivo();
+    },
+    eseguiComando(id, valori = {}) {
+      void eseguiPerId(id, valori, { senzaFinestra: true });
+    },
+    strumentoDelTasto(evento) {
+      if (ctx.motore === null || indiceArrivato === null) return null;
+      const strumenti = indiceArrivato.voci.flatMap((voce) => ("strumento" in voce.chiamata ? [{ strumento: voce.chiamata.strumento, tasto: voce.tasto }] : []));
+      for (const premuto of tastiPremuti(evento)) {
+        const scelto = strumentoDelTasto(strumenti, premuto, (id) => MOTORE_PRONTO.has(id));
+        if (scelto !== null) return scelto;
+      }
+      return null;
+    },
+    ascoltaColonna(ascolto) {
+      ascoltiColonna.add(ascolto);
+      if (!ascoltoMotore && ctx.motore !== null) {
+        ascoltoMotore = true;
+        ctx.life.add(ctx.motore.quandoCambia(ricontrollaMotore));
+      }
+      return () => {
+        ascoltiColonna.delete(ascolto);
+      };
+    },
+    cassetto(anchor, opzioni, lifetime) {
+      // Il cassetto è nel suo pezzo: si apre appena arriva, e non dopo la
+      // chiusura del disegno. Se il pezzo non arriva, lo dice e «Riprova» lo
+      // chiede di nuovo.
+      const apri = (): void => {
+        void import("../tools/editor/chrome/drawer").then(
+          ({ apriCassetto }) => {
+            if (chiuso) return;
+            apriCassetto({ ...opzioni, anchor, lifetime });
+          },
+          () => {
+            if (chiuso) return;
+            apriErroreCassetto(anchor, lifetime, apri);
+          },
+        );
+      };
+      apri();
+    },
+    async menu(selezione, azioni) {
+      const esegui = (voce: VoceIndice): void => avvia(voce, azioni);
+      let pronto: Indice;
+      try {
+        pronto = await indice();
+      } catch {
+        return menuNonCaricato(azioni.riprova);
+      }
+      return menuComando(pronto, conVociClient(await statoComandi(ctx.motore, selezione())), esegui, montaggio.regola());
+    },
+    async ricerca(selezione, azioni) {
+      let pronto: Indice;
+      try {
+        pronto = await indice();
+      } catch {
+        return null;
+      }
+      return vociRicerca(pronto, conVociClient(await statoComandi(ctx.motore, selezione())), (voce) => avvia(voce, azioni), montaggio.regola());
+    },
+  };
+  ctx.life.add(() => completo.chiudi());
+  ctx.life.add(() => ascoltiColonna.clear());
+  void indice().then(
+    (pronto) => {
+      indiceArrivato = pronto;
+      attivo = motoreAttivo();
+      avvisaColonna();
+    },
+    () => {},
+  );
+  void carica.famiglia(NUCLEO);
+  return completo;
+}

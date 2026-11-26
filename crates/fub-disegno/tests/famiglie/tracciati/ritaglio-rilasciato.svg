@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:fub="https://fubeo.github.io/ns/scene/1" fub:version="1" viewBox="0 0 400 300" width="400" height="300">
+  <rect id="fub-paper" fub:role="paper" x="0" y="0" width="400" height="300" fill="#ffffff"/>
+  <defs id="defs1">
+    <clipPath id="clipPath1" clipPathUnits="userSpaceOnUse"><circle cx="100" cy="100" r="60"/></clipPath>
+  </defs>
+  <g id="l1a2b3c4d" fub:layer="Livello 1">
+    <g id="og1g1g1g1">
+      <path id="oc02h41ec" d="M160 100 C160 133.14 133.14 160 100 160 C66.86 160 40 133.14 40 100 C40 66.86 66.86 40 100 40 C133.14 40 160 66.86 160 100 Z" fill="none"/>
+      <path id="oa1a1a1a1" d="M40 40 L160 40 L160 160 L40 160 Z" fill="#3366aa"/>
+      <path id="ob2b2b2b2" d="M100 100 L220 100 L220 220 L100 220 Z" fill="#ff0000"/>
+    </g>
+    <path id="oc3c3c3c3" d="M300 200 L360 200 L360 260 L300 260 Z" fill="#009e73"/>
+  </g>
+</svg>

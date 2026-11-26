@@ -1,0 +1,12 @@
+{
+  "$nota": "Le risposte della famiglia dati del banco. Gli attributi dell'oggetto scelto: la regola di riempimento di serie, «nonZero». La sezione Attributi la legge appena qualcosa è scelto, e un comando senza risposta renderebbe `unserved`, che ferma la sessione come motore spento.",
+  "risposte": [
+    {
+      "comando": "disegno.attributes.info",
+      "argomenti": {},
+      "esito": {
+        "reading": { "fillRule": "nonZero" }
+      }
+    }
+  ]
+}

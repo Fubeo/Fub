@@ -162,6 +162,9 @@ impl IndexProviderGuest for Componente {
         // The fixture keeps ids, not content fingerprints. Never claim an
         // unchanged document merely because a path is present in the index.
         INDEX.lock().expect("index lock").scanned += 1;
+        #[cfg(feature = "trap-up-to-date")]
+        panic!("up_to_date trap");
+        #[cfg(not(feature = "trap-up-to-date"))]
         vec![]
     }
 }

@@ -1,0 +1,9 @@
+# Le parole del motore del disegno e quelle di Fub (piano K6, T5; docs/architecture/disegno-completo.md, «L'indice e i pezzi pigri»). `src/catalogo.rs` le applica alle etichette dell'indice, nell'ordine del file, a parola intera e senza badare alle maiuscole; prima le frasi più lunghe, perché l'accordo cambia («nuova traccia» → «nuovo tratto»). Le parole sono quelle che il disegno di Fub già usa (`apps/client/src/editors/spatial/strings/`).
+lingua	motore	fub	nota
+it	nuova traccia	nuovo tratto	l'accordo del genere
+it	tracce	tratti	il tratto di un oggetto, come nel disegno di Fub
+it	traccia	tratto	il tratto di un oggetto, come nel disegno di Fub
+it	tavole da disegno	tavole	la tavola, come nell'esportazione di Fub
+it	tavola da disegno	tavola	la tavola, come nell'esportazione di Fub
+it	VectorCraft	Fub	il nome del motore non arriva a chi disegna
+en	VectorCraft	Fub	il nome del motore non arriva a chi disegna

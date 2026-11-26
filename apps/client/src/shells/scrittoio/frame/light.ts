@@ -22,6 +22,7 @@ import {
   themeSeries,
   type Theme,
 } from "../../../theme/theme";
+import { keepFocusOnPress } from "../../../kit/keep-focus";
 import { icon } from "../../../ui/icons";
 import type { Lifetime } from "../../../ui/lifetime";
 import { keepLabelled, labelCommandButton, run } from "./commands";
@@ -187,4 +188,6 @@ export function mountLightSwitch(lifetime: Lifetime): void {
   // Il bottone preme il comando, come ogni altro della cornice: la scena e la
   // guardia contro il doppio gesto stanno con chi lo dichiara.
   lifetime.listen(button, "click", () => run(LIGHT_COMMAND));
+  // Un comando sul posto: chi scrive cambia luce e continua a scrivere.
+  keepFocusOnPress(button, { lifetime });
 }

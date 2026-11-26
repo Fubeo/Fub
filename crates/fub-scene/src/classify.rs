@@ -39,9 +39,9 @@ use crate::repeat::{read_repeat, Repeat};
 use crate::text::{Lines, Span, Utf16Map};
 use crate::values::{
     angle, blend_style, dasharray, fraction, href, href_id, is_wsp, keyword, leading, length,
-    letter_spacing, non_negative_length, number, number_list, one_or_two, opacity, paint,
-    paint_reference, points, preserve_aspect_ratio, reference, start_offset, text_decoration,
-    transform, trim, url_ids, view_box, wrap_width, Href, Paint,
+    letter_spacing, miterlimit, non_negative_length, number, number_list, one_or_two, opacity,
+    paint, paint_reference, points, preserve_aspect_ratio, reference, start_offset,
+    text_decoration, transform, trim, url_ids, view_box, wrap_width, Href, Paint,
 };
 use crate::varwidth::{read_var_width, VarWidth};
 use crate::xml::{Document, Element, Kind, NodeId, NS_FUB, NS_NONE, NS_SVG, NS_XLINK};
@@ -280,14 +280,19 @@ fn svg_attribute(tag: Tag, name: &str, value: &str, resolve: Resolve<'_>) -> boo
         "style" => tag.is_drawn() && blend_style(value, matches!(tag, Tag::G | Tag::A)).is_some(),
         "fill-opacity" | "stroke-opacity" | "opacity" => opacity(value).is_some(),
         "stroke-width" | "font-size" => non_negative_length(value).is_some(),
-        "stroke-linecap" | "stroke-linejoin" | "display" | "font-weight" | "font-style"
-        | "text-anchor" => keyword(name, value),
+        "fill-rule" | "stroke-linecap" | "stroke-linejoin" | "display" | "font-weight"
+        | "font-style" | "text-anchor" => keyword(name, value),
         "letter-spacing" => letter_spacing(value).is_some(),
+        // Il verso del testo: soltanto sul `text` (formato della scena, testo §10).
+        "writing-mode" => tag == Tag::Text && keyword(name, value),
         // Non si eredita: vale soltanto dove si scrive il testo.
         "text-decoration" => {
             matches!(tag, Tag::Text | Tag::Tspan) && text_decoration(value).is_some()
         }
         "stroke-dasharray" => dasharray(value),
+        // Lo spostamento del tratteggio: una lunghezza, anche negativa.
+        "stroke-dashoffset" => length(value).is_some(),
+        "stroke-miterlimit" => miterlimit(value).is_some(),
         "transform" => transform(value).is_some(),
         "font-family" => true,
         _ => geometry_attribute(tag, name, value),
@@ -299,7 +304,7 @@ fn geometry_attribute(tag: Tag, name: &str, value: &str) -> bool {
     use Tag::*;
     match (tag, name) {
         (Rect | Image | Text, "x" | "y")
-        | (Tspan, "x" | "dy")
+        | (Tspan, "x" | "dy" | "y" | "dx")
         | (Ellipse | Circle, "cx" | "cy")
         | (Line, "x1" | "y1" | "x2" | "y2") => length(value).is_some(),
         (Rect | Image, "width" | "height") | (Circle, "r") | (Rect | Ellipse, "rx" | "ry") => {
@@ -351,10 +356,12 @@ fn first_title(doc: &Document<'_>, element: &Element<'_>) -> Option<String> {
 /// Gli attributi che un pezzo di riga non ha: un pezzo continua la riga,
 /// non la sposta, non la nasconde e non ha un nome suo. SVG non dà a un
 /// `tspan` né opacità né trasformazione.
-const NOT_IN_PIECE: [&str; 7] = [
+const NOT_IN_PIECE: [&str; 9] = [
     "id",
     "x",
     "dy",
+    "y",
+    "dx",
     "text-anchor",
     "display",
     "opacity",
@@ -479,6 +486,31 @@ fn text_path_target(element: &Element<'_>) -> Option<String> {
         .and_then(href_id)
 }
 
+/// Vero se `element` è un testo verticale: `writing-mode="vertical-rl"`
+/// (formato della scena, testo §10).
+pub(crate) fn vertical(element: &Element<'_>) -> bool {
+    element
+        .value(NS_NONE, "writing-mode")
+        .is_some_and(|m| crate::values::trim(m) == "vertical-rl")
+}
+
+/// Vero se le righe di un testo hanno gli attributi del suo verso: `x` e
+/// `dy` in orizzontale, `y` e `dx` in verticale (formato della scena, testo
+/// §6). Un testo verticale non va a capo in un riquadro: `fub:wrap` lo rende
+/// estraneo.
+fn lines_follow_writing_mode(doc: &Document<'_>, element: &Element<'_>) -> bool {
+    let vertical = vertical(element);
+    if vertical && element.value(NS_FUB, "wrap").is_some() {
+        return false;
+    }
+    let other = if vertical { ["x", "dy"] } else { ["y", "dx"] };
+    element
+        .children
+        .iter()
+        .filter_map(|&child| doc.element(child).filter(|e| e.is_svg("tspan")))
+        .all(|line| other.iter().all(|name| line.value(NS_NONE, name).is_none()))
+}
+
 /// Vero se ogni figlio di un'unità è ammesso: spazi, `title`, `desc` e, per
 /// `text`, i `tspan` o un `textPath`. Un testo ha le righe o il tracciato,
 /// non tutti e due, e col tracciato non ha `x` e `y`, che i lettori
@@ -509,10 +541,14 @@ fn unit_children_allowed(
             },
             _ => false,
         });
-    if !children || paths == 0 {
-        return children;
+    if !children || !lines_follow_writing_mode(doc, element) {
+        return false;
     }
-    paths == 1
+    if paths == 0 {
+        return true;
+    }
+    !vertical(element)
+        && paths == 1
         && lines == 0
         && element.value(NS_NONE, "x").is_none()
         && element.value(NS_NONE, "y").is_none()

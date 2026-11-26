@@ -161,6 +161,8 @@ export const DESCRIBE_IT = {
   "draw.describe.skip.label": "Salta questa immagine: resta senza descrizione",
   "draw.describe.empty": "Scrivi prima che cosa mostra l’immagine, oppure scegli «Decorativa» o «Salta».",
   "draw.surface.hint": "Le frecce muovono il cursore o la selezione; Spazio preme e rilascia; Tab passa all’oggetto dopo; Invio apre le proprietà; ? elenca i tasti.",
+  // Col motore del Completo i tasti sono quelli di VectorCraft: Tab nasconde i pannelli.
+  "draw.surface.hint.completo": "Le lettere scelgono gli strumenti; le frecce spostano la selezione; Tab nasconde e rimostra barra e pannelli, Maiusc+Tab solo i pannelli; Fine e poi Tab esce dal foglio.",
   "draw.sheet.keys": "Le frecce muovono il cursore o la selezione; Spazio preme e rilascia; Tab passa all’oggetto dopo; Invio aggiunge al cursore ciò che lo strumento disegna, o cambia la nota scelta; PagSu e PagGiù cambiano pagina; ? elenca i tasti."
 } as const;
 
@@ -323,5 +325,6 @@ export const DESCRIBE_EN: Record<keyof typeof DESCRIBE_IT, string> = {
   "draw.describe.skip.label": "Skip this image: it stays without a description",
   "draw.describe.empty": "First write what the image shows, or choose “Decorative” or “Skip”.",
   "draw.surface.hint": "Arrow keys move the cursor or the selection; Space presses and releases; Tab goes to the next object; Enter opens properties; ? lists the keys.",
+  "draw.surface.hint.completo": "Letters choose the tools; arrow keys move the selection; Tab hides and shows the bar and panels, Shift+Tab only the panels; End then Tab leaves the canvas.",
   "draw.sheet.keys": "Arrow keys move the cursor or the selection; Space presses and releases; Tab goes to the next object; Enter adds what the tool draws at the cursor, or edits the selected note; Page Up and Page Down change page; ? lists the keys."
 };

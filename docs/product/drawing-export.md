@@ -26,6 +26,16 @@ PDF](pdf-annotations.md#esportare).
 - **Il menu del riquadro** ha una voce per formato, «Esporta come PNG» ed
   «Esporta come PDF», i due export di serie del disegno intero; con la
   finestra, prima di loro, «Esporta…», che la apre.
+- **Il menu File del Disegno completo** ha le voci di VectorCraft.
+  - «Esporta come…» apre la finestra con le scelte di sempre.
+  - «Esporta come PNG…», «Esporta come SVG…» e «Salva come PDF…» la aprono
+    già sul loro formato. Esportano le tavole, o il disegno intero se non ce
+    ne sono, anche quando l'ultima volta si era esportata la selezione: la
+    selezione ha la sua voce.
+  - «Esporta selezione…» apre la finestra sulla selezione; senza oggetti
+    scelti è spenta, e dice perché.
+  - Le altre scelte (misura, sfondo, pagina) restano quelle ricordate. Come
+    il resto dell'export, le voci ci sono anche in sola lettura.
 
 L'export lo fa l'host leggendo il file del vault, quindi c'è in Disegno e in
 Lettura, in un disegno in sola lettura, in un SVG che l'editor mostra senza

@@ -70,6 +70,7 @@ import { embedSize, embedSizeText, pdfPassage, type PdfPassage } from "./media";
 import { icon as iconMarkup, registerIcon } from "../../../../ui/icons";
 import { liveStrings } from "./strings";
 import { CELL_VALUE_DISPLAY, cellShownAsValue, cellValueRef } from "./cell-value";
+import { composingKey } from "../../../../kit/ime";
 
 /// Un embed che è una scheda: ciò che il paragrafo scrive, letto.
 export interface LiveCardEmbed {
@@ -1351,7 +1352,7 @@ export class LiveCard {
   }
 
   #key(event: KeyboardEvent): void {
-    if (this.#owner.activeCard() !== this || event.defaultPrevented) return;
+    if (this.#owner.activeCard() !== this || event.defaultPrevented || composingKey(event)) return;
     if (event.key === "Escape") {
       event.preventDefault();
       event.stopPropagation();

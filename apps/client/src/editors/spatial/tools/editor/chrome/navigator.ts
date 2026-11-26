@@ -169,6 +169,8 @@ export function installNavigator(ctx: EditorContext): void {
     drag = null;
     shownFor = null;
     show();
+    // La voce del navigatore nella banda dice se è acceso: la banda si rilegge.
+    ctx.statusChanged();
     ctx.announce(t(on ? "draw.navigator.on" : "draw.navigator.off"));
   };
 }

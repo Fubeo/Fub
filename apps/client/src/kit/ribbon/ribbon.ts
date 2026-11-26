@@ -52,6 +52,7 @@ import {
   type SplitControl,
   type Text,
 } from "./types";
+import { composingKey } from "../ime";
 
 /// La classe della forma comune: la radice porta `kit-ribbon`, ogni pezzo
 /// `kit-ribbon-<pezzo>` accanto alla classe col prefisso. La forma e la pelle
@@ -886,6 +887,7 @@ export function mountRibbon<V, K extends string, X extends ExtraControl<V, K> = 
     };
     life.listen(input, "change", commit);
     life.listen(input, "keydown", (event) => {
+      if (composingKey(event)) return;
       if (event.key === "Enter") {
         event.preventDefault();
         commit();
@@ -1259,6 +1261,7 @@ export function mountRibbon<V, K extends string, X extends ExtraControl<V, K> = 
     });
     lifetime.listen(container, "keydown", (event) => {
       const target = event.target as HTMLElement;
+      if (composingKey(event)) return;
       if (event.key === "Escape") {
         if (container.classList.contains(own("popup-group"))) return;
         event.preventDefault();
@@ -1442,6 +1445,72 @@ export function mountRibbon<V, K extends string, X extends ExtraControl<V, K> = 
     fitFrame = null;
   });
 
+  // La misura costa: ogni lettura di `scrollWidth` dopo una scrittura fa
+  // impaginare la pagina intera, e la barra si rilegge a ogni cambio di
+  // selezione (`refresh`). Così `fit` ricorda che cosa ha misurato:
+  // - `fitted`, la chiave dell'ultima misura: se la scheda mostra le stesse
+  //   cose (`contentKey`) nella stessa larghezza, la barra è già com'era e non
+  //   si legge niente;
+  // - per ogni scheda (`FitState`), il passo della raccolta (`stepCount`) che
+  //   mostra e, finché mostra le stesse cose, quanto è larga la fila in ogni
+  //   passo che ha traboccato e la barra più stretta in cui ognuno è entrato:
+  //   a un cambio di larghezza la scelta si fa coi numeri, con una lettura e
+  //   un solo lotto di scritture. I foglietti sono larghi quanto il loro
+  //   contenuto (`max-content`), non quanto la barra: la fila di un passo non
+  //   cambia larghezza con lei.
+  /// La larghezza di ogni barra come la dà il `ResizeObserver`, senza
+  /// impaginare. Una barra che l'osservatore non ha ancora visto si legge.
+  const seenWidths = new WeakMap<Element, number>();
+  /// Cresce quando i caratteri finiscono di caricarsi: le misure di prima non
+  /// valgono più.
+  let fontEpoch = 0;
+  let fitted: string | null = null;
+  interface FitState {
+    /// L'ordine di raccolta (`order`) del passo mostrato.
+    order: string;
+    /// Il passo mostrato; -1 se non è un passo di questo ordine.
+    step: number;
+    /// Ciò che la scheda mostrava quando si sono presi i numeri.
+    content: string;
+    /// La fila di ogni passo che ha traboccato: `scrollWidth`.
+    readonly over: Map<number, number>;
+    /// La barra più stretta (`clientWidth`) in cui ogni passo è entrato.
+    readonly fits: Map<number, number>;
+  }
+  const fitStates = new Map<Tab, FitState>();
+
+  /// Ciò da cui dipende la larghezza della fila di `tab`, senza leggere il
+  /// layout: i foglietti e i comandi che si vedono, i loro nomi, l'ordine in
+  /// cui si raccolgono, il gruppo aperto sul posto, gli attributi della radice
+  /// (tema, contrasto, densità) e i caratteri caricati.
+  function contentKey(tab: Tab, order: string): string {
+    const parts: string[] = [tab.spec.id, String(fontEpoch), pinned?.spec.id ?? "", order];
+    for (const attribute of document.documentElement.attributes) parts.push(`${attribute.name}=${attribute.value}`);
+    for (const group of tab.groups) {
+      let bits = group.element.hidden ? "h" : "v";
+      for (const one of group.items) bits += one.wrap.hidden ? "0" : "1";
+      parts.push(bits);
+    }
+    parts.push(tab.toolbar.textContent ?? "");
+    return parts.join("\u0000");
+  }
+
+  /// I passi della raccolta, dal più largo: 0 tutti aperti coi nomi, 1 i
+  /// pulsanti piccoli senza nome, 1 + n i primi `n` gruppi di `order`
+  /// raccolti; con `openInPlace`, l'ultimo è il pannello denso.
+  function stepCount(order: readonly Group[]): number {
+    return order.length + (inPlace ? 3 : 2);
+  }
+
+  /// Mette la barra di `tab` al passo `step` (`stepCount`): solo scritture.
+  function showStep(tab: Tab, order: readonly Group[], step: number): void {
+    const folded = new Set(order.slice(0, Math.max(0, step - 1)));
+    tab.panel.dataset.compact = String(step > 0);
+    if (inPlace) tab.panel.dataset.dense = String(step === order.length + 2);
+    for (const group of tab.groups) collapseGroup(group, folded.has(group));
+    if (inPlace) markAlone(tab.groups);
+  }
+
   /// Raccoglie i gruppi da destra finché la scheda non sta nella barra:
   /// prima i pulsanti piccoli perdono il nome, poi i gruppi si chiudono. Con
   /// `openInPlace` il gruppo aperto sul posto resta aperto, e se la fila non
@@ -1452,29 +1521,91 @@ export function mountRibbon<V, K extends string, X extends ExtraControl<V, K> = 
     if (!tab || collapsed || element.hidden) return;
     if (!inPlace && popover && tab.groups.some((group) => group.toggle.getAttribute("aria-expanded") === "true")) return;
     const toolbar = tab.toolbar;
-    const overflows = () => toolbar.scrollWidth > toolbar.clientWidth + 1;
     if (pinned && (!tab.groups.includes(pinned) || pinned.element.hidden)) pin(null);
-    tab.panel.dataset.compact = "false";
-    if (inPlace) tab.panel.dataset.dense = "false";
-    for (const group of tab.groups) collapseGroup(group, false);
-    if (inPlace) markAlone(tab.groups);
-    if (!overflows()) {
-      // C'è posto per tutti: niente resta da aprire.
-      pin(null);
-      return;
-    }
-    tab.panel.dataset.compact = "true";
     // Nell'ordine della scheda, se lo dichiara; altrimenti da destra.
     const open = tab.groups.filter((group) => !group.element.hidden && group !== pinned);
     const order = tab.spec.fold
       ? tab.spec.fold.flatMap((id) => open.filter((group) => group.spec.id === id))
       : [...open].reverse();
-    for (const group of order) {
-      if (!overflows()) break;
-      collapseGroup(group, true);
-      if (inPlace) markAlone(tab.groups);
+    const orderKey = order.map((group) => group.spec.id).join(",");
+    const content = contentKey(tab, orderKey);
+    const widthKey = (): string => `${content}\u0000${seenWidths.get(toolbar) ?? toolbar.clientWidth}`;
+    if (widthKey() === fitted) return;
+
+    let state = fitStates.get(tab);
+    if (!state) {
+      state = { order: orderKey, step: -1, content, over: new Map(), fits: new Map() };
+      fitStates.set(tab, state);
     }
-    if (inPlace && overflows()) tab.panel.dataset.dense = "true";
+    const known = state;
+    if (known.order !== orderKey) {
+      known.order = orderKey;
+      known.step = -1;
+    }
+    if (known.content !== content) {
+      known.content = content;
+      known.over.clear();
+      known.fits.clear();
+    }
+    const last = stepCount(order) - 1;
+    const show = (step: number): void => {
+      if (known.step === step) return;
+      showStep(tab, order, step);
+      known.step = step;
+    };
+    /// Legge se il passo mostrato trabocca, e lo ricorda.
+    const measure = (): boolean => {
+      const scroll = toolbar.scrollWidth;
+      const room = toolbar.clientWidth;
+      const over = scroll > room + 1;
+      if (over) known.over.set(known.step, scroll);
+      else known.fits.set(known.step, Math.min(known.fits.get(known.step) ?? Infinity, room));
+      return over;
+    };
+    /// Se il passo `step` trabocca in una barra larga `room`: dai numeri, o
+    /// mostrandolo e leggendo.
+    const overflowsAt = (step: number, room: number): boolean => {
+      const width = known.over.get(step);
+      if (width !== undefined) return width > room + 1;
+      const fits = known.fits.get(step);
+      if (fits !== undefined && room >= fits) return false;
+      show(step);
+      return measure();
+    };
+
+    // Dal passo che la barra mostra (dal primo, se non è un passo di questo
+    // ordine) una lettura; poi avanti finché trabocca, o indietro finché il
+    // passo prima ci sta. Un passo di cui si sa già non si scrive e non si
+    // legge.
+    show(Math.max(0, known.step));
+    let step = known.step;
+    let over = measure();
+    const room = toolbar.clientWidth;
+    if (over) {
+      while (over && step < last) {
+        step += 1;
+        over = overflowsAt(step, room);
+      }
+    } else {
+      while (step > 0 && !overflowsAt(step - 1, room)) step -= 1;
+    }
+    show(step);
+    // La scelta fatta coi numeri si controlla con una lettura: se la fila
+    // trabocca lo stesso, i numeri erano vecchi, e si misura da capo da qui.
+    if (step < last && measure()) {
+      known.over.clear();
+      known.fits.clear();
+      while (step < last && measure()) show((step += 1));
+    }
+    fitted = widthKey();
+    if (step === 0) {
+      // C'è posto per tutti: niente resta da aprire.
+      if (pinned) {
+        pin(null);
+        fitted = null;
+      }
+      return;
+    }
     // Dentro i gruppi raccolti il fuoco non ha più dove stare.
     const focus = document.activeElement as HTMLElement | null;
     if (!keepFocus && focus && toolbar.contains(focus) && !focusables(toolbar).includes(focus)) options.focus();
@@ -1482,9 +1613,20 @@ export function mountRibbon<V, K extends string, X extends ExtraControl<V, K> = 
   }
 
   if (typeof ResizeObserver !== "undefined") {
-    const observer = new ResizeObserver(() => scheduleFit());
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) if (entry.target !== element) seenWidths.set(entry.target, entry.contentRect.width);
+      scheduleFit();
+    });
     observer.observe(element);
+    for (const tab of tabs) observer.observe(tab.toolbar);
     life.add(() => observer.disconnect());
+  }
+  const fonts = typeof document === "undefined" ? undefined : document.fonts;
+  if (fonts && typeof fonts.addEventListener === "function") {
+    life.listen(fonts, "loadingdone", () => {
+      fontEpoch += 1;
+      scheduleFit();
+    });
   }
 
   // ── Le lettere ────────────────────────────────────────────────────────

@@ -1,10 +1,21 @@
 import { searchForWorkspaceRoot, type Rollup } from "vite";
 import { defineConfig } from "vitest/config";
 import { fileURLToPath } from "node:url";
+import { readdirSync } from "node:fs";
 import { canvasWasm } from "./build/canvas-wasm.mjs";
+import { completoBoundaries, completoChunk, completoPreload } from "./build/completo-chunks.mjs";
 import { SKIN_GROUP_TARGET, skinGroups } from "./build/skin-split.mjs";
+import { chunkCycles, newChunkCycles } from "./build/chunk-cycles.mjs";
 
 const CHUNK_BUDGET = 500_000;
+
+/// Le famiglie del Disegno completo, una cartella ciascuna
+/// (`src/editors/spatial/completo/famiglie/<id>/`): ognuna è il suo chunk
+/// `drawing-fam-<id>` (`build/completo-chunks.mjs`).
+const COMPLETO_FAMILIES = readdirSync(new URL("./src/editors/spatial/completo/famiglie/", import.meta.url), { withFileTypes: true })
+  .filter((entry) => entry.isDirectory())
+  .map((entry) => entry.name)
+  .sort();
 // Il parser upstream arriva già precompilato: resta separato e solo lazy.
 const MERMAID_PARSER_BUDGET = 700_000;
 
@@ -58,6 +69,11 @@ const UNDER_THE_RENDER: ReadonlySet<string> = new Set([
   "html-entities",
   "ui-views",
 ]);
+
+/// I chunk che i gesti di formato della Live (`markdown-format`) possono
+/// importare: quelli sotto la resa e le discussioni dei commenti (`threads`,
+/// che Rollup nomina dal primo modulo).
+const UNDER_THE_FORMAT: ReadonlySet<string> = new Set([...UNDER_THE_RENDER, "threads"]);
 
 /// Un id di modulo detto a partire dal client: `src/...` o `node_modules/...`.
 function shortId(id: string): string {
@@ -178,13 +194,26 @@ export default defineConfig({
         map: null,
       };
     },
-  }, {
+  },
+  // I confini del Disegno completo: fuori da `completo/` solo un `import()`
+  // del suo ingresso, nessuna famiglia nei file di un'altra, e ogni modulo
+  // nel chunk della sua regola.
+  completoBoundaries(COMPLETO_FAMILIES),
+  {
     name: "bundle-size-budgets",
     apply: "build",
     generateBundle: {
       // Dopo la riscrittura degli import e dei preload di Vite: byte finali.
       order: "post",
       handler(_options, bundle) {
+        // Un ciclo statico fra chunk può far leggere un valore prima che
+        // esista, e l'app non parte (`build/chunk-cycles.mjs`).
+        const chunkImports = new Map<string, string[]>();
+        for (const chunk of Object.values(bundle)) if (chunk.type === "chunk") chunkImports.set(chunk.fileName, chunk.imports);
+        const cycles = newChunkCycles(chunkCycles(chunkImports, (file) => (bundle[file] as Rollup.OutputChunk).name));
+        if (cycles.length) {
+          this.error(`chunk legati da un ciclo di import statici: ${cycles.map((group) => group.join(" ↔ ")).join("; ")}; il modulo che condividono va in un chunk chiuso verso il basso (\`manualChunks\`)`);
+        }
         const eager = new Set<string>();
         const visit = (name: string): void => {
           const chunk = bundle[name];
@@ -235,19 +264,23 @@ export default defineConfig({
           if (chunk.name === "markdown-comments" && reaches(chunk.fileName, "markdown-comments")) {
             this.error(`${chunk.fileName}: i commenti delle note importano un chunk che li importa; un loro modulo importa qualcosa fuori dalla loro regola in \`manualChunks\``);
           }
-          // La resa delle note e il renderer delle viste stanno sotto il
-          // ponte dei documenti e importano soltanto i chunk sotto di loro.
+          // La resa delle note, il renderer delle viste e i gesti di formato
+          // stanno sotto il ponte dei documenti e importano soltanto i chunk
+          // sotto di loro.
           // Un chunk nuovo fra i loro import vuol dire un modulo che importano
           // e che la loro regola in `manualChunks` non nomina: Rollup lo ha
           // estratto a parte (all'avvio, un file in più) o lo ha lasciato nel
           // ponte (un ciclo). Va aggiunto alla regola. Se invece un chunk
           // condiviso ha soltanto cambiato nome, va cambiato qui.
-          if (chunk.name === "markdown-render" || chunk.name === "ui-views") {
+          const expected = chunk.name === "markdown-render" || chunk.name === "ui-views"
+            ? UNDER_THE_RENDER
+            : chunk.name === "markdown-format" ? UNDER_THE_FORMAT : undefined;
+          if (expected) {
             const strays = chunk.imports
               .map((file) => bundle[file])
-              .filter((next): next is Rollup.OutputChunk => next?.type === "chunk" && !UNDER_THE_RENDER.has(next.name));
+              .filter((next): next is Rollup.OutputChunk => next?.type === "chunk" && !expected.has(next.name));
             if (strays.length) {
-              this.error(`${chunk.fileName}: ${chunk.name} importa ${strays.map((next) => next.fileName).join(", ")}, fuori dai chunk attesi (${[...UNDER_THE_RENDER].join(", ")}); un modulo che importa manca dalla sua regola in \`manualChunks\``);
+              this.error(`${chunk.fileName}: ${chunk.name} importa ${strays.map((next) => next.fileName).join(", ")}, fuori dai chunk attesi (${[...expected].join(", ")}); un modulo che importa manca dalla sua regola in \`manualChunks\``);
             }
           }
           const limit = parser ? MERMAID_PARSER_BUDGET : CHUNK_BUDGET;
@@ -284,6 +317,10 @@ export default defineConfig({
       ],
     },
   },
+  // Il worker che disegna le pagine dei PDF (`pdf-render-worker.ts`) nasce
+  // `type: "module"` e carica il worker di pdf.js con un `import()`: un modulo
+  // anche nel build, come in sviluppo.
+  worker: { format: "es" },
   build: {
     target: "es2021",
     outDir: "dist",
@@ -291,6 +328,9 @@ export default defineConfig({
     // L'avviso generico copre il tetto massimo; il plugin applica anche
     // il limite ordinario più stretto e vieta il parser nel percorso eager.
     chunkSizeWarningLimit: MERMAID_PARSER_BUDGET / 1000,
+    // Una famiglia del Disegno completo lascia il suo `modulepreload`, che il
+    // banco WebView legge (`completoPreload`).
+    modulePreload: { resolveDependencies: (filename, deps) => completoPreload(filename, deps) },
     rollupOptions: {
       input: {
         main: fileURLToPath(new URL("./index.html", import.meta.url)),
@@ -302,6 +342,10 @@ export default defineConfig({
         // opzionali restano separati: non finiscono nel runtime iniziale.
         onlyExplicitManualChunks: true,
         manualChunks(id) {
+          // Il Disegno completo: l'ingresso, l'indice e una famiglia per
+          // chunk, che arrivano solo quando servono (`build/completo-chunks.mjs`).
+          const completo = completoChunk(id);
+          if (completo) return completo;
           if (/\/node_modules\/@codemirror\/(state|view|language|commands|autocomplete|search|lint)\//.test(id)) {
             return "editor-runtime";
           }
@@ -333,8 +377,11 @@ export default defineConfig({
           // Il pannello delle impostazioni, con la pagina dei componenti, le
           // informazioni e la rinomina del vault: cambia con le impostazioni,
           // non con l'editor o la ricerca, e da solo non pesa sul chunk che
-          // questi condividono.
-          if (/\/src\/panels\/(settings[^/]*|components-page|about|vault-rename)\.ts$/.test(id)) return "settings-panel";
+          // questi condividono. Con loro le parole delle preferenze del
+          // motore (`settings-motore.generated.json`), che legge soltanto la
+          // pagina del motore: senza la regola finivano nel chunk condiviso
+          // della shell, oltre la soglia.
+          if (/\/src\/panels\/((settings[^/]*|components-page|about|vault-rename)\.ts|settings-motore\.generated\.json)$/.test(id)) return "settings-panel";
           // Scrittura, il nucleo del testo ricco, con ProseMirror: la usano
           // i documenti e il testo dei disegni, che la carica dopo il
           // montaggio. Da sola non pesa sul primo disegno e resta in cache
@@ -346,6 +393,12 @@ export default defineConfig({
           if (/\/src\/editors\/spatial\/(scene\/|painter\/|ink\/|number\.ts$)|\/node_modules\/perfect-freehand\//.test(id)) {
             return "drawing-scene";
           }
+          // La curva della pressione e lo stabilizzatore della penna: non
+          // importano niente, e la griglia dei disegni li legge al
+          // caricamento. Senza una regola finivano nel chunk automatico
+          // `styles`, in ciclo con `drawing-commands`: la lavagna non si
+          // apriva più («Cannot access … before initialization»).
+          if (/\/src\/ink\/input\/(pressure|stabilizer)\.ts$/.test(id)) return "ink-input";
           // La geometria dei disegni senza DOM: i nodi dei tracciati, la
           // spina dei tratti, le forme e il loro riconoscimento, le aree
           // booleane, lo scostamento, la semplificazione, la Curvatura, i
@@ -380,8 +433,11 @@ export default defineConfig({
           // trasformazione, le forme coi parametri, il contagocce, le guide
           // intelligenti e la griglia; le librerie di simboli, i nodi di
           // Bézier, dove va la barra della selezione e l'ordine cambiato.
+          // E le risorse, i simboli, l'albero dei riquadri, le forme dei
+          // ritagli e gli stili: senza una regola Rollup li metteva nel chunk
+          // `styles`, in ciclo con questo.
           // Dipendono dal formato e dalla geometria, e l'editor li chiama.
-          if (/\/src\/editors\/spatial\/(tools\/(hit|hit\/[a-z-]+|clips|edit|palette|arrange|outline|transform|topath|look|look\/[a-z-]+|apply|inkshape|paths|width|combine|nodable|scissors|builder|place|layers|selecting|naming|trace-ops|rich|wrap|measure|text-path|boards|swatches|gradients|tips|crop|masks|effects|hatches|patterns|connectors|connector-ops|connector-copies|label-hosts|labels|follow|repeat-ops|symmetry|clipboard|clipboard\/[a-z-]+|history|audit|attributes|quantity|export-plan|frame|reshape|eyedropper|guides|grid|symbol-library|symbol-libraries|bezier|bar|order-changes)|describe)\.ts$/.test(id)) {
+          if (/\/src\/editors\/spatial\/(tools\/(hit|hit\/[a-z-]+|clips|edit|palette|arrange|outline|transform|topath|look|look\/[a-z-]+|apply|inkshape|paths|width|combine|nodable|scissors|builder|place|layers|selecting|naming|trace-ops|rich|wrap|measure|text-path|boards|swatches|gradients|tips|crop|masks|effects|hatches|patterns|connectors|connector-ops|connector-copies|label-hosts|labels|follow|repeat-ops|symmetry|clipboard|clipboard\/[a-z-]+|history|audit|attributes|quantity|export-plan|frame|reshape|eyedropper|guides|grid|symbol-library|symbol-libraries|bezier|bar|order-changes|resources|symbols|box-tree|clip-shapes|styles)|describe)\.ts$/.test(id)) {
             return "drawing-commands";
           }
           // I pannelli dei disegni: le proprietà coi loro campi e coi colori
@@ -487,10 +543,11 @@ export default defineConfig({
           // Il renderer delle viste dichiarative (`UiNode`) con il suo
           // riconciliatore, i `ns` che sa disegnare e i piccoli aiuti che
           // importa: la specie di un file, i tipi dei trascinamenti, i tasti
-          // delle linguette, le icone delle pagine. Lo montano la shell, i
-          // pannelli e la resa delle note; cambia col protocollo delle viste,
-          // non con l'editor. Chiuso verso il basso come la resa.
-          if (/\/src\/ui\/(node|format-kind|drag-types|custom|tab-keys)\.ts$|\/src\/state\/page-icons\.ts$/.test(id)) return "ui-views";
+          // delle linguette, le icone delle pagine, il confronto dei payload
+          // (`kit/json-equal`, che usa anche l'editor ricco). Lo montano la
+          // shell, i pannelli e la resa delle note; cambia col protocollo delle
+          // viste, non con l'editor. Chiuso verso il basso come la resa.
+          if (/\/src\/ui\/(node|format-kind|drag-types|custom|tab-keys)\.ts$|\/src\/state\/page-icons\.ts$|\/src\/kit\/json-equal\.ts$/.test(id)) return "ui-views";
           // L'ospite dei diagrammi Mermaid (`ui/mermaid.ts`): carica la
           // libreria con un `import()`, disegna, apre il menu e l'anteprima.
           // Lo montano la shell e la Live; cambia coi diagrammi, non con
@@ -508,6 +565,18 @@ export default defineConfig({
           // importano soltanto moduli che stanno nei loro chunk (`tabella/`,
           // `ui/`, le stringhe), nessuno del ponte.
           if (/\/src\/editors\/text\/profiles\/markdown\/table-(model|grid)\.ts$/.test(id)) return "markdown-tables";
+          // I gesti di formato in riga della Live (`format-toggle.ts`:
+          // grassetto, corsivo, apice… come in Word), la coppia vuota che
+          // aprono (`empty-pair.ts`) e gli elementi che contengono il cursore,
+          // cioè i pulsanti «premuti» (`cursor-elements.ts`). Li montano la
+          // superficie Markdown e i suoi comandi fin dall'apertura, con un
+          // import statico: il chunk arriva insieme al ponte, non dopo.
+          // Cambiano coi gesti di formato, non col ponte, e da soli lo tengono
+          // sotto il budget. Chiusi verso il basso: importano soltanto
+          // CodeMirror, la grammatica, la resa, i commenti e la sintassi, che
+          // stanno nei loro chunk; il plugin `bundle-size-budgets` ferma la
+          // build se importano un chunk fuori da `UNDER_THE_FORMAT`.
+          if (/\/src\/editors\/text\/profiles\/markdown\/(format-toggle|empty-pair|cursor-elements)\.ts$/.test(id)) return "markdown-format";
           // La disposizione dei riquadri e delle schede (`state/layout.ts`):
           // il modello che la shell salva e rilegge, letto da quasi ogni
           // pannello, anche da quelli che si caricano dopo. Cambia con la
@@ -516,6 +585,20 @@ export default defineConfig({
           // importa soltanto le stringhe, lo stato e l'aspetto del contenuto,
           // che stanno nei loro chunk, nessuno di `search`.
           if (/\/src\/state\/layout\.ts$/.test(id)) return "shell-layout";
+          // Ciò che la shell divide con le Impostazioni e la pagina dei
+          // componenti: la cartella dei temi, Marcuzzo, i profili e i permessi
+          // dei componenti, le preferenze della lavagna, la conferma col suo
+          // dialogo nativo e la ricerca sfocata. Senza un nome suo, da quando
+          // le Impostazioni aprono il Disegno completo con un `import()`,
+          // Rollup li fondeva nel chunk condiviso della shell (`search`),
+          // oltre la soglia. Chiusi verso il basso: importano soltanto
+          // moduli che stanno nei loro chunk (le stringhe, le icone, il
+          // tema, gli appunti, il ponte con l'ospite), nessuno di `search`.
+          // Qui anche le foglie che le Impostazioni leggono al caricamento
+          // (`dom`, gli id della shell, il caricatore del catalogo): lasciate
+          // in `search`, che importa le Impostazioni, il ciclo fra i due chunk
+          // le faceva leggere prima che esistessero e l'app non partiva.
+          if (/\/src\/(panels\/(theme-folder|component-profiles)|ui\/(marcuzzo|permissions|fuzzy|dom|shell-ids\.generated)|rules\/canvas-settings|platform\/confirm|host\/dialog|dev\/catalogo\/carica)\.ts$/.test(id)) return "shell-shared";
           if (/\/node_modules\/postcss\//.test(id)) return "theme-parser";
           if (/\/node_modules\/@tauri-apps\//.test(id)) return "host-bridge";
           if (/\/node_modules\/(d3-(selection|transition|shape|color|dispatch|ease|interpolate|timer|array|path)|dagre-d3-es|roughjs|dompurify|lodash-es|es-toolkit|marked|khroma)\//.test(id)) {

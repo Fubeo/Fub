@@ -9,6 +9,8 @@
 //! scritto sta in un `.tsv` di differenze ammesse (`vettore<TAB>perché`).
 #![allow(dead_code)]
 
+pub mod applica;
+
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -36,6 +38,29 @@ pub fn disegni() -> Arc<Disegni> {
     };
     servizi
         .fornisci_caratteri(Caratteri::nuovi([], generiche))
+        .unwrap_or_else(|_| panic!("i caratteri si danno una volta sola"));
+    Disegni::nuovi(servizi)
+}
+
+/// Un motore del disegno con le facce di Inter che Fub porta: i colpi sui
+/// testi vogliono le lettere disposte.
+#[allow(dead_code)]
+pub fn disegni_con_inter() -> Arc<Disegni> {
+    let servizi = Servizi::nuovi(Config {
+        fili: Some(2),
+        tetto: Tetto::fisso(256 * 1024 * 1024),
+    });
+    let facce: [&'static [u8]; 2] = [
+        include_bytes!("../../../fub-features/fonts/inter-400.ttf"),
+        include_bytes!("../../../fub-features/fonts/inter-700.ttf"),
+    ];
+    let generiche = Generiche {
+        serif: "Inter".into(),
+        sans: "Inter".into(),
+        mono: "Inter".into(),
+    };
+    servizi
+        .fornisci_caratteri(Caratteri::nuovi(facce, generiche))
         .unwrap_or_else(|_| panic!("i caratteri si danno una volta sola"));
     Disegni::nuovi(servizi)
 }
@@ -130,10 +155,121 @@ pub fn confronta_ops(attese: &Value, ottenute: &Value, ammessa: Option<&str>) ->
     }
 }
 
+/// `v` con ogni fila di elementi vuoti fratelli (`<polygon …/><polygon …/>`) di un
+/// `raw` messa in ordine e senza `id`: per le facce di un solido 3D, che il motore
+/// dipinge dalla più lontana e che a pari profondità vengono nell'ordine che dà
+/// l'ultima cifra della libreria matematica (Windows ne scambia due nella
+/// rivoluzione, 2026-11-25). L'ordine giusto lo prova l'oracolo a pixel, che
+/// confronta col disegno del motore sullo stesso sistema.
+pub fn facce_in_ordine(v: &Value) -> Value {
+    match v {
+        Value::Object(o) => Value::Object(
+            o.iter()
+                .map(|(k, x)| match (k.as_str(), x) {
+                    ("raw", Value::String(t)) => (k.clone(), Value::String(file_in_ordine(t))),
+                    _ => (k.clone(), facce_in_ordine(x)),
+                })
+                .collect(),
+        ),
+        Value::Array(a) => Value::Array(a.iter().map(facce_in_ordine).collect()),
+        _ => v.clone(),
+    }
+}
+
+/// `xml` con ogni fila di elementi vuoti consecutivi in ordine, senza `id`.
+fn file_in_ordine(xml: &str) -> String {
+    let mut out = String::new();
+    let mut fila: Vec<String> = Vec::new();
+    let mut resto = xml;
+    let svuota = |fila: &mut Vec<String>, out: &mut String| {
+        fila.sort();
+        out.push_str(&fila.concat());
+        fila.clear();
+    };
+    while let Some(i) = resto.find('<') {
+        if i > 0 {
+            svuota(&mut fila, &mut out);
+            out.push_str(&resto[..i]);
+        }
+        resto = &resto[i..];
+        let Some(j) = resto.find('>') else { break };
+        let tag = &resto[..=j];
+        if tag.ends_with("/>") && !tag.starts_with("</") {
+            fila.push(senza_id(tag));
+        } else {
+            svuota(&mut fila, &mut out);
+            out.push_str(tag);
+        }
+        resto = &resto[j + 1..];
+    }
+    svuota(&mut fila, &mut out);
+    out.push_str(resto);
+    out
+}
+
+/// L'elemento `tag` senza il suo attributo `id`.
+fn senza_id(tag: &str) -> String {
+    match tag.find(" id=\"") {
+        Some(i) => match tag[i + 5..].find('"') {
+            Some(j) => format!("{}{}", &tag[..i], &tag[i + 5 + j + 1..]),
+            None => tag.to_string(),
+        },
+        None => tag.to_string(),
+    }
+}
+
+/// `v` con i byte di ogni immagine PNG incorporata (`data:image/png;base64,…`) al posto di
+/// `@pixel`: per i casi degli effetti a pixel, i cui pixel prova l'oracolo a pixel.
+pub fn senza_pixel(v: &Value) -> Value {
+    const INIZIO: &str = "data:image/png;base64,";
+    match v {
+        Value::String(s) if s.contains(INIZIO) => {
+            let mut out = String::new();
+            let mut resto = s.as_str();
+            while let Some(i) = resto.find(INIZIO) {
+                let (prima, dopo) = resto.split_at(i + INIZIO.len());
+                out.push_str(prima);
+                out.push_str("@pixel");
+                let fine = dopo.find(['"', '\'', ')']).unwrap_or(dopo.len());
+                resto = &dopo[fine..];
+            }
+            out.push_str(resto);
+            Value::String(out)
+        }
+        Value::Array(a) => Value::Array(a.iter().map(senza_pixel).collect()),
+        Value::Object(o) => {
+            Value::Object(o.iter().map(|(k, x)| (k.clone(), senza_pixel(x))).collect())
+        }
+        _ => v.clone(),
+    }
+}
+
 /// Gli id nuovi (quelli dati da `ident` e dagli `add`) diventano `@1`,
 /// `@2`… nell'ordine in cui compaiono.
+///
+/// Un id che le operazioni tolgono e poi riscrivono nell'XML di un `add`
+/// (un oggetto rifatto al suo posto, come «Espandi aspetto») è quello di
+/// prima, non uno nuovo: resta com'è.
 fn canonicalizza(ops: &mut Value) {
-    let mut nuovi: Vec<String> = Vec::new();
+    fn tolti(v: &Value, fuori: &mut Vec<String>) {
+        match v {
+            Value::Array(a) => a.iter().for_each(|x| tolti(x, fuori)),
+            Value::Object(o) => {
+                if o.get("op").and_then(Value::as_str) == Some("remove") {
+                    if let Some(id) = o.get("target").and_then(Value::as_str) {
+                        fuori.push(id.to_string());
+                    }
+                }
+                o.values().for_each(|x| tolti(x, fuori));
+            }
+            _ => {}
+        }
+    }
+    let mut vecchi: Vec<String> = Vec::new();
+    tolti(ops, &mut vecchi);
+    // Gli id tolti partono già fra i «visti», così l'XML che li riscrive non li
+    // prende per nuovi; escono dalla mappa qui sotto.
+    let mut nuovi: Vec<String> = vecchi.clone();
     fn raccogli(v: &Value, nuovi: &mut Vec<String>) {
         match v {
             Value::Array(a) => a.iter().for_each(|x| raccogli(x, nuovi)),
@@ -148,13 +284,39 @@ fn canonicalizza(ops: &mut Value) {
                         nuovi.push(id.to_string());
                     }
                 }
+                // I figli di un elemento nuovo (i campioni nelle `defs` nuove)
+                // portano anche loro id nuovi.
+                if o.get("op").and_then(Value::as_str) == Some("add") {
+                    fn figli(e: &Value, nuovi: &mut Vec<String>) {
+                        for f in e["children"].as_array().into_iter().flatten() {
+                            if let Some(id) = f["attrs"]["id"].as_str() {
+                                if !nuovi.iter().any(|n| n == id) {
+                                    nuovi.push(id.to_string());
+                                }
+                            }
+                            figli(f, nuovi);
+                        }
+                    }
+                    if let Some(e) = o.get("elem") {
+                        figli(e, nuovi);
+                    }
+                }
+                // Un gruppo che il motore scrive come XML (`raw`) porta i suoi id
+                // nel testo: anche quelli sono id nuovi, e casuali a ogni prova.
+                if let Some(xml) = o.get("raw").and_then(Value::as_str) {
+                    for id in ids_xml(xml) {
+                        if !nuovi.contains(&id) {
+                            nuovi.push(id);
+                        }
+                    }
+                }
                 o.values().for_each(|x| raccogli(x, nuovi));
             }
             _ => {}
         }
     }
     raccogli(ops, &mut nuovi);
-    let mappa: HashMap<String, String> = nuovi
+    let mappa: HashMap<String, String> = nuovi[vecchi.len()..]
         .iter()
         .enumerate()
         .map(|(i, id)| (id.clone(), format!("@{}", i + 1)))
@@ -164,6 +326,29 @@ fn canonicalizza(ops: &mut Value) {
             Value::String(s) => {
                 if let Some(n) = mappa.get(s.as_str()) {
                     *s = n.clone();
+                } else if let Some(n) = s.strip_prefix('#').and_then(|id| mappa.get(id)) {
+                    // Un riferimento nudo, come `href` del testo su tracciato.
+                    *s = format!("#{n}");
+                } else if s.starts_with("url(#") && !s.contains('<') {
+                    // Un colore legato a un campione: `url(#id) #hex`.
+                    for (vecchio, nuovo) in mappa {
+                        *s = s.replace(&format!("url(#{vecchio})"), &format!("url(#{nuovo})"));
+                    }
+                } else if s.contains('<') {
+                    // XML: l'attributo `id="…"`, il riferimento `url(#…)` o
+                    // `href="#…"`, e `for="…"` della ricetta (il metadato che dice
+                    // a quale elemento appartiene).
+                    *s = senza_sigillo(s);
+                    for (vecchio, nuovo) in mappa {
+                        *s = s
+                            .replace(&format!("id=\"{vecchio}\""), &format!("id=\"{nuovo}\""))
+                            .replace(&format!("for=\"{vecchio}\""), &format!("for=\"{nuovo}\""))
+                            .replace(&format!("url(#{vecchio})"), &format!("url(#{nuovo})"))
+                            .replace(
+                                &format!("href=\"#{vecchio}\""),
+                                &format!("href=\"#{nuovo}\""),
+                            );
+                    }
                 }
             }
             Value::Array(a) => a.iter_mut().for_each(|x| rinomina(x, mappa)),
@@ -172,6 +357,76 @@ fn canonicalizza(ops: &mut Value) {
         }
     }
     rinomina(ops, &mappa);
+}
+
+/// Il sigillo di una ricetta (`hash="…"`) cambia da una prova all'altra con
+/// l'id dell'elemento, che è casuale: il confronto lo tiene come `@hash`. Che il
+/// sigillo sia quello giusto lo prova `tests/ricetta.rs`, non questo confronto.
+fn senza_sigillo(xml: &str) -> String {
+    let mut out = String::new();
+    let mut resto = xml;
+    while let Some(i) = resto.find(" hash=\"") {
+        let (prima, dopo) = resto.split_at(i + " hash=\"".len());
+        out.push_str(prima);
+        match dopo.find('"') {
+            Some(j) => {
+                out.push_str("@hash");
+                resto = &dopo[j..];
+            }
+            None => {
+                out.push_str(dopo);
+                return out;
+            }
+        }
+    }
+    out.push_str(resto);
+    out
+}
+
+/// Gli id dell'XML di un gruppo `raw`: i valori di `id="…"`, nell'ordine in cui
+/// compaiono.
+fn ids_xml(xml: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut resto = xml;
+    while let Some(i) = resto.find("id=\"") {
+        resto = &resto[i + 4..];
+        if let Some(j) = resto.find('"') {
+            out.push(resto[..j].to_string());
+            resto = &resto[j + 1..];
+        } else {
+            break;
+        }
+    }
+    out
+}
+
+/// Il confronto di una lettura parziale (`lettura_parziale` di un caso): ogni
+/// chiave dell'atteso dev'essere nell'esito, con lo stesso valore, scendendo negli
+/// oggetti; gli elenchi hanno la stessa lunghezza e si confrontano uno a uno. Serve
+/// alle letture con campi che cambiano da una prova all'altra (il `uid` del
+/// documento, la sua revisione): il resto è esatto.
+pub fn parziale(attesa: &Value, ottenuta: &Value, dove: &str) -> Result<(), String> {
+    match (attesa, ottenuta) {
+        (Value::Object(x), Value::Object(y)) => {
+            for (k, v) in x {
+                match y.get(k) {
+                    Some(w) => parziale(v, w, &format!("{dove}.{k}"))?,
+                    None => return Err(format!("{dove}.{k}: manca nell'esito")),
+                }
+            }
+            Ok(())
+        }
+        (Value::Array(x), Value::Array(y)) => {
+            if x.len() != y.len() {
+                return Err(format!("{dove}: {} elementi ≠ {}", x.len(), y.len()));
+            }
+            x.iter()
+                .zip(y)
+                .enumerate()
+                .try_for_each(|(i, (p, q))| parziale(p, q, &format!("{dove}[{i}]")))
+        }
+        _ => uguali(attesa, ottenuta, dove),
+    }
 }
 
 fn matrice(s: &str) -> Option<[f64; 6]> {
@@ -216,11 +471,46 @@ fn pezzi(s: &str) -> Vec<Result<f64, String>> {
     out
 }
 
+/// Il testo `xml` con ogni ricetta (`<vectorcraft:recipe …>base64</…>`) al posto
+/// `@ricetta`, e le ricette lette come JSON; `None` se non ce n'è una. Una
+/// ricetta tiene i numeri del motore in `f64` interi: la libreria matematica di
+/// Windows ne dà l'ultima cifra diversa (0.8477139135405054 contro …055,
+/// 2026-11-25), e il confronto li vuole con la tolleranza degli altri numeri.
+fn ricette(xml: &str) -> Option<(String, Vec<Value>)> {
+    const APRE: &str = "<vectorcraft:recipe ";
+    const CHIUDE: &str = "</vectorcraft:recipe>";
+    let mut testo = String::new();
+    let mut lette = Vec::new();
+    let mut resto = xml;
+    while let Some(i) = resto.find(APRE) {
+        let dentro = i + resto[i..].find('>')? + 1;
+        let fine = dentro + resto[dentro..].find(CHIUDE)?;
+        let byte = vectorcraft_svg::base64_decode(resto[dentro..fine].trim())?;
+        lette.push(serde_json::from_slice(&byte).ok()?);
+        testo.push_str(&resto[..dentro]);
+        testo.push_str("@ricetta");
+        resto = &resto[fine..];
+    }
+    testo.push_str(resto);
+    (!lette.is_empty()).then_some((testo, lette))
+}
+
 fn uguali(a: &Value, o: &Value, dove: &str) -> Result<(), String> {
     match (a, o) {
+        // `"*"` nell'atteso vale qualunque testo: i byte di un PNG dipendono dal
+        // compressore della build, e il contratto è la forma (misure, avvisi).
+        (Value::String(x), Value::String(_)) if x == "*" => Ok(()),
         (Value::String(x), Value::String(y)) => {
             if x == y {
                 return Ok(());
+            }
+            if let (Some((tx, rx)), Some((ty, ry))) = (ricette(x), ricette(y)) {
+                uguali(&Value::String(tx), &Value::String(ty), dove)?;
+                return uguali(
+                    &Value::Array(rx),
+                    &Value::Array(ry),
+                    &format!("{dove}.ricetta"),
+                );
             }
             if let (Some(m), Some(n)) = (matrice(x), matrice(y)) {
                 return if m.iter().zip(n).all(|(p, q)| (p - q).abs() <= 1e-6) {
@@ -261,8 +551,20 @@ fn uguali(a: &Value, o: &Value, dove: &str) -> Result<(), String> {
             }
             Ok(())
         }
+        // La distanza di colore (`deltaE`) passa per radici cubiche in `f32`:
+        // la libreria matematica di Windows la dà diversa di qualche millesimo
+        // (13.8976 contro 13.9010, 2026-11-23), e un deltaE conta al centesimo.
         (Value::Number(x), Value::Number(y)) => match (x.as_f64(), y.as_f64()) {
-            (Some(p), Some(q)) if (p - q).abs() <= 1e-3 => Ok(()),
+            (Some(p), Some(q))
+                if (p - q).abs()
+                    <= if dove.ends_with(".deltaE") {
+                        1e-2
+                    } else {
+                        1e-3
+                    } =>
+            {
+                Ok(())
+            }
             _ => Err(format!("{dove}: {x} ≠ {y}")),
         },
         _ if a == o => Ok(()),
@@ -302,6 +604,60 @@ mod prove {
         assert!(matches!(
             confronta_ops(&attese, &diverse, Some("prova")),
             Confronto::Ammessa(_)
+        ));
+    }
+
+    #[test]
+    fn il_delta_e_conta_al_centesimo_gli_altri_numeri_al_millesimo() {
+        let letta = json!({ "outOfGamut": [{ "deltaE": 13.897602, "count": 1 }], "x": 1.0 });
+        let windows = json!({ "outOfGamut": [{ "deltaE": 13.900992, "count": 1 }], "x": 1.0 });
+        assert_eq!(confronta_ops(&letta, &windows, None), Confronto::Uguali);
+        let lontano = json!({ "outOfGamut": [{ "deltaE": 13.92, "count": 1 }], "x": 1.0 });
+        assert!(matches!(
+            confronta_ops(&letta, &lontano, None),
+            Confronto::Diverse(_)
+        ));
+        let altro = json!({ "outOfGamut": [{ "deltaE": 13.897602, "count": 1 }], "x": 1.0034 });
+        assert!(matches!(
+            confronta_ops(&letta, &altro, None),
+            Confronto::Diverse(_)
+        ));
+    }
+
+    #[test]
+    fn una_ricetta_si_confronta_coi_numeri_e_non_coi_byte() {
+        // `{"frame":[0.8477139135405055]}` in base64, da Linux e da Windows.
+        let raw = |b64: &str| {
+            json!([{ "op": "add", "raw": format!(
+                "<g id=\"x\"><metadata><vectorcraft:recipe for=\"x\" v=\"1\">{b64}</vectorcraft:recipe></metadata></g>"
+            ) }])
+        };
+        let linux = raw("eyJmcmFtZSI6WzAuODQ3NzEzOTEzNTQwNTA1NV19");
+        let windows = raw("eyJmcmFtZSI6WzAuODQ3NzEzOTEzNTQwNTA1NF19");
+        assert_eq!(confronta_ops(&linux, &windows, None), Confronto::Uguali);
+        // `{"frame":[0.85]}`: un numero davvero diverso resta una differenza.
+        let lontano = raw("eyJmcmFtZSI6WzAuODVdfQ==");
+        assert!(matches!(
+            confronta_ops(&linux, &lontano, None),
+            Confronto::Diverse(_)
+        ));
+    }
+
+    #[test]
+    fn due_facce_scambiate_sono_le_stesse_un_punto_diverso_no() {
+        let raw =
+            |dentro: &str| json!([{ "op": "add", "raw": format!("<g id=\"g\">{dentro}</g>") }]);
+        let a = raw("<polygon id=\"p1\" points=\"0,0 1,0 1,1\"/><polygon id=\"p2\" points=\"5,5 6,5 6,6\"/>");
+        let b = raw("<polygon id=\"q1\" points=\"5,5 6,5 6,6\"/><polygon id=\"q2\" points=\"0,0 1,0 1,1\"/>");
+        assert!(matches!(confronta_ops(&a, &b, None), Confronto::Diverse(_)));
+        assert_eq!(
+            confronta_ops(&facce_in_ordine(&a), &facce_in_ordine(&b), None),
+            Confronto::Uguali
+        );
+        let c = raw("<polygon id=\"q1\" points=\"5,5 6,5 6,7\"/><polygon id=\"q2\" points=\"0,0 1,0 1,1\"/>");
+        assert!(matches!(
+            confronta_ops(&facce_in_ordine(&a), &facce_in_ordine(&c), None),
+            Confronto::Diverse(_)
         ));
     }
 }

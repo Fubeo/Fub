@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { listenerLedger, press } from "../../../kit/testing";
+import { listenerLedger, press, WEBKIT_COMPOSING } from "../../../kit/testing";
 import { trapFocus } from "../../../ui/a11y";
 import { activeMotions, createManualDriver, setMotionDriver, setMotionPreference } from "../../../moto";
 import { currentHints, resetHintSources } from "../../../editors/core/hints";
@@ -29,6 +29,8 @@ const world = vi.hoisted(() => ({
   created: "Nuova.md" as string | null,
   /// Le note che il nome cercato trova: un nome già preso.
   named: [] as string[],
+  /// Che cosa si è chiesto all'indice dei nomi.
+  namedAsked: [] as string[],
   openFails: false,
   languageListeners: new Set<() => void>(),
   render: null as unknown as (doc: string) => Promise<{ html: string; parts: [] }>,
@@ -84,7 +86,10 @@ vi.mock("../../../host/query", () => ({
     world.rendered.push(doc);
     return world.render(doc);
   },
-  notesByName: async () => world.named,
+  notesByName: async (text: string) => {
+    world.namedAsked.push(text);
+    return world.named;
+  },
 }));
 // La data dell'anteprima: anche questa la decide il test.
 vi.mock("../../../state/note-facts", () => ({
@@ -286,6 +291,7 @@ beforeEach(() => {
   state.vaultRoot = "/vault";
   world.created = "Nuova.md";
   world.named = [];
+  world.namedAsked.length = 0;
   world.openFails = false;
   world.answer = () => nothing("niente");
   world.rendered.length = 0;
@@ -759,6 +765,21 @@ describe("scegliere una riga", () => {
     expect(surface()).toBeNull();
   });
 
+  it("Invio, Maiusc-Invio ed Esc che chiudono una composizione (WebKit: codice 229) non scelgono, non creano e non chiudono", async () => {
+    world.answer = () => offer("Idea nuova");
+    launcher.open("all");
+    typed("Idea nuova");
+    press(field(), "Enter", { ...WEBKIT_COMPOSING, shiftKey: true });
+    press(field(), "Enter", WEBKIT_COMPOSING);
+    press(field(), "Escape", WEBKIT_COMPOSING);
+    await settle();
+    expect(world.log).toEqual([]);
+    expect(surface()).not.toBeNull();
+    press(field(), "Enter", { shiftKey: true });
+    await settle();
+    expect(world.log).toEqual(["create Idea nuova in -", "open Nuova.md", "focus editor"]);
+  });
+
   it("una creazione rifiutata non apre niente", async () => {
     world.created = null;
     world.answer = () => offer("Idea");
@@ -811,6 +832,41 @@ describe("scegliere una riga", () => {
     await settle();
     expect(world.log).toEqual(["open Idea.md"]);
     expect(world.notices).toEqual([{ text: 'launcher.create.taken {"name":"Idea"}', tone: "info" }]);
+  });
+
+  // IMP-6200: un percorso scritto crea la nota in quella cartella (le cartelle
+  // che mancano le crea il kernel con la nota), e una nota che c'è già in quel
+  // percorso si apre invece di nascere due volte.
+  it("un percorso crea la nota lì: il nome arriva al kernel con le sue cartelle", async () => {
+    world.created = "Aree/Eventi/prova caccia.md";
+    world.answer = () => offer("Aree/Eventi/prova caccia");
+    launcher.open("all");
+    typed("Aree/Eventi/prova caccia");
+    toCreate().click();
+    await settle();
+    expect(world.namedAsked).toEqual(["prova caccia"]);
+    expect(world.log).toEqual(["create Aree/Eventi/prova caccia in -", "open Aree/Eventi/prova caccia.md", "focus editor"]);
+  });
+
+  it("una nota che c'è già in quel percorso si apre, e lo dice", async () => {
+    world.named = ["Altrove/prova caccia.md", "aree/eventi/Prova caccia.md"];
+    world.answer = () => offer("Aree/Eventi/prova caccia");
+    launcher.open("all");
+    typed("Aree/Eventi/prova caccia");
+    press(field(), "Enter", { shiftKey: true });
+    await settle();
+    expect(world.log).toEqual(["open aree/eventi/Prova caccia.md"]);
+    expect(world.notices).toEqual([{ text: 'launcher.create.taken {"name":"Aree/Eventi/prova caccia"}', tone: "info" }]);
+  });
+
+  it("una nota con lo stesso nome in un'altra cartella non ferma il percorso", async () => {
+    world.named = ["Altrove/prova caccia.md", "Aree/prova caccia.md"];
+    world.answer = () => offer("Aree/Eventi/prova caccia");
+    launcher.open("all");
+    typed("Aree/Eventi/prova caccia");
+    press(field(), "Enter", { shiftKey: true });
+    await settle();
+    expect(world.log).toEqual(["create Aree/Eventi/prova caccia in -", "open Nuova.md", "focus editor"]);
   });
 
   it("un comando si avvia col modulo che esiste già; uno di shell si ricorda", async () => {

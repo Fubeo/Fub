@@ -141,8 +141,10 @@ export function resolvedLanguage(): string {
   return requested.toLowerCase().split(/[-_]/)[0] === catalog ? requested : catalog;
 }
 
-/// La lingua corrente. Fuori da un browser (i test) `navigator` può non esserci.
-function languageCurrent(): string {
+/// La lingua corrente, quella chiesta (scelta dall'utente o del sistema) e non
+/// quella del catalogo che la serve. Fuori da un browser (i test) `navigator`
+/// può non esserci.
+export function languageCurrent(): string {
   const systemLanguage = typeof navigator === "undefined" ? FALLBACK : navigator.language || FALLBACK;
   return effectiveLanguage(choice, systemLanguage);
 }

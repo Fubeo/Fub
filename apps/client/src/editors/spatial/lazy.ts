@@ -82,6 +82,8 @@ export function mountDrawingSurface(
       vaultFonts: callbacks.drawingFonts,
       // «Esporta» apre la finestra dello Scrittoio.
       onExport: shellCommand === undefined ? undefined : () => shellCommand("shell.doc.export"),
+      // Tab nel Completo nasconde anche i pannelli, che stanno nell'ispettore.
+      onToggleInspector: shellCommand === undefined ? undefined : () => shellCommand("shell.inspector.toggle"),
     });
   }
   if (profile === PDF_PROFILE) {
@@ -271,6 +273,11 @@ function lazily(
         statusListeners.add(listener);
         return () => statusListeners.delete(listener);
       },
+    },
+    // Lo spazio di lavoro nella banda (T7): quello della superficie vera, quando
+    // c'è; prima, niente, e il bottone non si vede.
+    get workspace() {
+      return surface?.workspace;
     },
     // Il chip dello stato del documento, quando la superficie ne ha uno: prima,
     // niente da dire.

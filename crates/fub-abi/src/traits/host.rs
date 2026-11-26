@@ -423,6 +423,36 @@ pub trait HostNetwork: Send + Sync {
         }
         Ok(response)
     }
+
+    /// Come [`fetch_cancelled`](HostNetwork::fetch_cancelled), con un tetto di
+    /// byte sul corpo scelto da chi chiama: un corpo di più di `max_bytes` byte
+    /// è [`LimitedFetchError::TooLarge`](crate::net::LimitedFetchError::TooLarge).
+    ///
+    /// Serve a chi accetta molto meno del tetto generale dell'host (le tessere
+    /// di una mappa: un mebibyte contro sedici): senza, un server rotto o
+    /// ostile fa scaricare e tenere in memoria tutto il tetto generale prima
+    /// che il chiamante possa dire di no.
+    ///
+    /// Il default scarica con `fetch_cancelled` e rifiuta dopo, così nessun
+    /// implementatore esistente si rompe; un trasporto vero deve smettere di
+    /// leggere appena il corpo supera il tetto. È solo Rust: non attraversa
+    /// WIT né IPC, e un tetto più alto di quello dell'host non lo alza.
+    fn fetch_limited(
+        &self,
+        request: crate::net::HttpRequest,
+        cancelled: &std::sync::atomic::AtomicBool,
+        max_bytes: u64,
+    ) -> Result<crate::net::HttpResponse, crate::net::LimitedFetchError> {
+        let response = self.fetch_cancelled(request, cancelled)?;
+        if response.body.len() as u64 > max_bytes {
+            return Err(crate::net::LimitedFetchError::TooLarge {
+                limit: max_bytes,
+                status: response.status,
+                headers: response.headers,
+            });
+        }
+        Ok(response)
+    }
 }
 
 /// Un prestito è ancora il filo: serve a chi ha un `Arc<dyn HostNetwork>` e
@@ -441,6 +471,15 @@ impl<T: HostNetwork + ?Sized> HostNetwork for &T {
         cancelled: &std::sync::atomic::AtomicBool,
     ) -> Result<crate::net::HttpResponse, PluginError> {
         (**self).fetch_cancelled(request, cancelled)
+    }
+
+    fn fetch_limited(
+        &self,
+        request: crate::net::HttpRequest,
+        cancelled: &std::sync::atomic::AtomicBool,
+        max_bytes: u64,
+    ) -> Result<crate::net::HttpResponse, crate::net::LimitedFetchError> {
+        (**self).fetch_limited(request, cancelled, max_bytes)
     }
 }
 

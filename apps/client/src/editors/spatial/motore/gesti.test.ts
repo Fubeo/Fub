@@ -9,10 +9,11 @@
 // gesto annullato non scrivono niente.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { DrawingFrame, DrawingGesture, DrawingOutcome, DrawingPointer } from "../../../host/contract";
+import { DRAWING_COMMAND_TOOL_OPTION, DRAWING_COMMAND_TOOL_STATE, type DrawingFrame, type DrawingGesture, type DrawingOutcome, type DrawingOverlay, type DrawingPointer } from "../../../host/contract";
 import { createFakeHost, type DrawingFake, type FakeHost } from "../../../host/fake";
 import { DocumentSessionCollection, type DocumentSessionApi } from "../../../state/document-session";
 import { openLifetime, type Lifetime } from "../../../ui/lifetime";
+import { lineFeeds } from "../../core/text-operation";
 import { SceneEngine } from "../scene/engine";
 import { t } from "../strings";
 import { toScreen } from "../view";
@@ -344,6 +345,44 @@ describe("i gesti sul motore", () => {
     expect(editor.engine.text).toBe(EMPTY);
     expect(editor.canUndo).toBe(false);
     expect(fake.atGate("drawingGesture")).toHaveLength(0);
+  });
+
+  it("con l'aggancio al pixel (K6 T11) il gesto manda il passo di un pixel; con la griglia accesa vince lei, col suo passo", async () => {
+    const fake = createFakeHost({ drawing: replaying(VECTORS.find((vector) => vector.name === "rettangolo")!, new Map()) });
+    const editor = await mount(EMPTY, fake, null);
+    editor.setGrid({ ...DEFAULT_GRID, snapPixel: true });
+    editor.setTool("rect");
+    await drag(editor, [[10.4, 3.2], [60.7, 40.4]]);
+    await settle(16, 8);
+    const pixel = gestures(fake);
+    expect(pixel.length).toBeGreaterThan(0);
+    expect(pixel.map((gesto) => gesto.snap)).toEqual(pixel.map(() => ({ grid: 1, free: false })));
+
+    editor.setGrid({ ...DEFAULT_GRID, snap: true, step: 20, snapPixel: true });
+    await drag(editor, [[200, 40], [260, 70]]);
+    await settle(16, 8);
+    const griglia = gestures(fake).slice(pixel.length);
+    expect(griglia.length).toBeGreaterThan(0);
+    expect(griglia.map((gesto) => gesto.snap.grid)).toEqual(griglia.map(() => 20));
+  });
+
+  it("guide sensibili e agganci di Visualizza (K6) vanno nel gesto solo se diversi da VectorCraft", async () => {
+    const fake = createFakeHost({ drawing: replaying(VECTORS.find((vector) => vector.name === "rettangolo")!, new Map()) });
+    const editor = await mount(EMPTY, fake, null);
+    editor.setGrid({ ...DEFAULT_GRID, smartGuidesOff: true, snapPointOff: true, snapGlyph: true });
+    editor.setTool("rect");
+    await drag(editor, [[10, 3], [60, 40]]);
+    await settle(16, 8);
+    const spenti = gestures(fake);
+    expect(spenti.length).toBeGreaterThan(0);
+    expect(spenti.map((gesto) => gesto.snap)).toEqual(spenti.map(() => ({ grid: null, free: false, guides: false, points: false, glyphs: true })));
+
+    editor.setGrid(DEFAULT_GRID);
+    await drag(editor, [[200, 40], [260, 70]]);
+    await settle(16, 8);
+    const diSerie = gestures(fake).slice(spenti.length);
+    expect(diSerie.length).toBeGreaterThan(0);
+    expect(diSerie.map((gesto) => gesto.snap)).toEqual(diSerie.map(() => ({ grid: null, free: false })));
   });
 
   it("aspetta il motore che si apre, poi manda il gesto", async () => {
@@ -831,6 +870,32 @@ describe("il Testo sul motore", () => {
     expect(editor.engine.text.match(/<text /g)).toHaveLength(1);
     expect(document.activeElement).toBe(wordsField());
   });
+
+  it("il doppio clic della selezione su un testo ci entra: il campo «Testo» a fuoco, niente cambia nel file", async () => {
+    const input = CLIC.input.replace(
+      "</g>",
+      '  <text id="ot1t1t1t1" x="100" y="80" fill="#000000" font-family="Inter, sans-serif" font-size="32"><tspan x="100" dy="0">Pioggia</tspan></text>\n  </g>',
+    );
+    expect(input).toContain('id="ot1t1t1t1"');
+    // Il motore sceglie il testo a ogni clic, senza operazioni.
+    const fake = createFakeHost({
+      drawing: {
+        gesto: (gesture) => ({ revision: gesture.revision, preview: null, ops: null, selection: gesture.phase === "commit" ? ["ot1t1t1t1"] : gesture.selection, losses: [], refused: null, frame: null }),
+      },
+    });
+    const editor = await mountClosed(input, fake);
+    editor.setTool("select");
+    await click(editor, 110, 70);
+    expect(editor.selection).toEqual(["ot1t1t1t1"]);
+    expect(document.activeElement).not.toBe(wordsField());
+    await click(editor, 110, 70);
+    expect(panelOf().hidden).toBe(false);
+    const field = wordsField()!;
+    expect(document.activeElement).toBe(field);
+    expect(field.value).toBe("Pioggia");
+    expect(editor.engine.text).toBe(input);
+    expect(editor.canUndo).toBe(false);
+  });
 });
 
 // --- I pezzi ------------------------------------------------------------------
@@ -858,5 +923,819 @@ describe("i pezzi dei gesti", () => {
     expect(elemDi(null)).toBeNull();
     expect(elemDi({ tag: "rect", attrs: { x: 1 } })).toBeNull();
     expect(elemDi({ tag: "g", attrs: {}, children: [{ attrs: {} }] })).toBeNull();
+  });
+});
+
+// --- Lo strumento del motore (K6 T8) ------------------------------------------
+
+/// L'editor col motore dell'host finto, con la preparazione della famiglia
+/// `prepara` (K6 T8). Come `mount`, ma con `preparaMotore` nelle opzioni.
+async function montaConPreparazione(input: string, fake: FakeHost, prepara?: (id: string) => Promise<boolean>): Promise<DrawEditor> {
+  const session = await documentOn(input);
+  motore = motoreDa(() => apriSessione(fake.module.api, DOC, input, session, { vault: "/vault" }));
+  await settle(0, 2);
+  return createDrawEditor(host, SceneEngine.open(input), owner, {
+    motore: motore!,
+    preparaMotore: prepara,
+    onChange: (change) => {
+      expect(sessions!.acceptSurfaceChange(DOC, "editor", { text: change.text, operation: change.operation })).toEqual({ kind: "accepted" });
+    },
+  });
+}
+
+/// Un esito del motore finto con lo stato dello strumento: il cursore e le
+/// opzioni che il motore dice dopo un'opzione cambiata.
+const esitoConStato = (cursor: string, options: unknown): DrawingOutcome => ({
+  revision: "rev-1",
+  preview: null,
+  ops: null,
+  selection: [],
+  losses: [],
+  refused: null,
+  frame: null,
+  state: { busy: false, transforming: false, wants_text: false, composing: false, cursor, options },
+  reading: null,
+});
+
+/// Il motore finto che, a famiglia pronta, dice lo stato di serie di uno
+/// strumento (`disegno.strumento.stato`), come quello vero.
+const statoDiSerie = (): DrawingOutcome => esitoConStato("arrow", null);
+
+describe("lo strumento del motore nei gesti (K6 T8)", () => {
+  it("due clic vicini mandano il doppio clic a parte, come VectorCraft; il cambio che il motore chiede sceglie lo strumento", async () => {
+    const fake = createFakeHost({
+      drawing: {
+        comando: statoDiSerie,
+        gesto: (gesture) => {
+          const doppio = gesture.events.some((e) => e.kind === "double_click");
+          const stato = { busy: false, transforming: false, wants_text: false, composing: false, cursor: "arrow", options: null, ...(doppio ? { switch_tool: "type" } : {}) };
+          return { revision: gesture.revision, preview: null, ops: null, selection: [], losses: [], refused: gesture.phase === "commit" ? "empty" : null, frame: null, state: stato, reading: null };
+        },
+      } as DrawingFake,
+    });
+    const preparati: string[] = [];
+    const editor = await montaConPreparazione(EMPTY, fake, (id) => {
+      preparati.push(id);
+      return Promise.resolve(true);
+    });
+    editor.setEngineTool("selection");
+    await settle();
+    // Lontani: due clic, niente doppio clic.
+    await drag(editor, [[100, 100]]);
+    await drag(editor, [[300, 200]]);
+    expect(gestures(fake).flatMap((g) => g.events).some((e) => e.kind === "double_click")).toBe(false);
+    // Vicini: il doppio clic arriva dopo il secondo rilascio, in un gesto suo.
+    await drag(editor, [[300, 200]]);
+    await settle(16, 8);
+    const tutti = gestures(fake);
+    const doppi = tutti.filter((g) => g.events.some((e) => e.kind === "double_click"));
+    expect(doppi.map((g) => g.events.map((e) => e.kind))).toEqual([["double_click"]]);
+    expect(doppi[0]!.events[0]).toEqual(expect.objectContaining({ x: 300, y: 200, pressure: 1 }));
+    expect(JSON.stringify(doppi[0]!.tool)).toBe(JSON.stringify({ engine: { id: "selection" } }));
+    // Il motore chiede il Testo: lo si sceglie.
+    expect(preparati).toEqual(["selection", "type"]);
+    // Il terzo clic ricomincia: niente altro doppio clic.
+    await drag(editor, [[300, 200]]);
+    await settle(16, 8);
+    expect(gestures(fake).filter((g) => g.events.some((e) => e.kind === "double_click"))).toHaveLength(1);
+  });
+
+  it("Canc ed Esc vanno allo strumento che li prende (`claims_keys`), e tornano alle scorciatoie quando smette o si cambia strumento", async () => {
+    // La Larghezza finta: dopo un gesto ha un punto scelto e prende Canc ed Esc;
+    // il tasto lo toglie e lo strumento non li prende più.
+    let scelto = false;
+    const fake = createFakeHost({
+      drawing: {
+        comando: statoDiSerie,
+        gesto: (gesture) => {
+          const tasti = (gesture.inputs ?? []).flatMap((i) => (i.kind === "key" ? [i.key] : []));
+          if (tasti.length > 0) scelto = false;
+          else if (gesture.phase === "commit") scelto = true;
+          const state = { busy: false, transforming: false, wants_text: false, composing: false, cursor: "width", options: null, ...(scelto ? { claims_keys: ["Delete", "Backspace", "Escape"] } : {}) };
+          return { revision: gesture.revision, preview: null, ops: null, selection: [], losses: [], refused: null, frame: null, state, reading: null };
+        },
+      } as DrawingFake,
+    });
+    const editor = await montaConPreparazione(EMPTY, fake);
+    editor.setEngineTool("width");
+    await settle();
+    await drag(editor, [[100, 100], [100, 120]]);
+    const prima = gestures(fake).length;
+    await tasto("Delete");
+    const conTasto = gestures(fake).slice(prima);
+    expect(conTasto.map((g) => [g.phase, g.events.length, (g.inputs ?? []).map((i) => (i.kind === "key" ? i.key : ""))])).toEqual([["commit", 0, ["Delete"]]]);
+    // Senza punti scelti Canc non va più allo strumento.
+    await tasto("Delete");
+    expect(gestures(fake).length).toBe(prima + 1);
+    // Scelto di nuovo, poi un altro strumento: Esc non va alla Larghezza.
+    await drag(editor, [[100, 100], [100, 130]]);
+    editor.setEngineTool("pencil");
+    await settle();
+    const dopo = gestures(fake).length;
+    editor.setEngineTool("width");
+    await settle();
+    await tasto("Escape");
+    expect(gestures(fake).slice(dopo).filter((g) => (g.inputs ?? []).length > 0)).toEqual([]);
+  });
+
+  it("uno strumento del motore manda `DrawingTool::Engine` col suo id, e il cursore del foglio segue il suo stato", async () => {
+    const fake = createFakeHost({ drawing: { comando: statoDiSerie } as DrawingFake });
+    const editor = await montaConPreparazione(EMPTY, fake);
+    editor.setEngineTool("pencil");
+    await drag(editor, [[220, 40], [260, 70], [300, 90]]);
+    expect(gestures(fake).length).toBeGreaterThan(0);
+    expect(gestures(fake).every((each) => JSON.stringify(each.tool) === JSON.stringify({ engine: { id: "pencil" } }))).toBe(true);
+    expect(gestures(fake).slice(-1)[0]!.phase).toBe("commit");
+    // Lo stato dell'ultimo esito (fermo) dà il cursore di serie del motore.
+    expect(surfaceOf().style.cursor).toBe("default");
+    expect(editor.statoStrumento("pencil")).toEqual(expect.objectContaining({ cursor: "arrow" }));
+  });
+
+  it("il mouse preme in pieno (pressione 1), come in VectorCraft: il rilascio porta 0", async () => {
+    const fake = createFakeHost({ drawing: { comando: statoDiSerie } as DrawingFake });
+    const editor = await montaConPreparazione(EMPTY, fake);
+    editor.setEngineTool("paintbrush");
+    await drag(editor, [[220, 40], [260, 70], [300, 90]]);
+    const eventi = gestures(fake).flatMap((each) => each.events);
+    expect(eventi.filter((e) => e.kind === "down" || e.kind === "drag").map((e) => e.pressure)).toEqual([1, 1, 1]);
+    expect(eventi.filter((e) => e.kind === "up").map((e) => e.pressure)).toEqual([0]);
+  });
+
+  it("un'opzione cambiata va al motore, e lo stato che torna si registra", async () => {
+    const fake = createFakeHost({
+      drawing: {
+        comando: (request) => ({ ...esitoConStato("arrow", request.value), revision: "rev-2" }),
+      } as DrawingFake,
+    });
+    const editor = await montaConPreparazione(EMPTY, fake);
+    editor.setEngineTool("pencil");
+    editor.setEngineOption("pen", "spessore", 3);
+    await settle();
+    const comandi = fake.atGate("drawingCommand").map((call) => call.args[1] as { id: string; selection: string[]; value: unknown });
+    expect(comandi.filter((c) => c.id === DRAWING_COMMAND_TOOL_OPTION)).toEqual([expect.objectContaining({ selection: [], value: { strumento: "pen", chiave: "spessore", valore: 3 } })]);
+    expect(editor.statoStrumento("pencil")).toEqual(expect.objectContaining({ cursor: "arrow" }));
+  });
+
+  it("a famiglia pronta lo stato dello strumento si legge senza un gesto, e una volta sola", async () => {
+    let pronta!: (ok: boolean) => void;
+    const fake = createFakeHost({
+      drawing: {
+        comando: (request) => (request.id === DRAWING_COMMAND_TOOL_STATE ? esitoConStato("crosshair", { meshPoints: [] }) : esitoConStato("arrow", null)),
+      } as DrawingFake,
+    });
+    const editor = await montaConPreparazione(EMPTY, fake, () => new Promise<boolean>((resolve) => (pronta = resolve)));
+    editor.setEngineTool("directSelection");
+    await settle();
+    // Mentre si prepara, niente: la famiglia non c'è ancora.
+    expect(fake.atGate("drawingCommand")).toHaveLength(0);
+    expect(editor.statoStrumento("directSelection")).toBeNull();
+    pronta(true);
+    await settle(0, 4);
+    const comandi = fake.atGate("drawingCommand").map((call) => call.args[1] as { id: string; selection: string[]; value: unknown });
+    expect(comandi).toEqual([expect.objectContaining({ id: DRAWING_COMMAND_TOOL_STATE, selection: [], value: { strumento: "directSelection" } })]);
+    expect(editor.statoStrumento("directSelection")).toEqual(expect.objectContaining({ cursor: "crosshair", options: { meshPoints: [] } }));
+    // Nessun gesto è partito, e il documento non è cambiato.
+    expect(gestures(fake)).toHaveLength(0);
+    // Tornare allo strumento, con lo stato già noto, non lo rilegge.
+    editor.setEngineTool(null);
+    editor.setEngineTool("directSelection");
+    await settle(0, 4);
+    expect(fake.atGate("drawingCommand")).toHaveLength(1);
+  });
+
+  it("la famiglia che non arriva non legge lo stato", async () => {
+    const fake = createFakeHost({ drawing: { comando: () => esitoConStato("arrow", null) } as DrawingFake });
+    const editor = await montaConPreparazione(EMPTY, fake, async () => false);
+    editor.setEngineTool("selection");
+    await settle(0, 4);
+    expect(fake.atGate("drawingCommand")).toHaveLength(0);
+    expect(editor.statoStrumento("selection")).toBeNull();
+  });
+
+  it("la famiglia che non arriva: lo strumento di prima resta, e lo si dice con «Riprova»", async () => {
+    const fake = createFakeHost({ drawing: {} });
+    const editor = await montaConPreparazione(EMPTY, fake, async () => false);
+    editor.setTool("rect");
+    editor.setEngineTool("pencil");
+    await settle();
+    // Lo si dice subito, prima che il gesto dopo scriva la sua riga.
+    expect(spoken()).toContain(t("draw.engine.prepare.failed"));
+    await drag(editor, [[220, 40], [300, 90]]);
+    expect(gestures(fake).length).toBeGreaterThan(0);
+    expect(gestures(fake).every((each) => each.tool === "rect")).toBe(true);
+  });
+
+  it("uno strumento scelto mentre la famiglia si prepara: il gesto aspetta, poi parte", async () => {
+    const fake = createFakeHost({ drawing: {} });
+    let pronta!: (ok: boolean) => void;
+    const editor = await montaConPreparazione(EMPTY, fake, () => new Promise<boolean>((resolve) => (pronta = resolve)));
+    editor.setEngineTool("pencil");
+    await drag(editor, [[220, 40], [300, 90]]);
+    expect(gestures(fake)).toHaveLength(0);
+    pronta(true);
+    await settle(16, 8);
+    expect(gestures(fake).slice(-1)[0]!.phase).toBe("commit");
+    expect(gestures(fake)[0]!.tool).toEqual({ engine: { id: "pencil" } });
+  });
+
+  it("i punti scelti al gesto di prima vanno col gesto dopo, e solo per lo strumento che li ha", async () => {
+    const punto = { element: "t", subpath: 0, anchor: 1, at: [100, 60] as [number, number], end: false };
+    const fake = createFakeHost({
+      drawing: {
+        comando: statoDiSerie,
+        gesto: (gesture) => {
+          const id = typeof gesture.tool === "object" ? gesture.tool.engine.id : "";
+          const esito = esitoConStato("arrow", null);
+          return id === "directSelection" ? { ...esito, state: { ...esito.state!, anchors: [punto] } } : esito;
+        },
+      } as DrawingFake,
+    });
+    const editor = await montaConPreparazione(EMPTY, fake);
+    editor.setEngineTool("directSelection");
+    await drag(editor, [[220, 40], [222, 41]]);
+    // Il primo gesto non ha punti da portare.
+    expect(gestures(fake).every((g) => g.anchors === undefined)).toBe(true);
+    const primi = gestures(fake).length;
+    await drag(editor, [[220, 40], [260, 70]]);
+    const dopo = gestures(fake).slice(primi);
+    expect(dopo.length).toBeGreaterThan(0);
+    expect(dopo.every((g) => JSON.stringify(g.anchors) === JSON.stringify([punto]))).toBe(true);
+    // Un altro strumento non porta i punti della Selezione diretta.
+    editor.setEngineTool("pencil");
+    const prima = gestures(fake).length;
+    await drag(editor, [[220, 40], [260, 70]]);
+    expect(gestures(fake).slice(prima).every((g) => g.anchors === undefined)).toBe(true);
+  });
+
+  it("il mouse che passa senza premere va al motore, al più una volta per fotogramma, e ne mostra cursore e segni", async () => {
+    const fake = createFakeHost({
+      drawing: {
+        comando: statoDiSerie,
+        gesto: (gesture) => {
+          if (gesture.phase !== "preview" || gesture.events[0]?.kind !== "move") return esitoConStato("arrow", null);
+          const sopraIlPunto = Math.hypot(gesture.events[0].x - 220, gesture.events[0].y - 40) < 5;
+          const esito = esitoConStato(sopraIlPunto ? "crosshair" : "arrow", null);
+          const overlays: DrawingOverlay[] = sopraIlPunto ? [{ kind: "anchor", at: [220, 40], role: "selection", filled: false, size: 7 }] : [];
+          return { ...esito, preview: { shape: null, overlays, marquee: null, matrix: null } };
+        },
+      } as DrawingFake,
+    });
+    const editor = await montaConPreparazione(EMPTY, fake);
+    editor.setEngineTool("directSelection");
+    const prima = gestures(fake).length;
+    // Tre movimenti nello stesso fotogramma: parte solo l'ultimo.
+    dispatch(editor, point("move", 100, 100));
+    dispatch(editor, point("move", 150, 100));
+    dispatch(editor, point("move", 220, 40));
+    await settle();
+    const passaggi = gestures(fake).slice(prima);
+    expect(passaggi).toHaveLength(1);
+    expect(passaggi[0]).toEqual(expect.objectContaining({ phase: "preview", tool: { engine: { id: "directSelection" } }, selection: [] }));
+    expect(passaggi[0]!.events).toEqual([expect.objectContaining({ kind: "move", x: 220, y: 40 })]);
+    expect(surfaceOf().style.cursor).toBe("crosshair");
+    // Il punto sotto il mouse è sullo strato dell'anteprima.
+    const anteprima = (): number => host.querySelector(".draw-preview g g")?.childElementCount ?? 0;
+    expect(anteprima()).toBeGreaterThan(0);
+    // Lontano dal punto il cursore torna quello di serie; fuori dal foglio
+    // non parte niente.
+    dispatch(editor, point("move", 400, 300));
+    await settle();
+    expect(surfaceOf().style.cursor).toBe("default");
+    expect(anteprima()).toBe(0);
+    const dopo = gestures(fake).length;
+    surfaceOf().dispatchEvent(new PointerEvent("pointerleave", { bubbles: false, pointerType: "mouse" }));
+    await settle();
+    expect(gestures(fake).length).toBe(dopo);
+    // Nessun passaggio scrive.
+    expect(gestures(fake).slice(prima).every((g) => g.phase === "preview")).toBe(true);
+  });
+
+  it("l'esito di un passaggio che arriva col mouse già uscito non rimette i segni", async () => {
+    let esce = false;
+    const fake = createFakeHost({
+      drawing: {
+        comando: statoDiSerie,
+        gesto: (gesture) => {
+          if (gesture.phase !== "preview" || gesture.events[0]?.kind !== "move") return esitoConStato("arrow", null);
+          // Il mouse esce dal foglio mentre la risposta è in viaggio.
+          if (esce) surfaceOf().dispatchEvent(new PointerEvent("pointerleave", { bubbles: false, pointerType: "mouse" }));
+          const overlays: DrawingOverlay[] = [{ kind: "anchor", at: [220, 40], role: "selection", filled: false, size: 7 }];
+          return { ...esitoConStato("crosshair", null), preview: { shape: null, overlays, marquee: null, matrix: null } };
+        },
+      } as DrawingFake,
+    });
+    const editor = await montaConPreparazione(EMPTY, fake);
+    editor.setEngineTool("directSelection");
+    const anteprima = (): number => host.querySelector(".draw-preview g g")?.childElementCount ?? 0;
+    // Il passaggio di sempre mostra i segni.
+    dispatch(editor, point("move", 220, 40));
+    await settle();
+    expect(anteprima()).toBeGreaterThan(0);
+    surfaceOf().dispatchEvent(new PointerEvent("pointerleave", { bubbles: false, pointerType: "mouse" }));
+    await settle();
+    expect(anteprima()).toBe(0);
+    // Ora il mouse esce prima che l'esito torni: il foglio resta pulito.
+    esce = true;
+    dispatch(editor, point("move", 222, 41));
+    await settle();
+    expect(anteprima()).toBe(0);
+  });
+
+  it("Esc annulla il gesto e lo strumento del motore resta", async () => {
+    const fake = createFakeHost({ drawing: { comando: statoDiSerie } as DrawingFake });
+    const editor = await montaConPreparazione(EMPTY, fake);
+    editor.setEngineTool("pen");
+    dispatch(editor, point("down", 220, 40));
+    await settle();
+    dispatch(editor, point("drag", 260, 70));
+    await settle();
+    dispatch(editor, point("drag", 260, 70), "pointercancel");
+    await settle();
+    expect(gestures(fake).map((each) => each.phase)).toContain("cancel");
+    await drag(editor, [[220, 40], [300, 90]]);
+    expect(gestures(fake).slice(-1)[0]!.tool).toEqual({ engine: { id: "pen" } });
+  });
+});
+
+// --- La penna del motore: il tracciato aperto (K6 T12) -------------------------
+
+/// Il motore finto della penna: a ogni clic il tracciato resta aperto
+/// (`busy`, coi punti come segni); il rilascio vero, con Invio, Esc o lo
+/// strumento cambiato, scrive le ops del rettangolo in un passo.
+function pennaFinta(): DrawingFake {
+  const rettangolo = VECTORS.find((vector) => vector.name === "rettangolo")!;
+  const stato = (busy: boolean) => ({ busy, transforming: false, wants_text: false, composing: false, cursor: "crosshair", options: null });
+  return {
+    comando: statoDiSerie,
+    gesto: (gesture) => {
+      const base: DrawingOutcome = { revision: gesture.revision, preview: null, ops: null, selection: gesture.selection, losses: [], refused: null, frame: null, reading: null };
+      if (gesture.phase === "preview") {
+        const ultimo = gesture.events[gesture.events.length - 1];
+        const overlays = ultimo === undefined ? [] : [{ kind: "anchor" as const, at: [ultimo.x, ultimo.y] as [number, number], role: "selection", filled: true, size: 7 }];
+        return { ...base, preview: { shape: null, matrix: null, marquee: null, overlays }, state: stato(true) };
+      }
+      if (gesture.phase === "commit") return { ...base, ops: JSON.stringify(rettangolo.expect.ops).replace(/@1/g, "oz0000001"), selection: [], state: stato(false) };
+      return { ...base, state: stato(false) };
+    },
+  } as DrawingFake;
+}
+
+/// Un clic sul foglio: premi e rilascia nello stesso punto.
+async function clic(editor: DrawEditor, x: number, y: number): Promise<void> {
+  dispatch(editor, point("down", x, y));
+  await settle();
+  dispatch(editor, { ...point("up", x, y), pressure: 0 });
+  await settle();
+}
+
+/// Un tasto premuto sul foglio.
+async function tasto(key: string): Promise<void> {
+  surfaceOf().dispatchEvent(new KeyboardEvent("keydown", { key, code: key, bubbles: true, cancelable: true }));
+  await settle(16, 8);
+}
+
+/// La Misura finta: all'anteprima la linea dal primo punto all'ultimo e la
+/// scritta con la distanza; al rilascio niente cambia.
+function misuraFinta(): DrawingFake {
+  const stato = (busy: boolean) => ({ busy, transforming: false, wants_text: false, composing: false, cursor: "measure", options: null });
+  let primo: [number, number] | null = null;
+  return {
+    comando: statoDiSerie,
+    gesto: (gesture) => {
+      const base: DrawingOutcome = { revision: gesture.revision, preview: null, ops: null, selection: gesture.selection, losses: [], refused: null, frame: null, reading: null };
+      const giu = gesture.events.find((each) => each.kind === "down");
+      if (giu !== undefined) primo = [giu.x, giu.y];
+      if (gesture.phase === "preview") {
+        const ultimo = gesture.events[gesture.events.length - 1];
+        if (primo === null || ultimo === undefined) return { ...base, preview: { shape: null, matrix: null, marquee: null, overlays: [] }, state: stato(true) };
+        const fine: [number, number] = [ultimo.x, ultimo.y];
+        const distanza = Math.hypot(fine[0] - primo[0], fine[1] - primo[1]).toFixed(2);
+        const overlays = [
+          { kind: "line" as const, a: primo, b: fine, role: "guide" as const, dashed: false },
+          { kind: "measure" as const, at: fine, text: `D: ${distanza} pt` },
+        ];
+        return { ...base, preview: { shape: null, matrix: null, marquee: null, overlays }, state: stato(ultimo.kind !== "up") };
+      }
+      return { ...base, state: stato(false) };
+    },
+  } as DrawingFake;
+}
+
+const scritteSulFoglio = (): string[] => [...host.querySelectorAll(".draw-engine-text")].map((each) => each.textContent ?? "");
+
+describe("la Misura del motore: la misura resta sul foglio", () => {
+  it("dopo il rilascio la linea e la distanza restano, il disegno non cambia; la misura dopo la sostituisce; Esc riporta quella di prima; un altro strumento la toglie", async () => {
+    const fake = createFakeHost({ drawing: misuraFinta() });
+    const editor = await montaConPreparazione(EMPTY, fake);
+    editor.setEngineTool("measure");
+    await drag(editor, [[100, 100], [130, 100], [130, 140]]);
+    await settle(16, 8);
+    expect(gestures(fake).filter((each) => each.phase === "commit")).toHaveLength(1);
+    expect(editor.engine.text).toBe(EMPTY);
+    expect(editor.canUndo).toBe(false);
+    const prima = scritteSulFoglio();
+    expect(prima).toHaveLength(1);
+    expect(host.querySelector(".draw-engine-marks")).not.toBeNull();
+    // La misura dopo prende il suo posto.
+    await drag(editor, [[200, 200], [260, 200]]);
+    await settle(16, 8);
+    const seconda = scritteSulFoglio();
+    expect(seconda).toHaveLength(1);
+    expect(seconda).not.toEqual(prima);
+    // Una misura annullata con Esc a metà: torna quella di prima.
+    dispatch(editor, point("down", 300, 300));
+    await settle();
+    dispatch(editor, point("drag", 340, 300));
+    await settle();
+    await tasto("Escape");
+    await settle(16, 8);
+    expect(scritteSulFoglio()).toEqual(seconda);
+    // Un altro strumento la toglie.
+    editor.setEngineTool("selection");
+    await settle(16, 8);
+    expect(scritteSulFoglio()).toEqual([]);
+  });
+
+  it("a uno zoom fatto dopo, le scritte che restano si rifanno alla scala nuova", async () => {
+    const fake = createFakeHost({ drawing: misuraFinta() });
+    const editor = await montaConPreparazione(EMPTY, fake);
+    editor.setEngineTool("measure");
+    await drag(editor, [[100, 100], [160, 100]]);
+    await settle(16, 8);
+    const corpo = (): number => Number(host.querySelector(".draw-engine-text")?.getAttribute("font-size"));
+    const scala = editor.stage.camera.scale;
+    expect(corpo()).toBeCloseTo(11 / scala);
+    const rotella = new WheelEvent("wheel", { deltaY: -200, bubbles: true, cancelable: true });
+    for (const [name, value] of Object.entries({ ctrlKey: true, shiftKey: false, metaKey: false, clientX: 40, clientY: 40 })) Object.defineProperty(rotella, name, { value });
+    surfaceOf().dispatchEvent(rotella);
+    await settle(16, 8);
+    expect(editor.stage.camera.scale).not.toBeCloseTo(scala);
+    expect(scritteSulFoglio()).toHaveLength(1);
+    expect(corpo()).toBeCloseTo(11 / editor.stage.camera.scale);
+  });
+});
+
+describe("le frecce durante il trascinamento di uno strumento del motore", () => {
+  it("vanno allo strumento nell'anteprima del gesto, che non finisce; senza gesto non partono", async () => {
+    const fake = createFakeHost({ drawing: misuraFinta() });
+    const editor = await montaConPreparazione(EMPTY, fake);
+    editor.setEngineTool("parametricShape");
+    dispatch(editor, point("down", 150, 190));
+    await settle();
+    dispatch(editor, point("drag", 170, 160));
+    await settle();
+    await tasto("ArrowUp");
+    const conTasto = gestures(fake).filter((each) => (each.inputs ?? []).length > 0);
+    expect(conTasto).toHaveLength(1);
+    expect(conTasto[0]!.phase).toBe("preview");
+    expect(conTasto[0]!.inputs).toEqual([expect.objectContaining({ kind: "key", key: "ArrowUp", pressed: true })]);
+    expect(gestures(fake).map((each) => each.phase)).not.toContain("commit");
+    dispatch(editor, point("up", 170, 160));
+    await settle(16, 8);
+    expect(gestures(fake).filter((each) => each.phase === "commit")).toHaveLength(1);
+    // A gesto finito la freccia non va allo strumento.
+    const prima = gestures(fake).length;
+    await tasto("ArrowUp");
+    expect(gestures(fake).slice(prima).some((each) => (each.inputs ?? []).length > 0)).toBe(false);
+  });
+});
+
+describe("la penna del motore: il tracciato aperto (K6 T12)", () => {
+  it("i clic lasciano il tracciato aperto, coi suoi punti sul foglio; Invio lo chiude come il motore, in un passo", async () => {
+    const fake = createFakeHost({ drawing: pennaFinta() });
+    const editor = await montaConPreparazione(EMPTY, fake);
+    editor.setEngineTool("pen");
+    await clic(editor, 220, 40);
+    await clic(editor, 300, 90);
+    await settle(16, 8);
+    expect(gestures(fake).map((each) => each.phase)).not.toContain("commit");
+    expect(editor.engine.text).toBe(EMPTY);
+    expect(editor.canUndo).toBe(false);
+    // I segni del motore (il punto dell'ultimo clic) si vedono.
+    expect(host.querySelector(".draw-engine-marks")).not.toBeNull();
+    await tasto("Enter");
+    const ultimo = gestures(fake).slice(-1)[0]!;
+    expect(ultimo.phase).toBe("commit");
+    expect(ultimo.inputs).toEqual([expect.objectContaining({ kind: "key", key: "Enter", pressed: true })]);
+    expect(gestures(fake).filter((each) => each.phase === "commit")).toHaveLength(1);
+    expect(editor.engine.text).not.toBe(EMPTY);
+    expect(spoken()).toContain(t("draw.engine.done"));
+    expect(host.querySelector(".draw-engine-marks")).toBeNull();
+    editor.undo();
+    expect(editor.engine.text).toBe(EMPTY);
+    expect(editor.canUndo).toBe(false);
+  });
+
+  it("cambiato lo strumento, il tracciato aperto resta com'è, aperto, in un passo", async () => {
+    const fake = createFakeHost({ drawing: pennaFinta() });
+    const editor = await montaConPreparazione(EMPTY, fake);
+    editor.setEngineTool("pen");
+    await clic(editor, 220, 40);
+    await clic(editor, 300, 90);
+    editor.setEngineTool("pencil");
+    await settle(16, 8);
+    const commit = gestures(fake).filter((each) => each.phase === "commit");
+    expect(commit).toHaveLength(1);
+    // Nessun tasto: il motore lo lascia aperto, come quando si lascia la penna.
+    expect(commit[0]!.inputs ?? []).toEqual([]);
+    expect(gestures(fake).map((each) => each.phase)).not.toContain("cancel");
+    expect(editor.engine.text).not.toBe(EMPTY);
+    editor.undo();
+    expect(editor.engine.text).toBe(EMPTY);
+    expect(editor.canUndo).toBe(false);
+  });
+
+  it("Esc chiude il tracciato come il motore; un secondo Esc torna alla Selezione", async () => {
+    const fake = createFakeHost({ drawing: pennaFinta() });
+    const editor = await montaConPreparazione(EMPTY, fake);
+    editor.setEngineTool("pen");
+    await clic(editor, 220, 40);
+    await clic(editor, 300, 90);
+    await tasto("Escape");
+    const ultimo = gestures(fake).slice(-1)[0]!;
+    expect(ultimo.phase).toBe("commit");
+    expect(ultimo.inputs).toEqual([expect.objectContaining({ kind: "key", key: "Escape" })]);
+    expect(editor.engine.text).not.toBe(EMPTY);
+    const prima = gestures(fake).length;
+    await tasto("Escape");
+    expect(editor.tool).toBe("select");
+    // Il secondo Esc non manda niente al motore.
+    expect(gestures(fake)).toHaveLength(prima);
+  });
+
+  it("un testo che cambia sotto non perde il tracciato aperto: il commit parte prima del sync, alla revisione vecchia, in un passo", async () => {
+    const fake = createFakeHost({ drawing: pennaFinta() });
+    const session = await documentOn(EMPTY);
+    motore = motoreDa(() => apriSessione(fake.module.api, DOC, EMPTY, session, { vault: "/vault" }));
+    await settle(0, 2);
+    // Il foglio qui non segue l'altra superficie: le sue modifiche vanno alla
+    // sessione senza pretendere che combacino.
+    const editor = createDrawEditor(host, SceneEngine.open(EMPTY), owner, {
+      motore: motore!,
+      onChange: (change) => void sessions!.acceptSurfaceChange(DOC, "editor", { text: change.text, operation: change.operation }),
+    });
+    editor.setEngineTool("pen");
+    await clic(editor, 220, 40);
+    await clic(editor, 300, 90);
+    await settle(16, 8);
+    const revisione = gestures(fake).slice(-1)[0]!.revision;
+    const prima = drawingCalls(fake).length;
+    // Un'altra superficie cambia il testo mentre il tracciato è aperto.
+    const before = lineFeeds(session.text());
+    const from = before.lastIndexOf("</svg>");
+    expect(sessions!.acceptSurfaceChange(DOC, "altro", {
+      text: `${before.slice(0, from)}\n${before.slice(from)}`,
+      operation: { beforeLength: before.length, afterLength: before.length + 1, edits: [{ from, to: from, deleted: "", inserted: "\n" }] },
+    })).toEqual({ kind: "accepted" });
+    await settle(16, 8);
+    expect(drawingCalls(fake).slice(prima, prima + 2)).toEqual(["drawingGesture", "drawingSync"]);
+    const commit = gestures(fake).filter((each) => each.phase === "commit");
+    expect(commit).toHaveLength(1);
+    expect(commit[0]!.revision).toBe(revisione);
+    expect(commit[0]!.inputs ?? []).toEqual([]);
+    // I punti sono nel foglio, in un passo; i segni del motore se ne vanno.
+    expect(editor.engine.text).not.toBe(EMPTY);
+    expect(host.querySelector(".draw-engine-marks")).toBeNull();
+    editor.undo();
+    expect(editor.engine.text).toBe(EMPTY);
+    expect(editor.canUndo).toBe(false);
+    // Chiuso, il tracciato non c'è più: un altro sync non manda un secondo
+    // commit.
+    const gesti = gestures(fake).length;
+    const adesso = lineFeeds(session.text());
+    const dove = adesso.lastIndexOf("\n</svg>");
+    expect(sessions!.acceptSurfaceChange(DOC, "altro", {
+      text: `${adesso.slice(0, dove)}${adesso.slice(dove + 1)}`,
+      operation: { beforeLength: adesso.length, afterLength: adesso.length - 1, edits: [{ from: dove, to: dove + 1, deleted: "\n", inserted: "" }] },
+    }).kind).toBe("accepted");
+    await settle(16, 8);
+    expect(gestures(fake)).toHaveLength(gesti);
+  });
+
+  it("con uno strumento del motore le opzioni dell'Inchiostro lasciano la riga; tornano con l'Inchiostro", async () => {
+    const fake = createFakeHost({ drawing: { comando: statoDiSerie } as DrawingFake });
+    const editor = await montaConPreparazione(EMPTY, fake);
+    editor.setTool("pen");
+    const opzioniInchiostro = (): HTMLElement => host.querySelector<HTMLElement>('.kit-options-row [role="group"][aria-label="Penna"]')!;
+    expect(opzioniInchiostro().hidden).toBe(false);
+    editor.setEngineTool("directSelection");
+    await settle(16, 8);
+    expect(opzioniInchiostro().hidden).toBe(true);
+    editor.setEngineTool(null);
+    await settle(16, 8);
+    expect(opzioniInchiostro().hidden).toBe(false);
+  });
+});
+
+// --- Il Testo del motore: si scrive con la tastiera (K6 T16) -----------------
+
+/// Il motore finto del Testo di punto: il clic apre la casella (`busy`,
+/// `wants_text`); ogni anteprima aggiunge ciò che arriva (il testo, l'IME, i
+/// tasti) alle righe, e rimanda il `<text>` col cursore; il commit scrive le
+/// ops del rettangolo (il loro contenuto qui non conta) in un passo.
+function testoFinto(): DrawingFake {
+  const rettangolo = VECTORS.find((vector) => vector.name === "rettangolo")!;
+  const stato = (busy: boolean) => ({ busy, transforming: false, wants_text: busy, composing: false, cursor: "text", options: null });
+  let righe = [""];
+  return {
+    comando: statoDiSerie,
+    gesto: (gesture) => {
+      const base: DrawingOutcome = { revision: gesture.revision, preview: null, ops: null, selection: gesture.selection, losses: [], refused: null, frame: null, reading: null };
+      for (const ingresso of gesture.inputs ?? []) {
+        if (ingresso.kind === "text") righe[righe.length - 1] += ingresso.text;
+        else if (ingresso.kind === "key" && ingresso.key === "Enter") righe.push("");
+        else if (ingresso.kind === "key" && ingresso.key === "Backspace") righe[righe.length - 1] = [...righe[righe.length - 1]!].slice(0, -1).join("");
+      }
+      if (gesture.phase === "preview") {
+        const shape = { tag: "text", attrs: { x: "40", y: "60" }, children: righe.map((riga) => ({ tag: "tspan", attrs: { x: "40" }, text: riga })) };
+        const caret = { kind: "line" as const, a: [80, 48] as [number, number], b: [80, 62] as [number, number], role: "preview" as const, dashed: false };
+        return { ...base, preview: { shape, matrix: null, marquee: null, overlays: [caret] }, state: stato(true) };
+      }
+      if (gesture.phase === "commit") {
+        righe = [""];
+        return { ...base, ops: JSON.stringify(rettangolo.expect.ops).replace(/@1/g, "oz0000001"), selection: [], state: stato(false) };
+      }
+      return { ...base, state: stato(false) };
+    },
+  } as DrawingFake;
+}
+
+const casella = (): HTMLTextAreaElement | null => host.querySelector<HTMLTextAreaElement>("textarea.draw-scrittura");
+
+/// Scrive `testo` nella casella, come la tastiera: il valore e l'`input`.
+async function scrivi(testo: string): Promise<void> {
+  const c = casella()!;
+  c.value = testo;
+  c.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText", data: testo }));
+  await settle(16, 8);
+}
+
+/// Un tasto premuto nella casella.
+async function tastoNellaCasella(key: string, opzioni: KeyboardEventInit = {}): Promise<KeyboardEvent> {
+  const event = new KeyboardEvent("keydown", { key, code: key, bubbles: true, cancelable: true, ...opzioni });
+  casella()!.dispatchEvent(event);
+  await settle(16, 8);
+  return event;
+}
+
+/// Un evento dell'IME con la sua parola (happy-dom non legge `data`).
+function composizione(tipo: string, data: string): CompositionEvent {
+  const event = new CompositionEvent(tipo, { data });
+  Object.defineProperty(event, "data", { value: data });
+  return event;
+}
+
+const ingressiDi = (fake: FakeHost) => gestures(fake).flatMap((each) => each.inputs ?? []);
+
+/// Il Testo del motore scelto e un clic sul foglio: la casella è aperta.
+async function apriIlTesto(fake: FakeHost): Promise<DrawEditor> {
+  const editor = await montaConPreparazione(EMPTY, fake);
+  editor.setEngineTool("type");
+  await clic(editor, 40, 60);
+  await settle(16, 8);
+  return editor;
+}
+
+describe("il Testo del motore: si scrive con la tastiera (K6 T16)", () => {
+  it.each(["areaType", "typeOnPath"])("anche %s scrive: il clic apre la casella e le parole vanno al motore", async (strumento) => {
+    const fake = createFakeHost({ drawing: testoFinto() });
+    const editor = await montaConPreparazione(EMPTY, fake);
+    editor.setEngineTool(strumento);
+    await clic(editor, 40, 60);
+    await settle(16, 8);
+    expect(casella()).not.toBeNull();
+    expect(document.activeElement).toBe(casella());
+    await scrivi("Ciao");
+    expect(gestures(fake).map((each) => each.phase)).not.toContain("commit");
+    expect(ingressiDi(fake)).toEqual([{ kind: "text", text: "Ciao" }]);
+  });
+
+  it("un clic apre la casella a fuoco; le parole e i tasti vanno al motore, il testo si vede, e Esc lo chiude in un passo e torna alla Selezione", async () => {
+    const fake = createFakeHost({ drawing: testoFinto() });
+    const editor = await apriIlTesto(fake);
+    expect(casella()).not.toBeNull();
+    expect(document.activeElement).toBe(casella());
+    expect(casella()!.getAttribute("aria-label")).toBe(t("draw.engine.type.box"));
+    await scrivi("Città 🌧");
+    await tastoNellaCasella("Backspace");
+    await tastoNellaCasella("Enter");
+    await scrivi("é");
+    // Niente è scritto nel disegno finché il testo è aperto.
+    expect(gestures(fake).map((each) => each.phase)).not.toContain("commit");
+    expect(editor.engine.text).toBe(EMPTY);
+    expect(ingressiDi(fake)).toEqual([
+      { kind: "text", text: "Città 🌧" },
+      expect.objectContaining({ kind: "key", key: "Backspace", pressed: true }),
+      expect.objectContaining({ kind: "key", key: "Enter", pressed: true }),
+      { kind: "text", text: "é" },
+    ]);
+    // L'anteprima: il testo del motore, con le sue righe (l'emoji è tolta
+    // intera dal Backspace del motore finto), e il cursore.
+    const righe = [...host.querySelectorAll("text tspan")].map((each) => each.textContent);
+    expect(righe).toEqual(["Città ", "é"]);
+    expect(host.querySelector(".draw-engine-line")).not.toBeNull();
+    // La casella sta sul cursore del motore.
+    expect(casella()!.style.transform).toMatch(/^translate\(-?[\d.]+px, -?[\d.]+px\)$/u);
+    // Una lettera nella casella non è una scorciatoia del foglio.
+    const prima = editor.tool;
+    const lettera = await tastoNellaCasella("v");
+    expect(lettera.defaultPrevented).toBe(false);
+    expect(editor.tool).toBe(prima);
+    expect(casella()).not.toBeNull();
+    await tastoNellaCasella("Escape");
+    const commit = gestures(fake).filter((each) => each.phase === "commit");
+    expect(commit).toHaveLength(1);
+    expect(commit[0]!.inputs).toEqual([expect.objectContaining({ kind: "key", key: "Escape" })]);
+    expect(casella()).toBeNull();
+    expect(host.querySelector("text tspan")).toBeNull();
+    expect(editor.tool).toBe("select");
+    expect(editor.engine.text).not.toBe(EMPTY);
+    editor.undo();
+    expect(editor.engine.text).toBe(EMPTY);
+    expect(editor.canUndo).toBe(false);
+  });
+
+  it("ciò che si scrive e non è ancora partito va col commit, prima di Esc", async () => {
+    const fake = createFakeHost({ drawing: testoFinto() });
+    await apriIlTesto(fake);
+    const c = casella()!;
+    c.value = "ciao";
+    c.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText", data: "ciao" }));
+    c.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", code: "Escape", bubbles: true, cancelable: true }));
+    await settle(16, 8);
+    const commit = gestures(fake).filter((each) => each.phase === "commit");
+    expect(commit).toHaveLength(1);
+    expect(commit[0]!.inputs).toEqual([{ kind: "text", text: "ciao" }, expect.objectContaining({ kind: "key", key: "Escape" })]);
+  });
+
+  it("l'IME manda la parola segnata e poi quella scelta; un incolla da Windows arriva con gli a capo di Fub", async () => {
+    const fake = createFakeHost({ drawing: testoFinto() });
+    await apriIlTesto(fake);
+    const c = casella()!;
+    c.dispatchEvent(composizione("compositionstart", ""));
+    c.value = "か";
+    c.dispatchEvent(composizione("compositionupdate", "か"));
+    // Mentre l'IME compone i tasti sono suoi: il motore non li vede.
+    await tastoNellaCasella("Enter", { isComposing: true });
+    c.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertCompositionText", data: "か", isComposing: true }));
+    c.dispatchEvent(composizione("compositionend", "書"));
+    c.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertCompositionText", data: "書" }));
+    await settle(16, 8);
+    await scrivi("uno\r\ndue");
+    expect(ingressiDi(fake)).toEqual([
+      { kind: "ime", preedit: "", active: null },
+      { kind: "ime", preedit: "か", active: null },
+      { kind: "text", text: "書" },
+      { kind: "text", text: "uno\ndue" },
+    ]);
+  });
+
+  it("Ctrl+Z chiude il testo e lo annulla: il disegno torna com'era", async () => {
+    const fake = createFakeHost({ drawing: testoFinto() });
+    const editor = await apriIlTesto(fake);
+    await scrivi("parola");
+    const z = await tastoNellaCasella("z", { code: "KeyZ", ctrlKey: true });
+    expect(z.defaultPrevented).toBe(true);
+    await settle(16, 8);
+    expect(gestures(fake).filter((each) => each.phase === "commit")).toHaveLength(1);
+    expect(casella()).toBeNull();
+    expect(editor.engine.text).toBe(EMPTY);
+    expect(editor.canRedo).toBe(true);
+  });
+
+  it("il fuoco altrove chiude il testo com'è, in un passo; un clic sul foglio ne apre uno nuovo", async () => {
+    const fake = createFakeHost({ drawing: testoFinto() });
+    const editor = await apriIlTesto(fake);
+    await scrivi("uno");
+    casella()!.blur();
+    await settle(16, 8);
+    const commit = gestures(fake).filter((each) => each.phase === "commit");
+    expect(commit).toHaveLength(1);
+    expect(commit[0]!.inputs ?? []).toEqual([]);
+    expect(casella()).toBeNull();
+    expect(editor.engine.text).not.toBe(EMPTY);
+    // Lo strumento resta il Testo: un clic dopo apre un'altra casella.
+    await clic(editor, 200, 200);
+    await settle(16, 8);
+    expect(casella()).not.toBeNull();
+  });
+
+  it("un comando che cambia il disegno chiude prima il testo aperto, che il motore altrimenti scarterebbe", async () => {
+    const fake = createFakeHost({ drawing: testoFinto() });
+    const editor = await apriIlTesto(fake);
+    await scrivi("uno");
+    const prima = drawingCalls(fake).length;
+    const sessione = motore!.adesso() as SessioneMotore;
+    // Lo stato di uno strumento non tocca il disegno: il testo resta aperto.
+    await sessione.comando({ id: DRAWING_COMMAND_TOOL_STATE, selection: [], value: { strumento: "type" } });
+    await settle(16, 8);
+    expect(drawingCalls(fake).slice(prima)).toEqual(["drawingCommand"]);
+    expect(casella()).not.toBeNull();
+    void sessione.comando({ id: "disegno.text.setStyle", selection: [], value: { justify: "center" } }).catch(() => undefined);
+    await settle(16, 8);
+    expect(drawingCalls(fake).slice(prima + 1, prima + 3)).toEqual(["drawingGesture", "drawingCommand"]);
+    expect(gestures(fake).filter((each) => each.phase === "commit")).toHaveLength(1);
+    expect(casella()).toBeNull();
+    expect(editor.engine.text).not.toBe(EMPTY);
   });
 });

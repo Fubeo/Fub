@@ -15,10 +15,15 @@ export { openDialog } from "./dialog";
 export type { DialogAction, DialogActionKind, DialogHandle, DialogOptions } from "./dialog";
 
 export { textField } from "./field";
+
+export { composingKey, type ComposingFields } from "./ime";
 export type { TextField, TextFieldOptions } from "./field";
 
 export { numberField, numberText, roundTo, SCRUB_PX, stepFactor } from "./number-field";
 export type { NumberField, NumberFieldOptions } from "./number-field";
+
+export { referencePoint, referencePointStep } from "./reference-point";
+export type { ReferencePoint, ReferencePointOptions } from "./reference-point";
 
 export { evaluate } from "./quantity";
 export type { Measure, Quantity, QuantityProblem } from "./quantity";
@@ -54,6 +59,9 @@ export type {
 } from "./popover";
 
 export { pressable } from "./press";
+
+export { keepFocusOnPress } from "./keep-focus";
+export type { KeepFocusOptions } from "./keep-focus";
 
 // La lingua dei menu: tessera, riga ed etichetta, comuni al menu, allo spazio
 // comandi e al «/».

@@ -83,12 +83,48 @@ fn every_key_with_its_own_gesture_is_declared() {
     let declared: Vec<String> = fub_host::settings::core_settings()
         .into_iter()
         .chain(fub_kernel::families::Family::all_settings())
+        .chain(draw_settings())
         .map(|spec| spec.key)
         .collect();
     for key in SETTINGS_WITH_THEIR_OWN_GESTURE {
+        // Senza il disegno nessuno dichiara le chiavi del suo bundle: con il
+        // disegno acceso le controlla `the_draw_workspace_keys_are_the_owners_constants`.
+        if cfg!(not(feature = "draw")) && key.starts_with("draw.") {
+            continue;
+        }
         assert!(
             declared.iter().any(|d| d == key),
             "`{key}` is in SETTINGS_WITH_THEIR_OWN_GESTURE but nobody declares it"
+        );
+    }
+}
+
+/// Le impostazioni del bundle del disegno, quando il disegno è acceso: le
+/// chiavi dello spazio di lavoro sono di lì.
+#[cfg(feature = "draw")]
+fn draw_settings() -> Vec<fub_abi::settings::SettingSpec> {
+    fub_features::draw::settings()
+}
+
+#[cfg(not(feature = "draw"))]
+fn draw_settings() -> Vec<fub_abi::settings::SettingSpec> {
+    Vec::new()
+}
+
+/// Le chiavi del disegno che la shell lascia fuori dal form sono le costanti
+/// del proprietario (`fub_features`), non due copie scritte a mano.
+#[cfg(feature = "draw")]
+#[test]
+fn the_draw_workspace_keys_are_the_owners_constants() {
+    for key in [
+        fub_features::DRAW_WORKSPACE_KEY,
+        fub_features::DRAW_WORKSPACES_KEY,
+        fub_features::DRAW_KEYS_KEY,
+        fub_features::DRAW_ENGINE_PREFS_KEY,
+    ] {
+        assert!(
+            SETTINGS_WITH_THEIR_OWN_GESTURE.contains(&key),
+            "`{key}` dello spazio di lavoro dovrebbe stare fuori dal form delle impostazioni"
         );
     }
 }

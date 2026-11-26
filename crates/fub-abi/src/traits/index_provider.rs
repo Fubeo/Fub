@@ -574,6 +574,18 @@ pub trait IndexProvider: Send + Sync {
     /// versione dello schema non combaciava non ha niente, e dirlo è l'unica
     /// cosa che gli impedisce di restare vuoto per sempre.
     ///
+    /// # Chi non tiene niente per documento li ha tutti
+    ///
+    /// Un indice che non tiene **niente per documento** — risponde da un file
+    /// suo, dalla domanda stessa, o da ciò che il kernel ha già — può rispondere
+    /// con gli id di tutti i documenti che gli sono stati mostrati: niente, in
+    /// lui, può restare indietro. Lasciargli il default non è prudenza, è il
+    /// verso costoso dello sbaglio: la domanda è un'intersezione, e un solo
+    /// «mandami tutto» fa rileggere e rianalizzare l'intero vault a ogni
+    /// riapertura per consegnarlo a chi lo butta. Vale per lui solo finché non
+    /// tiene niente: il giorno che comincia a ricavare qualcosa dalle note,
+    /// risponde come un indice persistente — o torna al default.
+    ///
     /// # La domanda arriva a fette, e una fetta non parla delle altre
     ///
     /// Il kernel chiede **per fetta**, come alimenta: su un vault grande questo
@@ -585,6 +597,17 @@ pub trait IndexProvider: Send + Sync {
     /// documenti che quella fetta non nomina. Azzerarla a ogni chiamata è la
     /// scorciatoia che sembra pulizia e butta via ciò che un'altra fetta stava
     /// ancora aspettando.
+    ///
+    /// # Una voce senza impronta ritira ciò che si era preso
+    ///
+    /// A una voce senza impronta non si risponde: chi non sa di che revisione
+    /// è un file non può dire che è la sua. Chi si prende nota della revisione
+    /// dichiarata, per la consegna che arriverà, la **toglie** quando la
+    /// stessa voce torna senza impronta. Il kernel lo usa quando un'apertura
+    /// si interrompe: non c'è `reconcile` a chiudere il giro, e ripete la
+    /// domanda senza impronta su ogni documento che aveva chiesto, così che
+    /// la prima consegna a sessione aperta non si prenda la revisione di un
+    /// testo che non è il suo.
     fn up_to_date(&self, _entries: &[VaultEntry]) -> Vec<DocId> {
         Vec::new()
     }

@@ -252,6 +252,7 @@ export class ProofCache {
   private nextScope = 0;
   private readonly entries = new Map<string, CachedSegment>();
   private readonly scopes = new Map<string, ProofScope>();
+  private readonly told = new Set<string>();
 
   constructor(
     private readonly maxEntries = CACHE_ENTRIES,
@@ -309,6 +310,15 @@ export class ProofCache {
     }
     this.entries.set(key, { issues, units: text.length });
     this.units += text.length;
+  }
+
+  /// Vero la prima volta che una risposta dice che manca `dictionary`: il
+  /// dizionario mancante si dice una volta sola finché l'app è aperta, per
+  /// tutte le superfici. `clear` non lo dimentica.
+  firstMissing(dictionary: string): boolean {
+    if (this.told.has(dictionary)) return false;
+    this.told.add(dictionary);
+    return true;
   }
 
   clear(): void {
@@ -423,7 +433,10 @@ export class ProofClient {
         };
         // Senza il dizionario della lingua la risposta vale solo per questa
         // chiamata: il dizionario può arrivare senza avvisi.
-        const lasting = answered.missingDictionary === null;
+        const missing = answered.missingDictionary;
+        const lasting = missing === null;
+        // E chi scrive lo sa, invece di credere che il testo sia senza refusi.
+        if (missing !== null && this.cache.firstMissing(missing)) this.ports.missingDictionary?.(missing, answered.code);
         // Dopo un `clear` lo scope è staccato dalla cache: scriverci non tocca
         // le configurazioni nuove.
         if (lasting) scope.language = answered;

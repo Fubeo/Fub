@@ -43,10 +43,13 @@ fn gesto(revision: u64, tool: DrawingTool) -> DrawingGesture {
         snap: DrawingSnap {
             grid: None,
             free: false,
+            ..DrawingSnap::default()
         },
         style: None,
         text: None,
         frame: None,
+        inputs: Vec::new(),
+        anchors: Vec::new(),
         events: vec![
             punto(DrawingPointerKind::Down, 150.0, 125.0),
             punto(DrawingPointerKind::Drag, 170.0, 135.0),
@@ -349,15 +352,22 @@ fn la_presa_conta_le_istanze() {
 }
 
 /// I comandi stanno in `tests/comandi.rs`; qui solo la carta, che nessun
-/// comando cambia: spenti, e `empty`.
+/// comando del nucleo di Fub cambia: spenti, e `empty`. Le righe «fatto»
+/// delle famiglie del Completo (`famiglie::elenco`) seguono, e hanno le loro
+/// regole (Seleziona tutto vale anche senza selezione): qui non contano.
 #[test]
 fn comandi_spenti_sulla_carta() {
     let (mut disegno, _) = common::apri(PICCOLO);
-    let comandi = disegno.comandi(&[]);
+    let di_fub = |comandi: Vec<fub_abi::DrawingCommandInfo>| -> Vec<fub_abi::DrawingCommandInfo> {
+        comandi
+            .into_iter()
+            .filter(|c| fub_abi::DRAWING_COMMANDS.contains(&c.id.as_str()))
+            .collect()
+    };
+    let comandi = di_fub(disegno.comandi(&[]));
     assert_eq!(comandi.len(), fub_abi::DRAWING_COMMANDS.len());
     assert!(comandi.iter().all(|c| !c.enabled));
-    assert!(disegno
-        .comandi(&["fub-paper".into()])
+    assert!(di_fub(disegno.comandi(&["fub-paper".into()]))
         .iter()
         .all(|c| !c.enabled));
     let esito = disegno
@@ -366,6 +376,7 @@ fn comandi_spenti_sulla_carta() {
             id: fub_abi::DRAWING_COMMAND_WIDTH.into(),
             selection: vec!["fub-paper".into()],
             value: serde_json::json!(2.0),
+            preview: false,
         })
         .expect("valido");
     assert_eq!(esito.refused, Some(DrawingRefusal::Empty));

@@ -125,12 +125,26 @@ destro su un link in Scrittura lascia il cursore dov'è, così la sintassi del l
 resta nascosta. Aperto col mouse, il menu tiene il fuoco su di sé e niente è
 acceso: la prima freccia sceglie la prima voce, o l'ultima con la freccia su.
 Dal tasto Menu o da Maiusc+F10 il fuoco va subito alla prima voce, non alla
-barra.
+barra, e il menu si apre sotto il cursore, la cella o la scheda scelta senza
+coprirli: dove sotto non c'è posto va sopra, poi a destra o a sinistra, e
+solo se la finestra non ha posto da nessuna parte resta dentro di lei anche
+sopra la cosa scelta.
 
 Il menu nasce dal punto del clic, in meno di un quinto di secondo: testata,
 barra e voci arrivano una dopo l'altra, il sottomenu entra da destra, e
 chiuso il menu sfuma senza muoversi. I menu a tendina entrano con una
 dissolvenza breve. Col moto ridotto niente si muove.
+
+Su Linux il menu compare alla pressione del tasto destro, non al rilascio come
+su Windows. Il rilascio che segue non lo chiude e non sceglie la voce che
+capita sotto il puntatore: il menu resta aperto e una voce si sceglie con un
+clic. Come nei menu di GTK, premere, scorrere fino a una voce e rilasciare la
+sceglie, se il puntatore si è mosso di più di 4 px dal punto della pressione.
+La guardia è una, sulla finestra (`ui/menu-release.ts`, montata dalla shell):
+vale per ogni menu, anche aperto in un punto calcolato o fatto a parte come la
+tendina degli strumenti, e dove nessun menu si apre il rilascio del tasto
+destro non preme il pulsante sotto. Il clic sinistro fuori, Esc e la scelta di
+una voce lo chiudono come sempre.
 
 Dove Fub non ha un menu, il tasto destro non apre quello della WebView: resta
 nei campi di testo, sul testo scelto, sul lettore audio e video e con
@@ -215,7 +229,11 @@ scrittura; il «+» della maniglia mette un blocco vuoto e ci apre il «/».
   galleria dei tipi), Link a una nota e Incorpora (le note, poi una sezione),
   Blocco di codice (i linguaggi) e Diagramma (i modelli Mermaid) si scelgono
   nello stesso riquadro, sotto una testata col nome del passo; ⌫ o Esc tornano
-  all'elenco. I venti colori non sono voci del «/»: stanno sotto «Colore ›» e
+  all'elenco. Finché il passo è aperto il «/nome» resta nel testo; Invio
+  sceglie la voce accesa del passo e la mette al suo posto. Nella galleria dei diagrammi chi scrive subito il sorgente
+  (`flowchart TD`) lo scrive in un recinto `mermaid` vuoto. Una tabella
+  appena messa prende il fuoco sulla prima intestazione: si scrive nella
+  cella. I venti colori non sono voci del «/»: stanno sotto «Colore ›» e
   si trovano scrivendo («/blu»).
 - **Niente trovato.** Il pannello resta aperto e lo dice («Nessun blocco per
   «qwerty».»); la sola riga, accesa, cerca fra tutti i comandi, con Invio o
@@ -395,6 +413,9 @@ griglia delle tabelle in Scrittura ha il suo
   `settings.components.*` delle impostazioni;
 - `apps/client/src/ui/system-menu.ts`: il menu della WebView spento dove Fub
   non ne ha uno;
+- `apps/client/src/ui/menu-release.ts`: il rilascio del tasto destro che ha
+  aperto il menu, che non lo chiude e non sceglie (provato in
+  `ui/menu-release.test.ts` con l'ordine degli eventi di Linux e di Windows);
 - `apps/client/src/panels/mini-bar.ts`: la mini-barra, e
   `apps/client/src/panels/selection-bubble.ts` che la posa sul testo scelto;
   `apps/client/src/editors/text/profiles/markdown/mini-bar.dom.test.ts`

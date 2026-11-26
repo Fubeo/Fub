@@ -38,6 +38,23 @@ disegno», e sotto le sezioni. L'intestazione di una sezione è un
 pulsante che la apre e la chiude; le sezioni chiuse si ricordano con la vista,
 in `grid.closed`. Una sezione senza niente da mostrare non c'è.
 
+Col Disegno completo acceso, in coda al pannello ci sono anche le sezioni
+che le famiglie del motore portano per il Design (il documento, la griglia,
+le tavole): arrivano nell'ordine della mappa e si vedono o no secondo la
+selezione. Il colore di Riempimento e Contorno, col Completo acceso, si
+cambia dalla sua sezione «Colore» ([Disegni, colori](drawing-colors.md#nel-disegno-completo)):
+i due campi del colore escono dal pannello. Spessore e Tratteggio passano alla
+sezione «Contorno» del Completo, che fa come il pannello Contorno di
+VectorCraft: limite dell'angolo, contorno al centro, dentro o fuori (solo su
+forme chiuse), tratteggio con tre coppie trattino/spazio, esatto o adattato
+agli angoli, punte di freccia del motore con scala e allineamento; i valori
+che non si leggono dalla vista li legge dal motore. Del Contorno del pannello
+restano le punte di Fub, nella sezione che lì si chiama «Punte». Il carattere e l'allineamento di un testo si cambiano dalle sezioni
+«Carattere» e «Paragrafo» ([Disegni, tipografia](drawing-typography.md#nel-disegno-completo)):
+Carattere, Dimensione, Peso, Spaziatura e Allineamento escono dal pannello,
+Enfasi, Stile e Interlinea restano. Senza il Completo acceso il pannello è
+quello di sempre.
+
 - **Posizione e misure.** X e Y sono l'angolo in alto a sinistra della
   cornice, anche di un oggetto ruotato; Larghezza e Altezza le misure lungo i
   suoi lati, contorno compreso, quelle che si leggono mentre si tira una
@@ -54,10 +71,57 @@ in `grid.closed`. Una sezione senza niente da mostrare non c'è.
 - **Aspetto.** L'Opacità. Gli effetti e la fusione che un disegno porta si vedono sul
   foglio e non stanno nel pannello ([Disegni, effetti e
   fusione](drawing-effects.md)).
+- **Trasparenza**, solo col Disegno completo, e al posto della sezione Aspetto,
+  che lì non c'è: l'Opacità in percento e il Metodo di fusione dell'oggetto
+  scelto, come la sezione Trasforma. I valori sono quelli del pannello; scrivere
+  un valore cambia il file di un passo di Annulla. Con niente di scelto i campi
+  sono spenti; con più oggetti di metodi diversi il metodo dice «Più valori», e
+  non si sceglie. Le maschere d'opacità, il gruppo a foratura e la fusione
+  isolata non ci sono ancora.
+- **Contorno**, solo col Disegno completo: lo Spessore, gli Estremi (Piatti,
+  Arrotondati, Sporgenti), gli Angoli (Vivi, Arrotondati, Smussati) e
+  «Tratteggiato», che acceso apre Trattino e Spazio; spento, il contorno torna
+  pieno. Un tratteggio con più di due lunghezze lo dice, e scrivere un trattino
+  o uno spazio lo sostituisce con quei due. Lo spessore e le lunghezze non
+  scendono sotto zero: un valore negativo diventa zero, e uno sopra 1000 porta a
+  1000. Lo stesso spessore che c’è già non fa nessun passo di Annulla. Un oggetto
+  senza contorno ha la sezione spenta: il pannello non gliene aggiunge uno. Il
+  Limite dell’angolo e
+  l’Allineamento si vedono spenti, a 4 e «Al centro», perché il file SVG non li
+  scrive. Con niente di scelto, con soli testi o tratti dell’Inchiostro, che un
+  contorno non l’hanno, o con un oggetto bloccato, la sezione è spenta e dice
+  perché; valori diversi fra gli oggetti scelti dicono «Più valori». Ogni
+  cambio è un passo di Annulla. Il profilo dello spessore non c’è ancora.
+- **Sfumatura**, solo col Disegno completo: la sfumatura, lineare o radiale,
+  del Riempimento o del Contorno, scelti in «Colore». Un colore pieno ha
+  «Crea una sfumatura», che lo fa sfumare dal bianco al nero; il pulsante
+  «Sfumatura» della sezione Colore fa lo stesso con l’ultima sfumatura usata,
+  sul lato attivo. Poi il Tipo, l’Angolo, una striscia coi colori e i punti:
+  per ognuno il colore, «Togli», la Posizione e l’Opacità in percento.
+  «Aggiungi punto» ne mette uno a metà dello spazio più largo, «Inverti»
+  rovescia l’ordine; una sfumatura tiene almeno due punti. L’Angolo è in
+  gradi, in senso orario come la Rotazione: 0° va da sinistra a destra, 90°
+  dall’alto in basso (il motore conta in senso antiorario, e la sezione gira il
+  segno). La sfumatura si scrive nel file come una sfumatura privata
+  dell’oggetto ([Disegni, sfumature](drawing-gradients.md)); quella di prima, se
+  nessuno la usa più, se ne va. Il testo non prende una sfumatura, che il file
+  SVG non scrive sui caratteri; un oggetto bloccato spegne la sezione e dice
+  perché; con oggetti di punti diversi i punti non si cambiano, il tipo e
+  l’angolo sì, per tutti. Ogni cambio è un passo di Annulla.
+  In fondo, «Preimpostate» (chiuse finché non si aprono): una scelta per temi
+  (Spettro, Cielo, Neutri, Due toni, Bagliori radiali, Metalli, poi le
+  Salvate) con la sua striscia, e «Applica», che la dà al colore mostrato con
+  un passo di Annulla, anche a un colore pieno. Con una sfumatura sola mostrata,
+  un nome e «Salva» (o Invio) la tengono fra le Salvate, per tutti i disegni e
+  fuori dal file; un nome vuoto o già preso lo dice senza salvare. Una salvata
+  ha «Elimina». Lo strumento Sfumatura della colonna (G) disegna la sfumatura
+  sulla tela: si trascina dall’inizio alla fine, sull’oggetto scelto, con la
+  guida del motore mentre si trascina; un trascinamento è un passo di Annulla.
 - **Riempimento**, con la parte «Colori personalizzati»: il colore che
   riempie gli oggetti, con sotto il contrasto con la carta.
 - **Contorno.** Il colore, con la parte «Colori personalizzati», lo
-  Spessore e il Tratteggio; per linee,
+  Spessore e il Tratteggio (col Completo acceso stanno nelle sue sezioni, e qui
+  restano le punte, sotto il titolo «Punte»); per linee,
   connettori e tracciati aperti, «Punta d’inizio» e «Punta di fine»
   ([Disegni, punte delle linee](drawing-tips.md)).
 - **Testo.** Per un testo libero scelto da solo, prima di tutto il campo
@@ -81,6 +145,10 @@ in `grid.closed`. Una sezione senza niente da mostrare non c'è.
   Orientamento della pagina, con le misure pronte; poi Larghezza e Altezza
   della pagina, l'unità di misura e la descrizione. Il titolo sta
   in cima al pannello.
+- **Tavole**, senza selezione, nel Disegno completo: l'elenco delle tavole,
+  il nome, la posizione e le misure di quella scelta, e i pulsanti per
+  crearne, duplicarne, eliminarne, riordinarle, copiarle e tagliarle
+  ([Disegni, tavole](drawing-boards.md)).
 - **Griglia**, senza selezione: le caselle della griglia, dell'aggancio e
   quella della barra della selezione, come in «Pagina e griglia».
 

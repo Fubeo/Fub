@@ -10,7 +10,8 @@
 //!
 //! - `sparse`: un disegno FubDraw in forma canonica (§7), con ogni ruolo di
 //!   §4 e ogni forma sintetica di §6, tratti che si ridisegnano e tratti che
-//!   no, un blocco estraneo dentro un gruppo, un livello bloccato e nascosto,
+//!   no, un blocco estraneo dentro un gruppo, un livello bloccato e nascosto
+//!   con un sottolivello,
 //!   e dentro un livello un gruppo bloccato con una forma nascosta, un
 //!   collegamento e una forma col loro `title`. Una lunghezza in pollici
 //!   resta com'è, come FubDraw copia i valori che non tocca;

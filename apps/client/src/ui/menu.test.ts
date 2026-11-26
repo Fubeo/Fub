@@ -29,6 +29,7 @@ import { setMotionDriver, setMotionPreference } from "../moto";
 import { createManualDriver } from "../moto/driver";
 import { closeContextMenu, menuKeyFoot, menuKeys, menuPointFor, pickIcon, registerMenuSearch, showContextMenu } from "./menu";
 import { openLifetime } from "./lifetime";
+import { WEBKIT_COMPOSING } from "../kit/testing";
 import { mountFrameIcons } from "../shells/scrittoio/icons";
 import { channels, contrast } from "../theme/contrast";
 import sheetLight from "../theme/scrittoio/sheet-light.css?raw";
@@ -466,6 +467,22 @@ describe("il selettore di icona", () => {
     expect(tab().defaultPrevented).toBe(false);
   });
 
+  it("a metà di una composizione Invio ed Esc nel campo restano al metodo d'immissione", () => {
+    const choices: (string | null)[] = [];
+    pickIcon(clickEvent(), (i) => choices.push(i));
+    const input = document.querySelector<HTMLInputElement>("#icon-picker input")!;
+    input.value = "★";
+    for (const name of ["Enter", "Escape"]) {
+      input.dispatchEvent(new KeyboardEvent("keydown", { key: name, bubbles: true, cancelable: true, ...WEBKIT_COMPOSING }));
+    }
+    vi.runAllTimers();
+    expect(choices).toEqual([]);
+    expect(document.getElementById("icon-picker")).not.toBeNull();
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    vi.runAllTimers();
+    expect(choices).toEqual(["★"]);
+  });
+
   it("scegliere un'emoji chiude e riporta la scelta una volta sola", () => {
     const choices: (string | null)[] = [];
     pickIcon(clickEvent(), (i) => choices.push(i));
@@ -668,6 +685,56 @@ describe("un menu aperto da un pulsante", () => {
     const menu = document.getElementById("context-menu")!;
     expect([menu.style.left, menu.style.top]).toEqual(["840px", "460px"]);
     expect(menu.style.transformOrigin).toBe("160px 240px");
+  });
+
+  // Dalla tastiera su una cosa scelta (la scheda della lavagna, la riga del
+  // cursore): il menu sa che cosa non coprire.
+  const card = { left: 112, top: 421, right: 242, bottom: 485 };
+  const fromKeys = (avoid = card): HTMLElement => {
+    showContextMenu(menuPointFor(avoid), [{ label: "Una", run: () => {} }]);
+    return document.getElementById("context-menu")!;
+  };
+  const place = (menu: HTMLElement): [string, string] => [menu.style.left, menu.style.top];
+
+  it("dalla tastiera, dove sotto ci sta, resta sotto la cosa scelta", () => {
+    window_(1280, 800);
+    size = [316, 200];
+    expect(place(fromKeys())).toEqual(["112px", "489px"]);
+  });
+
+  it("dalla tastiera, senza posto sotto, va sopra la cosa scelta invece di coprirla", () => {
+    window_(1280, 800);
+    size = [316, 320];
+    // Spinto dal bordo starebbe a 472, sopra la scheda: va sopra, a 421 - 4 - 320.
+    expect(place(fromKeys())).toEqual(["112px", "97px"]);
+  });
+
+  it("dalla tastiera, né sotto né sopra, le si apre accanto (la scheda della lavagna a 700 px)", () => {
+    window_(700, 800);
+    size = [316, 464];
+    // Prima il menu andava a 112,328 sopra la scheda; ora a destra, allineato
+    // al suo bordo alto finché la finestra lo lascia.
+    const menu = fromKeys();
+    expect(place(menu)).toEqual(["246px", "328px"]);
+    expect(menu.style.transformOrigin).toBe("0px 93px");
+    // Vicino al bordo destro si ribalta a sinistra del punto, e già così non
+    // la copre: resta lì.
+    expect(place(fromKeys({ left: 462, top: 524, right: 592, bottom: 567 }))).toEqual(["146px", "328px"]);
+    // Una cosa larga che non lascia posto a destra: a sinistra di lei.
+    expect(place(fromKeys({ left: 350, top: 300, right: 650, bottom: 700 }))).toEqual(["30px", "300px"]);
+  });
+
+  it("dalla tastiera, senza posto da nessuna parte, resta dentro la finestra", () => {
+    window_(400, 500);
+    size = [316, 464];
+    expect(place(fromKeys({ left: 60, top: 100, right: 340, bottom: 300 }))).toEqual(["60px", "28px"]);
+  });
+
+  it("col mouse resta dove si è cliccato, anche sopra la cosa", () => {
+    window_(700, 800);
+    size = [316, 464];
+    showContextMenu({ x: 152, y: 461 }, [{ label: "Una", run: () => {} }]);
+    expect(place(document.getElementById("context-menu")!)).toEqual(["152px", "328px"]);
   });
 
   it("aperto sopra il pulsante, cresce dal suo lato", () => {
@@ -899,6 +966,9 @@ describe("la barra sopra il menu", () => {
 
   it("menuPointFor apre sotto il riquadro, mai in 0,0", () => {
     expect(menuPointFor({ left: 120.4, bottom: 300 })).toEqual({ x: 120, y: 304 });
+    // Col riquadro intero, anche che cosa non coprire.
+    expect(menuPointFor({ left: 120.4, top: 280, right: 200, bottom: 300 }))
+      .toEqual({ x: 120, y: 304, avoid: { left: 120.4, top: 280, right: 200, bottom: 300 } });
   });
 });
 
@@ -1549,6 +1619,23 @@ describe("il menu col campo, il titolo e il piede dei tasti", () => {
     // come nel prototipo, e Invio la sceglie.
     expect(labels()).toEqual(["Duplica", "Copia il link al blocco", "Elimina"]);
     expect([...menu.querySelectorAll(".menu-items .menu-lit")]).toEqual([rows()[0]]);
+    key(input, "Enter");
+    expect(runs).toEqual(["Duplica"]);
+  });
+
+  it("a metà di una composizione Invio ed Esc nel campo sono del metodo d'immissione", () => {
+    const input = open();
+    write(input, "dup");
+    for (const name of ["Enter", "Escape"]) {
+      for (const composing of [{ isComposing: true }, WEBKIT_COMPOSING]) {
+        const e = new KeyboardEvent("keydown", { key: name, bubbles: true, cancelable: true, ...composing });
+        input.dispatchEvent(e);
+        expect(e.defaultPrevented).toBe(false);
+      }
+    }
+    expect(runs).toEqual([]);
+    expect(input.value).toBe("dup");
+    expect(document.getElementById("context-menu")).not.toBeNull();
     key(input, "Enter");
     expect(runs).toEqual(["Duplica"]);
   });

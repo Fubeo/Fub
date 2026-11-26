@@ -59,7 +59,27 @@ export type OverlayHandle =
   /// Il righello (P13): una riga larga `width` pixel dello schermo, col
   /// centro e il bordo girato di `angle` gradi nella scena, le tacche sui due
   /// bordi e l'angolo scritto in mezzo; `active` mentre lo si tira.
-  | { readonly kind: "ruler"; readonly center: Point; readonly angle: number; readonly width: number; readonly text: string; readonly active?: boolean };
+  | { readonly kind: "ruler"; readonly center: Point; readonly angle: number; readonly width: number; readonly text: string; readonly active?: boolean }
+  /// Un punto di ancoraggio di un tracciato (la Selezione diretta del motore):
+  /// un quadratino di misura fissa, pieno del colore della linea se è scelto.
+  | { readonly kind: "anchor"; readonly x: number; readonly y: number; readonly filled: boolean }
+  /// La fine di una maniglia di un punto scelto: un cerchietto pieno.
+  | { readonly kind: "control"; readonly x: number; readonly y: number }
+  /// Il contorno di un tracciato scelto, largo un pixel, coi pezzi già nella
+  /// scena (come VectorCraft lo disegna con gli strumenti del motore).
+  | { readonly kind: "outline"; readonly parts: readonly OutlinePart[] }
+  /// Uno spazio vuoto di un gruppo della pittura dinamica (Visualizza › Mostra
+  /// spazi vuoti): una linea larga due pixel fra i due capi, nel colore
+  /// d'anteprima del gruppo (un colore CSS), sotto le altre maniglie.
+  | { readonly kind: "gap"; readonly from: Point; readonly to: Point; readonly color: string };
+
+/// Un pezzo di [`OverlayHandle`] `outline`, in coordinate di scena.
+export type OutlinePart =
+  | { readonly kind: "move"; readonly to: Point }
+  | { readonly kind: "line"; readonly to: Point }
+  | { readonly kind: "quad"; readonly control: Point; readonly to: Point }
+  | { readonly kind: "cubic"; readonly c1: Point; readonly c2: Point; readonly to: Point }
+  | { readonly kind: "close" };
 
 /// La forma della punta: `round` un cerchio, `flat` l'ellisse stretta della
 /// punta piatta, `block` il rettangolo tondo dell'evidenziatore, `eraser` il
@@ -81,6 +101,12 @@ const GRIP = 8;
 
 /// Il diametro della maniglia che ruota, in pixel CSS.
 const ROTOR = 10;
+
+/// Il lato del quadratino di un punto di ancoraggio, e il diametro della fine
+/// di una maniglia, in pixel CSS: più piccoli delle maniglie della cornice,
+/// perché un tracciato ne ha tanti.
+const ANCHOR = 6;
+const CONTROL = 5;
 
 /// Quanto una maniglia sporge dal suo punto, in pixel CSS: la metà della più
 /// grande, quella che ruota.
@@ -243,6 +269,18 @@ export function createOverlay(host: HTMLElement, owner: Lifetime): SceneOverlay 
     ctx.lineWidth = 1;
     // Il righello sotto ogni altra cosa.
     for (const handle of handles) if (handle.kind === "ruler") drawRuler(ctx, handle, line, rulerPaper());
+    // Gli spazi vuoti della pittura dinamica, ciascuno nel colore del suo gruppo.
+    ctx.lineWidth = 2;
+    for (const handle of handles) {
+      if (handle.kind !== "gap") continue;
+      ctx.strokeStyle = handle.color;
+      ctx.beginPath();
+      ctx.moveTo(...screen(handle.from[0], handle.from[1]));
+      ctx.lineTo(...screen(handle.to[0], handle.to[1]));
+      ctx.stroke();
+    }
+    ctx.strokeStyle = line;
+    ctx.lineWidth = 1;
     for (const handle of handles) {
       if (handle.kind === "box") {
         const [a, b, c, d, e, f] = handle.matrix;
@@ -271,6 +309,17 @@ export function createOverlay(host: HTMLElement, owner: Lifetime): SceneOverlay 
         ctx.moveTo(...screen(handle.stem[0], handle.stem[1]));
         ctx.lineTo(...screen(handle.x, handle.y));
         ctx.stroke();
+      } else if (handle.kind === "outline") {
+        ctx.setLineDash([]);
+        ctx.beginPath();
+        for (const part of handle.parts) {
+          if (part.kind === "close") ctx.closePath();
+          else if (part.kind === "move") ctx.moveTo(...screen(part.to[0], part.to[1]));
+          else if (part.kind === "line") ctx.lineTo(...screen(part.to[0], part.to[1]));
+          else if (part.kind === "quad") ctx.quadraticCurveTo(...screen(part.control[0], part.control[1]), ...screen(part.to[0], part.to[1]));
+          else ctx.bezierCurveTo(...screen(part.c1[0], part.c1[1]), ...screen(part.c2[0], part.c2[1]), ...screen(part.to[0], part.to[1]));
+        }
+        ctx.stroke();
       } else if (handle.kind === "guide") {
         ctx.setLineDash(handle.dashed ? [4, 3] : []);
         ctx.beginPath();
@@ -298,6 +347,23 @@ export function createOverlay(host: HTMLElement, owner: Lifetime): SceneOverlay 
         ctx.stroke();
       }
     }
+    for (const handle of handles) {
+      if (handle.kind === "control") {
+        const [px, py] = screen(handle.x, handle.y);
+        ctx.fillStyle = line;
+        ctx.beginPath();
+        ctx.arc(px, py, CONTROL / 2, 0, 2 * Math.PI);
+        ctx.fill();
+      } else if (handle.kind === "anchor") {
+        const [px, py] = screen(handle.x, handle.y);
+        const x = Math.round(px - ANCHOR / 2) + 0.5;
+        const y = Math.round(py - ANCHOR / 2) + 0.5;
+        ctx.fillStyle = handle.filled ? line : fill;
+        ctx.fillRect(x, y, ANCHOR, ANCHOR);
+        ctx.strokeRect(x, y, ANCHOR, ANCHOR);
+      }
+    }
+    ctx.fillStyle = fill;
     for (const handle of handles) {
       if (handle.kind !== "label") continue;
       const [px, py] = screen(handle.x, handle.y);

@@ -2409,6 +2409,103 @@ kbd,
   }
 }
 
+/* ── K6 · Il modulo dei dialoghi (T6) ───────────────────────────────────── */
+.kit-form {
+  gap: var(--space-4);
+}
+.kit-form-row {
+  grid-template-columns: minmax(0, 9rem) minmax(0, 1fr);
+  column-gap: var(--space-3);
+}
+.kit-form-row > .kit-number {
+  grid-column: 1 / -1;
+  grid-template-columns: minmax(0, 9rem) minmax(0, 1fr);
+}
+.kit-form-label {
+  color: var(--muted);
+  font-size: var(--text-sm);
+  line-height: var(--leading-tight);
+}
+/* La scelta a segmenti è il pozzetto delle schede dell'ispettore: l'accesa è
+   un foglietto. */
+.kit-form-choice {
+  gap: var(--space-1);
+  padding: var(--space-1);
+  border-radius: var(--radius-control);
+  background: var(--bg-hover);
+}
+.kit-button.kit-form-option {
+  flex: 1 1 auto;
+  min-height: 26px;
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-chip);
+  font-size: var(--text-sm);
+}
+.kit-button.kit-form-option[aria-checked="false"] {
+  background: transparent;
+  color: var(--muted);
+}
+.kit-button.kit-form-option[aria-checked="false"]:hover {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+.kit-button.kit-form-option[aria-checked="true"] {
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-1);
+  color: var(--text);
+}
+.kit-form-check {
+  grid-column: 2;
+  gap: var(--space-3);
+  color: var(--text);
+  font-size: var(--text-base);
+}
+.kit-form-note,
+.kit-form-error {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: var(--text-sm);
+}
+.kit-form-note {
+  color: var(--muted);
+}
+.kit-form-error {
+  color: var(--danger);
+}
+.kit-dialog-scrim[data-preview] {
+  background: transparent;
+}
+
+/* Il punto di riferimento: nove quadratini, lo scelto pieno dell'accento. */
+.kit-reference-point {
+  gap: 2px;
+  padding: 2px;
+}
+.kit-reference-point-cell {
+  width: 10px;
+  height: 10px;
+  padding: 0;
+  border: 1px solid var(--muted);
+  border-radius: 1px;
+  background: transparent;
+  cursor: pointer;
+}
+.kit-reference-point-cell:hover {
+  border-color: var(--text);
+}
+.kit-reference-point-cell[aria-checked="true"] {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+.kit-reference-point-cell:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 1px;
+}
+.kit-reference-point-cell:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
 /* ── skin/frame.css ─────────────────────────────────────────────────────── */
 
 /* La cornice: barra del titolo, binario, banda di stato. */
@@ -3161,6 +3258,28 @@ kbd,
   height: 100%;
 }
 .status-mode[aria-expanded="true"] {
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-1);
+  color: var(--text);
+}
+/* Lo spazio di lavoro (T7): come la modalità, icona, nome e la freccia; aperto
+   è un foglietto. */
+.status-workspace > svg {
+  width: 14px;
+  height: 14px;
+}
+/* La freccia è un posto di 12 px, e la sua figura lo riempie. */
+.status-workspace > .status-workspace-arrow {
+  display: inline-flex;
+  width: 12px;
+  height: 12px;
+  color: var(--muted);
+}
+.status-workspace > .status-workspace-arrow > svg {
+  width: 100%;
+  height: 100%;
+}
+.status-workspace[aria-expanded="true"] {
   background: var(--bg-elev);
   box-shadow: var(--shadow-1);
   color: var(--text);
@@ -6318,11 +6437,80 @@ kbd,
    sembrare la stessa pagina. Ogni regola qui sotto ha perciò due facce — le
    classi `cm-fub-*` della Live e gli elementi dentro `.markdown-rendered` —
    con gli stessi numeri. Le regole di CodeMirror hanno specificità (0,2,0) o
-   più e arrivano dopo la pelle: quelle sulla Live portano sempre il prefisso
-   `.cm-editor .cm-content`, che le batte senza `!important`.
+   più: quelle sulla Live portano sempre il prefisso `.cm-editor .cm-content`,
+   che le batte senza `!important`.
 
    Dentro il foglio niente si muove: il pezzo del moto spegne ogni transizione
    sotto `.pane-editor`, e qui non se ne dichiarano. */
+
+/* ── Ciò che i profili Markdown davano a CodeMirror ──────────────────────── */
+
+/* Il corpo di lettura, i caratteri del codice e del frontmatter, la scala dei
+   titoli, il riquadro delle proprietà: prima stavano nel tema di CodeMirror
+   dei profili Markdown (`editors/text/profiles/markdown/`), fuori dalla pelle,
+   e un tema non li poteva vestire (issue #242). Là restano le misure fisse e
+   ciò che solo CodeMirror sa fare.
+
+   Ogni selettore pesa quanto quello che CodeMirror generava (la sua classe
+   d'ambito diventa `.cm-editor`, o `.cm-fub-markdown` per il corpo, che vale
+   solo sotto il profilo) e sta in testa al pezzo: il foglio di CodeMirror è
+   montato prima della pelle, e ogni regola che segue, qui o nei pezzi dopo,
+   lo ritocca come lo ritoccava prima. */
+.cm-fub-markdown .cm-content {
+  font-family: var(--font-reading);
+  font-size: var(--text-reading);
+  line-height: var(--leading-relaxed);
+}
+/* Il codice resta monospaziato in Sorgente e in Live; il frontmatter è YAML. */
+.cm-editor .cm-fub-code-line {
+  font-family: var(--font-mono, monospace);
+  line-height: var(--leading-normal);
+}
+.cm-editor .cm-fub-frontmatter {
+  font-family: var(--font-mono, monospace);
+  line-height: var(--leading-normal);
+  color: var(--syn-comment, var(--doc-muted));
+  background: var(--doc-fill-soft, rgba(135, 135, 135, 0.08));
+}
+.cm-editor .cm-fub-code {
+  font-family: var(--font-mono, monospace);
+}
+/* La scala dei titoli della Live, nei passi che leggono quella del tema. */
+.cm-editor .cm-fub-h1 {
+  font-size: max(1.75em, var(--text-3xl, 1.75em));
+}
+.cm-editor .cm-fub-h2 {
+  font-size: max(1.45em, var(--text-2xl, 1.45em));
+}
+.cm-editor .cm-fub-h5,
+.cm-editor .cm-fub-h6 {
+  letter-spacing: var(--tracking-caps, 0.06em);
+}
+.cm-editor .cm-fub-h1,
+.cm-editor .cm-fub-h2,
+.cm-editor .cm-fub-h3,
+.cm-editor .cm-fub-h4,
+.cm-editor .cm-fub-h5,
+.cm-editor .cm-fub-h6 {
+  line-height: var(--leading-tight, 1.2);
+}
+.cm-editor .cm-fub-image img {
+  border-radius: var(--radius-sm, 4px);
+}
+/* Le proprietà della Live (`editor.properties`): la tabella, la riga che si
+   apre, il vuoto. */
+.cm-editor .cm-fub-properties {
+  border-radius: var(--radius-sm, 4px);
+  background: var(--doc-fill-soft, rgba(135, 135, 135, 0.08));
+  line-height: var(--leading-normal, 1.5);
+}
+.cm-editor .cm-fub-properties-hidden,
+.cm-editor .cm-fub-properties-empty {
+  color: var(--doc-muted, var(--doc-gutter-fg, inherit));
+}
+.cm-editor .cm-fub-properties dt {
+  color: var(--doc-muted, var(--doc-gutter-fg, inherit));
+}
 
 /* ── La colonna ──────────────────────────────────────────────────────────── */
 
@@ -6524,7 +6712,7 @@ kbd,
 .markdown-rendered dl,
 .markdown-rendered blockquote,
 .markdown-rendered pre,
-.markdown-rendered table,
+.markdown-rendered table:not(:where(.base-surface *)),
 .markdown-rendered .markdown-table-scroll,
 .markdown-rendered hr,
 .markdown-rendered h1,
@@ -8500,6 +8688,13 @@ button.cm-fub-page-icon:focus-visible {
   border-bottom-right-radius: var(--radius-control);
   border-bottom-left-radius: var(--radius-control);
 }
+/* Sulla carta del riquadro il verde dei segni vicini non si legge abbastanza
+   (il tipo scritto a mano, `[!tip`, resta sorgente col cursore dentro): lì i
+   segni prendono il colore dei commenti della Sorgente, il passo sotto. */
+.cm-editor .cm-content .cm-fub-callout-line .cm-fub-near,
+.cm-editor .cm-content .cm-fub-callout-line .cm-fub-near * {
+  color: var(--syn-comment);
+}
 .cm-editor .cm-content .cm-fub-callout-type,
 .cm-editor .cm-content .cm-fub-callout-title {
   color: var(--doc-heading);
@@ -8899,8 +9094,14 @@ button.cm-fub-page-icon:focus-visible {
    scrive `border-spacing`): solo così gli angoli si arrotondano. Ogni
    cella ha il filo a destra e sotto; l'ultima colonna e l'ultima riga hanno
    al loro posto la cornice. La testata ha il suo fondo fino al bordo: la
-   cornice lì è trasparente, come nel prototipo dove il fondo la copre. */
-.markdown-rendered table {
+   cornice lì è trasparente, come nel prototipo dove il fondo la copre.
+   Queste regole sono delle tabelle Markdown, non delle tabelle che un
+   componente disegna dentro la pagina: la Base incorporata in una nota sta
+   dentro `.markdown-rendered`, e la sua tabella ha la sua pelle
+   (`skin/editors.css`, `.base-table`). Per questo ogni selettore lascia
+   fuori ciò che sta in una `.base-surface`, dentro un `:where()` che non
+   alza la specificità. */
+.markdown-rendered table:not(:where(.base-surface *)) {
   display: block;
   width: fit-content;
   max-width: 100%;
@@ -8920,8 +9121,8 @@ button.cm-fub-page-icon:focus-visible {
   margin: 0;
   overflow: visible;
 }
-.markdown-rendered th,
-.markdown-rendered td {
+.markdown-rendered th:not(:where(.base-surface *)),
+.markdown-rendered td:not(:where(.base-surface *)) {
   height: 34px;
   min-width: 4ch;
   padding: 0 var(--space-5);
@@ -8934,48 +9135,48 @@ button.cm-fub-page-icon:focus-visible {
   text-align: start;
   vertical-align: middle;
 }
-.markdown-rendered th {
+.markdown-rendered th:not(:where(.base-surface *)) {
   background: var(--doc-fill-soft);
   color: var(--doc-heading);
   font-weight: var(--weight-bold);
 }
-.markdown-rendered tr > :first-child {
+.markdown-rendered tr:not(:where(.base-surface *)) > :first-child {
   border-left: 1px solid var(--doc-rule);
 }
-.markdown-rendered tr > :last-child {
+.markdown-rendered tr:not(:where(.base-surface *)) > :last-child {
   border-right: 1px solid var(--doc-rule);
 }
-.markdown-rendered table > :first-child > tr:first-child > * {
+.markdown-rendered table:not(:where(.base-surface *)) > :first-child > tr:first-child > * {
   border-top: 1px solid var(--doc-rule);
 }
-.markdown-rendered table > :last-child > tr:last-child > * {
+.markdown-rendered table:not(:where(.base-surface *)) > :last-child > tr:last-child > * {
   border-bottom: 1px solid var(--doc-rule);
 }
-.markdown-rendered tr > th:first-child {
+.markdown-rendered tr:not(:where(.base-surface *)) > th:first-child {
   border-left-color: transparent;
 }
-.markdown-rendered tr > th:last-child {
+.markdown-rendered tr:not(:where(.base-surface *)) > th:last-child {
   border-right-color: transparent;
 }
-.markdown-rendered table > :first-child > tr:first-child > th {
+.markdown-rendered table:not(:where(.base-surface *)) > :first-child > tr:first-child > th {
   border-top-color: transparent;
 }
-.markdown-rendered table > :last-child > tr:last-child > th {
+.markdown-rendered table:not(:where(.base-surface *)) > :last-child > tr:last-child > th {
   border-bottom-color: transparent;
 }
-.markdown-rendered table > :first-child > tr:first-child > :first-child {
+.markdown-rendered table:not(:where(.base-surface *)) > :first-child > tr:first-child > :first-child {
   border-top-left-radius: var(--radius-md);
 }
-.markdown-rendered table > :first-child > tr:first-child > :last-child {
+.markdown-rendered table:not(:where(.base-surface *)) > :first-child > tr:first-child > :last-child {
   border-top-right-radius: var(--radius-md);
 }
-.markdown-rendered table > :last-child > tr:last-child > :first-child {
+.markdown-rendered table:not(:where(.base-surface *)) > :last-child > tr:last-child > :first-child {
   border-bottom-left-radius: var(--radius-md);
 }
-.markdown-rendered table > :last-child > tr:last-child > :last-child {
+.markdown-rendered table:not(:where(.base-surface *)) > :last-child > tr:last-child > :last-child {
   border-bottom-right-radius: var(--radius-md);
 }
-.markdown-rendered table:focus-visible {
+.markdown-rendered table:not(:where(.base-surface *)):focus-visible {
   outline: var(--focus-ring-width) solid var(--focus-ring);
   outline-offset: 1px;
 }
@@ -9351,13 +9552,17 @@ button.cm-fub-page-icon:focus-visible {
 }
 .ui-list-item-subtitle {
   /* Due righe al massimo: il contesto di un link si legge, ma non si prende il
-     pannello. */
+     pannello, e i puntini dicono che il testo continua. */
+  display: -webkit-box;
   overflow: hidden;
   max-height: calc(2em * var(--leading-tight));
   margin-top: var(--space-1);
   color: var(--muted);
   font-size: var(--text-sm);
   line-height: var(--leading-tight);
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 /* Il cestino e la cronologia non hanno regole proprie: sono due view dichiarate
    (§1.2), e le disegnano i componenti generici dell'albero. */
@@ -9851,6 +10056,38 @@ button.cm-fub-page-icon:focus-visible {
    delle colonne, i numeri delle righe, la selezione, la cella attiva, la
    maniglia di riempimento e i «+». L'aspetto del contenuto resta del
    formato: qui c'è soltanto la cornice. */
+
+/* Gli inchiostri che il tema di CodeMirror della tabella
+   (`editors/text/profiles/markdown/table-widget.ts`) scriveva da sé, fuori
+   dalla pelle (issue #242): là resta la forma. Ogni selettore pesa quanto
+   quello che CodeMirror generava, con `.cm-editor` al posto della sua classe
+   d'ambito, e sta in testa al pezzo: le regole più precise che seguono lo
+   ritoccano come prima. */
+.cm-editor .tb-grid .tb-corner,
+.cm-editor .tb-grid .tb-letter,
+.cm-editor .tb-grid .tb-rowhead {
+  color: var(--doc-gutter-fg, var(--muted, #888));
+}
+.cm-editor .tb-grid .tb-letter.is-selected,
+.cm-editor .tb-grid .tb-rowhead.is-selected {
+  color: var(--accent, #4a7dff);
+}
+.cm-editor .tb-grid:focus-within .tb-cell.is-selected {
+  background: var(--doc-selection, rgba(74, 125, 255, 0.18));
+}
+.cm-editor .tb-grid:focus-within .tb-cell.is-active {
+  box-shadow: inset 0 0 0 2px var(--accent, #4a7dff);
+}
+.cm-editor .tb-grid:focus-within .tb-cell.is-fill {
+  box-shadow: inset 0 0 0 1px var(--accent, #4a7dff);
+}
+.cm-editor .tb-fill {
+  background: var(--accent, #4a7dff);
+  border: 1px solid var(--doc-bg, #fff);
+}
+.cm-editor .tb-add {
+  border-radius: var(--radius-xs, 3px);
+}
 
 /* La griglia della Live, cioè la cornice della Tabella attorno a una tabella
    Markdown. Le intestazioni di riga escono nel margine: la prima
@@ -14500,6 +14737,33 @@ input.canvas-toolbar-item {
 .canvas-ink-label[data-free] {
   color: var(--muted);
 }
+/* L'avviso dei tratti sul testo che rifluisce: un segno d'attenzione di Fub,
+   col pulsante che rimette la larghezza. */
+.canvas-ink-reflow {
+  gap: calc(var(--space-2) / var(--canvas-ink-reflow-k, 1)) calc(var(--space-4) / var(--canvas-ink-reflow-k, 1));
+  margin-top: calc(var(--space-3) / var(--canvas-ink-reflow-k, 1));
+  padding: calc(var(--space-3) / var(--canvas-ink-reflow-k, 1)) calc(var(--space-4) / var(--canvas-ink-reflow-k, 1));
+  border-radius: calc(var(--radius-menu) / var(--canvas-ink-reflow-k, 1));
+  background: var(--warning-wash);
+  box-shadow: 0 0 0 calc(1px / var(--canvas-ink-reflow-k, 1)) var(--warning);
+  color: var(--text);
+  font-size: calc(var(--text-xs) / var(--canvas-ink-reflow-k, 1));
+  line-height: var(--leading-normal);
+}
+.canvas-ink-reflow-back {
+  padding: calc(var(--space-1) / var(--canvas-ink-reflow-k, 1)) calc(var(--space-3) / var(--canvas-ink-reflow-k, 1));
+  border-radius: calc(var(--radius-chip) / var(--canvas-ink-reflow-k, 1));
+  color: var(--accent);
+  font-size: inherit;
+  font-weight: var(--weight-medium);
+}
+.canvas-ink-reflow-back:hover,
+.canvas-ink-reflow-back:focus-visible {
+  background: var(--accent-wash);
+}
+.canvas-ink-reflow-back:active {
+  color: var(--accent-soft);
+}
 .canvas-edge-label {
   fill: var(--muted);
   font-family: var(--font-ui);
@@ -14844,6 +15108,30 @@ input.canvas-toolbar-item {
     display: none;
   }
 }
+/* La barra su due file (`stacked`, misurato dalla barra quando nemmeno la
+   vista scelta sta accanto agli strumenti, come al telefono): le linguette e
+   «+» sopra, larghe quanto la fila; lo spazio va a capo e fa da intervallo;
+   sotto gli strumenti, accostati, e «Nuova» in fondo a destra. Niente resta
+   tagliato: se «Nuova» non sta ancora, scende da sola. */
+.base-bar.stacked {
+  flex-wrap: wrap;
+  column-gap: 0;
+}
+.base-bar.stacked .base-tabs {
+  flex: 1 1 0;
+}
+/* Con la fila tutta per sé, la vista scelta torna a dire il suo nome: col
+   dito non c'è un suggerimento che lo dica. */
+.base-bar.stacked .base-tab[aria-pressed="true"] .base-tab-label {
+  display: inline;
+}
+.base-bar.stacked .base-bar-space {
+  flex-basis: 100%;
+  height: var(--space-2);
+}
+.base-bar.stacked .base-new {
+  margin-left: auto;
+}
 /* I popover della barra: Filtro, Ordina, Proprietà. Il rialzo è quello del
    kit; qui il contenuto. */
 .base-popover {
@@ -15064,6 +15352,7 @@ input.canvas-toolbar-item {
 .base-table {
   min-width: 560px;
   font-size: var(--text-base);
+  line-height: 1.4;
   font-variant-numeric: tabular-nums;
 }
 .base-table th,
@@ -15534,6 +15823,55 @@ input.canvas-toolbar-item {
 .base-cal-empty > p:first-child {
   color: var(--text);
 }
+/* La proprietà che regge la vista, nella sua testa: le corsie della
+   bacheca, la data del calendario (IMP-3809, IMP-3810). L'etichetta resta
+   visibile; il menu si accorcia prima di spingere fuori la testa. */
+.base-view-key {
+  display: inline-flex;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  white-space: nowrap;
+}
+.base-view-key-select {
+  min-width: 0;
+  max-width: 14rem;
+  height: 28px;
+  padding: 0 var(--space-3);
+  border: none;
+  border-radius: 7px;
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+  background: var(--sheet);
+  color: var(--text);
+  font: inherit;
+  text-overflow: ellipsis;
+}
+.base-view-key-select:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 1.5px var(--accent);
+}
+.base-view-key-select:disabled {
+  opacity: 0.6;
+}
+.base-cal-head > .base-view-key {
+  margin-left: auto;
+  padding-left: var(--space-4);
+}
+.base-cal-undated + .base-view-key {
+  margin-left: 0;
+}
+.base-kanban-head {
+  display: flex;
+  align-items: center;
+  margin-bottom: var(--space-4);
+}
+.base-kanban-empty {
+  margin: 0;
+  color: var(--muted);
+}
 /* Al telefono il mese è una colonna di giorni: niente riga dei nomi né giorni
    degli altri mesi, e accanto al numero il nome del giorno. */
 @container sheet (max-width: 560px) {
@@ -15560,6 +15898,18 @@ input.canvas-toolbar-item {
   }
   .base-cal-undated {
     display: none;
+  }
+  /* Accanto al mese e ai tre bottoni la scelta della data non ci sta: il
+     menu si stringeva fino a «cons…». Va a capo su una riga sua, con
+     l'etichetta allineata alle frecce e il menu largo quanto il suo nome. */
+  .base-cal-head {
+    flex-wrap: wrap;
+    row-gap: var(--space-2);
+  }
+  .base-cal-head > .base-view-key {
+    flex: 1 0 100%;
+    margin-left: 0;
+    padding-left: var(--space-6);
   }
 }
 /* La linea del tempo (T34): le righe del prototipo (`.tl`, `.tl-a`, `.tl-s`,
@@ -16871,11 +17221,14 @@ input.canvas-toolbar-item {
   white-space: normal;
   overflow-wrap: anywhere;
 }
+/* Il sottotitolo sta in fondo alla riga (il margine), ma il testo si allinea a
+   sinistra: allineato a destra, Chromium (WebView2) non disegna i puntini
+   delle due righe che la regola comune taglia. */
 .cm-day-page .ui-list-item-subtitle {
   flex: none;
   max-width: 40%;
   margin: 0 0 0 auto;
-  text-align: right;
+  text-align: left;
   color: var(--doc-gutter-fg);
   font-size: var(--text-xs);
 }
@@ -17018,6 +17371,31 @@ input.canvas-toolbar-item {
 /* Il vassoio finisce col suo padding, non col margine dell'ultimo blocco. */
 .transclusion-body > :last-child {
   margin-bottom: 0;
+}
+/* Una Base trasclusa si allarga oltre la colonna del testo come nel
+   prototipo (`.blk[data-t="base"]`, 64 dei 96 px di destra): si allarga il
+   vassoio intero, e la Base resta dentro il suo filo invece di uscirne.
+   Nella finestra stretta e nel foglio stretto il vassoio resta in colonna,
+   come la Base libera. */
+.cm-content .embed.transclusion:has(> .transclusion-body .base-surface[data-embedded="true"]),
+.markdown-rendered .embed.transclusion:has(> .transclusion-body .base-surface[data-embedded="true"]) {
+  margin-right: -64px;
+}
+.cm-content .transclusion-body .base-surface[data-embedded="true"],
+.markdown-rendered .transclusion-body .base-surface[data-embedded="true"] {
+  margin-right: 0;
+}
+@media (max-width: 940px) {
+  .cm-content .embed.transclusion:has(> .transclusion-body .base-surface[data-embedded="true"]),
+  .markdown-rendered .embed.transclusion:has(> .transclusion-body .base-surface[data-embedded="true"]) {
+    margin-right: 0;
+  }
+}
+@container sheet (max-width: 560px) {
+  .cm-content .embed.transclusion:has(> .transclusion-body .base-surface[data-embedded="true"]),
+  .markdown-rendered .embed.transclusion:has(> .transclusion-body .base-surface[data-embedded="true"]) {
+    margin-right: 0;
+  }
 }
 /* Mentre si scrive il vassoio diventa un foglio, col bordo d'accento. */
 .embed.transclusion-editing {
@@ -18371,6 +18749,41 @@ input.canvas-toolbar-item {
   stroke: var(--accent);
   stroke-width: 1.5px;
 }
+/* I segni del motore del Completo (`motore/tracciati.ts`): il tracciato aperto
+   della Penna, i punti e le maniglie, nel colore d'accento. Un punto vuoto ha
+   il fondo del tema, uno pieno l'accento. */
+.draw-engine-line {
+  fill: none;
+  stroke: var(--accent);
+}
+.draw-engine-point {
+  fill: var(--bg);
+  stroke: var(--accent);
+}
+.draw-engine-point-pieno {
+  fill: var(--accent);
+}
+.draw-engine-handle {
+  fill: var(--accent);
+}
+/* Le scritte del motore (misure accanto al puntatore, etichette delle guide,
+   distanze): il testo del tema. Le etichette delle guide nel colore d'accento. */
+.draw-engine-text {
+  fill: var(--fg);
+  font-family: var(--font-ui);
+}
+.draw-engine-label {
+  fill: var(--accent);
+}
+.draw-engine-highlight {
+  fill: color-mix(in oklch, var(--accent) 30%, transparent);
+}
+.draw-engine-swatch {
+  stroke: var(--fg);
+}
+.draw-engine-swatch-scelto {
+  stroke: var(--accent);
+}
 .draw-zoom-box {
   border: 1px dashed var(--accent);
   background: color-mix(in oklch, var(--accent) 8%, transparent);
@@ -18385,6 +18798,25 @@ input.canvas-toolbar-item {
   box-shadow:
     0 0 0 1px var(--border),
     0 1px 3px rgb(0 0 0 / 0.18);
+}
+/* La griglia di trasparenza (K6 T11): la carta a scacchi, come un foglio che
+   non ha un fondo, anche le tavole. La carta resta bianca nei due temi, e lo
+   scacchiere è fisso come lei. Quadretti di 8 px, con quattro gradienti lineari
+   sfalsati (il sanitizzatore dei temi non ammette `conic-gradient`). */
+/* Il foglio del documento (il suo rettangolo nel disegno) non ha più il riempimento
+   bianco: lo scacchiere si vede dove il foglio non ha un fondo suo. */
+.draw-surface[data-transparency] [data-paper] {
+  fill: none;
+}
+.draw-surface[data-transparency] .draw-page {
+  background-color: #ffffff;
+  background-image:
+    linear-gradient(45deg, #e6e6e6 25%, transparent 25%),
+    linear-gradient(-45deg, #e6e6e6 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #e6e6e6 75%),
+    linear-gradient(-45deg, transparent 75%, #e6e6e6 75%);
+  background-size: 16px 16px;
+  background-position: 0 0, 0 8px, 8px -8px, -8px 0;
 }
 /* Il nome di una tavola, sul tavolo sopra di lei: quello della tavola
    scelta più scuro. */
@@ -18673,6 +19105,22 @@ button.draw-isolation-crumb:hover {
   border-radius: var(--radius-sm);
   font-size: var(--text-sm);
 }
+/* Alti quanto i campi del kit, nella stessa riga; col dito 44 px. Il
+   selettore è doppio perché la struttura della shell fissa `min-height: 44px`
+   a questi due, da sola. */
+.draw-objects-filter .draw-objects-search,
+.draw-objects-filter .draw-objects-kind {
+  box-sizing: border-box;
+  height: var(--control-h);
+  min-height: 0;
+  padding: 0 var(--space-3);
+}
+@media (pointer: coarse) {
+  .draw-objects-filter .draw-objects-search,
+  .draw-objects-filter .draw-objects-kind {
+    min-height: 44px;
+  }
+}
 .draw-object-rename {
   padding: var(--space-1) var(--space-2);
   border-radius: var(--radius-sm);
@@ -18698,6 +19146,17 @@ button.draw-isolation-crumb:hover {
 .draw-object[aria-disabled="true"] {
   color: var(--muted);
   font-style: italic;
+}
+/* Il livello corrente: un puntino nel segno, nel colore del tema. Non ha
+   parole: a voce il nome dice che è quello corrente. */
+.draw-object[data-current] > .draw-object-mark::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  vertical-align: middle;
 }
 /* Col filtro, una riga che c'è per ciò che contiene è in grigio: la sua
    freccia aperta dice che i trovati sono sotto. */
@@ -19205,6 +19664,866 @@ button.draw-isolation-crumb:hover {
 .live-follow[aria-pressed="true"] {
   background: var(--bg-active);
   box-shadow: var(--shadow-sm);
+}
+
+/* ── K6 · I campioni nella scheda Risorse (T10) ─────────────────────────── */
+.draw-resources-corpo {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+}
+.draw-resources-swatches {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  width: auto;
+  padding: 0;
+}
+
+
+
+/* ── K6 · Il cassetto «Tutti gli strumenti» (T8) ────────────────────────── */
+.kit-popover.draw-drawer-popover {
+  padding: 0;
+}
+.draw-drawer-head {
+  gap: var(--space-1);
+  padding: var(--space-6) var(--space-6) var(--space-3);
+}
+.draw-drawer-title {
+  margin: 0;
+  color: var(--text);
+  font-size: var(--text-md);
+  font-weight: var(--weight-bold);
+  line-height: var(--leading-tight);
+}
+.draw-drawer-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+.draw-drawer-field {
+  padding: 0 var(--space-6) var(--space-4);
+}
+.draw-drawer-groups {
+  gap: var(--space-5);
+  padding: 0 var(--space-4) var(--space-6);
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+.draw-drawer-group {
+  gap: var(--space-2);
+}
+.draw-drawer-heading {
+  margin: 0;
+  padding: 0 var(--space-2);
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  letter-spacing: 0;
+  text-transform: none;
+}
+.draw-drawer-grid {
+  gap: var(--space-1);
+}
+.draw-drawer-tool {
+  gap: var(--space-3);
+  padding: var(--space-1) var(--space-2);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  font-family: inherit;
+  font-size: var(--text-sm);
+}
+.draw-drawer-tool:hover {
+  background: var(--overlay-hover);
+}
+.draw-drawer-tool[aria-pressed="true"] {
+  background: var(--accent-wash);
+  color: var(--accent);
+}
+.draw-drawer-tool:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: -1px;
+}
+.draw-drawer-icon {
+  color: var(--muted);
+}
+.draw-drawer-tool[aria-pressed="true"] .draw-drawer-icon {
+  color: inherit;
+}
+.draw-drawer-icon svg {
+  width: 20px;
+  height: 20px;
+}
+.draw-drawer-keys {
+  color: var(--muted);
+  font-family: var(--font-ui);
+  font-size: var(--text-xs);
+}
+.draw-drawer-empty {
+  margin: 0;
+  padding: var(--space-6);
+  color: var(--muted);
+  text-align: center;
+}
+
+/* Il pulsante «Modifica la colonna…» in fondo al cassetto: un testo del
+   kit, col colore dell'accento e il fuoco del kit. */
+.draw-drawer-edit {
+  align-self: flex-start;
+  margin: 0 var(--space-6) var(--space-6);
+  padding: var(--space-1) var(--space-3);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--accent);
+  font-family: inherit;
+  font-size: var(--text-sm);
+}
+.draw-drawer-edit:hover {
+  background: var(--overlay-hover);
+}
+.draw-drawer-edit:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: -1px;
+}
+
+/* La scatola del cassetto: una colonna che tiene ferma la testa e il campo
+   (scorrono solo i gruppi), e il nome dello strumento che va a capo. */
+.draw-drawer {
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  width: min(720px, calc(100vw - 32px));
+  max-height: min(560px, calc(100vh - 32px));
+}
+.draw-drawer-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* ── K6 · Il menu dello zoom della banda (T11) ───────────────────────────── */
+/* Un popover del kit con le voci del menu di contesto, e sotto il campo della
+   percentuale. Le voci hanno la faccia delle voci del menu: il fondo al passaggio
+   e l'anello del fuoco. */
+/* Il fondo, il raggio e l'ombra sono quelli del menu di contesto: il menu dello
+   zoom sta accanto alle altre scelte della banda. */
+.kit-popover.draw-zoom-popover {
+  min-width: 220px;
+  border-radius: calc(var(--radius-menu) + var(--space-2));
+  background: var(--sheet);
+  box-shadow: var(--shadow-pop, 0 0 0 1px color-mix(in oklab, var(--text) 8%, transparent), var(--shadow-3));
+}
+.draw-zoom-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.draw-zoom-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.draw-zoom-item {
+  display: flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 var(--space-3);
+  border: none;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+.draw-zoom-item:hover {
+  background: var(--bg-hover);
+}
+.draw-zoom-item:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: -1px;
+}
+.draw-zoom-separator {
+  height: 1px;
+  margin: 0 var(--space-3);
+  background: var(--border);
+}
+.draw-zoom-field {
+  padding: 0 var(--space-3) var(--space-1);
+}
+/* ── K6 · Il punto nella fila delle opzioni (T12) ───────────────────────── */
+.draw-point-place {
+  gap: var(--space-4);
+}
+.kit-number.draw-point-coord {
+  grid-template-columns: auto 5.5rem;
+  column-gap: var(--space-2);
+}
+.draw-point-coord .kit-number-box {
+  height: 28px;
+}
+/* La sezione Allinea (T13, giro 2): le due scelte di «Allinea a» e i gruppi dei pulsanti. */
+.draw-align-to {
+  display: flex;
+  gap: var(--space-1);
+  margin-block-end: var(--space-2);
+}
+.draw-align-to > .draw-button {
+  flex: 1 1 0;
+  min-width: 0;
+}
+.draw-align-group {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-1);
+  margin-block-end: var(--space-2);
+}
+.draw-align-group > p {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-weight: 600;
+}
+/* La sezione Trasforma (K6 T13, giro 3): i campi X, Y, larghezza, altezza, rotazione e inclinazione, una riga piena per campo. */
+.draw-transform-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-1);
+  margin-block-end: var(--space-2);
+}
+.draw-align-group > .kit-button {
+  min-width: 0;
+  width: 100%;
+  padding: var(--space-1) var(--space-2);
+  white-space: normal;
+  text-align: center;
+}
+
+/* ── K6 · La sezione Colore del Design (T14, giro 1) ─────────────────────── */
+/* Riempimento e contorno uno sotto l'altro, ognuno col suo nome a sinistra
+   come le righe di Trasforma; il lato attivo ha il bordo accento e il nome in
+   grassetto. Sotto, Scambia, Nessuno e Di serie in una riga. */
+.draw-color {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-block-end: var(--space-2);
+}
+.draw-color-wells {
+  display: grid;
+  grid-template-columns: minmax(0, max-content) minmax(0, 1fr);
+  gap: var(--space-1) var(--space-3);
+  align-items: center;
+}
+.draw-color-label {
+  color: var(--text);
+  font-size: var(--text-sm);
+}
+.draw-color-label.draw-color-active {
+  font-weight: var(--weight-bold);
+}
+.draw-color-wells .kit-color-well,
+.draw-color-wells .kit-color-well-button {
+  width: 100%;
+  min-width: 0;
+}
+.draw-color-wells .kit-color-well-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.draw-color-wells .draw-color-active .kit-color-well-button {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+.draw-color-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-1);
+}
+.draw-color-actions > .kit-button {
+  min-width: 0;
+  padding: var(--space-1) var(--space-2);
+  white-space: normal;
+  text-align: center;
+}
+
+/* ── K6 · La sezione Sfumatura del Design (T15, giro 5) ──────────────────── */
+/* Il colore da sfumare, il tipo e l'angolo, la striscia dei colori e i punti:
+   per ognuno il pozzo, «Togli», la posizione e l'opacità. Il punto
+   scelto ha il bordo accento, come il lato attivo del Colore. */
+.draw-gradient {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.draw-gradient-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+  color: var(--text);
+  font-size: var(--text-sm);
+}
+.draw-gradient-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.draw-gradient-bar {
+  height: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background-color: var(--bg);
+}
+.draw-gradient-stops {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.draw-gradient-stop {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) max-content;
+  gap: var(--space-1);
+  align-items: center;
+  padding: var(--space-1);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+}
+.draw-gradient-stop.draw-gradient-stop-chosen {
+  border-color: var(--accent);
+}
+/* Il pozzo e «Togli» in una riga; posizione e opacità sotto, larghe quanto la
+   sezione, come lo spessore del Contorno: in mezza colonna non ci stanno. */
+.draw-gradient-stop > .kit-number {
+  grid-column: 1 / -1;
+}
+.draw-gradient-stop > .kit-button {
+  grid-row: 1;
+  grid-column: 2;
+}
+.draw-gradient-stop .kit-color-well,
+.draw-gradient-stop .kit-color-well-button {
+  width: 100%;
+  min-width: 0;
+}
+.draw-gradient-stop .kit-color-well-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.draw-gradient-stop > .kit-button,
+.draw-gradient-actions > .kit-button,
+.draw-gradient-create {
+  min-width: 0;
+  padding: var(--space-1) var(--space-2);
+}
+.draw-gradient-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-1);
+}
+/* Le preimpostate (giro 6), in fondo alla sezione e chiuse di serie: il filo
+   le stacca dai punti; dentro la scelta, la striscia, «Applica» ed «Elimina»,
+   il nome e «Salva» in una riga, l'avviso. */
+/* Un `details` non fa da flex in ogni WebView: lo spazio fra i figli è un
+   margine. */
+.draw-gradient-presets {
+  display: block;
+  min-width: 0;
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--border);
+}
+.draw-gradient-presets > :nth-child(n + 2) {
+  margin-top: var(--space-2);
+}
+.draw-gradient-presets-title {
+  display: list-item;
+  padding: var(--space-1) 0;
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+}
+.draw-gradient-presets-title:hover {
+  background: var(--overlay-hover);
+}
+.draw-gradient-presets-title:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: calc(-1 * var(--focus-ring-width));
+}
+.draw-gradient-save {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) max-content;
+  gap: var(--space-1);
+  align-items: stretch;
+}
+.draw-gradient-save > :first-child,
+.draw-gradient-save-name {
+  min-width: 0;
+}
+.draw-gradient-save > .kit-button,
+.draw-gradient-presets-retry {
+  min-width: 0;
+  padding: var(--space-1) var(--space-2);
+}
+.draw-gradient-presets-error {
+  color: var(--danger);
+}
+
+/* ── K6 · Le guide del righello (`guide-linee.ts`) ───────────────────────── */
+/* Sopra il disegno e sotto i righelli di bordo; il puntatore le attraversa (i gesti
+   li prende la superficie). Il colore di serie delle guide di VectorCraft (#4affff,
+   linee piene), più scuro di poco perché si legga anche sulla carta bianca; una
+   guida bloccata nel file è tratteggiata, quella che si prende o si trascina più
+   spessa. */
+.draw-guides {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+  overflow: hidden;
+  pointer-events: none;
+}
+.draw-guide-line {
+  stroke: #1fc8e0;
+  stroke-width: 1px;
+  vector-effect: non-scaling-stroke;
+}
+.draw-guide-line-locked {
+  stroke-dasharray: 4 3;
+}
+.draw-guide-line-hot {
+  stroke-width: 2px;
+}
+/* Una guida scelta (clic con le Selezioni): Canc la toglie, le frecce la spostano. */
+.draw-guide-line-scelta {
+  stroke: var(--accent);
+  stroke-width: 2px;
+}
+/* Un tracciato-guida (Crea guide): la sua forma, senza riempimento. */
+.draw-guide-path {
+  fill: none;
+}
+/* Ritaglia immagine (`tools/editor/ritaglio-immagine.ts`): l'immagine fuori dal riquadro
+   scurita come in VectorCraft (nero al 43%), il riquadro e le maniglie nel ciano dei
+   segni dello strumento, la misura sotto l'angolo in basso a sinistra. I gesti li prende
+   la radice: il puntatore attraversa il disegno. */
+.draw-ritaglio {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 2;
+  overflow: hidden;
+  pointer-events: none;
+}
+.draw-ritaglio-ombra {
+  fill: rgb(0 0 0 / 43%);
+}
+.draw-ritaglio-bordo {
+  fill: none;
+  stroke: #1fc8e0;
+  stroke-width: 1px;
+  vector-effect: non-scaling-stroke;
+}
+.draw-ritaglio-maniglia {
+  fill: #ffffff;
+  stroke: #1fc8e0;
+  stroke-width: 1px;
+}
+.draw-ritaglio-misura {
+  fill: #1fc8e0;
+  font: 11px var(--font-ui, sans-serif);
+  stroke: rgb(0 0 0 / 60%);
+  stroke-width: 2px;
+}
+.draw-surface[data-ritaglio="move"] {
+  cursor: move !important;
+}
+.draw-surface[data-ritaglio="ns"] {
+  cursor: ns-resize !important;
+}
+.draw-surface[data-ritaglio="ew"] {
+  cursor: ew-resize !important;
+}
+.draw-surface[data-ritaglio="nwse"] {
+  cursor: nwse-resize !important;
+}
+.draw-surface[data-ritaglio="nesw"] {
+  cursor: nesw-resize !important;
+}
+/* Sopra una guida che si prende il cursore dice dove va, anche sopra quello dello
+   strumento (scritto sulla superficie da `motore/gesti.ts`). */
+.draw-surface[data-guida-sotto="x"] {
+  cursor: ew-resize !important;
+}
+.draw-surface[data-guida-sotto="y"] {
+  cursor: ns-resize !important;
+}
+
+/* ── K6 · I righelli di bordo del foglio (T11, giro E) ───────────────────── */
+/* Due righe dentro il foglio, sul suo bordo in alto e a sinistra: sopra il disegno,
+   e il puntatore le attraversa. Le misure, 20 px la riga e 28 px la colonna, sono
+   quelle di `edge-rulers.ts`. */
+.draw-ruler-x,
+.draw-ruler-y {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 1;
+  overflow: hidden;
+  pointer-events: none;
+  background: var(--bg-elev);
+}
+.draw-ruler-x {
+  width: 100%;
+  height: 20px;
+  box-shadow: inset 0 -1px 0 var(--border);
+}
+.draw-ruler-y {
+  width: 28px;
+  height: 100%;
+  box-shadow: inset -1px 0 0 var(--border);
+}
+.draw-ruler-x[hidden],
+.draw-ruler-y[hidden] {
+  display: none;
+}
+.draw-ruler-tick {
+  stroke: var(--muted);
+  stroke-width: 1;
+}
+.draw-ruler-label {
+  fill: var(--muted);
+  font-family: var(--font-ui);
+  font-size: var(--text-xs);
+}
+
+/* ── K6 · Carattere e Paragrafo del Design (T16, giro 1) ─────────────────── */
+/* Carattere: la famiglia a riga piena, sotto lo stile, poi corpo e spaziatura
+   affiancati. Paragrafo: i tre allineamenti in una barra, come nel pannello. */
+.draw-type {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-block-end: var(--space-2);
+}
+.draw-type-family > .kit-font-button {
+  width: 100%;
+  max-width: none;
+  min-width: 0;
+}
+.draw-type-family,
+.draw-type-style,
+.draw-type-align {
+  min-width: 0;
+}
+/* Corpo e spaziatura una riga piena per campo, come Trasforma. */
+.draw-type-sizes {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-1);
+}
+.draw-type-align {
+  margin-block-end: var(--space-2);
+}
+
+/* ── K6 · Risorse › Campioni: scelta, azioni e finestre (T14, giro 2) ────── */
+/* La griglia è quella del prototipo (`kit-color-swatches`); sotto, le azioni
+   in due colonne che vanno a capo. La finestra «Nuovo campione» tiene il
+   selettore del kit a tutta larghezza. */
+.draw-resources-swatches-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-1);
+}
+.draw-resources-swatches-actions > .kit-button {
+  min-width: 0;
+  padding: var(--space-1) var(--space-2);
+  white-space: normal;
+  text-align: center;
+}
+.draw-resources-swatches-label {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+.kit-color.draw-resources-swatches-picker {
+  width: auto;
+  padding: 0;
+}
+
+/* Le caselle della copia del Contagocce (K6 T14, giro 8): una fila con lo spazio del kit fra
+   una casella e la parola dopo, nel menu «…» come in linea nella testata. */
+.draw-contagocce-copia {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+/* Ricolora grafica (K6 T14, giro 3): una riga per colore della scelta, il colore attuale a sinistra e
+   il colore nuovo (il selettore del kit) a destra. La lista scorre se i colori sono tanti. */
+.draw-recolor-list {
+  display: grid;
+  gap: var(--space-1);
+  max-height: 40vh;
+  overflow-y: auto;
+  padding: var(--space-1);
+  border: 1px solid var(--border);
+}
+.draw-recolor-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--space-2);
+}
+.draw-recolor-current {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+}
+.draw-recolor-chip {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+}
+.draw-recolor-code {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.85em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.draw-recolor-arrow {
+  color: var(--muted);
+}
+
+/* Dati del grafico (K6, grafici): i pulsanti della tabella, poi la tabella che scorre nei due versi;
+   la prima riga ha i nomi delle serie, la prima colonna le categorie. */
+.draw-graph-data-body {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.draw-graph-data-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+.draw-graph-data-scroll {
+  max-height: 45vh;
+  overflow: auto;
+  border: 1px solid var(--border);
+}
+.draw-graph-data-table {
+  border-collapse: collapse;
+}
+.draw-graph-data-table td,
+.draw-graph-data-table th {
+  padding: 0;
+  border: 1px solid var(--border);
+}
+.draw-graph-data-cell {
+  width: 7em;
+  min-width: 0;
+  border: 0;
+  border-radius: 0;
+}
+
+/* Guida colori (K6 T14, guida): la sezione del Design e le sue finestre. Una riga per armonia-colore,
+   il colore di partenza al centro con il suo bordo. Con Senza scelta i campioni sono spenti. */
+.draw-guide-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+.draw-guide-rule-name {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.draw-guide-note {
+  margin: 0;
+  color: var(--muted);
+}
+.draw-guide-grid {
+  display: grid;
+  gap: 2px;
+  overflow-x: auto;
+}
+.draw-guide-row {
+  display: flex;
+  gap: 2px;
+}
+.draw-guide-swatch {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+}
+.draw-guide-swatch[data-base] {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.draw-guide-swatch:disabled {
+  opacity: 0.5;
+}
+.draw-guide-field {
+  display: grid;
+  gap: var(--space-1);
+}
+.draw-guide-rule {
+  min-width: 0;
+}
+
+/* ── K6 · La sezione «Tavole» del Design ─────────────────────────────────── */
+/* La sezione «Aspetto»: la pila degli effetti, una riga per effetto con
+   l'occhio, il nome (pulsante quando ha opzioni) e i pulsanti di posto. */
+.draw-appearance-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.draw-appearance-head {
+  margin-top: var(--space-2);
+}
+.draw-appearance-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: 28px;
+}
+.draw-appearance-eye {
+  flex: none;
+  margin: 0;
+}
+.draw-appearance-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: start;
+}
+.draw-appearance-name[data-hidden="true"] {
+  color: var(--text-muted);
+  text-decoration: line-through;
+}
+.draw-appearance-button {
+  flex: none;
+}
+.draw-appearance-expand {
+  margin-top: var(--space-2);
+}
+
+.draw-artboards {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+}
+.draw-artboards-list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 180px;
+  overflow-y: auto;
+}
+.draw-artboards-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  min-height: 28px;
+  padding: 0 var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+.draw-artboards-item:hover {
+  background: var(--bg-hover);
+}
+.draw-artboards-item[aria-pressed="true"] {
+  background: var(--bg-active);
+}
+.draw-artboards-number {
+  min-width: 2ch;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.draw-artboards-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.draw-artboards-current {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+.draw-artboards-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+.draw-artboards-fields[hidden] {
+  display: none;
+}
+.draw-artboards-name-field {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.draw-artboards-art {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.draw-artboards-bar {
+  gap: var(--space-1);
+}
+
+/* ── K6 · Nascondi tavole da disegno (Visualizza) ────────────────────────── */
+/* Le carte delle tavole restano (sono il fondo del disegno), ma senza bordo
+   né ombra e senza nome: si confondono col resto del tavolo. */
+.draw-surface[data-boards-hidden] .draw-page {
+  box-shadow: none;
+}
+.draw-surface[data-boards-hidden] .draw-sheet-name {
+  visibility: hidden;
+}
+.draw-view-goto-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
 }
 
 /* ── skin/media.css ─────────────────────────────────────────────────────── */
@@ -20985,6 +22304,27 @@ h6.ui-heading {
 .ui-table .ui-empty-cell {
   color: var(--muted);
 }
+/* Una tabella di bottoni è una griglia di giorni: le colonne sono uguali (lo
+   dice la struttura) e strette, quindi la cella cede il suo rientro e il
+   bottone sta nella cella invece di allargarla. Una testata più lunga della
+   colonna si tronca con i puntini invece di sovrapporsi alla vicina. */
+.ui-table:has(td > .ui-button) th,
+.ui-table:has(td > .ui-button) td {
+  padding: var(--space-2) var(--space-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ui-table td:has(> .ui-button) {
+  text-align: center;
+}
+.ui-table td > .ui-button {
+  /* Tondo quando la colonna ha posto, più stretto quando non ne ha. */
+  min-width: min(2.5em, 100%);
+  max-width: 100%;
+  padding-right: var(--space-1);
+  padding-left: var(--space-1);
+}
 
 /* ── Schede ──────────────────────────────────────────────────────────────── */
 
@@ -21416,9 +22756,23 @@ h6.ui-heading {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* La cartella sta su una riga, come il titolo: intera finché non passa metà
+   dello spazio del testo, oltre si accorcia coi puntini e al titolo resta
+   almeno l'altra metà. Lo spazio del testo è la voce meno l'icona da 15 px
+   (qui sotto) e i due spazi fra icona, titolo e cartella. Niente scatola a
+   righe contate della voce comune: qui la riga è una. */
 .ui-section[data-key="outline-incoming"] .ui-list-item-subtitle {
-  flex: none;
+  display: block;
+  flex: 0 0 auto;
+  min-width: 0;
+  max-width: calc((100% - 15px) / 2 - var(--space-4));
+  max-height: none;
   margin: 0;
+  overflow: hidden;
+  overflow-wrap: normal;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  -webkit-line-clamp: none;
   /* grafite e non più chiaro: la cartella è testo, e sotto 4,5:1 non si legge */
   color: var(--muted);
   font-size: var(--text-sm);
@@ -27945,6 +29299,34 @@ h6.ui-heading {
 .draw-commands-empty:empty {
   display: none;
 }
+/* Una voce che non vale adesso si vede attenuata, col suo perché (K6 T9a). */
+.draw-commands-row[aria-disabled="true"] .draw-commands-label {
+  color: var(--muted);
+}
+/* La riga attiva come nel prototipo: il testo verde, senza il fondo del
+   riquadro del kit. Il filo a sinistra è il segno che l'a11y chiede a un'opzione
+   attiva (bench/a11y-rules.mjs, modalComboboxGap: fondo, contorno, ombra o bordo):
+   il testo verde da solo non lo dà. */
+.draw-commands-list > .kit-list-highlight {
+  display: none;
+}
+.draw-commands-row[data-active] {
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+/* Le righe della tavolozza stanno una sotto l'altra, come nel prototipo (28 px
+   per riga): il gap di 2 px che la lista del kit mette fra le sue figlie qui
+   non c'è. Il kit non cambia. */
+.draw-commands-dialog .draw-commands-list {
+  gap: 0;
+}
+/* La croce di cancellazione del browser non c'è nel prototipo, il cui campo non
+   ha il fuoco: qui si cancella con la tastiera. Fub non ha una regola sua per i
+   campi di ricerca (cercata nel tema e nel kit). */
+.draw-commands-field input::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+  appearance: none;
+  display: none;
+}
 /* «Personalizza la barra…»: una riga per strumento, con la casella, il
    nome e le frecce; la riga presa si trascina. */
 .draw-toolbar-dialog {
@@ -29054,10 +30436,14 @@ h6.ui-heading {
   white-space: nowrap;
 }
 
+/* Lo scorrevole è un piano a sé (`isolation`): senza, WebKitGTK ridipinge la
+ * parte visibile a ogni passo e lo scorrimento perde la frequenza dello
+ * schermo (docs/architecture/desktop-webview.md, «Gli scorrevoli»). */
 .settings-scroll {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  isolation: isolate;
   padding: var(--space-8) var(--space-9) var(--space-10);
   border-top: 1px solid var(--border);
   scrollbar-width: thin;
@@ -30024,6 +31410,19 @@ h6.ui-heading {
 .settings-details-body > .setting-row {
   padding: var(--space-4) 0 0;
   border-top: 1px solid var(--border);
+}
+
+/* Le preferenze del motore del disegno (`settings-motore-corpo.ts`): righe del
+ * modulo del kit col nome a sinistra e il controllo a destra, largo quanto i
+ * campi delle altre righe (`.setting-input`, 280px). */
+.drawing-engine-row,
+.drawing-engine-row > .drawing-engine-row {
+  /* La seconda è il campo numerico dentro la sua riga: una griglia sua. */
+  grid-template-columns: minmax(0, 1fr) min(280px, 60%);
+}
+.drawing-engine-well {
+  justify-self: start;
+  min-width: 0;
 }
 
 /* Un permesso è una frase, non un nome: peso normale. */

@@ -21,24 +21,50 @@
 //   non ferma la fila per sempre. Scaduto il tempo, o al primo errore, la
 //   sessione si ferma come `MotoreAssente { perche: "errore" }`: la copia del
 //   motore non è più certa, e gli strumenti tornano a chi li sa fare senza.
+// - **Una richiesta sbagliata non è un motore guasto.** Un `bad_args` a un
+//   gesto o a un comando vuol dire che la richiesta non vale (due campioni
+//   da unire, un punto che il tracciato non ha), non che il motore ha
+//   sbagliato: il motore rifiuta prima di toccare la copia, la sessione resta
+//   aperta, la fila va avanti, e chi ha chiesto riceve la frase del motore
+//   (`ArgomentiRifiutati`) da dire a chi usa Fub. Un `bad_args` a un sync, o
+//   alla chiusura di un tracciato aperto, resta un guasto: lì la richiesta
+//   la fa la sessione, e la copia non è più certa.
 // - **Spento a metà.** Un `unserved` a una richiesta della sessione aperta
 //   vuol dire che il motore si è spento nel vault e l'host ne ha chiuso le
 //   istanze (T29): la sessione si ferma come `MotoreAssente { perche:
 //   "spento" }`. Una sessione ferma non riparte: chi la vuole di nuovo ne apre
 //   un'altra (`motoreDa` di `gesti.ts`).
+// - **Il tracciato aperto non si perde (T12).** Il motore tiene il gesto di
+//   uno strumento a più clic (la penna) solo alla sua revisione: un sync lo
+//   ricomincerebbe, e i punti già messi andrebbero persi. Chi tiene un
+//   tracciato aperto lo dice con `tieniAperto`; il primo sync che arriva
+//   mette in fila, prima di sé, il `commit` che lo chiude alla revisione
+//   vecchia, e ne passa l'esito a chi l'ha aperto (un passo, come Invio).
+//   Lo stesso prima di un comando che cambia il disegno (T16): il motore
+//   scarterebbe il gesto a metà, e con lui il testo che si sta scrivendo.
+// - **Un trascinamento non si interrompe.** Il motore scarta il gesto a
+//   metà anche per un comando che legge soltanto (la guida dei colori chiede
+//   il colore attivo mentre la scelta cambia): i punti dopo arriverebbero
+//   senza la pressione, e niente si sposterebbe. Chi trascina lo dice con
+//   `trattieni`; i comandi chiesti intanto partono quando lo lascia, dopo
+//   il `commit`. Un trascinamento che non finisce mai (un rilascio perso)
+//   li lascia partire dopo `TRATTIENI_AL_PIU_MS`.
 // - **Chiusa è chiusa.** Dopo `chiudi()` non parte più niente, e l'esito di
 //   una richiesta già in volo si scarta (`null`).
 
-import type {
-  DrawingChange,
-  DrawingCommandInfo,
-  DrawingCommandRequest,
-  DrawingGesture,
-  DrawingLoss,
-  DrawingOpen,
-  DrawingOutcome,
+import {
+  DRAWING_COMMAND_FAMILY_PREPARE,
+  DRAWING_COMMAND_TOOL_OPTION,
+  DRAWING_COMMAND_TOOL_STATE,
+  type DrawingChange,
+  type DrawingCommandInfo,
+  type DrawingCommandRequest,
+  type DrawingGesture,
+  type DrawingLoss,
+  type DrawingOpen,
+  type DrawingOutcome,
 } from "../../../host/contract";
-import { isErrorKind } from "../../../host/errors";
+import { asPluginError, isErrorKind } from "../../../host/errors";
 import type { api } from "../../../host/ipc";
 import type { DocumentSession, DocumentSurfaceUpdate } from "../../../state/document-session";
 import { lineFeeds } from "../../core/text-operation";
@@ -47,6 +73,14 @@ import { Queue } from "../../../ui/race";
 
 /// Quanto aspetta una richiesta al motore prima di darlo per perso.
 export const TEMPO_LIMITE_MS = 10_000;
+
+/// Quanto al più un trascinamento tiene fermi i comandi (`trattieni`).
+export const TRATTIENI_AL_PIU_MS = 60_000;
+
+/// I comandi che non toccano il disegno: lo stato e le opzioni di uno
+/// strumento, la preparazione di una famiglia. Lasciano il tracciato aperto
+/// com'è; ogni altro comando lo chiude prima di partire (`comando`).
+const NON_TOCCANO: ReadonlySet<string> = new Set([DRAWING_COMMAND_TOOL_STATE, DRAWING_COMMAND_TOOL_OPTION, DRAWING_COMMAND_FAMILY_PREPARE]);
 
 /// Il prefisso dell'identità con cui la sessione si registra come superficie.
 export const SUPERFICIE_MOTORE = "motore-disegno";
@@ -63,10 +97,32 @@ export type DocumentoDisegno = Pick<DocumentSession, "attachSurface" | "text" | 
 /// Il motore non c'è: spento (l'host non ha il componente, o lo ha spento a
 /// metà sessione) o in errore (all'apertura, a una richiesta, o perché non
 /// risponde).
+/// Un tracciato aperto che un sync non deve perdere (`tieniAperto`).
+export interface TracciatoAperto {
+  /// Il `commit` che lo chiude: la sessione ci mette la revisione.
+  chiusura(): GestoMotore;
+  /// L'esito del `commit` partito prima del sync; `null` o il motore assente
+  /// come per `gesto`.
+  chiuso(esito: DrawingOutcome | MotoreAssente | null): void;
+}
+
 export interface MotoreAssente {
   readonly kind: "assente";
   readonly perche: "spento" | "errore";
 }
+
+/// Il motore ha rifiutato un gesto o un comando perché i suoi argomenti non
+/// valgono (`bad_args`): niente è cambiato e la sessione resta aperta.
+/// `message` è la frase del motore, già scritta per chi usa Fub.
+export interface ArgomentiRifiutati {
+  readonly kind: "argomenti";
+  readonly message: string;
+}
+
+/// Ciò che torna da un gesto o da un comando: l'esito; gli argomenti
+/// rifiutati; il motore assente; `null` se la sessione è stata chiusa prima
+/// che l'esito arrivasse.
+export type RispostaMotore = DrawingOutcome | ArgomentiRifiutati | MotoreAssente | null;
 
 /// Un gesto, senza la revisione: la mette la sessione.
 export type GestoMotore = Omit<DrawingGesture, "revision">;
@@ -94,14 +150,31 @@ export interface SessioneMotore {
   /// perché la `DocumentSession` è finita (il file cancellato, il vault
   /// chiuso o cambiato). Il ritorno smette.
   quandoChiusa(listener: () => void): Teardown;
-  /// L'esito del gesto; il motore assente; `null` se la sessione è stata
-  /// chiusa prima che l'esito arrivasse.
-  gesto(gesture: GestoMotore): Promise<DrawingOutcome | MotoreAssente | null>;
+  /// L'esito del gesto; gli argomenti rifiutati; il motore assente; `null`
+  /// se la sessione è stata chiusa prima che l'esito arrivasse.
+  gesto(gesture: GestoMotore): Promise<RispostaMotore>;
   comandi(selection: string[]): Promise<DrawingCommandInfo[] | MotoreAssente | null>;
-  comando(request: ComandoMotore): Promise<DrawingOutcome | MotoreAssente | null>;
+  /// Un comando; con `lettura` (un pannello che legge, non una persona che
+  /// chiede) un tracciato aperto non si chiude: la lettura parte quando lui
+  /// si è chiuso, perché un clic arrivato mentre lei aspettava il motore non
+  /// perda il testo appena cominciato.
+  comando(request: ComandoMotore, opzioni?: OpzioniComando): Promise<RispostaMotore>;
+  /// Un tracciato aperto: il primo sync che arriva lo chiude prima di
+  /// partire (il `commit` alla revisione del gesto), una volta sola. Uno
+  /// nuovo prende il posto di quello di prima; il ritorno lo toglie.
+  tieniAperto(aperto: TracciatoAperto): Teardown;
+  /// Un trascinamento in corso nel motore: i comandi chiesti finché non lo
+  /// si lascia (il ritorno, una volta) partono dopo, nell'ordine.
+  trattieni(): Teardown;
   /// Chiude l'istanza nel motore e si toglie dalla `DocumentSession`. Torna
   /// quando la chiusura è partita e ha risposto (o il suo tempo è scaduto).
   chiudi(): Promise<void>;
+}
+
+export interface OpzioniComando {
+  /// Il comando legge soltanto, per un pannello (`chiama` di
+  /// `completo/esegui.ts`).
+  readonly lettura?: boolean;
 }
 
 export interface OpzioniSessione {
@@ -201,6 +274,15 @@ class Sessione implements SessioneMotore {
   /// ha, o avrà appena il motore lo legge.
   #revisione: bigint;
   #testo: string;
+  /// Il tracciato aperto da chiudere prima del prossimo sync.
+  #aperto: TracciatoAperto | null = null;
+  /// Le letture che aspettano che il tracciato aperto si chiuda (`comando`).
+  #inAttesaDelChiuso: (() => void)[] = [];
+  /// I trascinamenti in corso (`trattieni`) e la promessa che si risolve
+  /// quando l'ultimo è lasciato.
+  #trattenuti = 0;
+  #lasciati: Promise<void> = Promise.resolve();
+  #lascia: () => void = () => {};
 
   constructor(
     host: HostDisegno,
@@ -260,7 +342,7 @@ class Sessione implements SessioneMotore {
     };
   }
 
-  gesto(gesture: GestoMotore): Promise<DrawingOutcome | MotoreAssente | null> {
+  gesto(gesture: GestoMotore): Promise<RispostaMotore> {
     return this.#conRiprova((revision) =>
       this.#host.drawingGesture(this.instance, { ...gesture, revision }, this.#vault));
   }
@@ -269,14 +351,57 @@ class Sessione implements SessioneMotore {
     return this.#inFila(() => entro(this.#host.drawingCommands(this.instance, [...selection], this.#vault)));
   }
 
-  comando(request: ComandoMotore): Promise<DrawingOutcome | MotoreAssente | null> {
+  comando(request: ComandoMotore, opzioni?: OpzioniComando): Promise<RispostaMotore> {
+    // Un trascinamento in corso: il comando parte quando è finito.
+    if (this.#trattenuti > 0) return this.#lasciati.then(() => this.comando(request, opzioni));
+    // Una lettura col tracciato aperto aspetta che si chiuda (chi scrive
+    // finisce, o un comando lo chiude), poi guarda di nuovo.
+    if (opzioni?.lettura === true && this.#aperto !== null && this.#stato === "aperta" && !NON_TOCCANO.has(request.id)) {
+      return new Promise<void>((chiuso) => this.#inAttesaDelChiuso.push(chiuso)).then(() => this.comando(request, opzioni));
+    }
+    // Il motore scarta il gesto lasciato a metà quando un comando cambia il
+    // disegno: il tracciato aperto o il testo che si scrive si chiudono prima,
+    // in un passo, come prima di un sync (K6 T16).
+    if (!NON_TOCCANO.has(request.id)) this.#chiudiAperto();
     return this.#conRiprova((revision) =>
       this.#host.drawingCommand(this.instance, { ...request, revision }, this.#vault));
+  }
+
+  tieniAperto(aperto: TracciatoAperto): Teardown {
+    if (this.#stato !== "aperta") return () => {};
+    this.#aperto = aperto;
+    return () => {
+      if (this.#aperto === aperto) this.#nessunAperto();
+    };
+  }
+
+  trattieni(): Teardown {
+    if (this.#stato !== "aperta") return () => {};
+    if (this.#trattenuti === 0) {
+      this.#lasciati = new Promise<void>((resolve) => {
+        this.#lascia = resolve;
+      });
+    }
+    this.#trattenuti += 1;
+    let lasciato = false;
+    const lascia = (): void => {
+      if (lasciato) return;
+      lasciato = true;
+      clearTimeout(scadenza);
+      this.#trattenuti -= 1;
+      if (this.#trattenuti === 0) this.#lascia();
+    };
+    const scadenza = setTimeout(lascia, TRATTIENI_AL_PIU_MS);
+    return lascia;
   }
 
   async chiudi(): Promise<void> {
     if (this.#stato !== "aperta") return;
     this.#stato = "chiusa";
+    this.#nessunAperto();
+    // I comandi in attesa partono e trovano la sessione chiusa.
+    this.#trattenuti = 0;
+    this.#lascia();
     this.#assenti.clear();
     this.#life.close();
     const chiusura = this.#chiudiNelMotore();
@@ -293,12 +418,32 @@ class Sessione implements SessioneMotore {
     // Il testo dopo il cambio, preso adesso: è quello che la copia avrà
     // quando questo sync sarà partito, anche se il documento intanto va oltre.
     const dopo = lineFeeds(update.text);
+    this.#chiudiAperto();
     void this.#inFila(async () => {
       const revision = (this.#revisione + 1n).toString();
       await entro(this.#host.drawingSync(this.instance, { revision, change }, this.#vault));
       this.#revisione += 1n;
       this.#testo = dopo;
     });
+  }
+
+  /// Il tracciato aperto, se c'è, si chiude in fila prima del sync che
+  /// arriva: alla revisione del gesto, senza riprova (`stale` vorrebbe dire
+  /// che è già perso, e la riprova lo ricomincerebbe vuoto).
+  #chiudiAperto(): void {
+    const aperto = this.#aperto;
+    if (aperto === null) return;
+    this.#nessunAperto();
+    const gesture = aperto.chiusura();
+    void this.#inFila(() =>
+      entro(this.#host.drawingGesture(this.instance, { ...gesture, revision: this.revision() }, this.#vault)),
+    ).then((esito) => aperto.chiuso(esito));
+  }
+
+  /// Il tracciato aperto non c'è più: le letture che lo aspettavano partono.
+  #nessunAperto(): void {
+    this.#aperto = null;
+    for (const chiuso of this.#inAttesaDelChiuso.splice(0)) chiuso();
   }
 
   /// Il testo intero alla revisione dopo: da dentro un lavoro della fila.
@@ -312,14 +457,21 @@ class Sessione implements SessioneMotore {
   // --- La fila ---------------------------------------------------------------
 
   /// Un gesto o un comando: con `stale` rimanda il testo intero e riprova una
-  /// volta.
-  #conRiprova(send: (revision: string) => Promise<DrawingOutcome>): Promise<DrawingOutcome | MotoreAssente | null> {
+  /// volta. Un `bad_args` della richiesta torna come `ArgomentiRifiutati`;
+  /// quello del sync della riprova resta un guasto (`#inFila`).
+  #conRiprova(send: (revision: string) => Promise<DrawingOutcome>): Promise<RispostaMotore> {
+    const manda = (): Promise<DrawingOutcome | ArgomentiRifiutati> =>
+      entro(send(this.revision())).catch((error: unknown) => {
+        const rifiutati = argomentiRifiutati(error);
+        if (rifiutati === null) throw error;
+        return rifiutati;
+      });
     return this.#inFila(async () => {
-      const outcome = await entro(send(this.revision()));
-      if (outcome.refused !== "stale" || this.#stato !== "aperta") return outcome;
+      const outcome = await manda();
+      if ("kind" in outcome || outcome.refused !== "stale" || this.#stato !== "aperta") return outcome;
       await this.#rimandaTesto();
       if (this.#stato !== "aperta") return outcome;
-      return entro(send(this.revision()));
+      return manda();
     });
   }
 
@@ -350,6 +502,7 @@ class Sessione implements SessioneMotore {
   #guasto(perche: MotoreAssente["perche"]): MotoreAssente {
     const assente: MotoreAssente = { kind: "assente", perche };
     this.#stato = assente;
+    this.#nessunAperto();
     this.#life.close();
     this.#chiuse.clear();
     avvisa(this.#assenti, assente);
@@ -364,6 +517,13 @@ class Sessione implements SessioneMotore {
   #chiudiNelMotore(): Promise<void> {
     return this.#fila.enqueue(() => entro(this.#host.closeDrawing(this.instance, this.#vault)).catch(() => {}));
   }
+}
+
+/// Gli argomenti rifiutati di un errore `bad_args` del contratto, o `null`
+/// per ogni altro errore (che ferma la sessione).
+function argomentiRifiutati(error: unknown): ArgomentiRifiutati | null {
+  const plugin = asPluginError(error);
+  return plugin?.kind === "bad_args" ? { kind: "argomenti", message: plugin.message } : null;
 }
 
 /// Avvisa una volta chi ascolta in `listeners`, e li dimentica: l'errore di

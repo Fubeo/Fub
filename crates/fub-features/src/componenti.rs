@@ -319,6 +319,18 @@ pub fn righe() -> Vec<Riga> {
             .requires(&["fub.draw"])
             .cargo_feature("engine-drawing")
             .senza_bundle(),
+        // Il Disegno completo (piano K6): tutti i comandi, gli strumenti e i
+        // pannelli del motore nei disegni, con lo stato di ogni famiglia che
+        // nasce al primo uso (`fub-disegno/completo`). Acceso di serie;
+        // richiede il motore, quindi spento lui si spegne anche questo, e il
+        // Completo torna quello nativo. Non è un bundle: spento a mano sta in
+        // `components.off`.
+        #[cfg(feature = "drawing-complete")]
+        Riga::motore("fub.disegno-completo", "component.disegno-completo.name")
+            .group("disegnare")
+            .requires(&["fub.motore-vettoriale"])
+            .cargo_feature("drawing-complete")
+            .senza_bundle(),
         // I file delle app Craft: il bundle e i formati stanno in `fub-host`.
         // Spento il componente, l'anteprima non c'è e i formati restano.
         #[cfg(feature = "craft")]
@@ -636,6 +648,11 @@ const DESCRIZIONI: &[(&str, &str, &str)] = &[
         "Draws, moves and reshapes the shapes in drawings. When off, drawings use the simple tools.",
     ),
     (
+        "component.disegno-completo.description",
+        "Tutti i comandi, gli strumenti e i pannelli del motore nei disegni. Spento, il Completo usa gli strumenti di Fub.",
+        "Every command, tool and panel of the engine in drawings. When off, Complete uses Fub's own tools.",
+    ),
+    (
         "component.motore-fogli.description",
         "Formule, calcolo e comandi dei fogli.",
         "Formulas, calculation and commands for spreadsheets.",
@@ -718,6 +735,11 @@ const NOMI: &[(&str, &str, &str)] = &[
         "Drawing engine",
     ),
     (
+        "component.disegno-completo.name",
+        "Disegno completo",
+        "Complete drawing",
+    ),
+    (
         "component.motore-fogli.name",
         "Motore dei fogli",
         "Spreadsheet engine",
@@ -791,11 +813,18 @@ pub fn profili() -> Vec<DefProfilo> {
         ids.extend(di_questa_build(altri));
         ids
     };
+    // Un profilo aspetta solo ciò che questa build non ha: il Disegno
+    // completo, che «Grafica» aspettava, c'è con `drawing-complete`; e come
+    // ogni riga di «Disegnare» un profilo non lo sceglie.
     let profilo = |nome, etichetta, componenti, arriva_con: &[&'static str]| DefProfilo {
         nome,
         etichetta,
         componenti,
-        arriva_con: arriva_con.to_vec(),
+        arriva_con: arriva_con
+            .iter()
+            .copied()
+            .filter(|id| !righe.iter().any(|riga| riga.id == *id))
+            .collect(),
     };
     vec![
         profilo("solo-note", "profile.solo-note.name", note.clone(), &[]),

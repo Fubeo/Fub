@@ -904,21 +904,27 @@ describe("le schede dell'ispettore (C1)", () => {
     expect(status.counts, "un disegno non conta parole").toBe(true);
     let told = 0;
     const stop = status.subscribe(() => told++);
+    // La banda si rilegge al fotogramma successivo: si aspetta quello prima di leggerla.
+    const fotogramma = (): Promise<void> => new Promise((resolve) => requestAnimationFrame(() => resolve()));
     try {
       const ids = (): string[] => status.items().map((item) => item.id);
       const text = (id: string): string | undefined => status.items().find((item) => item.id === id)?.text;
       expect(ids()).toEqual(["zoom", "objects"]);
       expect(text("objects")).toBe("1 oggetto");
+      expect(status.items()[0]!.inPlace, "lo zoom torna al 100% sul posto: il fuoco resta al foglio").toBe(true);
       key(parent, { key: "a", ctrlKey: true });
+      await fotogramma();
       expect(told).toBeGreaterThan(0);
-      expect(ids()).toEqual(["zoom", "size", "objects"]);
+      expect(ids()).toEqual(["zoom", "info", "objects"]);
       expect(text("objects")).toBe("1 di 1 scelti");
-      expect(text("size"), "il contorno è compreso").toBe("22 × 22");
+      expect(text("info"), "il contorno è compreso").toBe("22 × 22");
       const sheet = parent.querySelector<HTMLElement>(".draw-surface")!;
       sheet.dispatchEvent(new PointerEvent("pointermove", { ...MOUSE, clientX: 5, clientY: 5, bubbles: true }));
-      expect(text("pointer")).toMatch(/^X -?\d+(,\d)?  Y -?\d+(,\d)?$/);
+      await fotogramma();
+      expect(text("info"), "il puntatore accanto alla selezione").toMatch(/^X -?\d+(,\d)?  Y -?\d+(,\d)? · 22 × 22$/);
       sheet.dispatchEvent(new PointerEvent("pointerleave", { ...MOUSE }));
-      expect(ids()).not.toContain("pointer");
+      await fotogramma();
+      expect(text("info")).toBe("22 × 22");
       surface.setMode("read");
       expect(status.items(), "in Lettura il foglio non c'è").toEqual([]);
     } finally {

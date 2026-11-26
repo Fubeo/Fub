@@ -5,9 +5,7 @@
 // per righe, con le righe tolte e aggiunte segnate, in una modale della shell.
 // Non è un editor di fusione: si guarda, poi si sceglie dal banner.
 import { t } from "../i18n/strings";
-import { trapFocus } from "./a11y";
-import { openLifetime } from "./lifetime";
-import { enterSurface, exitSurface } from "./motion";
+import { openFrame } from "./dialogs";
 
 export type DiffLine = { kind: "same" | "mine" | "theirs"; text: string };
 
@@ -55,19 +53,13 @@ export function diffLines(theirs: string, mine: string): DiffLine[] {
   return out;
 }
 
-/// Apre il confronto. Si chiude con Esc, col bottone o cliccando fuori.
+/// Apre il confronto. Si chiude con Esc, col bottone o cliccando fuori: è la
+/// finestra comune della shell (`openFrame`), con le sue regole del fuoco e
+/// del clic fuori, letto da `pointerdown` perché il tocco che la apre non la
+/// richiuda.
 export function openCompare(title: string, theirs: string, mine: string): void {
-  const life = openLifetime();
-  const overlay = document.createElement("div");
-  overlay.className = "modale shell-dialog";
-  overlay.setAttribute("role", "dialog");
-  overlay.setAttribute("aria-modal", "true");
-  overlay.setAttribute("aria-label", title);
-  const box = document.createElement("div");
-  box.className = "palette-box compare-box";
-  const heading = document.createElement("h2");
-  heading.className = "palette-heading";
-  heading.textContent = title;
+  const frame = openFrame(title, () => {});
+  frame.box.classList.add("compare-box");
   const legend = document.createElement("p");
   legend.className = "palette-desc";
   legend.textContent = t("compare.legend");
@@ -89,17 +81,8 @@ export function openCompare(title: string, theirs: string, mine: string): void {
   const close = document.createElement("button");
   close.type = "button";
   close.textContent = t("app.close");
+  close.addEventListener("click", () => frame.close());
   actions.append(close);
-  box.append(heading, legend, list, actions);
-  overlay.append(box);
-  const dismiss = () => life.close();
-  close.addEventListener("click", dismiss);
-  life.listen(overlay, "mousedown", (event) => {
-    if (event.target === overlay) dismiss();
-  });
-  document.body.append(overlay);
-  enterSurface(overlay);
-  life.add(() => exitSurface(overlay, () => overlay.remove()));
-  life.add(trapFocus(overlay, dismiss));
+  frame.box.append(legend, list, actions);
   close.focus();
 }

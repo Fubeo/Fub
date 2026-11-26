@@ -78,8 +78,8 @@ const EXACT = new WeakMap<Undo, Exact>();
 /// Un undo solo per due operazioni applicate una dopo l'altra, come la pila
 /// le fonde (§7): annulla tutte e due con l'inversa di `first`, e il suo redo
 /// le ripete con l'operazione in avanti di `second`. Vale se le due sono
-/// `set` sulle stesse chiavi degli stessi elementi, anche in due `batch` con
-/// lo stesso ordine, e se `second` è stata applicata subito dopo `first` e
+/// `set` sulle stesse chiavi degli stessi elementi (e con lo stesso `tag`),
+/// anche in due `batch` con lo stesso ordine, e se `second` è stata applicata subito dopo `first` e
 /// sullo stesso motore: l'undo resta esatto. Altrimenti `null`.
 export function mergeUndo(first: Undo, second: Undo): Undo | null {
   const a = EXACT.get(first);
@@ -99,6 +99,7 @@ function sameSets(a: Op, b: Op): boolean {
     const keys = Object.keys(a.attrs);
     return (
       a.id === b.id &&
+      a.tag === b.tag &&
       (a.part ?? []).join() === (b.part ?? []).join() &&
       keys.length === Object.keys(b.attrs).length &&
       keys.every((key) => Object.prototype.hasOwnProperty.call(b.attrs, key))

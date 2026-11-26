@@ -137,6 +137,16 @@ impl TagCounts {
             .unwrap_or_default()
     }
 
+    /// Se le grafie di `id` sono `names`, nello stesso ordine di
+    /// [`names_of`](TagCounts::names_of), senza copiarle: è il confronto con
+    /// cui l'anagrafe di una riapertura ferma si scopre già scritta (#524).
+    pub(crate) fn names_are(&self, id: &DocId, names: &[String]) -> bool {
+        match self.docs.get(id) {
+            Some(contribution) => contribution.values().flatten().eq(names.iter()),
+            None => names.is_empty(),
+        }
+    }
+
     /// I tag del vault, ordinati per chiave canonica: la risposta a
     /// [`IndexQuery::Tags`](fub_abi::traits::IndexQuery::Tags).
     pub(crate) fn snapshot(&self) -> Vec<TagCount> {

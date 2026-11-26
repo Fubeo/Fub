@@ -7,12 +7,23 @@
 // `onToolbar`); l'editor le applica subito.
 
 import { textButton } from "../../../../../kit";
+import { settings } from "../../../../../host/query";
+import { components, onComponents } from "../../../../../state/components";
 import type { MenuItem } from "../../../../../ui/menu";
 import { t } from "../../../strings";
 import type { ToolId, Workspace } from "../../registry";
 import { openToolbarDialog } from "../../toolbar-dialog";
 import type { EditorContext } from "../context";
+import { gesture } from "../../edit";
+import { elemDi, opsDellEsito } from "../../../motore/gesti";
+import { segniComeForma } from "../../../motore/tracciati";
+import { IDENTITY } from "../../../scene/matrix";
+import type { Sezioni } from "../../../completo/sezioni";
 import { railLayout } from "./rail";
+import { comandoDiFub, statoClienteCompleto, voceClienteCompleto } from "./status";
+import { eseguiVoceClient } from "./commands";
+import type { Completo } from "../../../completo";
+import type { EffettiSpazio, SchedaSpazio } from "../../../completo/spazi";
 
 /// Fino a questa larghezza della finestra, in px, la colonna sta sotto il
 /// foglio; e così in un riquadro largo fino a `NARROW_PANE`, anche in una
@@ -21,12 +32,50 @@ import { railLayout } from "./rail";
 const NARROW_WIDTH = 700;
 const NARROW_PANE = 480;
 
+/// Il componente del Disegno completo (`crates/fub-components`).
+export const DISEGNO_COMPLETO = "fub.disegno-completo";
+
+/// L'impostazione dello spazio di lavoro nel bundle del disegno: le stesse di
+/// `preferences.ts` (`WORKSPACE_KEY`), che sta nel chunk della superficie e
+/// da qui non si importa.
+const DRAW_BUNDLE = "fub.draw";
+const WORKSPACE_KEY = "draw.workspace";
+
+/// Lo spazio di base che il vault ha scelto, letto adesso: `simple` per il
+/// Semplice, `full` per ogni altro id (un preset, uno salvato, o uno che nessuno
+/// conosce); `null` se è quello di serie, o se la lettura non riesce.
+async function spazioDelVault(): Promise<Workspace | null> {
+  try {
+    const entry = (await settings(DRAW_BUNDLE)).find((one) => one.spec.key === WORKSPACE_KEY);
+    if (entry === undefined || entry.source === "default") return null;
+    return entry.value === "simple" ? "simple" : "full";
+  } catch {
+    return null;
+  }
+}
+
+/// La base di uno spazio: il Semplice per il suo id, il Completo per tutti gli
+/// altri (i preset e gli spazi salvati sono del Completo).
+export function baseOf(space: string): Workspace {
+  return space === "simple" ? "simple" : "full";
+}
+
 export interface WorkspaceContext {
+  /// La base dello spazio in uso: `simple` o `full`.
   workspace: Workspace;
+  /// Lo spazio in uso: `full`, `simple`, un preset o uno salvato.
+  space: string;
   /// Gli strumenti della colonna, in ordine; vuoto, quelli di serie.
   column: readonly ToolId[];
   /// Un altro spazio, dal vivo; con `toolbar`, anche la colonna.
-  setWorkspace: (next: Workspace, toolbar?: readonly ToolId[]) => void;
+  setSpace: (next: string, toolbar?: readonly ToolId[]) => void;
+  /// Riapplica i dati dello spazio in uso (Ripristina).
+  resetSpace: () => void;
+  /// Il Completo non si è caricato: si riprova (Riprova).
+  retryCompleto: () => void;
+  completoFailed: () => boolean;
+  /// La colonna, la scheda e la sezione adesso, per salvare lo spazio.
+  spaceSnapshot: () => { colonna: string[]; scheda: SchedaSpazio; sezione: string | null; righelli: boolean };
   /// Le voci «Spazio di lavoro» e «Personalizza la barra…» del menu ≡.
   workspaceItems: () => MenuItem[];
   /// Apre «Personalizza la barra…».
@@ -47,6 +96,7 @@ export function columnOf(ctx: EditorContext, toolbar: readonly ToolId[]): ToolId
 
 export function installWorkspace(ctx: EditorContext): void {
   const { options } = ctx;
+  ctx.space = options.space ?? ctx.workspace;
   ctx.root.dataset.workspace = ctx.workspace;
   // In una scheda (T46) gli strumenti sono sempre una fila sopra il foglio:
   // la scheda è larga quanto la colonna del testo, e una colonna di lato le
@@ -88,22 +138,223 @@ export function installWorkspace(ctx: EditorContext): void {
     full.title = t("draw.workspace.full.hint");
   });
 
-  ctx.setWorkspace = (next, toolbar) => {
+  // Il Disegno completo (K6): col componente acceso, entrare nel Completo
+  // porta il suo ingresso con un `import()`, una volta per disegno aperto. Il
+  // Semplice, una scheda e il componente spento non lo chiedono mai.
+  //
+  // Prima dell'`import()` si legge la scelta del vault: il primo disegno
+  // della sessione nasce nel Completo finché la superficie non ha letto
+  // l'impostazione (`preferences.ts`, il Completo è la scelta di serie), e
+  // senza questa lettura un vault nel Semplice porterebbe il Completo a ogni
+  // avvio. Una lettura che non riesce non ferma niente: decide lo spazio
+  // dell'editor.
+  // Lo stato del Completo: `fallito` quando il suo ingresso non arriva, e allora
+  // lo spazio di prima resta e il menu lo dice, con «Riprova».
+  let completo: "no" | "verifica" | "in-arrivo" | "aperto" | "fallito" = "no";
+  /// Il Completo aperto: vi si applica lo spazio in uso.
+  let aperto: Completo | null = null;
+  // La scheda che lo spazio apre passa dal pannello dell'ispettore. Le sezioni
+  // dell'ispettore (T10) non si aprono ancora per nome: lo spazio le salta.
+  const effetti: EffettiSpazio = {
+    scheda: (scheda) => options.chrome?.reveal?.(scheda),
+    sezione: () => false,
+  };
+  const applicaSpazio = (): void => {
+    // Uno spazio salvato porta la sua scheda; un preset chiede il Completo.
+    const salvato = options.spazioSalvato?.(ctx.space) ?? null;
+    if (salvato !== null) {
+      effetti.scheda(salvato.scheda);
+      return;
+    }
+    aperto?.spazio(ctx.space, effetti);
+  };
+  // Le sezioni del Completo aperto (T10): la scheda Risorse le legge di qui.
+  let sezioniAperte: Sezioni | null = null;
+  const vuoleCompleto = (): boolean =>
+    !compact && !ctx.disposed && ctx.workspace === "full" && components()?.on(DISEGNO_COMPLETO) === true;
+  // La scheda Risorse è quella del Completo del motore: c'è solo col Completo
+  // aperto, col componente acceso, col motore del disegno e nello spazio
+  // «Completo». Spento il componente, senza motore o nel Semplice, si toglie.
+  const mostraRisorse = (): void => {
+    if (completo !== "aperto" || sezioniAperte === null) return;
+    const motore = options.motore ?? null;
+    const attivo = !ctx.disposed && ctx.workspace === "full" && motore !== null && components()?.on(DISEGNO_COMPLETO) === true;
+    ctx.collegaCompleto(attivo ? sezioniAperte : null, attivo ? motore : null);
+  };
+  // La colonna del Completo (K6 T8) c'è quando il Completo è aperto e acceso
+  // nello spazio «Completo»: la colonna la chiede a ogni sincronia.
+  ctx.completo = () => {
+    const porta = aperto;
+    if (porta === null || !vuoleCompleto()) return null;
+    return {
+      colonna: (offerti) => porta.colonna(offerti),
+      strumentoMotore: (id) => porta.strumentoMotore(id),
+      cassetto: (anchor, opzioni) => porta.cassetto(anchor, opzioni, ctx.life),
+    };
+  };
+  // Il Completo aperto e acceso, per il menu ≡ e la ricerca Ctrl+/ (K6 T9a):
+  // le sue voci vengono dall'indice. Senza, quelli di oggi.
+  ctx.completoVoci = () => (aperto === null || !vuoleCompleto() ? null : aperto);
+  // La fila delle opzioni dello strumento del motore (K6 T11) col Completo aperto e
+  // acceso; senza, la testata non ha fila.
+  ctx.completoMotore = () => (aperto === null || !vuoleCompleto() ? null : aperto);
+  // I comandi di livello dell'albero (K6 T15, giro 4) passano dal motore col Completo
+  // aperto e acceso; nel Semplice, o senza motore, li fa l'editor come sempre.
+  ctx.livelliMotore = () => (aperto === null || !vuoleCompleto() ? null : aperto.livelli);
+  // Il campo «Testo» di un testo in area (K6 T16) passa dal motore col Completo aperto e
+  // acceso: rifà gli a capo nel riquadro. Senza motore il campo non c'è per un testo in area.
+  ctx.areaWordsWriter = () => {
+    const ora = aperto === null || !vuoleCompleto() || (options.motore ?? null) === null ? null : aperto;
+    return ora === null ? null : (elemento, testo) => ora.parole(elemento, testo);
+  };
+  const portaCompleto = (): void => {
+    if ((completo !== "no" && completo !== "fallito") || !vuoleCompleto()) return;
+    completo = "verifica";
+    void spazioDelVault().then((scelto) => {
+      if (ctx.disposed) return;
+      if (scelto === "simple" || !vuoleCompleto()) {
+        // La superficie porterà l'editor nel Semplice; il prossimo ingresso
+        // nel Completo ci riprova.
+        completo = "no";
+        return;
+      }
+      completo = "in-arrivo";
+      import("../../../completo").then(
+        ({ apri }) => {
+          if (ctx.disposed) return;
+          aperto = apri({ motore: options.motore ?? null, life: ctx.life }, {
+            // I tasti del motore (K6 T9b): la radice dell'editor, la selezione, e la
+            // cronologia e l'annuncio di sempre. L'anteprima di una finestra (T12,
+            // giro 3) va sullo strato dell'anteprima come quella dei gesti: la forma,
+            // o i contorni nuovi in coordinate di scena; `null` la toglie.
+            tasti: {
+              radice: ctx.root,
+              attivo: () => vuoleCompleto(),
+              selezione: () => ctx.selection,
+              strumento: (id) => ctx.sceltaMotore(id),
+              seleziona: (ids) => ctx.select(ids),
+              anteprima: (anteprima) =>
+                ctx.showShape(
+                  anteprima === null ? null : (elemDi(anteprima.shape) ?? segniComeForma(anteprima.overlays ?? [], ctx.camera.scale)),
+                  IDENTITY,
+                ),
+              stato: () => {
+                const id = ctx.motoreTool;
+                const stato = id === null ? null : ctx.statoStrumento(id);
+                return { vuoleTesto: stato?.wants_text === true, componendo: stato?.composing === true };
+              },
+              // I punti scelti con lo strumento del motore di adesso (Media, K6 T12).
+              punti: () => {
+                const id = ctx.motoreTool;
+                const punti = id === null ? undefined : ctx.statoStrumento(id)?.anchors;
+                return Array.isArray(punti) ? punti : [];
+              },
+              // Il livello corrente del disegno, per Sposta sul livello corrente.
+              livello: () => ctx.currentLayer()?.id ?? null,
+              rileggiStato: () => {
+                const id = ctx.motoreTool;
+                if (id !== null && !ctx.disposed) ctx.rileggiStato(id);
+              },
+              leggi: (ops) => {
+                const letto = opsDellEsito(ops);
+                return "ops" in letto ? letto.ops : null;
+              },
+              commit: (ops, nome) => ctx.commit({ name: nome }, gesture(ops)) !== null,
+              annuncia: (testo) => ctx.announce(testo),
+              diFub: (id) => comandoDiFub(ctx, id),
+              client: (id) => eseguiVoceClient(ctx, id),
+            },
+            // Le voci del client che il Completo fa: la banda, e ≡ › Visualizza.
+            clientVoce: (id) => voceClienteCompleto(ctx, id),
+            clientStato: (id) => statoClienteCompleto(ctx, id),
+          });
+          sezioniAperte = aperto.sezioni;
+          // Il campo «Testo» di un testo in area scelto c'è adesso (`areaWordsWriter`).
+          ctx.syncProperties();
+          // Lo strumento del motore aspetta la sua famiglia dal Completo aperto
+          // (`sceltaMotore`): una famiglia che non arriva non fa partire il gesto.
+          ctx.preparaStrumento = (id) => aperto!.preparaStrumento(id);
+          // Il clic senza trascinare di uno strumento di forma apre la sua finestra (T13).
+          ctx.clicStrumento = (strumento, punto, doppio) => aperto?.clicStrumento(strumento, punto, doppio);
+          // Un grafico disegnato trascinando apre i suoi dati.
+          ctx.gestoFinito = (strumento) => aperto?.gestoFinito(strumento);
+          // Le caselle degli strumenti del motore (K6 T11) cambiano col nome e
+          // con lo stato della loro famiglia, e la casella accesa con lo
+          // strumento scelto: la colonna si risincronizza.
+          const risincronizza = (): void => {
+            if (ctx.disposed) return;
+            ctx.syncRail(ctx.editable());
+            ctx.syncInsert();
+            ctx.sincronizzaFila();
+          };
+          ctx.life.add(aperto.ascoltaColonna(risincronizza));
+          ctx.life.add(ctx.ascoltaStrumentoMotore(risincronizza));
+          completo = "aperto";
+          // Come in VectorCraft si parte dalla sua Selezione: nessuno strumento di Fub resta acceso.
+          if (ctx.motoreTool === null && ctx.current === null && vuoleCompleto()) ctx.tornaAllaSelezione();
+          applicaSpazio();
+          mostraRisorse();
+          ctx.syncRail(ctx.editable());
+          // Il menu della scheda Livelli c'è col motore.
+          ctx.syncLayers();
+          // La voce dello zoom della banda sceglie il suo menu solo col Completo
+          // presente (`status.ts`): la banda si rilegge adesso.
+          ctx.statusChanged();
+          options.onWorkspaceChange?.();
+        },
+        // Un chunk che non arriva: lo spazio di prima resta, e «Riprova» ci
+        // riprova.
+        () => {
+          completo = "fallito";
+          options.onWorkspaceChange?.();
+        },
+      );
+    });
+  };
+  ctx.life.add(onComponents(() => {
+    portaCompleto();
+    mostraRisorse();
+    ctx.syncRail(ctx.editable());
+    ctx.syncLayers();
+    ctx.statusChanged();
+  }));
+
+  ctx.setSpace = (next, toolbar) => {
     if (ctx.disposed) return;
-    ctx.workspace = next;
+    ctx.space = next;
+    ctx.workspace = baseOf(next);
     if (toolbar !== undefined) ctx.column = toolbar;
-    ctx.root.dataset.workspace = next;
-    ctx.rail.element.dataset.size = sizeOf(next);
-    full.hidden = fullHidden(next);
-    ctx.offer(ctx.featuresOf(next));
+    // Uno spazio salvato dà la sua colonna, sopra quella dell'utente.
+    const salvato = options.spazioSalvato?.(next) ?? null;
+    if (salvato !== null) ctx.column = [...salvato.colonna] as ToolId[];
+    ctx.root.dataset.workspace = ctx.workspace;
+    ctx.rail.element.dataset.size = sizeOf(ctx.workspace);
+    full.hidden = fullHidden(ctx.workspace);
+    if (!vuoleCompleto()) ctx.pannelliTab(null);
+    ctx.sincronizzaFila();
+    ctx.offer(ctx.featuresOf(ctx.workspace));
     ctx.syncRail(ctx.editable());
     ctx.syncPenOptions();
+    portaCompleto();
+    applicaSpazio();
+    mostraRisorse();
+    ctx.statusChanged();
   };
+  ctx.resetSpace = applicaSpazio;
+  ctx.retryCompleto = () => portaCompleto();
+  ctx.completoFailed = () => completo === "fallito";
+  ctx.spaceSnapshot = () => ({
+    colonna: [...ctx.column],
+    scheda: "design",
+    sezione: null,
+    righelli: ctx.ruler !== null,
+  });
+  portaCompleto();
 
   /// Lo spazio scelto da chi disegna: si applica, si dice e si ricorda.
-  const choose = (next: Workspace): void => {
-    if (next === ctx.workspace) return;
-    ctx.setWorkspace(next);
+  const choose = (next: string): void => {
+    if (next === ctx.space) return;
+    ctx.setSpace(next);
     ctx.announce(t("draw.workspace.on", { name: t(next === "full" ? "draw.workspace.full" : "draw.workspace.simple") }));
     options.onWorkspace?.(next);
   };

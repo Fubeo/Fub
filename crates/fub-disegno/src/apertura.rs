@@ -24,14 +24,20 @@ use std::sync::Arc;
 
 use fub_abi::{DrawingLoss, DrawingLossKind};
 use fub_scene::{Item, ReadOnly, Role};
-use vectorcraft_doc::{Document, LayerColor, Node, NodeKind};
+use vectorcraft_doc::{Document, LayerColor, Node, NodeKind, WidthProfile};
 use vectorcraft_geom::Affine;
 
+use crate::campioni::{self, CampioniDelFile};
 use crate::mappa::{Elemento, Mappa};
 use crate::perdite::{self, Perdite};
+use crate::ricetta;
 
 /// Il prefisso degli id sintetici della copia per l'import.
 pub const PREFISSO_SINTETICO: &str = "fubtmp-";
+
+/// Il motivo della carta che la copia per l'import lascia fuori dal motore
+/// (vedi `carta_da_togliere`): non è una perdita, la carta non si modifica.
+pub const CARTA_FUORI: &str = "la carta resta fuori dal motore: i livelli di Fub sono la cima";
 
 /// La copia del disegno nel motore a una revisione del testo.
 pub(crate) struct Copia {
@@ -50,6 +56,14 @@ pub(crate) struct Copia {
     /// Dallo spazio della radice (le coordinate della scena) al documento
     /// del motore.
     pub radice: Affine,
+    /// I campioni del file, che il motore ha come campioni globali.
+    pub campioni: CampioniDelFile,
+    /// Le tavole del file, che il motore ha come sue tavole.
+    pub tavole: crate::tavole::Tavole,
+    /// I simboli del file, che il motore ha come suoi simboli.
+    pub simboli: crate::simboli::Simboli,
+    /// Le guide del file, che il motore ha come sue guide.
+    pub guide: crate::guide::GuideAperte,
 }
 
 impl Copia {
@@ -92,7 +106,7 @@ impl std::fmt::Display for ErroreApertura {
 pub(crate) fn importa(testo: &str, revisione: u64) -> Result<Copia, ErroreApertura> {
     let scena = fub_scene::read(testo).map_err(|e| ErroreApertura::Scena(e.to_string()))?;
     let mut perdite = Perdite::nuove();
-    let modificabile = scena.editable();
+    let mut modificabile = scena.editable();
     if !scena.read_only.is_empty() {
         let motivi: Vec<&str> = scena
             .read_only
@@ -120,7 +134,9 @@ pub(crate) fn importa(testo: &str, revisione: u64) -> Result<Copia, ErroreApertu
         .and_then(|at| attributi(testo, at))
         .map_or(Affine::IDENTITY, |(_, a)| matrice_della_radice(&a));
     let mut elementi = elementi(testo, &scena.items, base);
-    let (copia_testo, _) = copia_per_l_import(testo, &mut elementi, &scena.items);
+    let (campioni_del_file, usi) = campioni::leggi(testo, &scena.items);
+    let (copia_testo, _, profili) = copia_per_l_import(testo, &mut elementi, &scena.items);
+    let senza_carta = elementi.iter().any(|e| e.motivo == Some(CARTA_FUORI));
 
     let documento = if elementi.is_empty() && scena.items.len() <= 1 {
         // Niente da importare: una scena troncata o vuota.
@@ -145,9 +161,48 @@ pub(crate) fn importa(testo: &str, revisione: u64) -> Result<Copia, ErroreApertu
         }
     };
     let mut documento = documento;
+    let simboli = crate::simboli::leggi(&scena.items, &mut documento);
+    let legate = crate::simboli::istanze_legate(&scena.items, &simboli, &documento);
+    for e in elementi.iter_mut().filter(|e| legate.contains(&e.percorso)) {
+        e.motivo = None;
+    }
+    let tavole = crate::tavole::leggi(testo, &scena.items, base, &mut documento);
     gruppi_di_fub(&elementi, &mut documento);
     livelli_vuoti(&elementi, &mut documento);
-    let mappa = Mappa::nuova(elementi, &mut documento);
+    if senza_carta {
+        cima_vuota_via(&elementi, &mut documento);
+    }
+    // Le ricette dopo l'import, prima della mappa: gli elementi dentro un
+    // oggetto rifatto restano fuori dalla mappa.
+    let (ricette, sola_lettura) = ricetta::leggi(
+        testo,
+        &scena.items,
+        &mut elementi,
+        &mut documento,
+        &mut perdite,
+    );
+    if let Some(motivo) = sola_lettura {
+        if modificabile {
+            perdite.aggiungi(
+                "svg",
+                DrawingLossKind::Unsupported,
+                format!("sola lettura: {motivo}"),
+            );
+        }
+        modificabile = false;
+    }
+    let mut mappa = Mappa::nuova(elementi, &mut documento);
+    profili_nel_motore(&mappa, &profili, &mut documento);
+    spazi_fra_le_righe(&mappa, &mut documento);
+    testi_in_area(&mappa, &mut documento);
+    testi_verticali(&mappa, &mut documento);
+    angoli_dei_riquadri(&mappa, &mut documento);
+    crate::ricetta::nomi_di_ruolo(&ricette, &mut documento);
+    mappa.lega_le_facce(&documento);
+    mappa.lega_i_ritagli(&documento);
+    mappa.ricette = ricette;
+    campioni::nel_motore(&campioni_del_file, &usi, &mappa, &mut documento);
+    let guide = crate::guide::leggi(testo, &scena.items, base, &mappa, &tavole, &mut documento);
     perdite::classifica(&mut perdite, testo, &scena.items, &mappa);
     Ok(Copia {
         revisione,
@@ -156,6 +211,10 @@ pub(crate) fn importa(testo: &str, revisione: u64) -> Result<Copia, ErroreApertu
         mappa,
         perdite: perdite.in_elenco(),
         radice: base,
+        campioni: campioni_del_file,
+        tavole,
+        simboli,
+        guide,
     })
 }
 
@@ -315,6 +374,23 @@ fn livelli_vuoti(elementi: &[Elemento], doc: &mut Document) {
     }
 }
 
+/// Senza la carta, un disegno di soli livelli vuoti (un disegno nuovo) non
+/// ha niente da importare, e l'import fa un livello vuoto suo che starebbe
+/// per la radice accanto ai livelli di Fub di [`livelli_vuoti`]: si toglie,
+/// così il primo oggetto disegnato va nel livello di Fub e la cima del
+/// motore è quella del file. Si toglie solo un livello vuoto che non viene
+/// da un elemento di Fub, e solo se resta almeno un livello.
+fn cima_vuota_via(elementi: &[Elemento], doc: &mut Document) {
+    let di_fub: HashSet<&str> = elementi.iter().map(|e| e.nome.as_str()).collect();
+    let estraneo = |l: &Arc<Node>| {
+        l.children().is_some_and(|c| c.is_empty())
+            && !l.name.as_deref().is_some_and(|n| di_fub.contains(n))
+    };
+    if doc.layers.iter().any(|l| !estraneo(l)) {
+        doc.layers.retain(|l| !estraneo(l));
+    }
+}
+
 fn motivo_sola_lettura(r: ReadOnly) -> &'static str {
     match r {
         ReadOnly::Doctype => "c'è un DOCTYPE",
@@ -339,6 +415,7 @@ fn elementi(testo: &str, items: &[Item], base: Affine) -> Vec<Elemento> {
         ctm: Option<Affine>,
         in_risorsa: bool,
         indice: Option<usize>,
+        evenodd: bool,
     }
     let mut visti: HashMap<Vec<usize>, Visto> = HashMap::new();
     for item in items {
@@ -348,13 +425,16 @@ fn elementi(testo: &str, items: &[Item], base: Affine) -> Vec<Elemento> {
             .split_last()
             .map(|(_, g)| g.to_vec())
             .unwrap_or_default();
-        let (ctm_genitore, risorsa_genitore, indice_genitore) = match visti.get(&genitore) {
-            Some(v) => (v.ctm, v.in_risorsa, v.indice),
-            None => (Some(base), false, None),
-        };
+        let (ctm_genitore, risorsa_genitore, indice_genitore, evenodd_genitore) =
+            match visti.get(&genitore) {
+                Some(v) => (v.ctm, v.in_risorsa, v.indice, v.evenodd),
+                None => (Some(base), false, None, false),
+            };
         let attr = attributi(testo, e.span.bytes[0])
             .map(|(_, a)| a)
             .unwrap_or_default();
+        let evenodd =
+            valore(&attr, "fill-rule").map_or(evenodd_genitore, |r| r.trim() == "evenodd");
         let propria = match valore(&attr, "transform") {
             Some(t) => leggi_trasformazione(t),
             None => Some(Affine::IDENTITY),
@@ -384,14 +464,63 @@ fn elementi(testo: &str, items: &[Item], base: Affine) -> Vec<Elemento> {
                 ruolo: e.role,
                 id: e.id.clone(),
                 nome: e.id.clone().unwrap_or_default(),
+                livello: e.layer.as_ref().map(|l| l.name.clone()),
                 genitore: indice_genitore,
                 propria,
                 ctm_genitore,
                 bloccato: e.locked,
                 nascosto: e.hidden,
+                guida: e.guide,
                 nodo: None,
                 motivo,
+                testo: (e.tag == "text").then(|| info_testo(testo, e)),
+                clip_path: valore(&attr, "clip-path").is_some(),
+                ritaglio: valore(&attr, "clip-path").and_then(|v| {
+                    let v = v.trim();
+                    let id = v.strip_prefix("url(#")?.strip_suffix(')')?;
+                    (!id.is_empty()).then(|| id.to_string())
+                }),
+                privato: valore(&attr, "fub:role") == Some("private"),
+                ritaglia: false,
+                evenodd,
             });
+        }
+        // La forma di un `clipPath` privato: la scena non scende in una
+        // risorsa, e la si legge qui dal testo. Resta una risorsa finché
+        // `Mappa::lega_i_ritagli` non la lega al tracciato che ritaglia.
+        if let (Some(k), "clipPath", true) =
+            (indice, e.tag, valore(&attr, "fub:role") == Some("private"))
+        {
+            if let Some((tag, ruolo, inizio)) = forma_del_ritaglio(testo, e.span.bytes) {
+                let a = attributi(testo, inizio).map(|(_, a)| a).unwrap_or_default();
+                let mut percorso = e.path.clone();
+                percorso.push(0);
+                fuori.push(Elemento {
+                    percorso,
+                    tag,
+                    ruolo,
+                    id: valore(&a, "id").map(str::to_string),
+                    nome: String::new(),
+                    livello: None,
+                    genitore: Some(k),
+                    propria: match valore(&a, "transform") {
+                        Some(t) => leggi_trasformazione(t),
+                        None => Some(Affine::IDENTITY),
+                    },
+                    ctm_genitore: None,
+                    bloccato: false,
+                    nascosto: false,
+                    guida: false,
+                    nodo: None,
+                    motivo: Some("dentro <defs>: una risorsa, non un oggetto del disegno"),
+                    testo: None,
+                    clip_path: false,
+                    ritaglio: None,
+                    privato: false,
+                    ritaglia: false,
+                    evenodd: false,
+                });
+            }
         }
         visti.insert(
             e.path.clone(),
@@ -399,10 +528,368 @@ fn elementi(testo: &str, items: &[Item], base: Affine) -> Vec<Elemento> {
                 ctm,
                 in_risorsa,
                 indice: indice.or(indice_genitore),
+                evenodd,
             },
         );
     }
     fuori
+}
+
+/// La prima forma dentro il `clipPath` che occupa `span` nel testo: il tag,
+/// il ruolo e dove comincia. `None` se il primo figlio non è una forma (un
+/// commento, un testo, un `use`) o se il `clipPath` è vuoto.
+fn forma_del_ritaglio(testo: &str, span: [usize; 2]) -> Option<(&'static str, Role, usize)> {
+    let b = testo.as_bytes();
+    let (dopo_il_nome, _) = attributi(testo, span[0])?;
+    let fine = dopo_il_nome + testo.get(dopo_il_nome..span[1])?.find('>')?;
+    if b.get(fine.checked_sub(1)?) == Some(&b'/') {
+        return None;
+    }
+    let inizio = fine + 1 + testo.get(fine + 1..span[1])?.find('<')?;
+    let (nome, _) = attributi(testo, inizio)?;
+    let (tag, ruolo) = match testo.get(inizio + 1..nome)? {
+        "path" => ("path", Role::Path),
+        "rect" => ("rect", Role::Rect),
+        "ellipse" => ("ellipse", Role::Ellipse),
+        "circle" => ("circle", Role::Circle),
+        "polygon" => ("polygon", Role::Polygon),
+        "polyline" => ("polyline", Role::Polyline),
+        _ => return None,
+    };
+    Some((tag, ruolo, inizio))
+}
+
+/// Come il file scrive un paragrafo vuoto di un testo in area: uno spazio
+/// indivisibile, come la riga vuota dell'editor (`tools/text.ts`,
+/// `BLANK_LINE`).
+pub(crate) const RIGA_VUOTA: &str = "\u{a0}";
+
+/// Gli a capo e i rientri fra i `<tspan>` di un testo di punto non sono
+/// testo (formato della scena, testo §1), ma il motore li importa come uno
+/// spazio in fondo alla riga prima: qui si tolgono, e il testo del motore
+/// è quello che il file fa leggere. Senza, Converti in testo in area
+/// scriverebbe «Pioggia » dove il file dice «Pioggia». Gli spazi che la
+/// riga del file scrive davvero restano. Un testo con pezzi resta com'è:
+/// le sue parole non si cambiano dal motore.
+fn spazi_fra_le_righe(mappa: &Mappa, documento: &mut Document) {
+    use vectorcraft_doc::text::TextKind;
+    use vectorcraft_doc::NodeKind;
+    for e in mappa.elementi() {
+        let (Some(info), Some(nodo)) = (&e.testo, e.nodo) else {
+            continue;
+        };
+        if !info.di_punto || info.pezzi || info.righe.len() < 2 {
+            continue;
+        }
+        let Some(NodeKind::Text(t)) = documento.node_mut(nodo).map(|n| &mut n.kind) else {
+            continue;
+        };
+        if t.kind != TextKind::Point
+            || !t.ruby.is_empty()
+            || t.runs.iter().any(|r| r.inline.is_some())
+        {
+            continue;
+        }
+        let testo = t.plain_text();
+        let righe: Vec<&str> = testo.split('\n').collect();
+        if righe.len() != info.righe.len() {
+            continue;
+        }
+        // I byte da togliere, in ordine: gli spazi in fondo a ogni riga
+        // oltre quelli che la riga del file ha.
+        let mut via: Vec<std::ops::Range<usize>> = Vec::new();
+        let mut da = 0;
+        for (riga, del_file) in righe.iter().zip(&info.righe).take(righe.len() - 1) {
+            let fine = da + riga.len();
+            let in_fondo = |r: &str| r.len() - r.trim_end_matches(' ').len();
+            let di_troppo = in_fondo(riga).saturating_sub(in_fondo(del_file));
+            if di_troppo > 0 {
+                via.push(fine - di_troppo..fine);
+            }
+            da = fine + 1;
+        }
+        if via.is_empty() {
+            continue;
+        }
+        // Ogni pezzo perde i byte che cadono nel suo tratto.
+        let mut inizio = 0;
+        for run in &mut t.runs {
+            let tratto = inizio..inizio + run.text.len();
+            let mut nuovo = String::with_capacity(run.text.len());
+            for (i, c) in run.text.char_indices() {
+                let b = tratto.start + i;
+                if !via.iter().any(|r| r.contains(&b)) {
+                    nuovo.push(c);
+                }
+            }
+            inizio = tratto.end;
+            run.text = nuovo;
+        }
+        t.runs.retain(|r| !r.text.is_empty());
+    }
+}
+
+/// I testi in area del file (`fub:wrap`, formato della scena, testo §4)
+/// diventano testi in area del motore (K6 T16): il motore li importa come
+/// testi di punto, una riga per `<tspan>`. Il paragrafo torna intero (le
+/// righe unite secondo il loro `fub:join`) in un riquadro largo `fub:wrap`,
+/// che comincia, sta al centro o finisce in `x` secondo l'allineamento, con
+/// la prima riga dove il file la scrive e l'altezza che segue il testo
+/// (Dimensione automatica del motore). Un testo con pezzi di aspetto
+/// diverso, ruotato o inclinato resta di punto: si guarda e si sposta, ma
+/// le sue parole non si cambiano dal motore.
+fn testi_in_area(mappa: &Mappa, documento: &mut Document) {
+    use vectorcraft_doc::text::{Justify, TextKind};
+    use vectorcraft_doc::{AreaFit, NodeKind};
+    use vectorcraft_geom::{shapes, Rect};
+    for e in mappa.elementi() {
+        let (Some(info), Some(nodo), Some(ctm)) = (&e.testo, e.nodo, e.ctm()) else {
+            continue;
+        };
+        let Some(larghezza) = info.wrap.filter(|w| w.is_finite() && *w > 0.0) else {
+            continue;
+        };
+        if info.pezzi || info.unioni.len() != info.righe.len() {
+            continue;
+        }
+        let Some(NodeKind::Text(t)) = documento.node_mut(nodo).map(|n| &mut n.kind) else {
+            continue;
+        };
+        // Un aspetto solo, a parte l'interlinea che il `dy` delle righe
+        // dopo la prima dà ai loro pezzi: le righe tornano un pezzo solo.
+        let senza = |r: &vectorcraft_doc::text::TextRun| {
+            let mut s = r.style.clone();
+            s.leading = None;
+            s
+        };
+        let uguali = t.runs.windows(2).all(|w| senza(&w[0]) == senza(&w[1]));
+        let mut interlinee = t.runs.iter().filter_map(|r| r.style.leading);
+        let interlinea = interlinee.next();
+        let una = interlinee.all(|l| Some(l) == interlinea);
+        if t.kind != TextKind::Point || t.vertical || t.runs.is_empty() || !uguali || !una {
+            continue;
+        }
+        let [a, b, c, d, _, _] = (ctm.inverse() * t.xf).as_coeffs();
+        if !(a.is_finite() && a > 1e-9)
+            || b.abs() > 1e-6 * a
+            || c.abs() > 1e-6 * a
+            || (d - a).abs() > 1e-6 * a
+        {
+            continue;
+        }
+        let continua =
+            |i: usize| i > 0 && matches!(info.unioni[i].as_deref(), Some("space" | "word"));
+        let mut testo = String::new();
+        for (i, riga) in info.righe.iter().enumerate() {
+            if i > 0 {
+                testo.push_str(match info.unioni[i].as_deref() {
+                    _ if !continua(i) => "\n",
+                    Some("space") => " ",
+                    _ => "",
+                });
+            }
+            // Un paragrafo vuoto il file lo scrive come uno spazio
+            // indivisibile: un `<tspan>` vuoto non sposterebbe la riga dopo.
+            let solo = !continua(i) && (i + 1 == info.righe.len() || !continua(i + 1));
+            testo.push_str(if solo && riga == RIGA_VUOTA { "" } else { riga });
+        }
+        let ancora = match t.para_at(0).justify {
+            Justify::Center => 0.5,
+            Justify::Right => 1.0,
+            _ => 0.0,
+        };
+        let w = larghezza / a;
+        let x0 = -ancora * w;
+        t.runs.truncate(1);
+        t.runs[0].text = testo;
+        t.runs[0].style.leading = interlinea;
+        t.normalize_paras();
+        t.area.fit = AreaFit::None;
+        t.kind = TextKind::Area {
+            frame: shapes::rectangle(Rect::new(x0, 0.0, x0 + w, 1e7)),
+        };
+        let lay = vectorcraft_text::layout(vectorcraft_text::FontDb::global(), t);
+        let base = lay.lines.first().map_or(0.0, |l| l.baseline);
+        let fondo = lay
+            .lines
+            .last()
+            .map_or(1.0, |l| l.baseline + l.descent)
+            .max(base + 1.0);
+        t.kind = TextKind::Area {
+            frame: shapes::rectangle(Rect::new(x0, -base, x0 + w, fondo - base)),
+        };
+        t.area.fit = AreaFit::AutoHeight;
+        let lay = vectorcraft_text::layout(vectorcraft_text::FontDb::global(), t);
+        t.cached_bounds = Some(lay.bounds);
+        t.cached_baselines = lay.baselines();
+    }
+}
+
+/// I testi verticali del file (`writing-mode="vertical-rl"`, formato della
+/// scena, testo §10) tornano testi di punto verticali del motore, come li fa
+/// lo strumento Testo verticale: il motore li importa come testo su un
+/// tracciato verticale, una colonna sola. Le colonne tornano paragrafi,
+/// l'interlinea viene dal `dx` della seconda colonna, l'allineamento da
+/// `text-anchor`, e il testo si sposta perché la cima della prima colonna
+/// cada in `x`, `y` come nel file. Un testo con pezzi, ruotato o inclinato
+/// resta com'è importato.
+/// L'angolo del riquadro di ogni oggetto (`Node::bbox_angle`), che il motore tiene mentre lo si
+/// gira e il file dice con la `transform`: un rettangolo girato di 30° si riapre col suo riquadro
+/// girato, come in VectorCraft dopo Ruota, e il pannello Trasforma ne legge l'angolo e i lati. È
+/// l'angolo che la matrice dell'elemento (con quelle dei gruppi che lo contengono) dà ai suoi assi
+/// (`transformed_angle`, lo stesso conto di quando il motore lo trasforma). I livelli non ne
+/// hanno uno, come nel motore.
+fn angoli_dei_riquadri(mappa: &Mappa, documento: &mut Document) {
+    for e in mappa.elementi() {
+        let (Some(nodo), Some(ctm)) = (e.nodo, e.ctm()) else {
+            continue;
+        };
+        let angolo = vectorcraft_doc::orient::transformed_angle(0.0, ctm);
+        if angolo == 0.0 || !angolo.is_finite() {
+            continue;
+        }
+        if let Some(n) = documento.node_mut(nodo).filter(|n| !n.is_layer()) {
+            n.bbox_angle = angolo;
+        }
+    }
+}
+
+fn testi_verticali(mappa: &Mappa, documento: &mut Document) {
+    use vectorcraft_doc::text::{Justify, TextKind};
+    use vectorcraft_doc::NodeKind;
+    use vectorcraft_geom::{Affine, Point};
+    for e in mappa.elementi() {
+        let (Some(info), Some(nodo), Some(ctm)) = (&e.testo, e.nodo, e.ctm()) else {
+            continue;
+        };
+        let attributo = |nome: &str| {
+            info.attributi
+                .iter()
+                .find(|(n, _)| n == nome)
+                .map(|(_, v)| v.trim().to_string())
+        };
+        if attributo("writing-mode").as_deref() != Some("vertical-rl")
+            || !info.di_punto
+            || info.pezzi
+            || info.righe.is_empty()
+        {
+            continue;
+        }
+        let numero = |nome: &str| attributo(nome).map_or(Some(0.0), |v| v.parse::<f64>().ok());
+        let (Some(x), Some(y)) = (numero("x"), numero("y")) else {
+            continue;
+        };
+        let [a, b, c, d, _, _] = ctm.as_coeffs();
+        if !(a.is_finite() && a > 1e-9)
+            || b.abs() > 1e-6 * a
+            || c.abs() > 1e-6 * a
+            || (d - a).abs() > 1e-6 * a
+        {
+            continue;
+        }
+        let Some(NodeKind::Text(t)) = documento.node_mut(nodo).map(|n| &mut n.kind) else {
+            continue;
+        };
+        // Un aspetto solo: lo spostamento dalla linea di base che il `dx`
+        // delle colonne dà ai loro pezzi nel tracciato importato non conta.
+        let senza = |r: &vectorcraft_doc::text::TextRun| {
+            let mut s = r.style.clone();
+            s.baseline_shift = 0.0;
+            s.kerning = None;
+            s
+        };
+        if t.runs.is_empty() || t.runs.windows(2).any(|w| senza(&w[0]) != senza(&w[1])) {
+            continue;
+        }
+        t.runs.truncate(1);
+        t.runs[0].text = info.righe.join("\n");
+        t.runs[0].style.baseline_shift = 0.0;
+        t.runs[0].style.leading = info
+            .scarti
+            .get(1)
+            .copied()
+            .flatten()
+            .filter(|v| *v < 0.0)
+            .map(|v| -v);
+        t.normalize_paras();
+        let justify = match attributo("text-anchor").as_deref() {
+            Some("middle") => Justify::Center,
+            Some("end") => Justify::Right,
+            _ => Justify::Left,
+        };
+        t.edit_paras(None, |pa| pa.justify = justify);
+        t.kind = TextKind::Point;
+        t.vertical = true;
+        t.xf = Affine::IDENTITY;
+        // La cima della prima colonna con l'ancora all'origine, come la
+        // scrive `colonne_scritte`.
+        let lay = vectorcraft_text::layout(vectorcraft_text::FontDb::global(), t);
+        let cima = lay.lines.first().map_or(Point::ZERO, |l| {
+            let lungo = match justify {
+                Justify::Center => (l.x0 + l.x1) / 2.0,
+                Justify::Right => l.x1,
+                _ => l.x0,
+            };
+            lay.physical_point(Point::new(lungo, l.baseline + (l.descent - l.ascent) / 2.0))
+        });
+        t.xf = ctm * Affine::translate((x, y)) * Affine::translate(-cima.to_vec2());
+        let lay = vectorcraft_text::layout(vectorcraft_text::FontDb::global(), t);
+        t.cached_bounds = Some(lay.bounds);
+        t.cached_baselines = lay.baselines();
+    }
+}
+
+/// Le righe di un `<text>` e gli attributi dei suoi `<tspan>`.
+fn info_testo(testo: &str, e: &fub_scene::ElementItem) -> crate::mappa::InfoTesto {
+    let righe = e.lines.clone().unwrap_or_default();
+    let corpo = testo.get(e.span.bytes[0]..e.span.bytes[1]).unwrap_or("");
+    let mut attributi_delle_righe = std::collections::BTreeSet::new();
+    let mut tspan = 0usize;
+    let mut unioni = Vec::new();
+    let mut scarti = Vec::new();
+    let mut da = 0;
+    while let Some(i) = corpo[da..].find("<tspan") {
+        let inizio = da + i;
+        da = inizio + "<tspan".len();
+        if !corpo[da..].starts_with(|c: char| c.is_ascii_whitespace() || c == '>' || c == '/') {
+            continue;
+        }
+        tspan += 1;
+        let mut unione = None;
+        let mut scarto = None;
+        for a in attributi(corpo, inizio).map(|(_, a)| a).unwrap_or_default() {
+            if a.nome == "fub:join" {
+                unione = Some(a.valore.clone());
+            }
+            if a.nome == "dx" {
+                scarto = a
+                    .valore
+                    .trim()
+                    .parse::<f64>()
+                    .ok()
+                    .filter(|v| v.is_finite());
+            }
+            if !matches!(a.nome.as_str(), "x" | "dy" | "y" | "dx" | "fub:join") {
+                attributi_delle_righe.insert(a.nome);
+            }
+        }
+        unioni.push(unione);
+        scarti.push(scarto);
+    }
+    let propri = attributi(testo, e.span.bytes[0])
+        .map(|(_, a)| a.into_iter().map(|a| (a.nome, a.valore)).collect())
+        .unwrap_or_default();
+    crate::mappa::InfoTesto {
+        di_punto: e.wrap.is_none() && e.text_path.is_none() && e.along.is_none(),
+        pezzi: tspan > righe.len(),
+        righe,
+        attributi_delle_righe,
+        attributi: propri,
+        wrap: e.wrap,
+        tracciato: e.text_path.clone().filter(|_| e.along.is_none()),
+        unioni,
+        scarti,
+    }
 }
 
 /// La copia per l'import: id sintetici, etichette tolte, livelli marcati.
@@ -411,8 +898,16 @@ fn copia_per_l_import(
     testo: &str,
     elementi: &mut [Elemento],
     items: &[Item],
-) -> (String, Vec<String>) {
+) -> (String, Vec<String>, Vec<(String, WidthProfile)>) {
     let mut ids: HashSet<String> = HashSet::new();
+    let variabili: std::collections::HashMap<&[usize], &fub_scene::varwidth::VarWidth> = items
+        .iter()
+        .filter_map(|i| match i {
+            Item::Element(e) => e.varwidth.as_ref().map(|v| (e.path.as_slice(), v)),
+            _ => None,
+        })
+        .collect();
+    let mut profili = Vec::new();
     for item in items {
         if let Item::Element(e) = item {
             if let Some(id) = &e.id {
@@ -422,12 +917,28 @@ fn copia_per_l_import(
     }
     // Gli span di ogni elemento, per percorso.
     let mut span = std::collections::HashMap::new();
+    let mut fine = std::collections::HashMap::new();
     for item in items {
         if let Item::Element(e) = item {
             span.insert(e.path.clone(), e.span.bytes[0]);
+            fine.insert(e.path.clone(), e.span.bytes[1]);
         }
     }
     let mut modifiche: Vec<(usize, usize, String)> = Vec::new();
+    // La carta fuori dal motore quando la radice ha solo lei e livelli di
+    // Fub: il motore fa allora dei livelli di Fub i suoi livelli in cima,
+    // senza un livello che stia per la radice. Si toglie l'elemento intero;
+    // resta nella mappa senza oggetto e senza perdita.
+    for carta in carte_da_togliere(elementi) {
+        let e = &mut elementi[carta];
+        if let (Some(&da), Some(&a)) = (span.get(&e.percorso), fine.get(&e.percorso)) {
+            modifiche.push((da, a, String::new()));
+            e.motivo = Some(CARTA_FUORI);
+        }
+    }
+    for (dove, uso) in crate::simboli::usi_provvisori(testo, items) {
+        modifiche.push((dove, dove, uso));
+    }
     let mut n = 0usize;
     let mut sintetici = Vec::new();
     for e in elementi.iter_mut() {
@@ -455,6 +966,11 @@ fn copia_per_l_import(
         for a in attr.iter().filter(|a| etichetta(&a.nome)) {
             modifiche.push((a.da, a.a, String::new()));
         }
+        if let Some(v) = variabili.get(e.percorso.as_slice()) {
+            if let Some(profilo) = linea_variabile(v, &attr, dopo_il_nome, &mut modifiche) {
+                profili.push((e.nome.clone(), profilo));
+            }
+        }
         if e.ruolo == Role::Layer && !attr.iter().any(|a| a.nome == "data-vc-layer") {
             modifiche.push((
                 dopo_il_nome,
@@ -475,7 +991,111 @@ fn copia_per_l_import(
         at = a;
     }
     out.push_str(&testo[at..]);
-    (out, sintetici)
+    (out, sintetici, profili)
+}
+
+/// Una linea a spessore variabile del file (`fub:shape="width"`) per il motore: la linea centrale
+/// in `d`, il colore del riempimento come contorno largo quanto il suo punto più largo, con gli
+/// estremi e gli angoli del formato. Il profilo va sul contorno dopo l'import
+/// ([`profili_nel_motore`]). Una linea con un colore che non è scritto sull'elemento (ereditato o in
+/// `style`), che non è un colore pieno, o con un contorno suo resta l'area piena che il motore
+/// legge.
+fn linea_variabile(
+    v: &fub_scene::varwidth::VarWidth,
+    attr: &[Attributo],
+    dopo_il_nome: usize,
+    modifiche: &mut Vec<(usize, usize, String)>,
+) -> Option<WidthProfile> {
+    if attr.iter().any(|a| a.nome == "style") {
+        return None;
+    }
+    if valore(attr, "stroke").is_some_and(|s| s.trim() != "none") {
+        return None;
+    }
+    let fill = attr.iter().find(|a| a.nome == "fill")?;
+    let colore = fill.valore.clone();
+    if colore.contains("url(") || colore.trim() == "none" {
+        return None;
+    }
+    let d = attr.iter().find(|a| a.nome == "d")?;
+    let (peso, profilo) = crate::profilo::motore::dal_file(v)?;
+    let (cap, join) = crate::profilo::motore::parole(v);
+    // La forma e i punti del formato: il motore li terrebbe come attributi suoi, ma alla scrittura
+    // tornano dal profilo (`profilo::motore::nel_file`).
+    for a in attr
+        .iter()
+        .filter(|a| a.nome.ends_with(":shape") || a.nome.ends_with(":geom"))
+    {
+        modifiche.push((a.da, a.a, String::new()));
+    }
+    modifiche.push((d.valore_da, d.valore_a, v.spine.clone()));
+    modifiche.push((fill.valore_da, fill.valore_a, "none".to_string()));
+    if let Some(o) = attr.iter().find(|a| a.nome == "fill-opacity") {
+        modifiche.push((o.da, o.a, String::new()));
+        let valore = o.valore.clone();
+        modifiche.push((
+            dopo_il_nome,
+            dopo_il_nome,
+            format!(" stroke-opacity=\"{}\"", fub_abi::html::escape(&valore)),
+        ));
+    }
+    modifiche.push((
+        dopo_il_nome,
+        dopo_il_nome,
+        format!(
+            " stroke=\"{}\" stroke-width=\"{peso}\" stroke-linecap=\"{cap}\" stroke-linejoin=\"{join}\"",
+            fub_abi::html::escape(&colore)
+        ),
+    ));
+    Some(profilo)
+}
+
+/// Il profilo di ogni linea a spessore variabile del file sul contorno del suo oggetto del motore.
+fn profili_nel_motore(mappa: &Mappa, profili: &[(String, WidthProfile)], doc: &mut Document) {
+    for (nome, profilo) in profili {
+        let Some(nodo) = mappa
+            .elementi()
+            .iter()
+            .find(|e| &e.nome == nome)
+            .and_then(|e| e.nodo)
+        else {
+            continue;
+        };
+        let Some(n) = doc.node_mut(nodo) else {
+            continue;
+        };
+        for item in &mut n.appearance.items {
+            if let vectorcraft_doc::AppearanceItem::Stroke(s) = item {
+                s.profile = Some(profilo.clone());
+            }
+        }
+    }
+}
+
+/// Le carte da lasciare fuori dalla copia per l'import: se fra i figli
+/// della radice che il motore disegna ci sono solo le carte (della pagina o
+/// delle tavole, che nel motore sono le sue tavole) e livelli di Fub,
+/// almeno uno. Le `defs` e le tavole non si disegnano e non contano. Con un
+/// oggetto o un gruppo fuori dai livelli le carte restano: il motore li
+/// mette tutti in un livello che sta per la radice, carte comprese.
+fn carte_da_togliere(elementi: &[Elemento]) -> Vec<usize> {
+    let mut carte = Vec::new();
+    let mut livelli = 0;
+    for (i, e) in elementi.iter().enumerate() {
+        if e.genitore.is_some() {
+            continue;
+        }
+        match e.ruolo {
+            Role::Defs | Role::Board => {}
+            Role::Paper if e.motivo.is_none() => carte.push(i),
+            Role::Layer if e.motivo.is_none() => livelli += 1,
+            _ => return Vec::new(),
+        }
+    }
+    if livelli == 0 {
+        carte.clear();
+    }
+    carte
 }
 
 /// Le etichette che il motore userebbe come nome al posto dell'id.
@@ -732,7 +1352,7 @@ fn numeri(s: &str) -> Vec<f64> {
     out
 }
 
-fn leggi_view_box(s: &str) -> Option<[f64; 4]> {
+pub(crate) fn leggi_view_box(s: &str) -> Option<[f64; 4]> {
     match numeri(s)[..] {
         [x, y, w, h] if w > 0.0 && h > 0.0 => Some([x, y, w, h]),
         _ => None,
@@ -895,7 +1515,7 @@ mod tests {
         let testo = "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 10 10\">\n<g id=\"l1\" fub:layer=\"L\"><rect x=\"1\" y=\"1\" width=\"2\" height=\"2\"/></g>\n</svg>\n";
         let scena = fub_scene::read(testo).expect("scena");
         let mut el = elementi(testo, &scena.items, Affine::IDENTITY);
-        let (copia, sintetici) = copia_per_l_import(testo, &mut el, &scena.items);
+        let (copia, sintetici, _) = copia_per_l_import(testo, &mut el, &scena.items);
         assert_eq!(sintetici, vec!["fubtmp-1".to_string()]);
         assert!(
             copia.contains("<g data-vc-layer=\"\" id=\"l1\" fub:layer=\"L\">"),

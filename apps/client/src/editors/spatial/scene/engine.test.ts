@@ -121,7 +121,9 @@ describe("i rifiuti lasciano la scena com'era", () => {
     ["id da livello su un oggetto", BASE, add("l3f8a0c2d", rect("l0a1b2c3d")), "invalid-elem"],
     ["oggetto senza id", BASE, add("l3f8a0c2d", { tag: "rect", attrs: { width: "1", height: "1" } }), "invalid-elem"],
     ["tag fuori dal formato", BASE, add("l3f8a0c2d", { tag: "script", attrs: { id: "o0a1b2c3d" } }), "invalid-elem"],
-    ["livello dentro un livello", BASE, add("l3f8a0c2d", { tag: "g", attrs: { id: "l0a1b2c3d", "fub:layer": "X" } }), "invalid-elem"],
+    ["livello dentro un gruppo", WITH_GROUP, add("o6f7g8h9i", { tag: "g", attrs: { id: "l0a1b2c3d", "fub:layer": "X" } }), "invalid-elem"],
+    ["un sottolivello dentro un gruppo", WITH_GROUP, add("l3f8a0c2d", { tag: "g", attrs: { id: "o0a1b2c3d" }, children: [{ tag: "g", attrs: { id: "l0a1b2c3d", "fub:layer": "X" } }] }), "invalid-elem"],
+    ["move di un livello dentro un gruppo", WITH_GROUP_AND_L2, move("l9k8j7h6g", "o6f7g8h9i"), "invalid-elem"],
     ["una seconda carta", BASE, add("l3f8a0c2d", { tag: "rect", attrs: { id: "o0a1b2c3d", "fub:role": "paper" } }), "invalid-elem"],
     ["titolo della radice con add", BASE, add("#root", { tag: "title", attrs: {}, text: "X" }), "invalid-elem"],
     ["id ripetuto nello stesso elemento", BASE, add("l3f8a0c2d", group("o0a1b2c3d", group("o0a1b2c3d"))), "duplicate-id"],
@@ -157,6 +159,31 @@ describe("i rifiuti lasciano la scena com'era", () => {
   for (const [name, source, op, reason] of cases) {
     it(name, () => rejects(source, op, reason));
   }
+});
+
+describe("i sottolivelli (formato della scena §3)", () => {
+  const SUB = '    <g id="l0a1b2c3d" fub:layer="Sotto">';
+  it("un livello nasce dentro un livello, anche coi suoi sottolivelli", () => {
+    const engine = SceneEngine.open(BASE);
+    const elem = { tag: "g", attrs: { id: "l0a1b2c3d", "fub:layer": "Sotto" }, children: [{ tag: "g", attrs: { id: "l5e6f7g8h", "fub:layer": "Più giù" } }] };
+    const out = apply(engine, { op: "add", parent: "l3f8a0c2d", pos: { last: true }, elem });
+    expect(out.text).toBe(lf(ROOT, TITLE, PAPER, L1, E1, R2, R3, SUB, '      <g id="l5e6f7g8h" fub:layer="Più giù">', "      </g>", "    </g>", END_G, END));
+    const added = readScene(out.text);
+    expect(added.summary.layers).toEqual(["Livello 1", "Sotto", "Più giù"]);
+  });
+  it("un livello entra in un altro livello e ne esce", () => {
+    const engine = SceneEngine.open(TWO_LAYERS);
+    const inside = apply(engine, { op: "move", target: "l9k8j7h6g", parent: "l3f8a0c2d", pos: { last: true } });
+    expect(inside.text).toBe(lf(ROOT, TITLE, PAPER, L1, E1, R2, '    <g id="l9k8j7h6g" fub:layer="Livello 2">', '  ' + R3, "    </g>", END_G, END));
+    const back = apply(engine, inside.inverse);
+    expect(back.text).toBe(TWO_LAYERS);
+  });
+  it("il nome di un sottolivello si cambia, ma un gruppo in un livello non diventa un livello", () => {
+    const engine = SceneEngine.open(lf(ROOT, TITLE, PAPER, L1, SUB, "    </g>", '    <g id="o6f7g8h9i"/>', END_G, END));
+    const out = apply(engine, { op: "set", id: "l0a1b2c3d", attrs: { "fub:layer": "Nuovo" } });
+    expect(out.text).toContain('<g id="l0a1b2c3d" fub:layer="Nuovo">');
+    rejects(out.text, { op: "set", id: "o6f7g8h9i", attrs: { "fub:layer": "X" } }, "invalid-elem");
+  });
 });
 
 describe("i livelli bloccati", () => {
@@ -412,6 +439,16 @@ describe("la fusione di due undo", () => {
     const undone = applied(engine.undo(merged));
     expect(undone.text).toBe(BASE);
     expect(applied(engine.undo(undone.undo)).text).toBe(lf(ROOT, TITLE, PAPER, L1, E1_BLACK, R2, R3, END_G, END));
+  });
+
+  it("due set che cambiano il tipo in due modi diversi non si fondono", () => {
+    // Le stesse chiavi, ma il rettangolo diventa un tracciato e poi torna
+    // rettangolo: l'inversa della prima non annullerebbe la seconda.
+    const engine = SceneEngine.open(BASE);
+    const geometry = { x: null, y: null, width: null, height: null };
+    const first = apply(engine, { op: "set", id: "o2b3c4d5e", tag: "path", attrs: { ...geometry, d: "M500 100 L700 100 L700 220 Z" } });
+    const second = apply(engine, { op: "set", id: "o2b3c4d5e", tag: "rect", attrs: { x: "500", y: "100", width: "200", height: "120", d: null } });
+    expect(mergeUndo(first.undo, second.undo)).toBeNull();
   });
 
   it("vale per due batch con gli stessi set nello stesso ordine", () => {

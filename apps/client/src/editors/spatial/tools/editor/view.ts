@@ -10,12 +10,14 @@ import type { LengthUnit } from "../../scene/rulers";
 import { plural, t } from "../../strings";
 import { pageRect, type Board, type Rect } from "../boards";
 import { directionCursor, type GripCursor } from "../frame";
-import { gridLines, gridStep } from "../grid";
+import { gridLines, gridStep, snapStepOf } from "../grid";
 import { unitSuffix } from "../guide-dialog";
 import { fieldMin, fieldText, fromUnit, toUnit, UNIT_PLACES } from "../rulers";
 import { fitView, placedAt, toScene, toScreen, turnTo, viewTransform, zoomAt, type View } from "../../view";
 import { DRAW_SCALE_LIMITS, FIT_PAD, OPEN_MARGIN_PX } from "./constants";
 import type { EditorContext } from "./context";
+import { installEdgeRulers } from "./edge-rulers";
+import { installGuideLines } from "./guide-linee";
 import { union } from "./helpers";
 
 /// Sotto questa larghezza sullo schermo, in pixel, una tavola non mostra il
@@ -43,6 +45,7 @@ export interface ViewContext {
   hundredthsText: (value: number) => string;
   docUnit: () => LengthUnit;
   stepNow: () => number;
+  snapStep: () => number;
   coordText: (value: number) => string;
   lengthText: (value: number) => string;
   lengthSpoken: (value: number) => string;
@@ -64,6 +67,23 @@ export interface ViewContext {
   fit: () => void;
   /// Inquadra la selezione, e lo dice se non c'è niente di scelto.
   fitSelection: () => void;
+  /// I righelli di bordo del foglio sono accesi (K6 T11, giro E: ≡ › Visualizza del Completo).
+  edgeRulers: boolean;
+  setEdgeRulers: (on: boolean) => void;
+  /// Nascondi guide e Blocca guide del Completo (`guide-linee.ts`): della vista, non del file.
+  guidesHidden: boolean;
+  setGuidesHidden: (hidden: boolean) => void;
+  guidesLocked: boolean;
+  setGuidesLocked: (locked: boolean) => void;
+  /// Ridisegna le guide del righello, dopo un cambio della scena.
+  showGuides: () => void;
+  /// I tasti delle guide scelte (Canc, frecce): vero se li ha presi (`guide-linee.ts`).
+  guideKey: (event: KeyboardEvent) => boolean;
+  /// «Usa cursori di precisione» (K6 T11, cursori): la croce al posto del cursore degli strumenti che disegnano.
+  preciseCursors: boolean;
+  setPreciseCursors: (on: boolean) => void;
+  /// Rimette il cursore della superficie per lo strumento del motore scelto (`motore/gesti.ts`).
+  applyToolCursor: () => void;
 }
 
 /// Monta gli annunci, la camera, l'unità e i righelli.
@@ -72,6 +92,10 @@ export function installView(ctx: EditorContext): void {
     life, folio, has, relabels, zoomText, turnText, root, surface, live, zoomLevel, turnButton, paper, sheetLayer, gridMark, gridMinor, gridMajor,
     painter, previewCamera, nameLayer, overlay, cursorMark, boardsNow, currentIndex, currentPage
   } = ctx;
+  // I righelli di bordo: spenti finché il Completo non li accende.
+  installEdgeRulers(ctx);
+  // Le guide del righello, sotto i righelli di bordo.
+  installGuideLines(ctx);
   // --- Annunci ------------------------------------------------------------
 
   let echo = false;
@@ -204,8 +228,14 @@ export function installView(ctx: EditorContext): void {
   };
   ctx.rereadSize = rereadSize;
 
-  /// La griglia sullo schermo, se il livello la offre e la si vuole vedere.
+  /// La griglia sullo schermo, se il livello la offre e la si vuole vedere. Con lei
+  /// lo sfondo delle carte: la griglia di trasparenza (K6 T11) è a scacchi, dipinta
+  /// dal CSS del foglio su ogni carta della superficie (la pagina e le tavole), e si
+  /// rifà qui perché cambia con le stesse scelte.
   const showGrid = (): void => {
+    surface.toggleAttribute("data-transparency", ctx.grid.transparencyGrid === true);
+    // Nascondi tavole da disegno: il CSS toglie bordo, ombra e nome alle carte delle tavole.
+    surface.toggleAttribute("data-boards-hidden", ctx.grid.hideArtboards === true);
     const shown = has("grid") && ctx.grid.shown;
     gridMark.style.display = shown ? "" : "none";
     if (!shown) return;
@@ -254,6 +284,8 @@ export function installView(ctx: EditorContext): void {
     // Il fondo del foglio rende la parte della pagina che si vede.
     const size = surfaceSize();
     folio?.view?.(next, size.w, size.h);
+    // I segni del motore che restano sul foglio (la Misura) si rifanno alla scala nuova.
+    ctx.motoreVista?.();
   };
   ctx.setCamera = setCamera;
   /// Il formato delle coordinate dette a voce, nella lingua di adesso.
@@ -290,6 +322,10 @@ export function installView(ctx: EditorContext): void {
   /// ogni unità ricorda il suo.
   const stepNow = (): number => gridStep(ctx.grid, docUnit());
   ctx.stepNow = stepNow;
+  /// Il passo a cui l'aggancio porta i punti: quello della griglia, o un pixel
+  /// se aggancia solo il pixel. Le righe disegnate restano sul passo di `stepNow`.
+  const snapStep = (): number => snapStepOf(ctx.grid, docUnit());
+  ctx.snapStep = snapStep;
 
   /// I formati dell'unità di adesso, nella lingua di adesso: il numero solo,
   /// e con l'unità scritta corta e per intero.

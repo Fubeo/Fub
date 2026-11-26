@@ -1,7 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { markdown } from "@codemirror/lang-markdown";
-import { ensureSyntaxTree } from "@codemirror/language";
 import { history } from "@codemirror/commands";
 import { EditorState, type Extension, Prec } from "@codemirror/state";
 import { EditorView, runScopeHandlers } from "@codemirror/view";
@@ -14,6 +13,7 @@ import { blocksMode } from "./index";
 import { blockModel } from "./model";
 import { moveSiblings, siblingsOf } from "./move";
 import { blockAt, gesturePhrase, inferGesture, pageArrives } from "./motion";
+import { parsedView } from "../test-support";
 
 // Il blocco vivo (N13): che cosa si muove, quando, e che cosa si dice.
 
@@ -64,8 +64,7 @@ function mount(doc: string, anchor = 0, extra: Extension = []): EditorView {
       ],
     }),
   });
-  ensureSyntaxTree(view.state, view.state.doc.length, 1000);
-  view.dispatch({});
+  parsedView(view);
   views.push(view);
   return view;
 }
@@ -240,6 +239,20 @@ describe("che cosa si muove", () => {
     await frame();
     const born = moto.runs.find((run) => run.el.textContent === "Due");
     expect(born?.spec.from).toEqual({ y: -8, opacity: 0 });
+  });
+
+  it("le righe partono dopo le letture di CodeMirror: il cursore si misura sulla riga ferma", async () => {
+    const view = await mounted("Uno", 3);
+    view.dispatch({ changes: { from: 3, insert: "\n\nDue" }, selection: { anchor: 8 }, userEvent: "input" });
+    // Nella battuta niente si muove ancora: il livello dei cursori legge le
+    // righe nel ciclo delle misure che segue, insieme a questa lettura.
+    expect(moto.runs).toEqual([]);
+    let movingWhenRead: boolean | null = null;
+    view.requestMeasure({ read: () => { movingWhenRead = moto.runs.length > 0; } });
+    await frame();
+    expect(movingWhenRead).toBe(false);
+    // Prima del fotogramma, la riga nata scende e appare.
+    expect(moto.runs.find((run) => run.el.textContent === "Due")?.spec.from).toEqual({ y: -8, opacity: 0 });
   });
 
   it("un gesto annotato senza testo cambiato (il ripiegabile) passa dal plugin", async () => {

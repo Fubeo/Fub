@@ -31,6 +31,10 @@ interface GridSpec {
   readonly done: (selected: number) => { entry?: SlashMenuEntry; params: Readonly<Record<string, unknown>> } | null;
   /// Un'intestazione sopra le celle (i nomi delle righe del colore).
   readonly lead?: HTMLElement;
+  /// La scelta di chi scrive invece di scegliere una cella: il passo la mette
+  /// e la battuta prosegue nel testo che ne nasce. Senza, ciò che si scrive
+  /// allunga la ricerca del «/».
+  readonly typed?: () => { entry?: SlashMenuEntry; params: Readonly<Record<string, unknown>> };
 }
 
 /// Un passo a griglia: le celle sono opzioni di un elenco, scelte con le
@@ -110,6 +114,10 @@ function gridStep(context: StepContext, spec: GridSpec): SlashStep {
         case "Enter":
           choose();
           return true;
+      }
+      if (spec.typed && event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey) {
+        host.done(spec.typed());
+        return false;
       }
       return false;
     },
@@ -229,5 +237,8 @@ export function diagramStep(context: StepContext): SlashStep {
     },
     hint: () => t("slash.step.keys"),
     done: (selected) => ({ params: { template: DIAGRAM_TEMPLATES[selected]!.id } }),
+    // Chi scrive subito il sorgente (`flowchart TD`) lo scrive in un recinto
+    // `mermaid` vuoto, non dopo il «/Diagramma» (IMP-421).
+    typed: () => ({ params: {} }),
   });
 }

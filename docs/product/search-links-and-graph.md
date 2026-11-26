@@ -17,17 +17,16 @@ Il linguaggio è un albero di clausole in OR e letterali in AND con negazione
 per foglia. Le foglie testo, regex e task vivono nell'indice full-text;
 proprietà, tag, cartella, path, estensione e link usano i metadati e il grafo
 del kernel. Testo significa termini in AND o frase esatta, con tolleranza
-esatta o refusi che restringono invece di allargare; `case_sensitive` e le
-regex lavorano sui campi memorizzati con limiti dichiarati di pattern,
-documenti e byte. La stessa espressione vale per ricerca globale, viste,
-query salvate e ricerca incorporata: il pianificatore instrada ogni foglia al
-proprietario e ricompone l'AND/OR senza divergenze.
+esatta o refusi che restringono; `case_sensitive` e le regex rileggono solo le
+note che l'indice dà con le parole intere della domanda, al più 2048 e 8 MiB di
+testo. L'ultima parola scritta è un prefisso di al più 10 000 parole. La stessa
+espressione vale per ricerca globale, viste, query salvate e ricerca incorporata:
+il pianificatore instrada ogni foglia al proprietario e ricompone l'AND/OR.
 
 «Vai alla nota» cerca le note per nome e per alias, perché l'indice tiene gli
-alias del frontmatter nello stesso campo del nome. Una nota trovata soltanto
-per un alias mostra l'alias, con le parole scritte segnate, e sotto «alias di»
-la nota. `Maiusc+Invio` crea la nota col nome scritto anche se qualcosa
-combacia.
+alias del frontmatter nello stesso campo del nome. Una nota trovata soltanto per
+un alias mostra l'alias, con le parole scritte segnate, e sotto «alias di» la
+nota. `Maiusc+Invio` crea la nota col nome scritto anche se qualcosa combacia.
 
 `Ctrl+F` cerca nella nota con una sola barra: in Sorgente e in Live è quella
 dell'editor (sostituisci, maiuscole, parola intera, espressioni regolari),
@@ -108,10 +107,10 @@ nome nudo porta prima al formato che dichiara un sorgente di prosa
 (`fub:prose-source`), e l'estensione scritta sceglie l'altro. Un nome o un path
 che finisce con l'estensione di un allegato noto (`[[Bando.pdf]]`) nomina quel
 file, mai un documento con un'estensione in più come `Bando.pdf.fubann`.
-Heading e blocchi condividono slug e ancore canoniche; un punto rinominato apre
-la nota senza inventare una destinazione. Completamento e cambio rapido
-propongono nomi per pertinenza senza riordinare nella shell, e la rinomina
-riscrive solo i wikilink che nominavano la nota, e l'estensione se era scritta.
+Heading e blocchi condividono slug e ancore; un punto rinominato apre la nota
+senza inventare una destinazione. Completamento e cambio rapido propongono
+nomi per pertinenza senza riordinare nella shell; la rinomina riscrive solo i
+wikilink che la nominavano (anche in una proprietà), e l'estensione se scritta.
 Il pannello mostra incoming, outgoing con contesto, menzioni non collegate nei
 due versi con filtro, e la conversione esplicita in wikilink. Una menzione è il
 nome o un alias, parola intera in prosa: non in un link, nel codice, in un tag,
@@ -198,11 +197,10 @@ sanno dove andrà, parte dalla radice (`/cartella/Nota.md#Titolo`). Un wikilink
 non ha forma relativa: «relativo» lo scrive dalla radice. Il `[[` digitato
 resta un wikilink.
 
-Passando col puntatore su un wikilink si apre l'anteprima della nota: in
-Lettura dopo un breve ritardo, subito con Ctrl/Cmd; mentre si scrive soltanto
-con Ctrl/Cmd. L'impostazione `editor.preview-modifier` chiede Ctrl/Cmd
-dappertutto. Un link che non si risolve, o che nomina un allegato, non apre
-niente.
+Passando col puntatore su un wikilink si apre l'anteprima della nota: in Lettura
+dopo un breve ritardo, subito con Ctrl/Cmd; mentre si scrive soltanto con
+Ctrl/Cmd. L'impostazione `editor.preview-modifier` chiede Ctrl/Cmd dappertutto.
+Un link che non si risolve, o che nomina un allegato, non apre niente.
 
 Un merge che cestina una sorgente citata da altre note porta i loro link sulla
 destinazione, con alias e frammenti intatti. Il piano lo calcola il kernel come
@@ -223,15 +221,16 @@ quindi si risolve al momento della domanda. I backlink di un allegato elencano
 le note che lo nominano. Il pannello Collegamenti elenca fra gli uscenti solo i
 documenti.
 
-Il pannello Collegamenti mostra una sezione per parte (in entrata, in uscita,
-menzioni non collegate nei due versi) con il numero nel titolo; una parte vuota
-resta chiusa su una riga. Il contesto si legge come testo: un wikilink compare
-col suo alias o col nome della nota, non con la sua sintassi. Il filtro delle
-menzioni sta in fondo, in una sezione chiusa finché non è attivo, e usa la
-sintassi della barra di ricerca (un filtro salvato come JSON vale ancora); un
-filtro che non si legge lo dice accanto al campo, col carattere a cui si ferma.
-Di un documento che non si apre le menzioni si cercano sul nome. La banda dei
-collegamenti in entrata è `backlinks.status`; senza una nota aperta è vuota.
+Il pannello Collegamenti mostra una sezione per parte (in entrata, dalle
+proprietà con le chiavi, in uscita, menzioni non collegate nei due versi) col
+numero nel titolo; una parte vuota resta chiusa su una riga. Il contesto si
+legge come testo: un wikilink compare col suo alias o col nome della nota, non
+con la sua sintassi. Il filtro delle menzioni sta in fondo, in una sezione
+chiusa finché non è attivo, e usa la sintassi della barra di ricerca (un filtro
+salvato come JSON vale ancora); un filtro che non si legge lo dice accanto al
+campo, col carattere a cui si ferma. Di un documento che non si apre le menzioni
+si cercano sul nome. La banda dei collegamenti in entrata è `backlinks.status`;
+senza una nota aperta è vuota.
 
 Il pannello Cronologia elenca le versioni della nota con l'istante e la
 variazione di dimensione rispetto alla precedente. Una versione si sceglie col
@@ -242,10 +241,11 @@ la nota; il testo di prima resta nella cronologia.
 
 I controlli di salute del vault (`vault_health` in `query_index`, `--health`
 nella CLI) trovano link rotti, note orfane, path che collidono, date non
-riconosciute, vicoli ciechi e allegati non usati. Un vicolo cieco è una nota
-senza link verso il vault: un URL o un `[[#Sezione]]` non portano altrove, un
-link rotto invece conta come uscita. Un allegato non usato è un file di specie
-allegato che nessun link o embed raggiunge, risolto come per i link rotti.
+riconosciute, vicoli ciechi e allegati non usati; i link nelle proprietà contano
+come quelli del corpo, anche fra i rotti. Un vicolo cieco è una nota senza link
+verso il vault: un URL o un `[[#Sezione]]` non portano altrove, un link rotto
+invece conta come uscita. Un allegato non usato è un file di specie allegato che
+nessun link o embed raggiunge, risolto come per i link rotti.
 
 Un file non letto o non parsato non può produrre link affidabili; l'apertura lo
 dichiara invece di inventare un grafo completo.
@@ -270,8 +270,8 @@ Due altri filtri, spenti di default, aggiungono nodi che non sono file:
   Il nodo è in trasparenza, e il click crea la nota come farebbe il suo
   wikilink. Un allegato mancante segue il filtro degli allegati.
 
-Spento, il grafo mostra solo i file che esistono. Una nota collegata solo a un
-tag non conta come orfana, e tag e note mancanti non hanno gruppo di cartella.
+Spento, il grafo mostra solo i file che esistono; non è orfana una nota legata a un tag o in una proprietà.
+Tag e note mancanti non hanno cartella né data: linea del tempo e legenda li nascondono con le note che li scrivono, e uno senza note segue la regola di tutti; un allegato che c'è ha cartella e data sue.
 
 Il campo **Filtro** della barra accetta la sintassi della barra di ricerca:
 restano le note che la ricerca trova, gli allegati collegati a loro e il seme
@@ -384,8 +384,8 @@ fotogrammi. Col moto ridotto il passo è invece quello nominale (1/60 s): conta
 lo stato d'arrivo, e il grafo si ferma nello stesso punto a ogni ritmo. L'impostazione **Aspetto → Fotogrammi al secondo**
 (`appearance.frame-rate`) mette un tetto al ritmo; il default è il massimo
 dello schermo. Il livello della fisica dipende solo dal numero di nodi. Quando
-i fotogrammi durano stabilmente più del budget (il periodo del tetto, mai sotto
-i 60 fps), il grafo nasconde le etichette dei nodi di grado basso. Le rimette
+i fotogrammi durano stabilmente più del budget (il periodo dello schermo, o
+del tetto se è più lento), il grafo nasconde le etichette dei nodi di grado basso. Le rimette
 dopo cinque secondi di fotogrammi di nuovo nel budget.
 
 La modularizzazione del renderer è tracciata nell'issue

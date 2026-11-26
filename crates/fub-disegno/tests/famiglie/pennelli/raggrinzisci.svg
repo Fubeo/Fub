@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:fub="https://fubeo.github.io/ns/scene/1" fub:version="1" viewBox="0 0 400 300" width="400" height="300">
+  <rect id="fub-paper" fub:role="paper" x="0" y="0" width="400" height="300" fill="#ffffff"/>
+  <g id="l1a2b3c4d" fub:layer="Livello 1">
+    <path id="oa1a1a1a1" d="M100 100 C104.17 100 108.33 100 112.5 99.95 C116.67 100.04 120.83 100.22 125 99.6 C129.17 99.49 133.33 99.4 137.5 99.58 C141.67 100.79 145.83 100.74 150 99.3 C154.17 99.45 158.33 100.08 162.5 100.48 C166.67 100.15 170.83 99.56 175 100.01 C179.17 99.94 183.33 99.89 187.5 100.02 C191.67 100 195.83 100 200 100 L200 150 C195.83 150 191.67 150 187.5 149.97 C183.33 150.08 179.17 150.19 175 150.25 C170.83 149.51 166.67 150.15 162.5 149.91 C158.33 150.07 154.17 149.14 150 149.55 C145.83 149.13 141.67 149.27 137.5 149.29 C133.33 150.18 129.17 149.93 125 149.66 C120.83 149.77 116.67 150.15 112.5 149.97 C108.33 150 104.17 150 100 150 Z" fill="#000000"/>
+    <rect id="ob2b2b2b2" x="220" y="100" width="60" height="50" fill="#ff0000"/>
+    <g id="gd4d4d4d4">
+      <rect id="oe5e5e5e5" x="20" y="20" width="30" height="30" fill="#00ff00"/>
+      <rect id="of6f6f6f6" x="60" y="20" width="30" height="30" fill="#0000ff"/>
+    </g>
+    <path id="op7a7a7a7" d="M300 200 L360 200 L330 260 Z" fill="#cccccc"/>
+    <path id="oi8b8b8b8" fub:tool="pen" fub:brush="pf1 size=4 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0" d="M120 220 L160 220 L160 240 L120 240 Z" fill="#d55e00" fub:ink="1 s100 cxypt 12050,23020,128,0 25,-3,2,8 31,-5,0,8"/>
+  </g>
+</svg>

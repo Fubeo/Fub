@@ -158,7 +158,7 @@ export function flagged(model: DocumentModel, scope: ContainerNode | null, flag:
       if (details === null) continue;
       if (details.role === "layer") {
         const layer = details.layer;
-        if (container === model.root && child.kind === "container" && layer !== undefined && !layer.locked && !layer.hidden) visit(child);
+        if (child.kind === "container" && layer !== undefined && !layer.locked && !layer.hidden) visit(child);
         continue;
       }
       if (details.role === "paper" || details.role === "board" || details.role === "title" || details.role === "desc" || details.role === "defs") continue;

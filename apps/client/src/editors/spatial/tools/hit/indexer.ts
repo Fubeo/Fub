@@ -53,6 +53,17 @@ import { ForeignBlock, Unit } from "./unit";
 /// Chi riceve gli oggetti di un documento: il nodo, il suo percorso, il
 /// livello, la matrice e lo stile del genitore, e i ritagli e le maschere di
 /// chi lo contiene.
+/// Un tracciato-guida (`fub:guide`): l'elemento, il suo livello e la sua
+/// forma nella scena.
+export interface GuidePath {
+  readonly id: string | null;
+  readonly path: readonly number[];
+  readonly layer: string | null;
+  readonly segments: readonly Segment[];
+  /// Dalle coordinate della forma a quelle della scena.
+  readonly matrix: Matrix;
+}
+
 type Visit = (node: ElementPart, path: number[], layer: string | null, parent: Matrix, style: Style, clips: readonly Clip[] | null) => void;
 
 /// Chi riceve i blocchi estranei fuori dagli oggetti: il blocco, la matrice
@@ -242,6 +253,33 @@ export class SceneIndexer {
     return units;
   }
 
+  /// I tracciati-guida di `model` (`fub:guide`, formato della scena, guide)
+  /// nei livelli che si vedono e fuori dai gruppi nascosti: si vedono come
+  /// le guide del righello, anche se il loro `display="none"` li toglie dal
+  /// disegno. In ordine di documento.
+  guides(model: DocumentModel): GuidePath[] {
+    const out: GuidePath[] = [];
+    const visit = (node: ElementPart, path: number[], layer: string | null, parent: Matrix, style: Style, clips: readonly Clip[] | null): void => {
+      if (node.details === null) return;
+      if (node.details.guide === true && node.kind === "leaf") {
+        const shape = this.builder.shape(node);
+        if (shape === null) return;
+        const matrix = compose(parent, transformOf(shape.attrs));
+        const part = this.part(node, shape, matrix, IDENTITY, styleOf(style, shape.attrs), null, null);
+        out.push({ id: node.facts.id, path, layer, segments: part.segments, matrix: part.matrix });
+        return;
+      }
+      if (node.kind !== "container" || node.details.role === "instance") return;
+      const attrs = this.attrsOf(node);
+      if (attrs === null || hidden(attrs)) return;
+      const matrix = compose(parent, transformOf(attrs));
+      const inner = styleOf(style, attrs);
+      childLoop(node, (child, index) => visit(child, [...path, index], layer, matrix, inner, clips));
+    };
+    this.walk(model, (layer) => !layer.hidden, [], visit);
+    return out;
+  }
+
   /// Gli oggetti di `model` che una tavola porta con sé quando si sposta:
   /// quelli che non sono bloccati né stanno in un livello bloccato, anche
   /// nascosti o in un livello nascosto, che altrimenti si ritroverebbero
@@ -366,7 +404,10 @@ export class SceneIndexer {
 
   /// Un livello, o un gruppo di una pagina che ne fa le veci: in `layers`, e
   /// i suoi figli a `visit` se `enters` lo accetta, col ritaglio e la
-  /// maschera del livello.
+  /// maschera del livello. Un sottolivello (formato della scena §3) è un
+  /// livello anch'esso, dopo il suo genitore in `layers`: i suoi oggetti si
+  /// scelgono uno per uno, come quelli del livello, e ne ereditano il blocco,
+  /// la visibilità, la matrice, lo stile e i ritagli.
   private walkLayer(
     child: ContainerNode,
     path: number[],
@@ -378,15 +419,24 @@ export class SceneIndexer {
     layers: LayerInfo[],
     visit: Visit,
     foreign: ForeignVisit | null,
+    outer: { readonly matrix: Matrix; readonly clips: readonly Clip[] | null } = { matrix: IDENTITY, clips: null },
   ): void {
     const head = this.builder.headInfo(child);
-    const matrix = compose(IDENTITY, transformOf(head.attrs));
+    const matrix = compose(outer.matrix, transformOf(head.attrs));
     const info: LayerInfo = { id: child.facts.id, path, name, locked, hidden: hidden || head.hidden, matrix };
     layers.push(info);
-    if (!enters(info)) return;
+    // Blocco e visibilità passano ai sottolivelli: chi non entra qui non entra
+    // nemmeno in loro, ma li elenca lo stesso in `layers`.
+    const entered = enters(info);
     const style = styleOf(rootStyle, head.attrs);
-    const clips = this.clipsOf(child, head.attrs, matrix, style, null);
+    const clips = entered ? this.clipsOf(child, head.attrs, matrix, style, outer.clips) : null;
     childLoop(child, (grandchild, inner) => {
+      if (grandchild.kind === "container" && grandchild.details?.role === "layer") {
+        const sub = grandchild.details.layer!;
+        this.walkLayer(grandchild, [...path, inner], sub.name, info.locked || sub.locked, info.hidden || sub.hidden, style, entered ? enters : () => false, layers, visit, foreign, { matrix, clips });
+        return;
+      }
+      if (!entered) return;
       if (grandchild.kind === "leaf") {
         if (grandchild.details === null) {
           foreign?.(grandchild, matrix, style, [...path, inner], clips);
@@ -721,7 +771,7 @@ export class SceneIndexer {
     // riquadro.
     const fill = tag === "line" ? false : tag === "text" || tag === "image" ? true : style.fill;
     const radius = style.stroke && tag !== "text" && tag !== "image" ? style.strokeWidth / 2 : 0;
-    return { leaf, segments, matrix, frameMatrix: frame, fill, radius, cache, flat: null, host: null, regions, via };
+    return { leaf, segments, matrix, frameMatrix: frame, fill, radius, evenodd: style.evenodd, cache, flat: null, host: null, regions, via };
   }
 
   /// I marcatori di `host`, una forma con gli attributi `attrs` e lo stile

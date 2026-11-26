@@ -35,7 +35,7 @@ use fub_abi::settings::{SettingKind, SettingSpec, SettingValue};
 use fub_abi::text::{Arg, Text};
 use fub_abi::traits::{
     EntryKind, Excerpts, HostApi, IndexQuery, IndexResult, Page, PropertySelect, ReadApi,
-    ViewInstance, ViewSpec, ViewSurface,
+    VaultEntry, ViewInstance, ViewSpec, ViewSurface,
 };
 use fub_abi::ui::{
     ActionRef, Align, Intent, TableColumn, UiAction, UiKind, UiNode, UiOption, UiValue, ViewUpdate,
@@ -411,6 +411,7 @@ fn write_tiles(host: &mut dyn HostApi, tiles: &[Tile]) -> Result<(), PluginError
 pub(super) fn render(instance: &ViewInstance, host: &dyn ReadApi) -> Result<UiNode, PluginError> {
     let tiles = shown_tiles(host)?;
     let today = today(host);
+    let entries = VaultEntries::new(host);
     let mut children = Vec::new();
     if tiles.is_empty() {
         children.push(UiNode::keyed(
@@ -429,7 +430,7 @@ pub(super) fn render(instance: &ViewInstance, host: &dyn ReadApi) -> Result<UiNo
             .map(|(at, tile)| {
                 // Un riquadro che non si legge lo dice dentro di sé: gli altri
                 // si vedono lo stesso, e lui si può spostare o togliere.
-                let body = tile_body(*tile, host, today)
+                let body = tile_body(*tile, host, &entries, today)
                     .unwrap_or_else(|_| vec![UiNode::text(Text::key(S_TILE_FAILED))]);
                 frame(instance, *tile, at, count, body)
             })
@@ -539,13 +540,52 @@ fn frame(
     )
 }
 
-fn tile_body(tile: Tile, host: &dyn ReadApi, today: i64) -> Result<Vec<UiNode>, PluginError> {
+fn tile_body(
+    tile: Tile,
+    host: &dyn ReadApi,
+    entries: &VaultEntries<'_>,
+    today: i64,
+) -> Result<Vec<UiNode>, PluginError> {
     match tile {
         Tile::Pinned => pinned(host),
-        Tile::Recent => recent(host),
+        Tile::Recent => recent(host, entries.get()?),
         Tile::Tasks => Ok(tasks(host, today)),
-        Tile::Base => base(host),
+        Tile::Base => base(host, entries.get()?),
         Tile::Month => Ok(month(host, today)),
+    }
+}
+
+/// Le voci del vault, lette **una volta** per ridisegno e solo se un riquadro
+/// le guarda: i Recenti e la Base partono dalla stessa anagrafe, e la
+/// Scrivania si ridisegna a ogni salvataggio. Una lettura fallita la vedono
+/// tutti e due, come prima la vedeva ognuno con la sua.
+struct VaultEntries<'h> {
+    host: &'h dyn ReadApi,
+    read: std::cell::OnceCell<Result<Vec<VaultEntry>, PluginError>>,
+}
+
+impl<'h> VaultEntries<'h> {
+    fn new(host: &'h dyn ReadApi) -> Self {
+        VaultEntries {
+            host,
+            read: std::cell::OnceCell::new(),
+        }
+    }
+
+    fn get(&self) -> Result<&[VaultEntry], PluginError> {
+        self.read
+            .get_or_init(|| {
+                match self.host.query_index(IndexQuery::Entries {
+                    of_kind: None,
+                    within: None,
+                    page: None,
+                })? {
+                    IndexResult::Entries(entries) => Ok(entries.items),
+                    other => super::unexpected_result("entries", other),
+                }
+            })
+            .as_deref()
+            .map_err(Clone::clone)
     }
 }
 
@@ -626,26 +666,17 @@ fn pinned(host: &dyn ReadApi) -> Result<Vec<UiNode>, PluginError> {
 
 // --- Recenti ------------------------------------------------------------------
 
-fn recent(host: &dyn ReadApi) -> Result<Vec<UiNode>, PluginError> {
-    let entries = match host.query_index(IndexQuery::Entries {
-        of_kind: Some(EntryKind::Document),
-        within: None,
-        page: None,
-    })? {
-        IndexResult::Entries(entries) => entries,
-        other => return super::unexpected_result("entries", other),
-    };
-    if entries.items.is_empty() {
+fn recent(host: &dyn ReadApi, entries: &[VaultEntry]) -> Result<Vec<UiNode>, PluginError> {
+    let documents: Vec<&VaultEntry> = entries
+        .iter()
+        .filter(|entry| entry.kind == EntryKind::Document)
+        .collect();
+    if documents.is_empty() {
         return Ok(vec![empty(S_RECENT_NONE, None)]);
     }
-    let mut items = entries.items;
-    // Il più recente in cima; a parità, il path decide, così l'ordine non
-    // salta da un ridisegno all'altro.
-    items.sort_by(|a, b| b.mtime.cmp(&a.mtime).then_with(|| a.id.cmp(&b.id)));
     let locale = host.user_locale();
-    let rows_shown = items
-        .iter()
-        .take(DESK_ROWS)
+    let rows_shown = most_recent(documents, DESK_ROWS)
+        .into_iter()
         .map(|entry| {
             note_row(
                 &entry.id,
@@ -656,6 +687,25 @@ fn recent(host: &dyn ReadApi) -> Result<Vec<UiNode>, PluginError> {
         .collect();
     // Le recenti non si contano: «e altre 3.000» non direbbe niente.
     Ok(vec![UiNode::list(rows_shown)])
+}
+
+/// Le `n` voci più recenti, la più recente in cima; a parità di data il path
+/// decide, così l'ordine non salta da un ridisegno all'altro. I path sono
+/// unici, quindi l'ordine è totale: scegliere le prime `n` e ordinare solo
+/// quelle dà le stesse righe dell'ordinamento di tutto il vault, in tempo
+/// lineare invece di `N log N`.
+fn most_recent(mut items: Vec<&VaultEntry>, n: usize) -> Vec<&VaultEntry> {
+    let newest_first =
+        |a: &&VaultEntry, b: &&VaultEntry| b.mtime.cmp(&a.mtime).then_with(|| a.id.cmp(&b.id));
+    if items.len() > n {
+        if n == 0 {
+            return Vec::new();
+        }
+        items.select_nth_unstable_by(n - 1, newest_first);
+        items.truncate(n);
+    }
+    items.sort_by(newest_first);
+    items
 }
 
 // --- Compiti di oggi --------------------------------------------------------------
@@ -726,27 +776,13 @@ fn tasks(host: &dyn ReadApi, today: i64) -> Vec<UiNode> {
 
 // --- Base -------------------------------------------------------------------------
 
-fn base(host: &dyn ReadApi) -> Result<Vec<UiNode>, PluginError> {
+fn base(host: &dyn ReadApi, entries: &[VaultEntry]) -> Result<Vec<UiNode>, PluginError> {
     let chosen = match host.setting(DESK_BASE_KEY) {
         Ok(SettingValue::Text(path)) => path.trim().to_string(),
         // Chiave non dichiarata: nessuna Base scelta.
         _ => String::new(),
     };
-    let entries = match host.query_index(IndexQuery::Entries {
-        of_kind: None,
-        within: None,
-        page: None,
-    })? {
-        IndexResult::Entries(entries) => entries,
-        other => return super::unexpected_result("entries", other),
-    };
-    let mut bases: Vec<DocId> = entries
-        .items
-        .into_iter()
-        .map(|entry| entry.id)
-        .filter(|id| is_base(host, id))
-        .collect();
-    bases.sort();
+    let bases = bases_among(entries, |id| is_base(host, id));
     let exists = !chosen.is_empty() && bases.iter().any(|id| id.as_str() == chosen);
     let mut out = Vec::new();
     if exists {
@@ -819,6 +855,44 @@ const BASE_FORMAT: &str = "base";
 fn is_base(host: &dyn ReadApi, id: &DocId) -> bool {
     host.format_of(id)
         .is_some_and(|format| format.descriptor.id == BASE_FORMAT)
+}
+
+/// Le Base fra le voci, in ordine di path.
+///
+/// `format_of` è una domanda sul nome risolta sull'estensione
+/// ([`ReadApi::format_of`]): la si fa una volta per estensione e non per ogni
+/// file del vault, che a ogni ridisegno clonava descrittore e capacità del
+/// formato per migliaia di note. La chiave è quella di [`extension_key`].
+fn bases_among(entries: &[VaultEntry], mut is_base: impl FnMut(&DocId) -> bool) -> Vec<DocId> {
+    let mut answered: std::collections::HashMap<(Option<&str>, bool), bool> =
+        std::collections::HashMap::new();
+    let mut bases: Vec<DocId> = entries
+        .iter()
+        .filter(|entry| {
+            *answered
+                .entry(extension_key(entry.id.as_str()))
+                .or_insert_with(|| is_base(&entry.id))
+        })
+        .map(|entry| entry.id.clone())
+        .collect();
+    bases.sort();
+    bases
+}
+
+/// Ciò che di un nome decide il suo formato: due nomi con la stessa chiave
+/// hanno la stessa estensione per ogni lettura ragionevole di «estensione».
+/// Il registro del kernel prende ciò che segue l'ultimo punto del path
+/// (`rsplit_once('.')`, poi in minuscolo); chi la prendesse solo dal nome del
+/// file, e senza i file nascosti (`.base` non ha estensione), la deduce dal
+/// secondo campo: il punto sta nel nome, con qualcosa prima e dopo. La chiave
+/// non abbassa le maiuscole, così regge anche un registro che le distingua.
+fn extension_key(id: &str) -> (Option<&str>, bool) {
+    let after_dot = id.rsplit_once('.').map(|(_, ext)| ext);
+    let name = id.rsplit('/').next().unwrap_or(id);
+    let in_name = name
+        .rsplit_once('.')
+        .is_some_and(|(stem, ext)| !stem.is_empty() && !ext.is_empty());
+    (after_dot, in_name)
 }
 
 // --- Il mese --------------------------------------------------------------------
@@ -983,6 +1057,110 @@ pub(super) fn action(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn entry(id: &str, mtime: u64) -> VaultEntry {
+        VaultEntry {
+            id: DocId::new(id),
+            kind: EntryKind::Document,
+            size: 1,
+            mtime,
+            fingerprint: None,
+        }
+    }
+
+    #[test]
+    fn most_recent_da_le_righe_dell_ordinamento_intero() {
+        let mut state: u64 = 0x2545_f491_4f6c_dd1d;
+        for len in [0usize, 1, 7, 8, 9, 30, 500] {
+            for _ in 0..20 {
+                // Date in un intervallo stretto: le parità sono la norma.
+                let entries: Vec<VaultEntry> = (0..len)
+                    .map(|i| {
+                        state ^= state << 13;
+                        state ^= state >> 7;
+                        state ^= state << 17;
+                        entry(
+                            &format!("n{}.md", (state >> 8) % 100_000 * 1000 + i as u64),
+                            state % 4,
+                        )
+                    })
+                    .collect();
+                let mut whole: Vec<&VaultEntry> = entries.iter().collect();
+                whole.sort_by(|a, b| b.mtime.cmp(&a.mtime).then_with(|| a.id.cmp(&b.id)));
+                whole.truncate(DESK_ROWS);
+                let chosen = most_recent(entries.iter().collect(), DESK_ROWS);
+                assert_eq!(chosen, whole, "{len} voci");
+            }
+        }
+        assert!(most_recent(vec![&entry("a.md", 1)], 0).is_empty());
+    }
+
+    #[test]
+    fn a_parita_di_data_decide_il_path() {
+        let entries = [
+            entry("c.md", 5),
+            entry("b.md", 5),
+            entry("z.md", 9),
+            entry("a.md", 5),
+        ];
+        let ids: Vec<&str> = most_recent(entries.iter().collect(), 3)
+            .into_iter()
+            .map(|e| e.id.as_str())
+            .collect();
+        assert_eq!(ids, ["z.md", "a.md", "b.md"]);
+    }
+
+    #[test]
+    fn le_base_si_chiedono_una_volta_per_estensione() {
+        let names = [
+            "Liste/Libri.base",
+            "Liste/film.base",
+            "Liste/MAIUSCOLA.BASE",
+            "a.md",
+            "b.md",
+            "c/d.md",
+            ".base",
+            "x/.base",
+            "cartella.base/LEGGIMI",
+            "altra.base/LEGGIMI",
+            "senza-estensione",
+            "foto.png",
+        ];
+        let entries: Vec<VaultEntry> = names.iter().map(|n| entry(n, 1)).collect();
+        // Un registro che legge l'estensione dal nome del file, senza i file
+        // nascosti, e distingue le maiuscole: il più severo che la chiave
+        // deve reggere.
+        let strict = |id: &DocId| {
+            let name = id.as_str().rsplit('/').next().unwrap();
+            name.rsplit_once('.')
+                .is_some_and(|(stem, ext)| !stem.is_empty() && ext == "base")
+        };
+        // Il registro del kernel: dopo l'ultimo punto del path, in minuscolo.
+        let kernel = |id: &DocId| {
+            id.as_str()
+                .rsplit_once('.')
+                .is_some_and(|(_, ext)| ext.to_lowercase() == "base")
+        };
+        for rule in [&strict as &dyn Fn(&DocId) -> bool, &kernel] {
+            let mut asked = 0;
+            let found = bases_among(&entries, |id| {
+                asked += 1;
+                rule(id)
+            });
+            let mut expected: Vec<DocId> = entries
+                .iter()
+                .map(|e| e.id.clone())
+                .filter(|id| rule(id))
+                .collect();
+            expected.sort();
+            assert_eq!(found, expected);
+            assert!(
+                asked < names.len(),
+                "{asked} domande per {} voci",
+                names.len()
+            );
+        }
+    }
 
     #[test]
     fn moved_porta_un_riquadro_al_suo_posto() {

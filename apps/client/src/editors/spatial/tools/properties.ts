@@ -36,7 +36,25 @@ import { resolvedLanguage } from "../../../i18n/strings";
 import { identifier } from "../../../ui/a11y";
 import { iconEl } from "../../../ui/icons";
 import { ensureDrawIcons } from "../icons";
-import type { Lifetime } from "../../../ui/lifetime";
+import type { Lifetime, Teardown } from "../../../ui/lifetime";
+// Le sezioni del Design che il Completo registra (T10): in coda al pannello.
+import type {
+  ColoreSelezione,
+  ColoriSelezione,
+  MisuraSelezione,
+  MisureSelezione,
+  Selezione,
+  Sezioni,
+  SfumaturaSelezione,
+  SfumatureSelezione,
+  TavoleDocumento,
+  TestoSelezione,
+} from "../completo/sezioni";
+import type { GradientSummary } from "./gradients";
+import { UNITS, type LengthUnit } from "../scene/rulers";
+import { fromUnit } from "./rulers";
+import type { MotoreDelDisegno } from "../motore/gesti";
+import { createSezioniList, type SezioniList } from "./resources-panel";
 import { closeContextMenu, showContextMenu, type MenuItem } from "../../../ui/menu";
 import { createColorPicker, type ColorPicker } from "../../../kit/color/picker";
 import { openPopover, type PopoverHandle } from "../../../kit/popover";
@@ -48,6 +66,8 @@ import { cleanName } from "./naming";
 import { customColor, PALETTE, swatchOf } from "./palette";
 import { evaluate, type QuantityProblem } from "./quantity";
 import type { PaintSample } from "./resources";
+import type { SelectionGradients } from "./fields";
+import { composingKey } from "../../../kit/ime";
 
 /// Le sezioni, nell'ordine in cui si vedono.
 export type SectionId =
@@ -270,6 +290,23 @@ export interface PropertiesView {
   readonly actions: Readonly<Partial<Record<ActionId, ActionState>>>;
   /// Vero se c'è «Esporta la selezione».
   readonly exportSelection?: boolean;
+  /// Il modo di fusione degli oggetti scelti, come lo scrive il file (`normal` dove nessuno lo dice):
+  /// `value` è `null` se la selezione ne ha più d'uno. Non è un campo: lo legge la sezione Trasparenza
+  /// del Completo (K6 T15, giro 2).
+  readonly blend?: { readonly value: string | null; readonly count: number };
+  /// Gli estremi, gli angoli e il tratteggio dei contorni scelti: `null` dove non sono uguali per
+  /// tutti; i trattini e gli spazi nell'unità dello spessore, vuoti per un contorno pieno. Manca se la
+  /// selezione non ha un contorno da tratteggiare (un testo, un'immagine). Non sono campi: li legge la
+  /// sezione Contorno del Completo (K6 T15, giro 5).
+  readonly outline?: {
+    readonly cap: "butt" | "round" | "square" | null;
+    readonly join: "miter" | "round" | "bevel" | null;
+    readonly dashes: readonly number[] | null;
+    readonly locked: boolean;
+  };
+  /// Le sfumature del riempimento e del contorno della selezione. Non sono campi: le legge la sezione
+  /// Sfumatura del Completo (K6 T15, giro 5).
+  readonly gradients?: SelectionGradients;
   /// I campioni del documento, che i campi dei colori scrivono per nome e
   /// offrono nel menu del loro campione.
   readonly swatches?: readonly FieldSwatch[];
@@ -297,6 +334,19 @@ export interface PropertiesOptions {
 export interface Properties {
   /// Il pannello: titolo, oggetto, sezioni.
   readonly element: HTMLElement;
+  /// Il Completo aperto dà le sezioni del Design (`ispettore/design/…`) dal
+  /// suo registro, con la selezione di `selezione` (gli oggetti e i punti
+  /// scelti) e `rileggi` per lo stato dello strumento; `null` le toglie.
+  collegaSezioni(
+    registro: Sezioni | null,
+    motore: MotoreDelDisegno | null,
+    selezione: () => Selezione,
+    rileggi?: () => void,
+    tavole?: () => TavoleDocumento,
+  ): void;
+  /// Lo stato dello strumento del motore è cambiato (i punti scelti): le
+  /// sezioni del registro si rifanno, al più una volta per fotogramma.
+  aggiornaSezioni(): void;
   /// Fra il titolo e le sezioni: ciò che l'editor ci mette (il titolo del
   /// disegno).
   readonly lead: HTMLElement;
@@ -376,10 +426,132 @@ const SECTIONS: ReadonlyArray<{ readonly id: SectionId; readonly label: DrawKey 
   { id: "view", label: "draw.properties.view_section" },
 ];
 
+/// Le punte di Fub (`marker-start`/`marker-end`): nel Completo le frecce sono quelle del motore (sezione
+/// Contorno, come VectorCraft); le punte di Fub si mostrano solo se gli oggetti scelti ne hanno già.
+const PUNTE_DI_FUB: ReadonlySet<FieldId> = new Set<FieldId>(["tipStart", "tipEnd"]);
+
+/// Vero se nessun oggetto scelto ha una punta di Fub (inizio e fine «nessuna»; un misto ne ha).
+function senzaPunteDiFub(vista: PropertiesView): boolean {
+  return [...PUNTE_DI_FUB].every((id) => {
+    const campo = vista.fields[id];
+    return campo === undefined || (campo.kind === "menu" && campo.value === "none");
+  });
+}
+
+/// Le sezioni che nel Completo non ci sono: la sezione Trasforma dà posizione e misure (K6 T13, giro 4),
+/// e la sezione Trasparenza dà l'opacità (K6 T15, giro 2).
+const NASCOSTE_NEL_COMPLETO: ReadonlySet<SectionId> = new Set<SectionId>(["place", "look"]);
+
+/// I campi che nel Completo non ci sono: i colori di riempimento e contorno li dà la sezione Colore
+/// (K6 T14, giro 1); lo spessore e il tratteggio la sezione Contorno (K6 T15, giro 5). Le punte del
+/// contorno restano, nella sezione che nel Completo si chiama «Punte»; la sezione Riempimento, che
+/// resta senza campi, si chiude da sé. La famiglia, il corpo, il peso, la spaziatura e
+/// l'allineamento li danno Carattere e Paragrafo (K6 T16, giro 1); le parole, lo stile di Fub,
+/// l'enfasi (con sottolineato e barrato) e l'interlinea restano.
+const CAMPI_NASCOSTI_NEL_COMPLETO: ReadonlySet<FieldId> = new Set<FieldId>(["fill", "stroke", "strokeWidth", "dash", "family", "size", "weight", "spacing", "anchor"]);
+
+/// Le sezioni che nel Completo hanno un altro titolo: del Contorno restano solo le punte, perché il
+/// resto lo dà la sezione Contorno del Completo, e due sezioni «Contorno» confonderebbero. Le punte
+/// restano visibili dove ci sono (K6 T15, giro 6): il motore non ha un comando per le punte di Fub
+/// (`marker-start`/`marker-end` sulle linee), e toglierle le farebbe sparire dal Completo; dove non ci
+/// sono la sezione si nasconde (`senzaPunteDiFub`).
+const TITOLI_NEL_COMPLETO: Readonly<Partial<Record<SectionId, DrawKey>>> = { stroke: "draw.properties.tips" };
+
+/// La misura del campo numerico `id` della vista, con il passaggio alle unità della scena; `undefined`
+/// se il campo non c'è.
+function misuraDelCampo(vista: PropertiesView, id: FieldId): MisuraSelezione | undefined {
+  const campo = vista.fields[id];
+  if (campo?.kind !== "number") return undefined;
+  const unita = campo.unit;
+  const lunghezza = (UNITS as readonly string[]).includes(unita);
+  return {
+    valore: campo.value,
+    unita,
+    decimali: campo.places,
+    allaScena: (valore) => (lunghezza ? fromUnit(valore, unita as LengthUnit) : valore),
+  };
+}
+
+/// Le misure di «Posizione e misure» come le ha la vista del pannello (K6 T13, giro 4): il Trasforma del
+/// Completo le legge di qui, senza chiedere il motore. Il valore sta nell'unità del campo; `allaScena`
+/// lo riporta alle unità della scena, dove lavora il motore.
+function misureDellaVista(vista: PropertiesView): MisureSelezione {
+  const misura = (id: FieldId): MisuraSelezione | undefined => misuraDelCampo(vista, id);
+  const fusione = vista.blend === undefined ? undefined : { valore: vista.blend.value, mista: vista.blend.value === null };
+  const spessore = misura("strokeWidth");
+  const contorno =
+    vista.outline === undefined
+      ? undefined
+      : {
+          ...(spessore === undefined ? {} : { spessore }),
+          estremi: vista.outline.cap,
+          angoli: vista.outline.join,
+          trattini: vista.outline.dashes,
+          bloccato: vista.outline.locked,
+        };
+  const sfumatura = (summary: GradientSummary | undefined): SfumaturaSelezione | undefined =>
+    summary === undefined
+      ? undefined
+      : { parti: summary.count, conSfumatura: summary.gradients, tipo: summary.kind, punti: summary.stops, angolo: summary.angle };
+  const g = vista.gradients;
+  const sfumature: SfumatureSelezione | undefined =
+    g === undefined
+      ? undefined
+      : {
+          ...(g.fill === undefined ? {} : { riempimento: sfumatura(g.fill)! }),
+          ...(g.stroke === undefined ? {} : { contorno: sfumatura(g.stroke)! }),
+          bloccato: g.locked,
+          soloTesto: g.onlyText,
+        };
+  return {
+    ...(contorno === undefined ? {} : { contorno }),
+    ...(sfumature === undefined ? {} : { sfumature }),
+    x: misura("x"),
+    y: misura("y"),
+    larghezza: misura("width"),
+    altezza: misura("height"),
+    rotazione: misura("rotation"),
+    opacita: misura("opacity"),
+    fusione,
+  };
+}
+
+/// Il riempimento e il contorno come li ha la vista del pannello (K6 T14, giro 1): la sezione Colore
+/// del Completo li legge di qui, senza chiedere il motore.
+function coloriDellaVista(vista: PropertiesView): ColoriSelezione {
+  const colore = (id: PaintId): ColoreSelezione | undefined => {
+    const campo = vista.fields[id];
+    if (campo?.kind !== "paint") return undefined;
+    return campo.sample === undefined ? { valore: campo.value } : { valore: campo.value, campione: campo.sample };
+  };
+  return { riempimento: colore("fill"), contorno: colore("stroke") };
+}
+
+/// Il carattere e il paragrafo dei testi scelti come li ha la vista del pannello (K6 T16, giro 1):
+/// Carattere e Paragrafo del Completo li leggono di qui, senza chiedere il motore. `undefined` se la
+/// selezione non ha testi.
+function testoDellaVista(vista: PropertiesView): TestoSelezione | undefined {
+  const { family, weight, emphasis, spacing, anchor } = vista.fields;
+  if (family?.kind !== "choice") return undefined;
+  const corpo = misuraDelCampo(vista, "size");
+  const corsivo = emphasis?.kind === "toggles" ? (emphasis.options.find((each) => each.value === "italic")?.on ?? false) : false;
+  const peso = weight?.kind === "choice" && weight.value !== null ? Number(weight.value) : null;
+  return {
+    famiglia: family.value,
+    famiglie: family.options.map((each) => ({ valore: each.value, nome: each.label })),
+    ...(corpo === undefined ? {} : { corpo }),
+    peso: peso !== null && Number.isFinite(peso) ? peso : null,
+    corsivo,
+    ...(spacing?.kind === "number" ? { spaziatura: spacing.value } : {}),
+    allineamento: anchor?.kind === "segment" ? anchor.value : null,
+  };
+}
+
 /// I comandi di «Disponi», in tre barre: allineare, distribuire, ordinare.
-const ACTION_ROWS: ReadonlyArray<{ readonly label: DrawKey; readonly actions: readonly ActionId[] }> = [
-  { label: "draw.properties.align", actions: ["align-left", "align-center", "align-right", "align-top", "align-middle", "align-bottom"] },
-  { label: "draw.properties.distribute", actions: ["distribute-x", "distribute-y"] },
+// Nel Completo il gruppo dei sei allineamenti non c'è: lo dà la sezione «Allinea», con «alla tavola» (K6 T13).
+const ACTION_ROWS: ReadonlyArray<{ readonly label: DrawKey; readonly actions: readonly ActionId[]; readonly nascostoNelCompleto?: true }> = [
+  { label: "draw.properties.align", actions: ["align-left", "align-center", "align-right", "align-top", "align-middle", "align-bottom"], nascostoNelCompleto: true },
+  { label: "draw.properties.distribute", actions: ["distribute-x", "distribute-y"], nascostoNelCompleto: true },
   { label: "draw.order", actions: ["order-front", "order-forward", "order-backward", "order-back"] },
 ];
 
@@ -592,6 +764,8 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
   element.append(header, lead, scroller);
 
   let view: PropertiesView = { key: "", subject: "", editable: false, fields: {}, actions: {} };
+  /// Le sezioni del Design dal registro del Completo (T10); `null` senza il Completo.
+  let registrate: SezioniList | null = null;
   /// Vero mentre i campi si ridisegnano: un campo che se ne va non scrive.
   let rendering = false;
   const closed = new Set(options.closed);
@@ -688,7 +862,9 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
   // --- I comandi di «Disponi» ---------------------------------------------------
 
   const actionButtons = new Map<ActionId, HTMLButtonElement>();
-  const actionBars: Array<{ readonly bar: HTMLElement; readonly label: DrawKey }> = [];
+  /// Vero con il Completo aperto: il gruppo che nel Completo non c'è si toglie.
+  let completoAperto = false;
+  const actionBars: Array<{ readonly bar: HTMLElement; readonly label: DrawKey; readonly nascosto: boolean }> = [];
   const arrangeBody = sections.get("arrange")!.body;
   const arrangeRows = document.createElement("div");
   arrangeRows.className = "draw-properties-actions";
@@ -726,7 +902,7 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
       });
     }
     arrangeRows.append(bar);
-    actionBars.push({ bar, label: row.label });
+    actionBars.push({ bar, label: row.label, nascosto: row.nascostoNelCompleto === true });
     roves.push(rove(bar));
   }
 
@@ -1530,6 +1706,7 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
   const writes = (line: Line): boolean => line.spec.kind === "number" || line.spec.kind === "paint" || line.spec.kind === "text";
 
   life.listen(element, "keydown", (event) => {
+    if (composingKey(event)) return;
     const line = lineOf(event.target);
     const plain = !event.ctrlKey && !event.metaKey && !event.altKey;
     if (event.key === "Escape" && plain && !event.shiftKey) {
@@ -1614,10 +1791,13 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
     return null;
   };
 
+  /// Il titolo della sezione `id`: nel Completo aperto, quello di `TITOLI_NEL_COMPLETO` se c'è.
+  const titoloDi = (id: SectionId, label: DrawKey): DrawKey => (completoAperto ? (TITOLI_NEL_COMPLETO[id] ?? label) : label);
+
   const relabel = (): void => {
     formats.clear();
     heading.textContent = t("draw.properties");
-    for (const { id, label } of SECTIONS) sections.get(id)!.title.textContent = t(label);
+    for (const { id, label } of SECTIONS) sections.get(id)!.title.textContent = t(titoloDi(id, label));
     for (const { bar, label } of actionBars) bar.setAttribute("aria-label", t(label));
     for (const [id, control] of actionButtons) {
       const text = view.actions[id]?.label ?? t(ACTION_LABELS[id]);
@@ -1643,7 +1823,7 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
       for (const spec of SPECS) {
         const line = lines.get(spec.id)!;
         const state = next.fields[spec.id];
-        if (state === undefined || state.kind !== spec.kind) {
+        if (state === undefined || state.kind !== spec.kind || (completoAperto && (CAMPI_NASCOSTI_NEL_COMPLETO.has(spec.id) || (PUNTE_DI_FUB.has(spec.id) && senzaPunteDiFub(next))))) {
           line.root.hidden = true;
           continue;
         }
@@ -1663,13 +1843,15 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
         if (off) control.setAttribute("aria-disabled", "true");
         else control.removeAttribute("aria-disabled");
       }
-      for (const { bar } of actionBars) bar.hidden = [...bar.children].every((control) => (control as HTMLElement).hidden);
+      for (const { bar, nascosto } of actionBars) bar.hidden = (nascosto && completoAperto) || [...bar.children].every((control) => (control as HTMLElement).hidden);
       if (next.exportSelection === true && options.onExportSelection !== undefined) shown.add("exportSelection");
-      for (const section of sections.values()) section.root.hidden = !shown.has(section.id);
+      for (const section of sections.values()) section.root.hidden = !shown.has(section.id) || (completoAperto && NASCOSTE_NEL_COMPLETO.has(section.id));
     } finally {
       rendering = false;
     }
     for (const sync of roves) sync();
+    // Le sezioni del registro vedono la selezione di adesso.
+    registrate?.aggiorna();
     // Il fuoco in un campo che se n'è andato resta nel pannello: alla sua
     // sezione, se c'è ancora.
     if (lost !== null && (lost as HTMLElement).closest("[hidden]") !== null) {
@@ -1681,10 +1863,59 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
 
   relabel();
 
+  // Le sezioni del Design che le famiglie registrano (`ispettore/design/…`): in
+  // coda al pannello, dopo le sue, nell'ordine della mappa (T10).
+  const sezioniDesign = document.createElement("div");
+  scroller.append(sezioniDesign);
+  let registro: Sezioni | null = null;
+  let motoreCompleto: MotoreDelDisegno | null = null;
+  let selezione: () => Selezione = () => ({ numero: 0, punti: [] });
+  let rileggiStato: () => void = () => undefined;
+  let tavoleDiAdesso: (() => TavoleDocumento) | undefined;
+  let stopRegistro: Teardown | null = null;
+  registrate = createSezioniList(sezioniDesign, life, {
+    elenco: () => registro?.di("design") ?? [],
+    selezione: () => {
+      // Carattere e Paragrafo vedono il testo scelto dalla vista (K6 T16).
+      const testo = testoDellaVista(view);
+      return testo === undefined ? selezione() : { ...selezione(), testo };
+    },
+    motore: () => motoreCompleto,
+    rileggi: () => rileggiStato(),
+    misure: () => misureDellaVista(view),
+    colori: () => coloriDellaVista(view),
+    tavole: () => tavoleDiAdesso?.(),
+  });
+  life.add(() => {
+    stopRegistro?.();
+    stopRegistro = null;
+  });
+
   return {
     element,
     lead,
     update,
+    collegaSezioni(nuovo, motore, sceltaDiAdesso, rileggi, tavole) {
+      stopRegistro?.();
+      stopRegistro = null;
+      registro = nuovo;
+      const prima = completoAperto;
+      completoAperto = nuovo !== null;
+      motoreCompleto = motore;
+      selezione = sceltaDiAdesso;
+      rileggiStato = rileggi ?? (() => undefined);
+      tavoleDiAdesso = nuovo === null ? undefined : tavole;
+      // Ciò che nel Completo non c'è si toglie (o torna) subito, non al prossimo cambio.
+      if (prima !== completoAperto) {
+        for (const { id, label } of SECTIONS) sections.get(id)!.title.textContent = t(titoloDi(id, label));
+        update(view);
+      }
+      if (nuovo !== null) stopRegistro = nuovo.ascolta(() => registrate?.aggiorna());
+      registrate?.aggiorna();
+    },
+    aggiornaSezioni() {
+      registrate?.aggiorna();
+    },
     focus() {
       for (const section of sections.values()) {
         if (section.root.hidden || !section.open) continue;

@@ -267,6 +267,9 @@ export const api = {
     openViewer(mediaInvoke, url, title, policy),
   viewerSave: (url: string, title: string, allowlist: readonly string[], attachmentFolder: string, vault?: string) =>
     saveViewer(mediaInvoke, url, title, allowlist, attachmentFolder, vault),
+  /** Una tessera della vista Mappa di una Base, in byte: la scarica l'host,
+   * soltanto da un sito che `map.tile-hosts` ammette su questa macchina. */
+  mapTile: (url: string, kind: "raster" | "vector") => invoke<ArrayBuffer>("map_tile", { url, kind }),
   /** Indietro, avanti, ricarica, chiudi o porta davanti la finestra del visore. */
   viewerControl: (action: ViewerAction) => invoke<void>("viewer_control", { action }),
   /** Le navigazioni del visore, ammesse o fermate, e la sua chiusura. */

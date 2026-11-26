@@ -139,7 +139,7 @@ const guard = EditorState.transactionFilter.of((tr) => {
   // Il gesto che apre una coppia vuota l'ha già provata con una lettera
   // dentro: vuota, si legge diversa (`**====**`), e non dice niente.
   if (!tr.isUserEvent("input.type") && tr.effects.some((effect) => effect.is(openedPair))) return tr;
-  const tags = brokenTwins(tr.startState, tr.changes);
+  const tags = brokenTwins(tr.startState, tr.changes, tr.isUserEvent("input.type"));
   if (!tags.length) return tr;
   const twins = tr.startState.changes(tags).map(tr.changes);
   // Le due modifiche in una: il passo di annulla resta uno.

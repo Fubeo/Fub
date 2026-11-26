@@ -111,6 +111,13 @@ export function nonNegativeLength(value: string): number | null {
   return n !== null && n >= 0 ? n : null;
 }
 
+/// `stroke-miterlimit`: un numero non minore di 1 (SVG rifiuta i valori
+/// più piccoli).
+export function miterlimit(value: string): number | null {
+  const n = number(value);
+  return n !== null && n >= 1 ? n : null;
+}
+
 /// Un'opacità: un numero da 0 a 1, senza percentuale.
 export function opacity(value: string): number | null {
   const n = number(value);
@@ -175,6 +182,7 @@ const KEYWORDS: ReadonlyMap<string, readonly string[]> = new Map([
   ["font-weight", ["normal", "bold", "100", "200", "300", "400", "500", "600", "700", "800", "900"]],
   ["font-style", ["normal", "italic", "oblique"]],
   ["text-anchor", ["start", "middle", "end"]],
+  ["writing-mode", ["horizontal-tb", "vertical-rl"]],
   // Le risorse del disegno (formato della scena, risorse).
   ["spreadMethod", ["pad", "reflect", "repeat"]],
   ["gradientUnits", ["userSpaceOnUse", "objectBoundingBox"]],
@@ -188,6 +196,7 @@ const KEYWORDS: ReadonlyMap<string, readonly string[]> = new Map([
   ["primitiveUnits", ["userSpaceOnUse"]],
   ["color-interpolation-filters", ["auto", "sRGB", "linearRGB"]],
   ["clip-rule", ["nonzero", "evenodd"]],
+  ["fill-rule", ["nonzero", "evenodd"]],
 ]);
 
 /// Una parola chiave fra quelle elencate per `name`.

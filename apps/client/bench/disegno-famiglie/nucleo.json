@@ -1,0 +1,8 @@
+{
+  "risposte": [
+    {
+      "comando": "disegno.strumento.stato",
+      "esito": { "state": { "busy": false, "transforming": false, "wants_text": false, "composing": false, "cursor": "arrow", "options": null } }
+    }
+  ]
+}

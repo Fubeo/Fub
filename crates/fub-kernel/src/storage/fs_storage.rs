@@ -548,6 +548,64 @@ pub fn identity_of_the_file(path: &Utf8Path) -> Option<Identity> {
     }
 }
 
+/// L'orologio di sistema di adesso, nella stessa unità del timbro di
+/// cambiamento che il filesystem dà su questa piattaforma: nanosecondi dal
+/// 1970 su unix, centinaia di nanosecondi dal 1601 su Windows (il
+/// `ChangeTime`). `None` dove il timbro non c'è.
+///
+/// Serve a dire se un timbro letto può ancora essere quello di una
+/// riscrittura che verrà: vedi [`crate::transfer::change_stamp_settled`].
+pub fn change_stamp_clock() -> Option<u64> {
+    change_stamp_of_instant(
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .ok()?,
+    )
+}
+
+/// Un istante dell'orologio di sistema già letto, in millisecondi UNIX (come
+/// [`crate::time::now_unix_millis`]), nell'unità del timbro di cambiamento:
+/// vedi [`change_stamp_clock`]. Il millisecondo è troncato, cioè l'istante
+/// resta quello letto o un po' prima: chi lo usa per dire «il timbro era già
+/// fermo» sbaglia solo per eccesso di prudenza.
+pub fn change_stamp_at_unix_millis(millis: u64) -> Option<u64> {
+    change_stamp_of_instant(std::time::Duration::from_millis(millis))
+}
+
+fn change_stamp_of_instant(since: std::time::Duration) -> Option<u64> {
+    #[cfg(any(unix, windows))]
+    {
+        #[cfg(unix)]
+        let stamp = unix_change_stamp(
+            i64::try_from(since.as_secs()).ok()?,
+            i64::from(since.subsec_nanos()),
+        );
+        #[cfg(windows)]
+        let stamp = {
+            // Fra il 1601 e il 1970 ci sono 11 644 473 600 secondi.
+            let ticks = since.as_nanos() / 100 + 116_444_736_000_000_000;
+            u64::try_from(ticks).ok()?
+        };
+        Some(stamp)
+    }
+    #[cfg(not(any(unix, windows)))]
+    {
+        let _ = since;
+        None
+    }
+}
+
+/// La grana più grossa che si assume per il timbro di cambiamento, nella
+/// sua unità: due secondi. Su Linux `ctime` prende l'orologio grossolano del
+/// kernel (un tick, 1–10 ms), ma FAT ha due secondi e HFS+ uno: chi si fida
+/// di un timbro ricordato lo fa solo quando la lettura è venuta almeno una
+/// grana dopo di lui.
+#[cfg(unix)]
+pub const CHANGE_STAMP_GRAIN: u64 = 2_000_000_000;
+/// Vedi la versione unix: qui l'unità sono centinaia di nanosecondi.
+#[cfg(not(unix))]
+pub const CHANGE_STAMP_GRAIN: u64 = 20_000_000;
+
 #[cfg(unix)]
 pub(crate) fn unix_change_stamp(seconds: i64, nanos: i64) -> u64 {
     let ticks = (seconds as i128)
@@ -577,6 +635,70 @@ pub(crate) fn windows_change_stamp(handle: std::os::windows::io::RawHandle) -> i
         return Err(io::Error::last_os_error());
     }
     Ok(info.ChangeTime.max(0) as u64)
+}
+
+/// L'identità del file dietro `handle`: il numero di serie del volume e
+/// l'indice del file, come [`identity_of_the_file`], senza aprirlo di nuovo.
+#[cfg(windows)]
+pub(crate) fn windows_identity(
+    handle: std::os::windows::io::RawHandle,
+) -> io::Result<FileIdentity> {
+    use windows_sys::Win32::Storage::FileSystem::{
+        GetFileInformationByHandle, BY_HANDLE_FILE_INFORMATION,
+    };
+
+    let mut info: BY_HANDLE_FILE_INFORMATION = unsafe { std::mem::zeroed() };
+    // SAFETY: l'handle resta vivo nel chiamante per tutta la syscall e `info`
+    // è una struttura del chiamante che la funzione riempie soltanto.
+    let outcome = unsafe { GetFileInformationByHandle(handle as _, &mut info) };
+    if outcome == 0 {
+        return Err(io::Error::last_os_error());
+    }
+    Ok(FileIdentity {
+        volume: info.dwVolumeSerialNumber as u64,
+        file: ((info.nFileIndexHigh as u64) << 32) | info.nFileIndexLow as u64,
+    })
+}
+
+/// Timbro di cambiamento e identità di `path` con **una** domanda al
+/// filesystem: un `stat` su unix, un handle solo su Windows (dove la
+/// risposta separata apriva il file due volte). Come le due domande prese
+/// una per una, un timbro che non si legge è un errore e un'identità che
+/// non si legge è `None`.
+pub(super) fn witness_of_file(path: &Utf8Path) -> io::Result<FileWitness> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        let metadata = std::fs::metadata(path)?;
+        Ok(FileWitness {
+            change_stamp: Some(unix_change_stamp(metadata.ctime(), metadata.ctime_nsec())),
+            identity: Some(FileIdentity {
+                volume: metadata.dev(),
+                file: metadata.ino(),
+            }),
+        })
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+        use std::os::windows::io::AsRawHandle;
+        use windows_sys::Win32::Storage::FileSystem::FILE_FLAG_BACKUP_SEMANTICS;
+
+        let file = std::fs::OpenOptions::new()
+            .read(true)
+            .custom_flags(FILE_FLAG_BACKUP_SEMANTICS)
+            .open(path)?;
+        let handle = file.as_raw_handle();
+        Ok(FileWitness {
+            change_stamp: Some(windows_change_stamp(handle)?),
+            identity: windows_identity(handle).ok(),
+        })
+    }
+    #[cfg(not(any(unix, windows)))]
+    {
+        let _ = path;
+        Ok(FileWitness::default())
+    }
 }
 
 pub(super) fn change_stamp_of_file(path: &Utf8Path) -> io::Result<Option<u64>> {

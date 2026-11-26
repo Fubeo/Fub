@@ -150,7 +150,7 @@ describe("il corpus di SVG scritti da altri", () => {
       "root",
       "[] foreign [0, 3]",
       "[3] group",
-      "[3] foreign [0, 1]",
+      "[3, 0] line",
       "[3, 1] rect",
     ]);
     expect(scene.diagnostics.some((d) => d.code === "S008")).toBe(true);

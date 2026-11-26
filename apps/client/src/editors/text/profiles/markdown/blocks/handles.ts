@@ -302,6 +302,12 @@ interface Hold {
   /// Il posto per cui la posa delle righe è già scritta: a posto fermo, un
   /// movimento del puntatore non la ricalcola.
   partedKey: string;
+  /// Dove sta scritto il posto (px nello scorrimento, e il suo rientro): i
+  /// numeri, non lo stile riletto. Il browser scrive `top` con sei cifre
+  /// (412.5625 diventa «412.562px»), e un confronto con lo stile troverebbe
+  /// il posto «cambiato» a ogni movimento del puntatore, facendone ripartire
+  /// la corsa. `null` finché non è stato messo la prima volta.
+  slotAt: { readonly top: number; readonly indent: number } | null;
   readonly column: { readonly left: number; readonly right: number };
   /// I bordi del testo (la colonna senza il suo rientro), px dello schermo:
   /// oltre 90 px da lì il blocco si stacca.
@@ -364,14 +370,54 @@ function atRest(view: EditorView, pos: number, seen: { left: number; right: numb
   };
 }
 
-/// Il bordo sinistro di ciò che si vede del blocco: il testo, o il bordo di
-/// un widget più largo della colonna (una scheda, una tabella larga), così
-/// «+» e maniglia stanno sempre a sinistra di ciò che si vede.
-function visibleLeft(view: EditorView, block: Block, text: number): number {
+/// Le righe che disegnano un riquadro loro, col testo rientrato: il filo di
+/// una citazione, il fondo di un riquadro e di un blocco di codice. Il loro
+/// bordo sinistro è quello della riga, non quello del primo carattere. Una
+/// specie nuova di riga col suo riquadro va aggiunta qui, o le maniglie le
+/// finiscono sopra.
+const BOXED_LINE = ".cm-fub-quote, .cm-fub-callout-line, .cm-fub-codeblock";
+/// Un widget di blocco più alto di così (una tabella, una scheda, un'immagine)
+/// ha le maniglie in testa, all'altezza della sua prima riga, come nel
+/// prototipo: a metà altezza starebbero lontane dall'inizio del blocco, e
+/// fuori dalla vista in una tabella lunga.
+const WIDGET_HEAD = 36;
+
+/// La riga del blocco fra i figli diretti del contenuto: una `.cm-line`, o
+/// il widget di blocco quando la posizione cade dentro di lui.
+function rowOf(view: EditorView, block: Block): Element | null {
   const node = view.domAtPos(block.from).node;
   let row = node instanceof Element ? node : node.parentElement;
   while (row && row.parentElement !== view.contentDOM) row = row.parentElement;
-  if (!row || row.classList.contains("cm-line")) return text;
+  return row;
+}
+
+/// La fascia su cui si centrano le maniglie: la prima riga di testo (`glyph`,
+/// l'altezza del primo carattere), o il blocco di riga (`line`) quando non c'è
+/// un carattere da misurare. Di un widget di blocco conta la testa.
+export function handleSpan(glyph: number, line: number, widget: boolean): number {
+  const span = glyph > 0 ? glyph : line;
+  return widget ? Math.min(span, WIDGET_HEAD) : span;
+}
+
+/// Il blocco comincia con un widget di blocco (una tabella, una scheda,
+/// un'immagine), non con una riga di testo. Davanti a un widget sostituito
+/// la posizione cade nel contenuto stesso, fra due suoi figli: si guarda il
+/// figlio che segue.
+function startsWithWidget(view: EditorView, block: Block, row: Element | null): boolean {
+  if (row) return !row.classList.contains("cm-line");
+  const at = view.domAtPos(block.from);
+  if (at.node !== view.contentDOM) return false;
+  const next = at.node.childNodes[at.offset];
+  return next instanceof Element && !next.classList.contains("cm-line");
+}
+
+/// Il bordo sinistro di ciò che si vede del blocco: il testo; il bordo della
+/// riga, se la riga disegna un riquadro suo (`BOXED_LINE`); o il bordo di un
+/// widget più largo della colonna (una scheda, una tabella larga). Così «+» e
+/// maniglia stanno sempre a sinistra di ciò che si vede.
+export function visibleLeft(row: Element | null, text: number): number {
+  if (!row) return text;
+  if (row.classList.contains("cm-line")) return row.matches(BOXED_LINE) ? Math.min(text, row.getBoundingClientRect().left) : text;
   const box = (row.firstElementChild ?? row).getBoundingClientRect();
   return box.width > 0 ? Math.min(text, box.left) : text;
 }
@@ -711,17 +757,19 @@ class HandlesView {
         const scroller = view.scrollDOM.getBoundingClientRect();
         const lineBlock = view.lineBlockAt(block.from);
         // Centrate sulla prima riga di testo, non sul blocco di riga: un
-        // titolo ha aria sopra, e le maniglie starebbero in alto.
+        // titolo ha aria sopra, e le maniglie starebbero in alto. Di un
+        // widget di blocco conta la testa, non tutta l'altezza.
+        const row = rowOf(view, block);
         const glyph = coords.bottom - coords.top;
         return {
           index,
           key: keyOf(block),
           label: gripLabel(view.state, blocks, index),
-          left: visibleLeft(view, block, coords.left) - scroller.left + view.scrollDOM.scrollLeft,
+          left: visibleLeft(row, coords.left) - scroller.left + view.scrollDOM.scrollLeft,
           top: glyph > 0
             ? coords.top - scroller.top + view.scrollDOM.scrollTop
             : lineBlock.top + view.documentTop - scroller.top + view.scrollDOM.scrollTop,
-          height: glyph > 0 ? glyph : lineBlock.height,
+          height: handleSpan(glyph, lineBlock.height, startsWithWidget(view, block, row)),
         };
       },
       write: (place) => {
@@ -1304,7 +1352,7 @@ class HandlesView {
       edge: edgeScroll(), scrolling: null,
       section: sectionAt(state, blocks, span.from, span), said: "",
       skew: Math.abs(skew) < 0.5 ? 0 : skew,
-      sx, sy, otherIndex: new Map(others.map((i, k) => [i, k])), partedKey: "",
+      sx, sy, otherIndex: new Map(others.map((i, k) => [i, k])), partedKey: "", slotAt: null,
       tx: 0, ty: 0, cx: 0, cy: 0, tilt: 0, frames: null, flying: false,
     };
     const hold = drag.hold;
@@ -1586,15 +1634,15 @@ class HandlesView {
     // sull'origine. Un rientro più in là o più in qua per annidare o portare fuori.
     const slot = hold.slot;
     const indent = hold.lean === "nest" ? NEST_PX : hold.lean === "outdent" ? -NEST_PX : 0;
-    const wasTop = parseFloat(slot.style.top);
-    const wasLeft = parseFloat(slot.style.left) - hold.left;
+    const was = hold.slotAt;
     const nowTop = slotTop(geo, place);
+    hold.slotAt = { top: nowTop, indent };
     slot.hidden = hold.beside !== null;
     slot.style.top = `${nowTop}px`;
     slot.style.left = `${hold.left + indent}px`;
     if (place === geo.origin && hold.lean === "none") slot.dataset.home = "true";
     else delete slot.dataset.home;
-    if (slide && Number.isFinite(wasTop) && (wasTop !== nowTop || wasLeft !== indent)) {
+    if (slide && was && (was.top !== nowTop || was.indent !== indent)) {
       // Come le righe di `part`: un posto ancora in corsa riparte da dove lo
       // si vede, non dal suo posto di prima; la dissolvenza d'entrata, se è
       // ancora in corsa, prosegue anche lei.
@@ -1602,8 +1650,8 @@ class HandlesView {
       halt(slot);
       animate(slot, {
         from: {
-          x: (pose?.x ?? 0) + wasLeft - indent,
-          y: (pose?.y ?? 0) + wasTop - nowTop,
+          x: (pose?.x ?? 0) + was.indent - indent,
+          y: (pose?.y ?? 0) + was.top - nowTop,
           ...(pose?.opacity === undefined ? {} : { opacity: pose.opacity }),
         },
         duration: PART_MS,

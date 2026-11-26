@@ -372,6 +372,28 @@ fn ora_ns() -> i64 {
     ns
 }
 
+/// Il margine dei timer del thread che dorme fino ai vblank, in nanosecondi.
+/// Quello di serie (50 µs) lascia al kernel di accorpare il risveglio con
+/// altri: misurato su questa macchina a 180 Hz, il ritardo mediano al
+/// risveglio passa da 65 µs a 14 µs con 1 ns.
+const MARGINE_DEL_TIMER_NS: c_ulong = 1;
+
+/// Stringe il margine dei timer del thread che chiama, una volta per thread.
+/// Lo si chiama solo emulando: è il thread del display link di WebKit, che
+/// non fa altro che aspettare il vblank.
+fn margine_stretto() {
+    thread_local! {
+        static FATTO: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    }
+    FATTO.with(|fatto| {
+        if !fatto.replace(true) {
+            // SAFETY: `PR_SET_TIMERSLACK` tocca solo il thread che chiama e
+            // non legge memoria; un fallimento lascia il margine di prima.
+            unsafe { libc::prctl(libc::PR_SET_TIMERSLACK, MARGINE_DEL_TIMER_NS) };
+        }
+    });
+}
+
 fn dormi_fino_a(scadenza_ns: i64) {
     let t = libc::timespec {
         tv_sec: scadenza_ns.div_euclid(1_000_000_000) as libc::time_t,
@@ -468,6 +490,7 @@ pub unsafe fn drm_wait_vblank(fd: c_int, vbl: *mut DrmVBlank) -> c_int {
     };
     let scadenza = griglia.scadenza(k);
     if scadenza > ora {
+        margine_stretto();
         dormi_fino_a(scadenza);
     }
     // SAFETY: `vbl` è valido e scrivibile; la risposta occupa la stessa
@@ -480,6 +503,13 @@ pub unsafe fn drm_wait_vblank(fd: c_int, vbl: *mut DrmVBlank) -> c_int {
 /// La griglia del CRTC (rileggendo la modalità se serve) e il vblank da
 /// aspettare. `None`: il CRTC è spento, la frequenza è fuori dai limiti o
 /// l'attesa è troppo lunga, e si risponde come il driver.
+///
+/// La rilettura (al più una al secondo) chiama il driver fuori dal lock:
+/// `drmModeGetCrtc` costa 0,3 µs (2,3 µs al massimo su 2000 letture, misurato
+/// su `nvidia-drm`), e poiché la scadenza è assoluta il suo costo sparisce
+/// nell'attesa; ma è un ioctl, che durante un cambio di modalità può aspettare
+/// il driver, e il lock non deve restare preso intanto. Anche il log del
+/// cambio di frequenza esce fuori dal lock.
 fn pianifica(
     fd: c_int,
     scheda: u64,
@@ -487,38 +517,64 @@ fn pianifica(
     ora: i64,
     cosa: Richiesta,
 ) -> Option<(Griglia, u64)> {
-    let mut tutti = CRTC_CHE_FALLISCONO.lock().ok()?;
-    let crtc = tutti
-        .iter_mut()
-        .find(|c| c.scheda == scheda && c.pipe == pipe)?;
-    if ora.saturating_sub(crtc.letta_ns) >= RILETTURA_NS {
-        crtc.letta_ns = ora;
-        if crtc.id.is_none() {
-            crtc.id = drm::id_del_crtc(fd, pipe);
-        }
-        let letta = crtc
-            .id
+    // Chi trova la rilettura scaduta la prende per sé segnando l'ora: un
+    // altro thread, nello stesso secondo, usa la griglia che c'è.
+    let da_rileggere = {
+        let mut tutti = CRTC_CHE_FALLISCONO.lock().ok()?;
+        let crtc = tutti
+            .iter_mut()
+            .find(|c| c.scheda == scheda && c.pipe == pipe)?;
+        (ora.saturating_sub(crtc.letta_ns) >= RILETTURA_NS).then(|| {
+            crtc.letta_ns = ora;
+            crtc.id
+        })
+    };
+    let lettura = da_rileggere.map(|id| {
+        let id = id.or_else(|| drm::id_del_crtc(fd, pipe));
+        let letta = id
             .and_then(|id| drm::modo_del_crtc(fd, id))
             .and_then(frequenza_mhz);
-        let mhz = letta.filter(|&mhz| nei_limiti(mhz)).unwrap_or(0);
-        if crtc.mhz != Some(mhz) {
-            tracing::info!(
-                target: "fub.app",
-                pipe,
-                crtc = ?crtc.id,
-                letta_mhz = ?letta,
-                emulata_mhz = mhz,
-                "WebKitGTK emulated vblank for CRTC"
-            );
-            crtc.griglia = (mhz != 0).then(|| match crtc.griglia {
-                Some(griglia) => griglia.con_periodo(ora, periodo_ns(mhz)),
-                None => Griglia::nuova(ora, periodo_ns(mhz)),
-            });
-            crtc.mhz = Some(mhz);
+        (id, letta)
+    });
+    let mut cambio = None;
+    let griglia = {
+        let mut tutti = CRTC_CHE_FALLISCONO.lock().ok()?;
+        let crtc = tutti
+            .iter_mut()
+            .find(|c| c.scheda == scheda && c.pipe == pipe)?;
+        if let Some((id, letta)) = lettura {
+            crtc.id = crtc.id.or(id);
+            let mhz = letta.filter(|&mhz| nei_limiti(mhz)).unwrap_or(0);
+            if crtc.mhz != Some(mhz) {
+                cambio = Some((crtc.id, letta, mhz));
+                crtc.griglia = griglia_dopo_lettura(crtc.griglia, ora, mhz);
+                crtc.mhz = Some(mhz);
+            }
         }
+        crtc.griglia
+    };
+    if let Some((crtc, letta, mhz)) = cambio {
+        tracing::info!(
+            target: "fub.app",
+            pipe,
+            crtc = ?crtc,
+            letta_mhz = ?letta,
+            emulata_mhz = mhz,
+            "WebKitGTK emulated vblank for CRTC"
+        );
     }
-    let griglia = crtc.griglia?;
+    let griglia = griglia?;
     Some((griglia, bersaglio(&griglia, ora, cosa)?))
+}
+
+/// La griglia dopo una lettura della frequenza `mhz` (0: niente emulazione):
+/// la prima parte da adesso, un cambio di frequenza continua il contatore
+/// dall'ultimo vblank passato, senza tornare indietro né saltare.
+pub fn griglia_dopo_lettura(prima: Option<Griglia>, ora_ns: i64, mhz: u32) -> Option<Griglia> {
+    (mhz != 0).then(|| match prima {
+        Some(griglia) => griglia.con_periodo(ora_ns, periodo_ns(mhz)),
+        None => Griglia::nuova(ora_ns, periodo_ns(mhz)),
+    })
 }
 
 /// Le funzioni di modalità di libdrm, cercate nel processo (WebKit carica
@@ -786,6 +842,24 @@ mod tests {
         assert_eq!(h.conta(ora), 10);
         assert_eq!(h.scadenza(10), 10 * P180);
         assert_eq!(h.scadenza(11), 10 * P180 + 16_666_666);
+    }
+
+    /// La rilettura fuori dal lock non perde la frequenza cambiata: la griglia
+    /// passa al periodo nuovo senza che il contatore torni indietro, lo
+    /// schermo spento ferma l'emulazione e quello riacceso riparte da adesso.
+    #[test]
+    fn la_lettura_aggiorna_la_griglia() {
+        let prima = griglia_dopo_lettura(None, 1_000, 179_960).expect("180 Hz si emula");
+        assert_eq!(prima, Griglia::nuova(1_000, P180));
+        let ora = 1_000 + 30 * P180 + 5;
+        let dopo = griglia_dopo_lettura(Some(prima), ora, 60_000).expect("60 Hz si emula");
+        assert_eq!(dopo.conta(ora), 30);
+        assert_eq!(dopo.scadenza(31), 1_000 + 30 * P180 + periodo_ns(60_000));
+        assert_eq!(griglia_dopo_lettura(Some(dopo), ora, 0), None);
+        assert_eq!(
+            griglia_dopo_lettura(None, ora, 60_000),
+            Some(Griglia::nuova(ora, periodo_ns(60_000)))
+        );
     }
 
     #[test]

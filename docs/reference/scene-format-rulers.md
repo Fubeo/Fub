@@ -8,9 +8,18 @@
 > tutte e due le letture.
 
 Righelli e guide se ne sono andati col livello Standard
-([decisione 0231](../decisions/0231-la-chiusura-di-fubdraw.md)):
-`fub:guides` si legge e resta com'è, e l'editor non lo scrive più;
-`fub:units` si sceglie ancora, nella sezione Documento delle proprietà.
+([decisione 0231](../decisions/0231-la-chiusura-di-fubdraw.md)); il livello
+Completo li riporta con le guide di VectorCraft (`crates/fub-disegno/src/guide.rs`):
+all'apertura `fub:guides` diventa l'elenco delle guide del motore, e un
+comando che le cambia riscrive l'attributo intero nella forma canonica (§2).
+Una guida che non cambia si riscrive com'era, coi suoi riferimenti; una
+guida senza livello che si sposta prende il primo livello visibile e
+sbloccato, come in VectorCraft. Una guida `locked` non si sposta, non cambia
+livello e non si toglie da sola; se ne va con la sua tavola, col suo livello
+o con «Cancella guide». Con un valore fuori grammatica, o con una radice
+ruotata o inclinata, i comandi delle guide sono spenti e il valore resta
+com'è. `fub:units` si sceglie ancora, nella sezione Documento delle
+proprietà.
 
 Due attributi facoltativi della radice del
 [formato della scena](scene-format.md): l'unità in cui la superficie mostra le
@@ -46,7 +55,9 @@ units = "px" / "mm" / "cm" / "in" / "pt"
 
 ```text
 guides = *wsp / guide *(";" guide)
-guide  = *wsp axis 1*wsp number [1*wsp "locked"] *wsp
+guide  = *wsp axis 1*wsp number *(1*wsp part) *wsp
+part   = "locked" / "board=" ref / "layer=" ref
+ref    = 1*(%x21-3A / %x3C-10FFFF)   ; né spazi né ";"
 axis   = "x" / "y"
 wsp    = %x20 / %x09 / %x0A / %x0C / %x0D
 ```
@@ -57,13 +68,31 @@ wsp    = %x20 / %x09 / %x0A / %x0C / %x0D
   (formato della scena, §4), in unità utente; `-0` vale `0`.
 - **Bloccata:** con `locked` la guida non si sposta e non si prende col
   puntatore.
+- **Tavola:** con `board=` la guida appartiene alla tavola con quell'id
+  (formato della scena, tavole): corre solo sulla tavola, e si sposta, si
+  copia e se ne va con lei. Senza, la guida è del foglio intero.
+- **Livello:** con `layer=` la guida sta sul livello con quell'id: si
+  mostra, si nasconde e si blocca con lui, e se ne va con lui. Senza, la
+  guida non è di nessun livello ed è sempre lì.
+- **Riferimenti persi:** un `board=` o un `layer=` che non nomina una
+  tavola o un livello del disegno si legge come se mancasse; la guida resta.
+- **Parti dopo il numero:** in qualunque ordine, ognuna al più una volta.
 - **Elenco:** le guide valgono nell'ordine del file, e due guide uguali sono
   due guide. Un valore vuoto, o di soli spazi, non ha guide.
 - **Limite:** al più 1 000 guide; oltre, il valore è fuori grammatica.
 - **Fuori grammatica:** fra l'altro un `;` in testa, in coda o ripetuto
   (`x 1;`, `x 1;;y 2`), un asse attaccato al numero (`x1`), un asse diverso
   da `x` e `y`, un numero che manca o non è un numero, una parola dopo il
-  numero che non è `locked`.
+  numero che non è `locked`, `board=…` o `layer=…`, una parte ripetuta, un
+  `board=` o un `layer=` senza id.
+- **Forma ampliata:** `board=` e `layer=` vengono dopo la prima forma
+  (asse, numero e `locked`) e non cambiano il significato di quella:
+  la versione del formato resta 1. Un lettore di prima trova fuori grammatica
+  un valore che li usa e lo lascia nel file com'è (§3), quindi non si perdono.
+
+- **Tracciati-guida:** oltre a queste rette, una forma con `fub:guide="true"`
+  è una guida della sua forma (formato della scena, §3): non sta in
+  `fub:guides` e si mostra e si nasconde con le altre guide e col suo livello.
 
 ## 3. Lettura e diagnostica
 
@@ -82,9 +111,9 @@ superficie non lo sostituisce:
 ## 4. Scrittura
 
 - **Unità:** `px` non si scrive: scegliere i pixel toglie l'attributo.
-- **Guide:** la forma canonica è `x 120; y 340.5 locked`, con uno spazio fra
-  le parti, `; ` fra una guida e l'altra e i numeri della geometria, al più
-  con due decimali (formato della scena, §7, punto 3). Chi cambia l'elenco
+- **Guide:** la forma canonica è `x 120; y 340.5 board=b1 layer=l2 locked`,
+  con le parti in quest'ordine e uno spazio fra l'una e l'altra, `; ` fra
+  una guida e l'altra e i numeri della geometria, al più con due decimali (formato della scena, §7, punto 3). Chi cambia l'elenco
   con un'operazione riscrive l'attributo intero, e senza guide lo toglie.
 - **Ordine sulla radice:** quando la radice si riscrive, gli attributi vanno
   nell'ordine dell'esempio: le dichiarazioni, `fub:version`, `viewBox`,

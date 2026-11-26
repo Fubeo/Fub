@@ -23,6 +23,7 @@ import { rovingToolbar } from "../../../../kit/toolbar-keys";
 import { DRAW_SCALE_LIMITS, ZOOM_SETTLE_MS } from "./constants";
 import type { EditorContext } from "./context";
 import { sign, union } from "./helpers";
+import { composingKey } from "../../../../kit/ime";
 
 /// Quanto girano due dita prima che il foglio giri con loro, in gradi: un
 /// pizzico per lo zoom non gira il foglio per sbaglio.
@@ -80,7 +81,7 @@ export interface InputContext {
 export function installInput(ctx: EditorContext): void {
   const {
     life, has, measureText, style, history, header, surface, suggestions, titleInput, arrangeBar, editable, grownPage,
-    newIds, announce, setCamera, stepNow, lengthSpoken, localPoint, viewCenter, announceTurn, selectedUnits, inOrder, showHandles, currentTitle,
+    newIds, announce, setCamera, snapStep, lengthSpoken, localPoint, viewCenter, announceTurn, selectedUnits, inOrder, showHandles, currentTitle,
     syncControls, commit, undo, redo, moveSelection, setColor, pickTool, cancelGesture, pen
   } = ctx;
   // --- Navigazione: tasto centrale, dita, rotella ------------------------------
@@ -450,6 +451,7 @@ export function installInput(ctx: EditorContext): void {
     commit("draw.action.title", { op: "meta", title: value === "" ? null : value });
   });
   life.listen(titleInput, "keydown", (event) => {
+    if (composingKey(event)) return;
     if (event.key === "Enter") {
       event.preventDefault();
       titleInput.blur();
@@ -581,8 +583,8 @@ export function installInput(ctx: EditorContext): void {
     const from = geometryOf(units);
     if (from === null) return;
     const [left, top] = from.min;
-    const dx = x === 0 ? 0 : lineBeyond(left, stepNow(), sign(x), lines) - left;
-    const dy = y === 0 ? 0 : lineBeyond(top, stepNow(), sign(y), lines) - top;
+    const dx = x === 0 ? 0 : lineBeyond(left, snapStep(), sign(x), lines) - left;
+    const dy = y === 0 ? 0 : lineBeyond(top, snapStep(), sign(y), lines) - top;
     moveSelection(units, roundDelta(dx), roundDelta(dy));
   };
   ctx.moveOnGrid = moveOnGrid;
@@ -597,7 +599,7 @@ export function installInput(ctx: EditorContext): void {
     const shown = boundsOf(units);
     if (from === null || shown === null) return;
     const edge = (min: number, max: number, direction: number): number =>
-      direction === 0 || max <= min ? max : Math.max(lineBeyond(max, stepNow(), sign(direction), lines), lineBeyond(min, stepNow(), 1, 1));
+      direction === 0 || max <= min ? max : Math.max(lineBeyond(max, snapStep(), sign(direction), lines), lineBeyond(min, snapStep(), 1, 1));
     const right = edge(from.min[0], from.max[0], x);
     const bottom = edge(from.min[1], from.max[1], y);
     if (right === from.max[0] && bottom === from.max[1]) return;

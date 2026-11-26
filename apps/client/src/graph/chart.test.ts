@@ -431,6 +431,21 @@ describe("createChart", () => {
     expect([...tiers]).toEqual([2]);
   });
 
+  it("a 180 Hz, quando i frame sforano il periodo dello schermo, il grafo alleggerisce la resa", () => {
+    // Prima il budget non scendeva mai sotto i 16,7 ms: a 180 Hz un grafo che
+    // perdeva un fotogramma su due (11 ms) restava al livello pieno, a 90 fps.
+    g.unmount();
+    g = createChart(baseOptions(f));
+    g.mount(fakeHost());
+    runAt(f, 1000 / 180, 40);
+    expect(lastPainter!.states.every((state) => state.tier === 1)).toBe(true);
+    runAt(f, 2000 / 180, 40);
+    // dopo pochi frame lenti, e fino all'ultimo, che dorme al livello del grafo
+    const overrun = lastPainter!.states.slice(40).map((state) => state.tier);
+    expect(overrun.length).toBeGreaterThan(10);
+    expect(overrun.slice(5, -1).every((tier) => tier === 2)).toBe(true);
+  });
+
   it("col tetto dei fotogrammi il loop salta i callback di troppo e la sim avanza per tempo", () => {
     g.unmount();
     g = createChart({ ...baseOptions(f), pacer: createFramePacer(() => 30) });

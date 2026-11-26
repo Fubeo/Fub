@@ -8,6 +8,7 @@ import { catalogFor as shellCatalogFor } from "../../i18n/strings";
 import { drawStrings, plural, t } from "./strings";
 import { ARRANGE_IT } from "./strings/arrange";
 import { CHROME_IT } from "./strings/chrome";
+import { COLONNA_IT, COMPLETO_IT, RISORSE_IT, TEMI_IT } from "./strings/completo";
 import { DESCRIBE_IT } from "./strings/describe";
 import { EXPORT_IT } from "./strings/export";
 import { LAYERS_IT } from "./strings/layers";
@@ -57,7 +58,7 @@ describe("il catalogo del disegno", () => {
   it("non ripete una chiave in due aree di `strings/`", () => {
     // Nel letterale unico il compilatore rifiutava una chiave doppia; con le
     // aree ricomposte per spread l'ultima vincerebbe in silenzio.
-    const areas = [TOOLS_IT, DESCRIBE_IT, PROPERTIES_IT, EXPORT_IT, ARRANGE_IT, LAYERS_IT, SELECTION_IT, CHROME_IT];
+    const areas = [TOOLS_IT, DESCRIBE_IT, PROPERTIES_IT, EXPORT_IT, ARRANGE_IT, LAYERS_IT, SELECTION_IT, CHROME_IT, COMPLETO_IT, RISORSE_IT, TEMI_IT, COLONNA_IT];
     const count = areas.reduce((sum, area) => sum + Object.keys(area).length, 0);
     expect(count).toBe(Object.keys(IT).length);
   });

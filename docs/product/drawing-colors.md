@@ -25,10 +25,13 @@ colore solo, e chi lo usa scrive anche il colore, come ripiego.
 <rect id="o3c5e7g9j" x="40" y="40" width="200" height="120" fill="url(#r7k2m9q4x) #0072b2"/>
 ```
 
-- **Si usano, non si fanno.** L'editor non fa più campioni, non li
+- **Nell'editor di sempre si usano, non si fanno.** Non fa campioni, non li
   rinomina, non ne cambia il colore e non li elimina: la sezione «Colori del
   documento» se ne è andata col livello Standard (decisione 0231). Il campo
   di un colore li offre ancora, col loro nome, e chi ne sceglie uno lo usa.
+  Col Disegno completo si fanno e si cambiano da Risorse › Campioni (sotto).
+- **Ogni campione del file è globale**: cambiarlo cambia ogni oggetto che lo
+  usa. Il formato non ha tinte, colori spot né gruppi di colori.
 - **I testi** usano un campione intero. Le righe e le parole non ne usano,
   perché il formato non dà loro riferimenti: quelle che scrivono un colore
   loro lo tengono.
@@ -59,6 +62,12 @@ colore ignoto.
 
 ## I colori recenti
 
+I recenti e i due colori del riempimento e del tratto si leggono dal motore
+con `paint.recent` e `paint.proxies` (letture, senza cambiare il file). La
+sfumatura a forma libera (punti e linee, `paint.freeform.*`) non si scrive
+ancora: il formato della scena ha solo sfumature lineari e radiali, e il
+Disegno non la accetta come argomento di una sfumatura.
+
 Un colore scritto e scelto entra fra i recenti: dal campo del
 riempimento o del contorno e come colore con cui si disegna; anche il colore con cui si disegnava prima resta fra loro. Un
 campione no, perché ha la sua griglia. I recenti valgono per tutti i disegni
@@ -76,6 +85,172 @@ con lo stesso id, o diventa quello con lo stesso nome e lo stesso colore, e
 chi lo usa ne prende il colore come ripiego; altrimenti arriva, e con un nome
 già preso, o che si legge come un colore, prende il primo libero, «Vermiglio
 2» ([Disegni, risorse](drawing-resources.md#copiare-e-incollare)).
+
+## Nel Disegno completo
+
+Col Disegno completo acceso il colore degli oggetti scelti si cambia dalla
+sezione **Colore** della scheda Design, e i campi del colore di Riempimento e
+Contorno escono dal pannello; Spessore e Tratteggio vanno nella sezione
+Contorno del Design, con le altre opzioni del contorno e le punte di freccia
+del motore, e le punte di Fub restano nel pannello
+([Disegni, pannello delle proprietà](drawing-properties.md)). Spento il
+Completo, i campi tornano.
+
+- **Riempimento e Contorno**, uno sotto l'altro, col colore che il pannello ha
+  già: un colore, «nessuno», una sfumatura o un motivo per nome. Uno dei due è
+  il **lato attivo**, col bordo accento e il nome in grassetto; aprire il
+  colore dell'altro lo fa attivo, anche per i tasti del motore. Un colore
+  scelto va sul suo lato con un comando solo.
+- **Scambia** scambia riempimento e contorno; **Nessuno** toglie il colore del
+  lato attivo; **Di serie** rimette il riempimento bianco e il contorno nero;
+  **Sfumatura** dà al lato attivo l’ultima sfumatura usata (la prima volta, dal
+  bianco al nero), che poi si cambia dalla sezione Sfumatura
+  ([Disegni, pannello delle proprietà](drawing-properties.md#le-sezioni)). È
+  spento, col perché, senza niente di scelto, con soli testi, con un oggetto
+  bloccato o su un lato che la selezione non ha.
+- Senza niente di scelto la sezione è spenta; un lato che gli oggetti scelti
+  non hanno si spegne da solo e dice «Nessuno», col perché nel suggerimento
+  («Contorno: la selezione non ne ha»): un'immagine non ha contorno, e
+  nemmeno un testo, perché Fub non ne dà ai testi. «Misto» vuol dire solo
+  oggetti scelti con colori diversi.
+
+### I campioni nella scheda Risorse
+
+Nella scheda **Risorse** la sezione **Campioni** mostra i campioni del
+documento in una griglia, col conto («24 campioni»); con molti campioni la
+griglia scorre dentro la scheda.
+
+- **Un clic sceglie** un campione (il segno ✓) e, se ci sono oggetti scelti,
+  lo dà al lato attivo della sezione Colore, riempimento o contorno, con un
+  comando solo. Il doppio clic apre le opzioni. Le frecce, Inizio e Fine
+  muovono il fuoco fra i campioni.
+- **Nuovo…** apre la finestra «Nuovo campione»: il nome, il colore col
+  selettore dei colori e la nota che il campione è globale. Un nome vuoto o
+  già di un altro campione tiene la finestra aperta e lo dice.
+- **Opzioni…** apre «Opzioni del campione» per quello scelto: rinominarlo o
+  cambiarne il colore cambia tutti gli oggetti che lo usano, in un passo.
+- **Elimina** toglie il campione scelto: chi lo usava tiene il suo colore.
+- **Duplica** fa una copia del campione scelto, subito dopo di lui; il motore
+  la chiama «… copy», e si rinomina con Opzioni. **Ordina per nome** mette i
+  campioni in ordine di nome, e il file salva quell'ordine. **Unisci campioni**
+  e **Sposta campione** sono nell'indice dei comandi (Ctrl+/), senza un'interfaccia
+  nella sezione: chiedono i campioni da unire o da spostare, e dicono che cosa manca.
+  «Ordina per specie» non cambia niente, perché ogni campione è un colore.
+- **Nuovo gruppo colori…** (Ctrl+/) apre la finestra «Nuovo gruppo colori»: il nome
+  (senza nome il gruppo si chiama «Gruppo colori») e, con una casella per campione, i
+  campioni di colore pieno che ci entrano. OK li mette nel gruppo in un solo passo di
+  Annulla. Un gruppo senza campioni non si salva: la finestra lo dice, e non parte
+  niente. Gradienti, motivi e «Nessuno» non si mostrano.
+- **Aggiungi i colori usati** fa un campione per ogni colore degli oggetti
+  scelti, o di tutto il disegno senza niente di scelto.
+- **Togli i non usati** elimina in un passo i campioni che nessun oggetto,
+  gruppo o altra risorsa usa; spento se sono usati tutti.
+- **Librerie di campioni**: la finestra «Librerie di campioni» (Ctrl+/) elenca
+  le librerie di base, mostra i campioni di quella scelta, col nome e il colore,
+  e **Aggiungi tutti** o **Aggiungi quelli scelti** li copia nel disegno, come
+  campioni globali senza gruppo, nell'ordine della libreria. Un nome già presente
+  con lo stesso colore non si raddoppia; con un colore diverso prende un numero
+  (per esempio «Clay 1 2»). Le librerie di sfumature non si aggiungono: il formato
+  ha solo colori pieni, e la finestra lo dice prima. «Altra libreria…» (caricare
+  un file) non c'è ancora. Anche «Salva libreria campioni…» non c'è ancora: il
+  motore sa dare il contenuto di una libreria da salvare e caricarne una dai suoi
+  dati, ma il client non lo usa, perché l'indice non legge lo schema di questi due
+  comandi (`path` e `data` senza tipo). Le librerie dell'utente staranno in
+  `.fub/plugins/fub.draw/librerie/` (D11): le scrive Fub, il motore non tocca il disco.
+
+Le stesse finestre si aprono dal menu ≡ e da Ctrl+/: «Nuovo campione…» e
+«Opzioni campione…», spenta finché non c'è un campione scelto.
+
+Modifica › **Modifica colori** cambia i colori degli oggetti scelti tutti
+insieme: Regola bilanciamento colore… e Satura…, poi Fondi dal davanti al
+retro, in orizzontale e in verticale, poi Converti in CMYK, in scala di grigi
+e in RGB, poi Inverti colori e Sovrastampa nero…. Satura chiede l'intensità,
+da -100 a 100 %; Regola bilanciamento colore il rosso, il verde e il blu in %
+e se cambiare il riempimento, il contorno o tutti e due; Sovrastampa nero la
+percentuale e quali neri. Con «Anteprima» la finestra mostra sul foglio i
+contorni di ciò che cambierebbe, e il disegno cambia solo con il pulsante della
+finestra.
+
+- Con un oggetto bloccato fra quelli scelti, o un disegno di sola lettura, le
+  voci sono spente e lo dicono: «Il disegno è di sola lettura, o un oggetto
+  scelto è bloccato.». Con un tratto dell'Inchiostro di Fub scelto: «Un tratto
+  dell'Inchiostro di Fub non si cambia da qui.».
+- Le fusioni vogliono almeno tre oggetti con un riempimento; Converti in RGB e
+  Sovrastampa nero non cambiano un SVG, che ha già i colori in RGB e non ha la
+  sovrastampa. Quando non c'è niente da cambiare il file resta com'è.
+- **Selettore colore…** apre il selettore del pozzo, nello stesso menu e in Ctrl+/:
+  parte dal riempimento, o dal contorno se è quello attivo nel pozzo, e OK applica il
+  colore a tutti gli oggetti scelti in un solo passo di Annulla. Con colori diversi fra
+  gli oggetti, una sfumatura o un motivo il selettore parte senza colore, e lo dice;
+  senza niente di scelto la voce è spenta, con la frase del pozzo. Un oggetto bloccato
+  dice il suo perché, il colore non cambia, e la finestra resta aperta.
+- **Campione più vicino (T14 giro 9).** Oggetto › Plug-ins › Colore: «Applica
+  campione più vicino» dà a ogni colore pieno del riempimento e del tratto il
+  campione più vicino del documento, per differenza di colore (ΔE); il colore
+  diventa il campione globale, collegato. «Seleziona per tipo di colore» sceglie
+  gli oggetti con tinte piatte, effetti di colore o immagini di un tipo (RGB,
+  CMYK, scala di grigi), con una finestra per il tipo. Sono «da fare» la stampa
+  con correzione degli inchiostri (serve un documento CMYK, che Fub non ha ancora)
+  e il filtro di colore: «Inverti» funziona, ma Luminosità e contrasto il motore
+  le lascia com'erano, e gli altri effetti vanno verificati uno per uno (T18).
+  Le tinte piatte non ci sono: il formato del campione non le ha.
+
+- **Temi di colore (K6 T14, temi).** Nella scheda Risorse, il pannello «Temi di
+  colore» elenca i temi della libreria con i loro colori. «Salva tema dai colori
+  scelti» prende il riempimento e il contorno della selezione (senza selezione il
+  pulsante è spento, con la frase); un nome vuoto o già di un tema si dice sotto il
+  campo prima del motore. «Togli tema» toglie quello scelto. La libreria sta nelle
+  preferenze del motore (`draw.motore`): salvare e togliere non cambiano il disegno,
+  restano accesi anche su un disegno di sola lettura. «Aggiungi ai campioni» non c'è
+  ancora: crea un gruppo di colori, e il formato non ne ha.
+
+La sezione è in `apps/client/src/editors/spatial/completo/colore-sezione.ts`,
+Campioni in `completo/campioni-sezione.ts`;
+le parole delle finestre nella famiglia `colore`
+(`apps/client/src/editors/spatial/completo/famiglie/colore/`), i comandi nel
+motore (`crates/fub-disegno/src/famiglie/colore.rs`), i campioni del file in
+`crates/fub-disegno/src/campioni.rs`.
+
+### Ricolora grafica
+
+**Modifica › Modifica colori › Ricolora grafica…** apre una riga per ogni
+colore degli oggetti scelti: a sinistra il colore attuale, a destra il colore
+nuovo, col selettore del kit. **Riduci colori** e **Colori casuali** riempiono
+le righe con le proposte del motore: con lo stesso seme la proposta è sempre
+la stessa, con un seme diverso un'altra. Ogni cambio mostra l'anteprima sul
+foglio senza passi nella cronologia; **OK** scrive un solo passo, **Annulla**
+ed Esc non lasciano niente.
+
+- Senza niente di scelto, con un oggetto bloccato o con un tratto
+  dell'Inchiostro di Fub la voce è spenta, col perché.
+- Un testo cambia il colore del testo; un'immagine non ha colori da cambiare
+  e viene rifiutata.
+- Un oggetto legato a un campione globale si stacca dal campione quando lo ricolori: il campione e gli altri oggetti che lo usano restano com'erano.
+- Una sfumatura cambia il colore delle sue fermate, e resta una sfumatura.
+- Lo stesso colore su riempimento e contorno cambia su tutti e due.
+- Un gruppo scelto cambia i colori dei suoi oggetti.
+
+### La guida dei colori
+
+La sezione **Guida colori** del Design mostra le armonie del colore di
+riempimento o di contorno, calcolate dal motore: una riga per colore della
+guida, con i suoi passi e il colore di partenza al centro. Un clic su un passo
+dà quel colore al lato attivo degli oggetti scelti, in un solo passo della
+cronologia.
+
+- **Opzioni guida colori…** sceglie l'armonia (ventuno), i passi (da 1 a 20),
+  la variazione (tinte e ombre, caldo e freddo, vivi e spenti) e l'ampiezza
+  (da 0 a 100%). Non cambia il disegno: la guida si ridisegna.
+- **Limita guida colori…** sceglie fra nessun limite, una libreria di colori di
+  base del motore, o i campioni del documento. Se il disegno non ha campioni,
+  quella scelta è spenta e la frase lo dice. Le librerie personali non ci sono
+  ancora.
+- Senza niente di scelto la guida parte dal colore attivo del lato, e i suoi
+  passi sono spenti: scegli un oggetto per dargli il colore.
+- Le scelte della guida valgono per la pagina aperta: non si salvano nel file,
+  e riaprendo il disegno si parte da quelle di serie.
+- Se il motore non risponde, la sezione lo dice. Una lettura che arriva dopo
+  un cambio più recente non sostituisce quella nuova.
 
 ## Chi monta l'editor
 

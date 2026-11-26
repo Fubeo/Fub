@@ -83,6 +83,7 @@ import {
   UI_TEXT,
   VECTOR_PROFILE,
   VIEWER_OWNER,
+  uisForFile,
 } from "./component-surfaces";
 import type { VaultFontPort } from "../spatial/fonts/vault";
 import type { DrawingSurfaceCallbacks } from "../spatial/lazy";
@@ -172,6 +173,9 @@ export interface SurfaceBootstrapOptions extends SurfaceCallbacks {
   /// La revisione che il file `doc` ha adesso sul disco: la cartella di Excel
   /// la chiede quando i byte di `documentBase` non ci sono più.
   readonly documentDiskRevision?: (doc: string) => Promise<string | null>;
+  /// La scrittura in volo del documento `doc`, o `null`: annulla e ripeti di
+  /// una cartella di Excel la aspettano (IMP-6400).
+  readonly documentWriting?: (doc: string) => Promise<void> | null;
   /// Le scritture dei documenti aperti, per i gesti della barra di una Base:
   /// salvare prima, e annunciare la scrittura perché la ricarica non si dica.
   readonly documentWrites?: BaseDocumentWrites;
@@ -256,7 +260,20 @@ function proofPorts(vault: string | null | undefined): ProofPorts {
       ];
       return () => stops.forEach((stop) => stop());
     },
+    missingDictionary: (dictionary, language) => notify(t("proof.missing_dictionary", { language: languageName(language), dictionary }), "info"),
   };
+}
+
+/// Il nome di una lingua nella lingua dell'interfaccia, come un valore che
+/// comincia con la maiuscola: `it` → «Italiano».
+function languageName(code: string): string {
+  let name = code;
+  try {
+    name = new Intl.DisplayNames([resolvedLanguage()], { type: "language" }).of(code) ?? code;
+  } catch {
+    // Un codice che `Intl` non conosce resta il codice.
+  }
+  return name.charAt(0).toLocaleUpperCase(resolvedLanguage()) + name.slice(1);
 }
 
 const PLAIN_TEXT_MODES = [
@@ -279,6 +296,10 @@ const GRID_EXPORTS: readonly SurfaceExport[] = [
     options: () => ({ sheets: "all" }),
   },
 ];
+
+/// Quanto pesa un foglio tenuto da parte nel riquadro (`EditorSurface.parking`):
+/// una nota pesa uno, e un foglio tiene in più la cartella aperta nell'host.
+const GRID_PARKING_WEIGHT = 2;
 
 const VIEWER_MODES = [
   { id: "view", label: () => t("mode.reading"), presentation: "surface", contextMode: "reading", looks: ["file"] },
@@ -378,6 +399,9 @@ function pdfEngineLoader(): Promise<PdfEngineLoader> {
     ([{ default: workerUrl }, { makePdfJsLoader }]) => makePdfJsLoader(
       () => import("pdfjs-dist/build/pdf.min.mjs") as unknown as Promise<PdfJsModule>,
       workerUrl,
+      // Le pagine si disegnano in questo worker, fuori dal thread principale
+      // (#525): lo si crea solo quando un PDF chiede la sua prima pagina.
+      () => new Worker(new URL("../media/pdf-render-worker.ts", import.meta.url), { type: "module" }),
     ),
     (error: unknown) => {
       pdfEngine = null;
@@ -875,7 +899,7 @@ export function createDocumentSurfaceRegistry(
     // shell condivide con gli altri editor.
     factory: {
       load: async () => {
-        const { mountBaseSurface, vaultPropertyTypes } = await import("../base/surface");
+        const { appMapTiles, mountBaseSurface, vaultPropertyTypes } = await import("../base/surface");
         return {
           mount(profile, context) {
             // Il vault in cui la superficie nasce (FUB-001).
@@ -891,6 +915,9 @@ export function createDocumentSurfaceRegistry(
               documentWrites: options.documentWrites,
               // Il registro dei tipi: le corsie della Bacheca su Selezione e Stato.
               propertyTypes: vaultPropertyTypes,
+              // Le tessere della Mappa: dall'host, dai siti che questa
+              // macchina ammette; il rimando porta alla riga che li ammette.
+              mapTiles: appMapTiles(options.onOpenSettings),
             });
           },
         };
@@ -1048,8 +1075,12 @@ function mountGrid(
       documentId: context.documentId,
       base: () => options.documentBase?.(context.documentId) ?? context.revision ?? null,
       diskRevision: options.documentDiskRevision ? () => options.documentDiskRevision!(context.documentId) : undefined,
+      writing: options.documentWriting ? () => options.documentWriting!(context.documentId) : undefined,
+      // Il documento viaggia con ogni modifica: un foglio tenuto da parte
+      // (`parking`) che finisce di scrivere quando il riquadro mostra già
+      // un'altra scheda scrive comunque nella sua cartella.
       onChange: (change) => {
-        options.onChange(context.paneId, change);
+        options.onChange(context.paneId, change, context.documentId);
         cellChanged();
       },
       onSelectionChange: () => {
@@ -1128,6 +1159,10 @@ function mountGrid(
       surfaceId: context.paneId,
       modes: GRID_MODES,
       exports: GRID_EXPORTS,
+      // Da parte il foglio tiene aperta la sua sessione nell'host (la
+      // cartella letta, le finestre): pesa per due fra le superfici che il
+      // riquadro conserva. Dentro una scheda della lavagna resta della scheda.
+      ...(compact ? {} : { parking: { weight: GRID_PARKING_WEIGHT } }),
       setMode(mode) {
         requireMode(GRID_MODES, mode);
         context.parent.dataset.surfaceMode = mode;
@@ -1190,6 +1225,12 @@ interface EditorPart {
   readonly id: string;
   /// Gli altri pezzi di interfaccia che devono essere accesi anche loro.
   readonly alsoNeeds?: readonly string[];
+  /// Le superfici del pezzo non leggono le forme sintattiche del documento
+  /// (`EditorSurface.setSyntaxForms`): il loro testo non è scritto in una
+  /// grammatica, come il giornale delle celle di un foglio. Il riquadro non
+  /// le chiede al kernel per un file che soltanto pezzi così aprono
+  /// (`readsSyntaxForms`).
+  readonly withoutSyntax?: true;
   registration(options: SurfaceBootstrapOptions): SurfaceRegistration;
 }
 
@@ -1227,6 +1268,8 @@ function drawingCallbacks(options: SurfaceBootstrapOptions): DrawingSurfaceCallb
 export const COMPONENT_EDITORS: Readonly<Record<string, readonly EditorPart[]>> = {
   [UI_GRID]: [{
     id: "grid",
+    // Il testo di una cartella di Excel è il giornale delle celle.
+    withoutSyntax: true,
     registration: (options) => ({
       owner: GRID_OWNER,
       family: GRID_FAMILY,
@@ -1395,6 +1438,19 @@ interface ComponentEditorState {
 
 const components = new WeakMap<DocumentSurfaceRegistry, ComponentEditorState>();
 const unknownLogged = new Set<string>();
+
+/// L'editor che apre `doc` legge le forme sintattiche del documento: vero
+/// per una nota e per ogni file che apre almeno un pezzo senza
+/// `withoutSyntax`. Il riquadro chiede le forme al kernel soltanto allora.
+export function readsSyntaxForms(doc: string): boolean {
+  const uis = uisForFile(doc);
+  if (uis.length === 0) return true;
+  // Un `ui` che la tabella non conosce le legge: nel dubbio si chiedono.
+  return uis.some((ui) => {
+    const parts = COMPONENT_EDITORS[ui];
+    return !parts || parts.some((part) => !part.withoutSyntax);
+  });
+}
 
 /// `ui` ha il suo caricatore: è del nucleo o sta in `COMPONENT_EDITORS`.
 export function hasComponentEditor(ui: string): boolean {

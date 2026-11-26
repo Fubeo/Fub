@@ -282,12 +282,24 @@ impl Shared {
             ws.prepare_finish_index_with_graph(in_progress.work, graph)
         };
         let completed_finish = prepared_finish.invoke();
-        let opening = with_event_drain(&self.workspace, |ws| {
-            ws.finalize_finish_index(completed_finish)
+        let (opening, rejoin) = with_event_drain(&self.workspace, |ws| {
+            ws.finalize_finish_index_detached(completed_finish)
         })?;
+        // I dati delle rinomine fatte ad app chiusa si spostano fuori dal
+        // prestito esclusivo e sotto lo stesso turno (IMP-1805), prima della
+        // raccolta degli spazi orfani che sta più sotto.
+        if !rejoin.is_empty() {
+            let completed = rejoin.invoke();
+            with_event_drain(&self.workspace, |ws| ws.finish_rejoin(completed))?;
+        }
         // Il flush è una fase esterna separata: il token conserva gli indici,
         // mentre i lettori e la re-entry possono progredire senza guard Workspace.
-        let _ = crate::teardown::flush_indexes(&self.workspace)?;
+        // Lo span ha il nome di quello del percorso sincrono
+        // (`Workspace::finish_index`): la tabella di `open_30k` è una sola.
+        {
+            let _phase = tracing::info_span!(target: "fub.apertura", "flush_indexes").entered();
+            let _ = crate::teardown::flush_indexes(&self.workspace)?;
+        }
         if !opening.interrupted {
             // Gli intent possono dipendere dai provider di formato: il replay
             // parte soltanto dopo l'indice completo e senza il lock Workspace.
@@ -323,6 +335,14 @@ impl Shared {
                                 target: "fub.host",
                                 subject = ?failure.subject,
                                 "elemento archive lasciato in conflitto: {}",
+                                failure.error
+                            );
+                        }
+                        for failure in report.link_failures {
+                            tracing::warn!(
+                                target: "fub.host",
+                                subject = ?failure.subject,
+                                "link di proprietà da guardare dopo l'archiviazione: {}",
                                 failure.error
                             );
                         }

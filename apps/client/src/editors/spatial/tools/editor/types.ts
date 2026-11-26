@@ -21,6 +21,7 @@ import type { ShapeTool } from "../shapes";
 import type { Recognized } from "../recognize";
 import type { DrawingPointer, DrawingTool } from "../../../../host/contract";
 import type { DrawKey } from "../../strings";
+import type { Page } from "../../painter/paint";
 
 /// Un'istanza da cui si è entrati nel suo simbolo isolato: la chiave e il
 /// posto con cui ritrovarla, come il contenitore isolato.
@@ -57,6 +58,8 @@ export type Gesture =
   | TextGesture
   | RulerGesture
   | MotoreGesture
+  | PathEraseGesture
+  | BrushGesture
   | RefusedGesture;
 
 export interface GestureBase {
@@ -64,6 +67,11 @@ export interface GestureBase {
   /// tratto nuovo al limite dei campioni.
   stroke: number;
   readonly pointer: InkPointerType;
+  /// Sul foglio delle annotazioni, la pagina dove comincia un gesto che
+  /// scrive un segno: cominciato fuori non scrive niente, e i suoi punti
+  /// restano dentro (`../page-bounds.ts`). `null` nel disegno libero, e per
+  /// i gesti che non scrivono, come la gomma e la Selezione.
+  readonly page: Page | null;
 }
 
 export interface InkGesture extends GestureBase {
@@ -161,6 +169,24 @@ export interface SelectGesture extends GestureBase {
   /// I connettori che seguono gli oggetti presi, per l'anteprima; `null`
   /// finché il gesto non li sposta.
   lines: ConnectorPreview | null;
+}
+
+/// La Gomma dei punti (K6 T12, giro 2): il trascinamento raccoglie il tratto nella scena, e
+/// al rilascio manda un solo comando (`motore/gomma-punti.ts`). Niente motore a ogni movimento.
+/// Il Pennello tondo (K6 T12, giro 2): il colpo si raccoglie qui, e al rilascio manda un solo comando
+/// (`motore/pennello-tondo.ts`). Il colore è quello di adesso, preso all'inizio.
+export interface BrushGesture extends GestureBase {
+  readonly kind: "brush";
+  /// Il colpo nella scena, in ordine.
+  readonly path: Point[];
+  /// Il colore del colpo (`#rrggbb`).
+  readonly color: string;
+}
+
+export interface PathEraseGesture extends GestureBase {
+  readonly kind: "pathErase";
+  /// Il tratto nella scena, in ordine.
+  readonly path: Point[];
 }
 
 export interface EraseGesture extends GestureBase {

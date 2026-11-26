@@ -55,6 +55,8 @@ import {
 import { highlightSelectionMatches, openSearchPanel, searchKeymap } from "@codemirror/search";
 import type { SyntaxNode } from "@lezer/common";
 import { vim } from "@replit/codemirror-vim";
+import { insertedLineBreaks } from "./line-breaks";
+import { vimLines } from "./vim-lines";
 import { lintKeymap } from "@codemirror/lint";
 import { currentTheme as getCurrentTheme, type Theme } from "../../theme/theme";
 import { byteToNormalizedCharIndices, charToByteIndices } from "../../rules/offsets";
@@ -68,6 +70,7 @@ import { notify } from "../../ui/notify";
 import { onEvent } from "../../state/kernel";
 import type { Teardown } from "../../ui/lifetime";
 import { editorTheme } from "./theme";
+import { keepEditorStylesSteady } from "./steady-styles";
 import { HistoryFootprints } from "./history-footprints";
 import { smartLists } from "./smart-lists";
 import { propertiesDisplay, propertiesDisplayOf, type PropertiesDisplay } from "./properties-display";
@@ -241,7 +244,7 @@ function foldMarker(open: boolean): HTMLElement {
 /// per ultimo, e si esce dalla concentrazione con «Esci» nella banda o col
 /// comando (T24).
 function vimInput(): Extension {
-  return [vim(), Prec.lowest(keymap.of([{ key: "Escape", run: () => concentrating() }]))];
+  return [vim(), vimLines(), Prec.lowest(keymap.of([{ key: "Escape", run: () => concentrating() }]))];
 }
 
 function layoutExtensions(layout: LayoutPreferences): Extension {
@@ -332,6 +335,7 @@ export class TextEngine {
       parent,
       state: EditorState.create({ extensions: this.extensions() }),
     });
+    keepEditorStylesSteady(this.view);
     // Il solo controllo da raggiungere con Tab è lo scroller, mentre il
     // contenteditable interno resta la destinazione per il fuoco dell'editor.
     this.view.contentDOM.tabIndex = -1;
@@ -533,7 +537,10 @@ export class TextEngine {
   public runCommand(command: StateCommand): boolean {
     if (this.disposed || this.readOnlyEnabled) return false;
     try {
-      return command({ state: this.view.state, dispatch: (transaction) => this.view.dispatch(transaction) });
+      // `state` è letto a ogni accesso: un comando che scrive dopo un'attesa
+      // (la spunta di un compito ricorrente) rilegge lo stato di allora.
+      const view = this.view;
+      return command({ get state() { return view.state; }, dispatch: (transaction) => view.dispatch(transaction) });
     } catch {
       return false;
     }
@@ -817,6 +824,19 @@ export class TextEngine {
     return this.view.posAtCoords({ x, y });
   }
 
+  /// Mette il cursore sotto un punto dello schermo, come un clic nel testo, e
+  /// non dà il fuoco. Un punto oltre l'ultima riga vale la posizione più
+  /// vicina; uno fuori dal riquadro dell'editor (la testata di una scheda
+  /// della lavagna) non tocca niente e rende `false`.
+  public caretAtPoint(x: number, y: number): boolean {
+    if (this.disposed) return false;
+    const box = this.view.scrollDOM.getBoundingClientRect();
+    if (box.width === 0 || x < box.left || x > box.right || y < box.top || y > box.bottom) return false;
+    const at = this.view.posAtCoords({ x, y }, false);
+    this.view.dispatch({ selection: { anchor: at }, scrollIntoView: true, userEvent: "select.pointer" });
+    return true;
+  }
+
   /// Inserisce testo nel punto dello schermo dove qualcosa è stato lasciato
   /// cadere, come battuta dell'utente; il cursore va dopo il testo. Fuori dal
   /// testo (oltre l'ultima riga) vale la posizione più vicina.
@@ -1032,10 +1052,10 @@ export class TextEngine {
     return [
       ...(convertLineBreaks === null ? [] : [
         EditorState.lineSeparator.of(convertLineBreaks),
-        // CodeMirror divide il testo incollato o lasciato cadere solo sul
-        // separatore: gli a capo degli appunti diventano quelli della nota,
-        // così un "\n" nudo non resta dentro la riga (#394).
-        EditorView.clipboardInputFilter.of((text) => text.replace(/\r\n?|\n/g, convertLineBreaks)),
+        // CodeMirror divide il testo inserito solo sul separatore: gli a capo
+        // nudi di ogni inserimento (appunti, Vim, comandi) diventano quelli
+        // della nota, così un "\n" non resta dentro la riga (#394, #397).
+        insertedLineBreaks(),
       ]),
       this.profile.of(this.profileExtensions()),
       this.phrasesCompartment.of(editorPhrases()),

@@ -87,6 +87,20 @@ describe("boardCards", () => {
     expect(boardCards(`[]`)).toBeNull();
     expect(boardCards(``)).toBeNull();
   });
+
+  it("una chiave o un valore con una stringa malformata danno null, non un SyntaxError", () => {
+    const card = `{"id":"b","type":"text","x":0,"y":0,"width":1,"height":1}`;
+    for (const text of [
+      `{"\\x":1,"nodes":[${card}]}`,
+      `{"a\u0001b":1,"nodes":[${card}]}`,
+      `{"\\u12":1,"nodes":[]}`,
+      `{"nodes":[{"id":"\\x","type":"text","x":0,"y":0,"width":1,"height":1}]}`,
+      `{"nodes":[{"id":"a\u0002","type":"text","x":0,"y":0,"width":1,"height":1}]}`,
+    ]) {
+      expect(() => boardCards(text), text).not.toThrow();
+      expect(boardCards(text), text).toBeNull();
+    }
+  });
 });
 
 describe("i nomi e il filtro", () => {

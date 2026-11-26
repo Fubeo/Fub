@@ -719,7 +719,14 @@ pub fn resource_read_at(
 /// ChangeTime) devono combaciare con la lease. `change` qui è il Windows
 /// ChangeTime (non creation_time) e il ctime Unix: escludono rewrite in-place a
 /// pari size+mtime; identity esclude replace/rename; stat esclude mutazione di
-/// specie/dimensione/data.
+/// specie/dimensione/data. Il confronto di identità e timbro è quello di ogni
+/// altro punto che decide «il file è quello che conosco»
+/// ([`FileWitness::agrees`]).
+///
+/// La grana del timbro qui non si guarda, ed è giusto così: la lease vive
+/// quanto una lettura, e ciò che se ne ricorda dopo (una revisione) passa da
+/// [`change_stamp_settled`]. Una riscrittura dello stesso peso, della stessa
+/// data e nella stessa grana del timbro fra due pezzi nessun metadato la vede.
 fn verify_lease(
     lease: &ResourceLease,
     stat: &Stat,
@@ -729,25 +736,72 @@ fn verify_lease(
     if *stat != lease.stat {
         return Err(KernelError::Stale(lease.path.clone()));
     }
-    let identity = storage
-        .file_identity(path)
-        .map_err(|source| KernelError::Io {
-            path: path.to_owned(),
-            source,
-        })?;
-    if identity != lease.identity {
-        return Err(KernelError::Stale(lease.path.clone()));
-    }
-    let change = storage
-        .change_stamp(path)
-        .map_err(|source| KernelError::Io {
-            path: path.to_owned(),
-            source,
-        })?;
-    if change != lease.change {
+    let now = FileWitness::of_path(storage, path).map_err(|source| KernelError::Io {
+        path: path.to_owned(),
+        source,
+    })?;
+    let leased = FileWitness {
+        change_stamp: lease.change,
+        identity: lease.identity,
+    };
+    if !leased.agrees(&now) {
         return Err(KernelError::Stale(lease.path.clone()));
     }
     Ok(())
+}
+
+/// Un timbro di cambiamento `change`, letto da una lease aperta quando
+/// l'orologio diceva `observed` ([`crate::storage::change_stamp_clock`],
+/// preso **prima** di aprirla), distingue ogni riscrittura che viene dopo?
+///
+/// Il timbro ha la grana dell'orologio del filesystem: una riscrittura dello
+/// stesso peso e della stessa data nella stessa grana del timbro di prima
+/// lascia il timbro uguale, e la formula della lease non la vede (#318).
+/// Ogni riscrittura dopo `observed` però ha un timbro di almeno
+/// `observed - grana`: se `change` sta almeno una grana prima di `observed`,
+/// la riscrittura ha per forza un timbro diverso. Chi ricorda qualcosa per
+/// una lease (una revisione) se ne fida solo allora; altrimenti la rifà dai
+/// byte. Senza orologio (`None`) non ci si fida.
+///
+/// Vale per l'orologio di questa macchina: un filesystem di rete con un
+/// orologio indietro di più della grana sfugge, come a ogni lease su `stat`.
+pub fn change_stamp_settled(change: Option<u64>, observed: Option<u64>) -> bool {
+    match (change, observed) {
+        (Some(change), Some(observed)) => change
+            .checked_add(crate::storage::CHANGE_STAMP_GRAIN)
+            .is_some_and(|settled| settled <= observed),
+        _ => false,
+    }
+}
+
+pub(crate) use crate::storage::FileWitness;
+
+impl FileWitness {
+    /// Il testimone di `id` adesso, come lo dà il supporto del vault. Un
+    /// errore del supporto è un campo che non si conosce.
+    pub(crate) fn of(vault: &Vault, id: &DocId) -> FileWitness {
+        vault.witness(id)
+    }
+
+    /// Il testimone di `path` adesso; un errore del supporto risale.
+    pub(crate) fn of_path(
+        storage: &dyn VaultStorage,
+        path: &Utf8Path,
+    ) -> std::io::Result<FileWitness> {
+        storage.witness(path)
+    }
+
+    /// `self`, ciò che si sapeva, dice ancora il file `now`?
+    ///
+    /// Ogni campo deve dire lo stesso dalle due parti. **Un campo noto da una
+    /// parte e ignoto dall'altra è un file cambiato**: nel dubbio il file si
+    /// rilegge, che costa una lettura, invece di essere creduto uguale, che
+    /// costerebbe una modifica persa. Un campo ignoto da entrambe le parti non
+    /// decide: è un supporto che non lo sa dare (una memoria, un archivio), e
+    /// per lui vale la regola storica di misura e data.
+    pub(crate) fn agrees(&self, now: &FileWitness) -> bool {
+        self.change_stamp == now.change_stamp && self.identity == now.identity
+    }
 }
 
 #[cfg(test)]
@@ -1252,5 +1306,89 @@ mod tests {
             matches!(opened, Err(PluginError::AlreadyExists(_))),
             "a name that may be a delivered artifact was opened as a new one"
         );
+    }
+
+    /// **Un campo noto da una parte sola è un file cambiato.**
+    ///
+    /// Prima la regola delle impronte imparate diceva il contrario («un campo
+    /// ignoto non decide»), e un timbro che il supporto non dava più (una
+    /// domanda fallita, una riga scritta senza) lasciava passare per lo stesso
+    /// file un file di cui si sapeva solo l'identità. Ignoto da entrambe le
+    /// parti, invece, non decide: è un supporto che non lo sa dare.
+    #[test]
+    fn a_witness_field_known_on_one_side_only_is_a_changed_file() {
+        let id = |file| Some(FileIdentity { volume: 1, file });
+        let full = FileWitness {
+            change_stamp: Some(10),
+            identity: id(7),
+        };
+        assert!(full.agrees(&full));
+        assert!(!full.agrees(&FileWitness {
+            change_stamp: Some(11),
+            ..full
+        }));
+        assert!(!full.agrees(&FileWitness {
+            identity: id(8),
+            ..full
+        }));
+        let no_stamp = FileWitness {
+            change_stamp: None,
+            ..full
+        };
+        let no_identity = FileWitness {
+            identity: None,
+            ..full
+        };
+        for partial in [no_stamp, no_identity, FileWitness::default()] {
+            assert!(!full.agrees(&partial), "{partial:?}");
+            assert!(!partial.agrees(&full), "{partial:?}");
+            assert!(partial.agrees(&partial), "{partial:?}");
+        }
+    }
+
+    /// **Un timbro nella stessa grana della lettura non si ricorda.**
+    ///
+    /// Una riscrittura dello stesso peso e della stessa data nel tick del
+    /// timbro di prima lascia il timbro uguale (#318): ci si fida solo di un
+    /// timbro almeno una grana più vecchio dell'orologio preso prima della
+    /// lease, e mai senza timbro o senza orologio.
+    #[test]
+    fn a_change_stamp_is_settled_only_one_grain_before_the_read() {
+        use crate::storage::CHANGE_STAMP_GRAIN as GRAIN;
+        let change = 10 * GRAIN;
+        assert!(!change_stamp_settled(Some(change), Some(change)));
+        assert!(!change_stamp_settled(
+            Some(change),
+            Some(change + GRAIN - 1)
+        ));
+        assert!(change_stamp_settled(Some(change), Some(change + GRAIN)));
+        // Un orologio indietro rispetto al timbro (un file di rete, un
+        // orologio corretto) non si fida.
+        assert!(!change_stamp_settled(Some(change), Some(change - 1)));
+        assert!(!change_stamp_settled(None, Some(change + GRAIN)));
+        assert!(!change_stamp_settled(Some(change), None));
+        assert!(!change_stamp_settled(Some(u64::MAX), Some(u64::MAX)));
+    }
+
+    /// L'orologio è nella stessa unità del timbro che il filesystem dà: un
+    /// file appena scritto ha il timbro entro poco dall'orologio di adesso.
+    #[cfg(any(unix, windows))]
+    #[test]
+    fn the_change_clock_speaks_the_unit_of_the_change_stamp() {
+        use crate::storage::{change_stamp_clock, VaultStorage, CHANGE_STAMP_GRAIN as GRAIN};
+        let dir = tempfile::tempdir().unwrap();
+        let root = Utf8Path::from_path(dir.path()).unwrap();
+        let path = root.join("a.txt");
+        let before = change_stamp_clock().unwrap();
+        std::fs::write(&path, b"a").unwrap();
+        let stamp = crate::storage::FsStorage
+            .change_stamp(&path)
+            .unwrap()
+            .unwrap();
+        let after = change_stamp_clock().unwrap();
+        // Il timbro del kernel può stare un tick indietro all'orologio fine.
+        assert!(stamp + GRAIN >= before, "timbro {stamp}, orologio {before}");
+        assert!(stamp <= after + GRAIN, "timbro {stamp}, orologio {after}");
+        assert!(!change_stamp_settled(Some(stamp), Some(after)));
     }
 }

@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 import { history, undo } from "@codemirror/commands";
 import { markdown } from "@codemirror/lang-markdown";
-import { ensureSyntaxTree } from "@codemirror/language";
+import { parsed } from "../test-support";
 import { EditorState, type StateCommand, type TransactionSpec } from "@codemirror/state";
 import { markdownGrammar } from "../grammar";
 import { blockAnchor } from "./anchor";
@@ -23,7 +23,7 @@ import { transformTo } from "./transform";
 const CRLF = "\r\n";
 
 function stateOf(doc: string, cursor = 0, separator: string | null = null): EditorState {
-  const state = EditorState.create({
+  return parsed(EditorState.create({
     doc,
     selection: { anchor: cursor },
     extensions: [
@@ -32,9 +32,7 @@ function stateOf(doc: string, cursor = 0, separator: string | null = null): Edit
       blockModel,
       history(),
     ],
-  });
-  ensureSyntaxTree(state, state.doc.length, 5000);
-  return state;
+  }));
 }
 
 const crlf = (text: string) => text.replace(/\n/g, CRLF);

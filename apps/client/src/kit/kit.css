@@ -124,6 +124,16 @@
   cursor: default;
 }
 
+/* ── Punto di riferimento ─────────────────────────────────────────────────── */
+
+/* Nove quadratini in tre righe: la griglia è della primitiva, la misura dei
+   quadratini della pelle. */
+.kit-reference-point {
+  display: inline-grid;
+  grid-template-columns: repeat(3, auto);
+  flex: none;
+}
+
 /* ── Selettore del colore ────────────────────────────────────────────────── */
 
 /* Il quadrato: la tinta pura sotto (in linea, da `picker.ts`), il bianco da
@@ -185,4 +195,28 @@
   position: sticky;
   top: 0;
   z-index: 2;
+}
+
+/* ── K6 · Il modulo dei dialoghi (`kit/form.ts`, T9) ────────────────────────
+   Righe di etichetta e campo, scelte a segmenti e caselle: la geometria. */
+.kit-form {
+  display: flex;
+  flex-direction: column;
+}
+.kit-form-row {
+  display: grid;
+  align-items: center;
+}
+.kit-form-choice {
+  display: flex;
+  flex-wrap: wrap;
+}
+.kit-form-check {
+  display: inline-flex;
+  align-items: center;
+}
+/* Un dialogo con l'anteprima lascia vedere il foglio: niente velo, e il
+   dialogo si sposta in alto a destra, lontano dalla selezione. */
+.kit-dialog-scrim[data-preview] {
+  place-items: start end;
 }

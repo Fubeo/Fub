@@ -197,6 +197,18 @@ fn un_clic_sceglie_l_oggetto_in_cima_e_il_gruppo() {
     assert_eq!(esito.selection, ["og1g1g1g1"]);
 }
 
+/// Il clic sull'ellisse piena e su una linea senza riempimento, come nel disegno del banco: il motore
+/// sceglie ciò che sta sotto il punto, anche il tratto sottile, e il clic nel vuoto lascia la selezione
+/// vuota (K6 T15, giro 2: il banco non rispondeva ai gesti, e la causa era lì).
+#[test]
+fn un_clic_sceglie_l_ellisse_piena_e_la_linea_senza_riempimento() {
+    let corpo = "<ellipse id=\"oe1e1e1e1\" cx=\"220\" cy=\"170\" rx=\"60\" ry=\"40\" fill=\"#ecfccb\"/>\n    <path id=\"ol1l1l1l1\" d=\"M 100 250 L 300 250\" fill=\"none\" stroke=\"#1a202c\" stroke-width=\"2\"/>";
+    let testo = disegno(corpo);
+    assert_eq!(clic(&testo, &[], (220.0, 170.0)).selection, ["oe1e1e1e1"]);
+    assert_eq!(clic(&testo, &[], (200.0, 250.0)).selection, ["ol1l1l1l1"]);
+    assert!(clic(&testo, &[], (20.0, 20.0)).selection.is_empty());
+}
+
 #[test]
 fn un_oggetto_scelto_dentro_un_gruppo_si_sposta_da_solo() {
     let altro = "<rect id=\"ob2b2b2b2\" x=\"250\" y=\"100\" width=\"50\" height=\"50\"/>";
@@ -1018,4 +1030,67 @@ fn un_livello_di_inkscape_con_un_figlio_solo() {
     let esito = tira(LIVELLI_CON_UN_FIGLIO, &[], (220.0, 50.0), (240.0, 60.0));
     come_il_client(&esito, spostato_di_venti("le"));
     assert_eq!(esito.selection, ["le"]);
+}
+
+/// Un trascinamento come `tira`, col passo della griglia del gesto (`None`: spenta).
+fn tira_con_passo(
+    testo: &str,
+    selezione: &[&str],
+    da: (f64, f64),
+    a: (f64, f64),
+    passo: Option<f64>,
+) -> DrawingOutcome {
+    let (mut d, _) = apri(testo);
+    let mut g = richiesta(
+        "commit",
+        selezione,
+        vec![
+            evento("down", da.0, da.1),
+            evento("drag", (da.0 + a.0) / 2.0, (da.1 + a.1) / 2.0),
+            evento("drag", a.0, a.1),
+            evento("up", a.0, a.1),
+        ],
+    );
+    g.snap.grid = passo;
+    d.gesto(g).expect("il gesto")
+}
+
+/// Lo spostamento (dx, dy) che la `transform` scritta su `id` porta.
+fn spostamento(esito: &DrawingOutcome, id: &str) -> (f64, f64) {
+    let ops = ops_di(esito);
+    let op = ops
+        .as_array()
+        .and_then(|lista| lista.iter().find(|op| op["id"] == id))
+        .unwrap_or_else(|| panic!("nessuna operazione su {id}: {ops}"));
+    let testo = op["attrs"]["transform"]
+        .as_str()
+        .expect("un transform scritto");
+    let cifre: Vec<f64> = testo
+        .trim_start_matches("matrix(")
+        .trim_end_matches(')')
+        .split_whitespace()
+        .map(|cifra| cifra.parse().expect("una cifra"))
+        .collect();
+    (cifre[4], cifre[5])
+}
+
+#[test]
+fn spostare_con_l_aggancio_al_pixel_cade_su_interi() {
+    // L'angolo dell'oggetto più vicino al punto preso (100, 100) va su 103,6:
+    // col passo di un pixel su 104, cioè lo spostamento è 4; spento resta 3,6.
+    let testo = disegno(A);
+    let acceso = tira_con_passo(
+        &testo,
+        &["oa1a1a1a1"],
+        (120.0, 120.0),
+        (123.6, 120.0),
+        Some(1.0),
+    );
+    assert_eq!(spostamento(&acceso, "oa1a1a1a1"), (4.0, 0.0));
+    let spento = tira_con_passo(&testo, &["oa1a1a1a1"], (120.0, 120.0), (123.6, 120.0), None);
+    let (dx, dy) = spostamento(&spento, "oa1a1a1a1");
+    assert!(
+        (dx - 3.6).abs() < 1e-9 && dy.abs() < 1e-9,
+        "spento: {dx}, {dy}"
+    );
 }

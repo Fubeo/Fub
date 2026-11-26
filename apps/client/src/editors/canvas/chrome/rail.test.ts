@@ -116,7 +116,8 @@ describe("la colonna della lavagna", () => {
     expect(slotOf(host, "highlighter").getAttribute("aria-haspopup")).toBe("menu");
     const pen = slotOf(host, "pen");
     expect(pen.getAttribute("aria-label")).toBe(t("canvas.tool.pen"));
-    expect(pen.getAttribute("aria-keyshortcuts")).toBe("P");
+    // La casella con la tendina dice anche la freccia di lato, che la apre.
+    expect(pen.getAttribute("aria-keyshortcuts")).toBe("P ArrowRight");
     expect(slotOf(host, "select").classList.contains("canvas-tool")).toBe(true);
     expect(pressed(host)).toEqual(["select"]);
     // Un solo punto di tabulazione, come il kit.

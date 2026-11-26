@@ -19,8 +19,15 @@
 // - `S9/Fogli vivi.canvas` e `S9/Conti-01.xlsx` … `S9/Conti-20.xlsx`: le
 //   trecento schede di S3, negli stessi posti, e in più venti fogli `.xlsx`
 //   in un blocco di 5 × 4 a sinistra della prima riga (S9);
+// - `S10/Registro.xlsx`: un foglio grande, 3000 righe per 20 colonne, da
+//   scorrere, da percorrere con le frecce e con la barra multifunzione che si
+//   rifà a ogni cambio di larghezza (S10);
+// - `S11/Dispense.pdf`: un PDF di quaranta pagine scritto qui, con testo e
+//   tracciati, da scorrere e da sfogliare (S11);
 // - `F3/Cartella/`: trenta note e una sottocartella di dieci, la cartella che
 //   F3 apre e chiude;
+// - `F4/Bilancio.xlsx`: un foglio Excel di 1.000 righe × 12 colonne, la
+//   cartella su cui F4 torna dalla nota e da cui riparte;
 // - `config/settings.json`: le impostazioni di macchina con la sonda accesa.
 import { copyFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -45,6 +52,9 @@ export const LIVE_CARDS = 20;
 
 /// La cartella che F3 apre e chiude: trenta note e una sottocartella.
 export const GESTURE_FOLDER = "F3/Cartella";
+
+/// F4: il foglio Excel fra cui e una nota si cambia scheda, e la sua misura.
+export const SWITCH_SHEET = { file: "F4/Bilancio.xlsx", name: "Bilancio", rows: 1_000, columns: 12 };
 
 /// Il nome della nota `i` di S2, da 1 a `NOTES`.
 export const noteName = (i) => `Nota ${String(i).padStart(5, "0")}`;
@@ -108,6 +118,64 @@ export const SHEET_BOARD = {
   rows: 4,
 };
 export const SHEET_CARDS = SHEET_BOARD.columns * SHEET_BOARD.rows;
+
+/// S10: il foglio grande, il nome che si cerca col selettore rapido e la sua
+/// misura. Ogni colonna dopo la prima ha numeri: sono le celle che la griglia
+/// misura (`#fitCells`), il caso più pesante dello scorrimento.
+export const BIG_SHEET = { file: "S10/Registro.xlsx", name: "Registro", rows: 3_000, columns: 20 };
+
+/// S11: il PDF di più pagine, il nome che si cerca col selettore rapido e
+/// quante pagine ha. Le prove del repo hanno PDF di una pagina sola: questo
+/// si scrive qui (`multipagePdf`).
+export const BIG_PDF = { file: "S11/Dispense.pdf", name: "Dispense", pages: 40 };
+
+/// La pagina di S11 in punti: larga come un A4 e alta due. Il visore mostra
+/// una pagina alla volta; adattata alla larghezza, un A4 in un riquadro più
+/// alto che largo (una colonna di niri) ci sta quasi intero e non scorre.
+/// Alta il doppio, scorre in ogni finestra.
+export const PDF_PAGE = { width: 595, height: 1684 };
+
+/// Un PDF 1.4 di `pages` pagine `PDF_PAGE`, scritto a mano: un titolo, cento
+/// righe di testo in Helvetica (un font standard, senza file incorporati) e
+/// qualche riquadro e linea a pagina, così il motore ha testo e tracciati da
+/// disegnare. La tabella `xref` porta gli scarti veri di ogni oggetto.
+export function multipagePdf(pages) {
+  const { width, height } = PDF_PAGE;
+  const objects = [];
+  // Il numero di un oggetto è la sua posizione, da 1: quella che `push` dà.
+  const add = (body) => objects.push(body);
+  const catalog = add("");
+  const tree = add("");
+  const font = add("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>");
+  const kids = [];
+  for (let page = 1; page <= pages; page++) {
+    const lines = [`BT /F1 22 Tf 56 ${height - 62} Td (Capitolo ${page}) Tj ET`];
+    for (let row = 0; row < 100; row++) {
+      lines.push(`BT /F1 10 Tf 56 ${height - 98 - row * 14} Td (Riga ${row + 1} della pagina ${page}: un paragrafo di dispense da leggere scorrendo.) Tj ET`);
+    }
+    for (let box = 0; box < 12; box++) {
+      const gray = (0.2 + (box % 6) * 0.1).toFixed(1);
+      lines.push(`${gray} g ${420 + (box % 2) * 70} ${height - 160 - Math.floor(box / 2) * 240} 60 60 re f`);
+      lines.push(`0 0 0 RG 1 w 56 ${60 + box * 6} m ${width - 56} ${60 + box * 6} l S`);
+    }
+    const stream = lines.join("\n");
+    const content = add(`<< /Length ${Buffer.byteLength(stream, "latin1")} >>\nstream\n${stream}\nendstream`);
+    kids.push(add(`<< /Type /Page /Parent ${tree} 0 R /MediaBox [0 0 ${width} ${height}] /Resources << /Font << /F1 ${font} 0 R >> >> /Contents ${content} 0 R >>`));
+  }
+  objects[catalog - 1] = `<< /Type /Catalog /Pages ${tree} 0 R >>`;
+  objects[tree - 1] = `<< /Type /Pages /Kids [${kids.map((kid) => `${kid} 0 R`).join(" ")}] /Count ${pages} >>`;
+  let text = "%PDF-1.4\n";
+  const offsets = [];
+  objects.forEach((body, index) => {
+    offsets.push(Buffer.byteLength(text, "latin1"));
+    text += `${index + 1} 0 obj\n${body}\nendobj\n`;
+  });
+  const xref = Buffer.byteLength(text, "latin1");
+  text += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+  for (const offset of offsets) text += `${String(offset).padStart(10, "0")} 00000 n \n`;
+  text += `trailer\n<< /Size ${objects.length + 1} /Root ${catalog} 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
+  return Buffer.from(text, "latin1");
+}
 
 /// Il foglio `i` di S9, da 1 a `SHEET_CARDS`.
 export const sheetName = (i) => `S9/Conti-${String(i).padStart(2, "0")}.xlsx`;
@@ -290,7 +358,7 @@ function inkBoard() {
 export function writeFixtures(root) {
   const vault = join(root, "vault");
   const config = join(root, "config");
-  for (const dir of ["S1", "S2", "S3", "S5", "S7", "S8", "S9", "R1", "T1"]) mkdirSync(join(vault, dir), { recursive: true });
+  for (const dir of ["S1", "S2", "S3", "S5", "S7", "S8", "S9", "S10", "S11", "R1", "T1"]) mkdirSync(join(vault, dir), { recursive: true });
   mkdirSync(config, { recursive: true });
   writeFileSync(join(vault, "S1", "Lunga.md"), longNote());
   for (let i = 1; i <= NOTES; i++) writeFileSync(join(vault, "S2", `${noteName(i)}.md`), note(i));
@@ -302,11 +370,15 @@ export function writeFixtures(root) {
   writeFileSync(join(vault, INK_BOARD.sheet), workbook(INK_TABLE.rows, INK_TABLE.columns));
   writeFileSync(join(vault, SHEET_BOARD.file), sheetBoard());
   for (let i = 1; i <= SHEET_CARDS; i++) writeFileSync(join(vault, sheetName(i)), workbook());
+  writeFileSync(join(vault, BIG_SHEET.file), workbook(BIG_SHEET.rows, BIG_SHEET.columns));
+  writeFileSync(join(vault, BIG_PDF.file), multipagePdf(BIG_PDF.pages));
   writeFileSync(join(vault, "T1", "Tessere.png"), storedPng(FRAME.width, FRAME.height));
   for (const [name, from] of Object.entries(MODE_FILES)) copyFileSync(join(repo, from), join(vault, "R1", name));
   mkdirSync(join(vault, GESTURE_FOLDER, "Dentro"), { recursive: true });
   for (let i = 1; i <= 30; i++) writeFileSync(join(vault, GESTURE_FOLDER, `Voce ${String(i).padStart(2, "0")}.md`), `# Voce ${i}\n\nUna nota della cartella di F3.\n`);
   for (let i = 1; i <= 10; i++) writeFileSync(join(vault, GESTURE_FOLDER, "Dentro", `Sotto ${i}.md`), `# Sotto ${i}\n`);
+  mkdirSync(join(vault, dirname(SWITCH_SHEET.file)), { recursive: true });
+  writeFileSync(join(vault, SWITCH_SHEET.file), workbook(SWITCH_SHEET.rows, SWITCH_SHEET.columns));
   // Il formato del livello macchina (`fub_kernel::settings`, schema 2).
   writeFileSync(join(config, "settings.json"), JSON.stringify({ version: 2, values: { "perf.probe": true } }, null, 2) + "\n");
   return { vault, config };

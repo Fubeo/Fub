@@ -2,13 +2,22 @@
 // (`../editor.ts`): lavora sul contesto che i pezzi condividono.
 
 import { showContextMenu } from "../../../../ui/menu";
+import { isWritingField } from "../../../../ui/field-history";
 import { t } from "../../strings";
 import { nextTurn } from "../../view";
 import { carriesFiles, type Decoded } from "../images";
+import { hrefAttributes, hrefOf, nodeOf, Plan, type Arranged } from "../arrange";
+import type { NewIds } from "../edit";
+import type { Unit } from "../hit";
+import type { DocumentModel } from "../../scene/model";
 import { toolForKey, type Feature, type ToolSpec } from "../registry";
 import { ROTATE_STEP, ZOOM_STEP } from "./constants";
 import type { Edge } from "../arrange";
 import type { EditorContext } from "./context";
+import { adattaTavola } from "./chrome/zoom-menu";
+import { cambiaUnita } from "./chrome/unita";
+import { uscitaDalFoglio } from "./chrome/pannelli-tab";
+import { installCropImage } from "./ritaglio-immagine";
 
 const ROTATE_STEP_SHIFT = 90;
 
@@ -28,6 +37,8 @@ const ALIGN_KEYS: Readonly<Record<string, Edge>> = {
 export interface VaultImagesContext {
   insertsImages: (at: ReadonlySet<Feature>) => boolean;
   vaultImage: () => Promise<void>;
+  /// «Incorpora immagine»: le immagini scelte collegate a un file entrano nel disegno.
+  embedImages: () => Promise<void>;
 }
 
 /// Monta le immagini del vault.
@@ -98,6 +109,55 @@ export function installVaultImages(ctx: EditorContext): void {
   }
   ctx.vaultImage = vaultImage;
 
+  /// «Incorpora immagine» (VectorCraft: `links.embed`): ogni immagine scelta che porta
+  /// a un file del vault riceve i byte di quel file nel suo `href`, dentro il peso
+  /// che il disegno ha ancora e, se serve, ridotti dopo averlo chiesto, come
+  /// un'immagine incollata. La misura sul foglio non cambia. Un passo di annulla.
+  async function embedImages(): Promise<void> {
+    const port = options.images;
+    if (ctx.asking || ctx.disposed || !editable()) return;
+    const model = ctx.engine.model;
+    if (model === null) return;
+    const linked = linkedImages(model, ctx.selectedUnits());
+    if (linked.length === 0) {
+      announce(t("draw.embed.none"));
+      return;
+    }
+    if (port === undefined) {
+      announce(t("draw.image.gone"));
+      return;
+    }
+    ctx.asking = true;
+    cancelGesture();
+    const loaded = ctx.loads;
+    try {
+      const gone = (): boolean => ctx.disposed || ctx.loads !== loaded || !editable();
+      const blobs: Blob[] = [];
+      for (const { href } of linked) {
+        const blob = await port.read(href).catch(() => null);
+        if (gone()) return;
+        if (blob === null) {
+          announce(t("draw.embed.gone", { href }));
+          return;
+        }
+        blobs.push(blob);
+      }
+      const placed = await ctx.encodeImages(blobs, gone);
+      if (placed === null || gone()) return;
+      const now = ctx.engine.model;
+      if (now === null) return;
+      if (ctx.arrange("draw.action.embed", embedOps(now, linked, placed.map((one) => one.href), ctx.newIds())) !== null) {
+        announce(t(linked.length === 1 ? "draw.embed.one" : "draw.embed.other", { count: linked.length }));
+      }
+    } finally {
+      ctx.asking = false;
+    }
+  }
+  ctx.embedImages = embedImages;
+
+  // Ritaglia immagine, del Disegno completo.
+  installCropImage(ctx);
+
   const onDragOver = (event: DragEvent): void => {
     if (!editable() || !carriesFiles(event.dataTransfer)) return;
     event.preventDefault();
@@ -118,6 +178,64 @@ export function installVaultImages(ctx: EditorContext): void {
   life.listen(surface, "dragover", onDragOver);
   life.listen(surface, "drop", onDrop);
 
+  /// Un tasto con Ctrl o ⌘ che col Completo e il motore resta all'editor, come in
+  /// VectorCraft: annulla (`Ctrl+Z`) e ripeti (`Ctrl+Maiusc+Z`) sulla cronologia del
+  /// disegno, la vista (`Ctrl+Y` contorni, `Ctrl+'` griglia, `Ctrl+Maiusc+'` aggancio,
+  /// `Ctrl+0` adatta la tavola e `Ctrl+Alt+0` tutto, `Ctrl+1` 100%, `Ctrl+=` e `Ctrl+-`
+  /// zoom, `Ctrl+Maiusc+H` nasconde le tavole), l'unità del documento (`Ctrl+Alt+Maiusc+U` passa
+  /// alla successiva) e la
+  /// ricerca dei comandi (`Ctrl+Maiusc+/`). `true` se l'ha preso. Copia, taglia e
+  /// incolla restano al browser, che manda gli appunti al Completo.
+  function vistaComeVectorCraft(event: KeyboardEvent): boolean {
+    const key = event.key.toLowerCase();
+    const alt = event.altKey;
+    if (key === "v" && !alt) ctx.inPlaceUntil = event.shiftKey ? event.timeStamp + IN_PLACE_MS : -Infinity;
+    if (key === "z" && !alt) {
+      if (event.shiftKey) redo();
+      else undo();
+      return true;
+    }
+    if (key === "y" && !alt && !event.shiftKey) {
+      ctx.setOutline(!ctx.outline);
+      return true;
+    }
+    if (event.code === "Quote" && !alt && has("grid")) {
+      if (event.shiftKey) changeGrid({ ...ctx.grid, snap: !ctx.grid.snap });
+      else changeGrid({ ...ctx.grid, shown: !ctx.grid.shown });
+      return true;
+    }
+    if (event.code === "Digit0" && !event.shiftKey) {
+      if (alt) ctx.fit();
+      else adattaTavola(ctx);
+      return true;
+    }
+    if (event.code === "KeyH" && event.shiftKey && !alt) {
+      changeGrid({ ...ctx.grid, hideArtboards: ctx.grid.hideArtboards !== true });
+      return true;
+    }
+    if (event.code === "KeyU" && event.shiftKey && alt) {
+      cambiaUnita(ctx);
+      return true;
+    }
+    if (event.code === "Digit1" && !alt && !event.shiftKey) {
+      zoomBy(1 / ctx.camera.scale);
+      return true;
+    }
+    if ((event.code === "Equal" || event.key === "+" || event.key === "=") && !alt) {
+      zoomBy(ZOOM_STEP);
+      return true;
+    }
+    if ((event.code === "Minus" || event.key === "-") && !alt && !event.shiftKey) {
+      zoomBy(1 / ZOOM_STEP);
+      return true;
+    }
+    if (event.code === "Slash" && event.shiftKey && !alt) {
+      ctx.searchCommands();
+      return true;
+    }
+    return false;
+  }
+
   /// Maiusc, Ctrl o ⌘, o Alt premuti o lasciati a metà gesto: la forma, lo
   /// spostamento e la cornice si ridisegnano subito.
   const onModifiers = (event: KeyboardEvent): void => {
@@ -131,9 +249,13 @@ export function installVaultImages(ctx: EditorContext): void {
     else if (ctx.current?.kind === "select" && (ctx.current.mode === "move" || ctx.current.mode === "resize" || ctx.current.mode === "rotate")) selectUpdate(ctx.current);
   };
 
+  // Col motore Tab nasconde i pannelli e non esce dal foglio: Fine e poi Tab ne
+  // esce (`draw.surface.hint.completo`).
+  const uscita = uscitaDalFoglio();
   life.listen(root, "keyup", onModifiers);
   life.listen(root, "keydown", (event) => {
     onModifiers(event);
+    const tabOFine = uscita(event.key);
     if (event.defaultPrevented || event.target === titleInput || event.target === opacityInput) return;
     // I campi del foglio, come il numero della pagina, tengono i loro tasti.
     if (event.target instanceof HTMLInputElement && folio?.controls?.contains(event.target) === true) return;
@@ -160,6 +282,32 @@ export function installVaultImages(ctx: EditorContext): void {
     }
     const onSurface = event.target === surface;
     const inTree = event.target instanceof Node && tree.element.contains(event.target);
+    const completo = ctx.completoMotore?.() ?? null;
+    const comeVectorCraft = completo?.conMotore?.() === true;
+    // Lo strumento del motore che scrive (il Testo) prende i tasti, come in VectorCraft.
+    const scriveTesto = comeVectorCraft && ctx.motoreTool !== null && ctx.statoStrumento(ctx.motoreTool)?.wants_text === true;
+    // Nel Completo col motore le frecce spostano come VectorCraft (`nudge_and_clear`):
+    // `object.nudge` del motore, Maiusc per il passo grande, Alt per spostare una copia.
+    // Durante il trascinamento di uno strumento del motore vanno a lui, come in
+    // VectorCraft (la Forma parametrica ne cambia i numeri).
+    const freccia = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[event.key];
+    if (freccia !== undefined && ctx.current?.kind === "motore" && !scriveTesto && !isWritingField(event.target)) {
+      event.preventDefault();
+      ctx.motoreFreccia?.({ kind: "key", key: event.key, code: event.code, mods: { shift: event.shiftKey, alt: event.altKey, cmd: event.ctrlKey || event.metaKey }, pressed: true });
+      return;
+    }
+    // Le guide scelte prendono Canc e le frecce, come in VectorCraft.
+    if (comeVectorCraft && !scriveTesto && ctx.current === null && !isWritingField(event.target) && ctx.guideKey(event)) {
+      event.preventDefault();
+      return;
+    }
+    if (comeVectorCraft && !scriveTesto && freccia !== undefined && !isWritingField(event.target)) {
+      event.preventDefault();
+      if (ctx.current === null && ctx.selection.length > 0 && editable()) {
+        completo?.eseguiComando?.("object.nudge", { dx: freccia[0], dy: freccia[1], big: event.shiftKey, copy: event.altKey });
+      }
+      return;
+    }
     if (onSurface && !event.altKey && arrows(event)) {
       event.preventDefault();
       return;
@@ -168,21 +316,29 @@ export function installVaultImages(ctx: EditorContext): void {
     // «#» e «%» valgono come si scrivono, anche con AltGr, che su Windows
     // arriva come Ctrl e Alt insieme.
     const altGraph = typeof event.getModifierState === "function" && event.getModifierState("AltGraph");
+    // Col Completo aperto e il motore presente i tasti sono quelli di VectorCraft
+    // (`completo/tasti.ts`): con Ctrl o Alt l'editor tiene solo annulla e ripeti, gli
+    // appunti (che il browser manda al Completo) e i tasti della vista di VectorCraft;
+    // gli altri vanno ai comandi del motore (`completo/montaggio-tasti.ts`).
+    if (comeVectorCraft && (mod || event.altKey)) {
+      if (mod && vistaComeVectorCraft(event)) event.preventDefault();
+      return;
+    }
     // `[` e `]` ruotano la selezione, `{` e `}` di un angolo retto: come si
     // scrivono, anche con AltGr; con Ctrl o ⌘ cambiano l'ordine.
     // Con la Penna e l'Evidenziatore `[` e `]` cambiano la punta (P4).
-    if ((event.key === "[" || event.key === "]") && onSurface && (altGraph || !mod) && ctx.stepNib(event.key === "[" ? -1 : 1)) {
+    if (!comeVectorCraft && (event.key === "[" || event.key === "]") && onSurface && (altGraph || !mod) && ctx.stepNib(event.key === "[" ? -1 : 1)) {
       event.preventDefault();
       return;
     }
     const turn = { "[": -ROTATE_STEP, "]": ROTATE_STEP, "{": -ROTATE_STEP_SHIFT, "}": ROTATE_STEP_SHIFT }[event.key];
-    if (turn !== undefined && onSurface && (altGraph || !mod)) {
+    if (!comeVectorCraft && turn !== undefined && onSurface && (altGraph || !mod)) {
       if (ctx.current !== null || ctx.pressed !== null || ctx.selection.length === 0 || !editable()) return;
       rotateSelection(turn);
       event.preventDefault();
       return;
     }
-    if ((event.key === "#" || event.key === "%") && (altGraph || !mod) && has("grid")) {
+    if (!comeVectorCraft && (event.key === "#" || event.key === "%") && (altGraph || !mod) && has("grid")) {
       if (event.key === "#") changeGrid({ ...ctx.grid, shown: !ctx.grid.shown });
       else changeGrid({ ...ctx.grid, snap: !ctx.grid.snap });
       event.preventDefault();
@@ -304,6 +460,50 @@ export function installVaultImages(ctx: EditorContext): void {
       showContextMenu(at, menu.items, { labelledBy: selectionButton.id, clipboard: menu.clipboard, searchable: menu.searchable });
       return;
     }
+    // Col Completo aperto e il motore presente i tasti di una lettera sono quelli di
+    // VectorCraft: le lettere, le cifre e i riflessi degli strumenti di Fub non valgono.
+    const strumentoDelMotore = completo?.strumentoDelTasto?.(event) ?? null;
+    if (comeVectorCraft) {
+      // Come `shortcuts.rs` di VectorCraft: Esc e Invio vanno prima allo strumento,
+      // Canc toglie i punti scelti, la lettera di uno strumento lo sceglie. Ogni altro
+      // tasto va ai comandi del motore (`montaggio-tasti.ts`: D, X, Maiusc+X, /, la
+      // virgola, il punto, Maiusc+D, Canc e Backspace). I tasti che solo Fub aveva
+      // (Tab fra gli oggetti, Pag Su/Giù, Home e Fine, Spazio, F2, ?, le cifre,
+      // Maiusc+1 e Maiusc+2) non valgono.
+      if (event.key === "Escape") {
+        if (ctx.current !== null) cancelGesture();
+        else if (ctx.motoreTasto?.("Escape") === true) {
+          // Il tracciato aperto si chiude; senza, lo strumento torna alla Selezione.
+        } else if (scriveTesto) {
+          return;
+        } else if (ctx.selection.length > 0) {
+          select([]);
+          announceSelection();
+        } else return;
+      } else if (scriveTesto) {
+        // Le lettere, Invio e Canc sono del testo che si scrive.
+        return;
+      } else if (onSurface && tabOFine === "fine" && ctx.current === null && !mod && !event.altKey) {
+        // Il Tab che segue esce dal foglio.
+      } else if (onSurface && tabOFine === "esce") {
+        // Esce dal foglio: il Tab è del browser.
+        return;
+      } else if (onSurface && event.key === "Tab") {
+        // Dal foglio Tab nasconde e rimostra barra, colonna e pannelli, Maiusc+Tab i
+        // pannelli (`window.dock`, `window.panels`). Fuori dal foglio Tab va avanti fra i comandi.
+        ctx.pannelliTab(event.shiftKey);
+      } else if (onSurface && event.key === "Enter" && ctx.current === null && ctx.motoreTasto?.("Enter") === true) {
+        // Chiuso dal motore.
+      } else if ((event.key === "Delete" || event.key === "Backspace") && ctx.current === null && ctx.motoreTasto?.(event.key) === true) {
+        // Preso dallo strumento del motore (la Larghezza toglie i suoi punti scelti).
+      } else if ((event.key === "Delete" || event.key === "Backspace") && ctx.current === null && completo?.cancellaPunti?.() === true) {
+        // Tolti i punti scelti dalla Selezione diretta.
+      } else if (strumentoDelMotore !== null && editable()) {
+        ctx.sceltaMotore(strumentoDelMotore);
+      } else return;
+      event.preventDefault();
+      return;
+    }
     if (onSurface && event.key === "Tab") {
       if (!walk(event.shiftKey ? -1 : 1)) return;
     } else if (onSurface && (event.key === "PageUp" || event.key === "PageDown") && !event.shiftKey && folio !== undefined) {
@@ -330,7 +530,10 @@ export function installVaultImages(ctx: EditorContext): void {
       renameSelection();
     } else if (onSurface && event.key === "Enter") {
       if (ctx.pressed !== null) release();
-      else if (folio === undefined) {
+      // Il tracciato aperto della penna del motore si chiude.
+      else if (ctx.current === null && ctx.motoreTasto?.("Enter") === true) {
+        // Chiuso dal motore.
+      } else if (folio === undefined) {
         void properties();
       } else if (ctx.selection.length > 0) {
         // Sul foglio una nota scelta si cambia, e il resto mostra le sue
@@ -343,6 +546,17 @@ export function installVaultImages(ctx: EditorContext): void {
     } else if (event.key === "?") {
       void keys();
     } else if (event.key === "Delete" || event.key === "Backspace") {
+      // Coi punti scelti dalla Selezione diretta Canc toglie quei punti, non
+      // l'oggetto (il Completo, K6 T12).
+      if (ctx.current === null && ctx.motoreTasto?.(event.key) === true) {
+        // Preso dallo strumento del motore (la Larghezza toglie i suoi punti scelti).
+        event.preventDefault();
+        return;
+      }
+      if (ctx.current === null && ctx.completoMotore?.()?.cancellaPunti?.() === true) {
+        event.preventDefault();
+        return;
+      }
       if (ctx.selection.length === 0) return;
       deleteSelection();
     } else if (event.shiftKey && onSurface && (event.code === "KeyH" || event.code === "KeyV") && ctx.selection.length > 0 && editable()) {
@@ -351,7 +565,10 @@ export function installVaultImages(ctx: EditorContext): void {
       ctx.flipSelection(event.code === "KeyH" ? "x" : "y");
     } else if (event.key === "Escape") {
       if (ctx.current !== null) cancelGesture();
-      else if (leaveIsolation(false)) {
+      else if (ctx.motoreTasto?.("Escape") === true) {
+        // Il tracciato aperto si chiude; senza, uno strumento dei tracciati
+        // torna alla Selezione.
+      } else if (leaveIsolation(false)) {
         // Fuori di un gruppo, scelto quello da cui si è usciti.
       } else if (ctx.selection.length > 0) {
         select([]);
@@ -379,4 +596,37 @@ export function installVaultImages(ctx: EditorContext): void {
     }
     event.preventDefault();
   });
+}
+
+/// Un'immagine collegata a un file, e il file.
+export interface LinkedImage {
+  readonly unit: Unit;
+  readonly href: string;
+}
+
+/// Le immagini di `units` che portano a un file (non a un `data:` già dentro il disegno).
+/// Come in SVG 2, `href` prevale su `xlink:href`.
+export function linkedImages(model: DocumentModel, units: readonly Unit[]): LinkedImage[] {
+  return units.flatMap((unit) => {
+    if (unit.role !== "image") return [];
+    const href = hrefOf(nodeOf(model, unit))?.trim() ?? "";
+    return href === "" || href.startsWith("data:") ? [] : [{ unit, href }];
+  });
+}
+
+/// Le operazioni di Incorpora: ogni immagine di `linked` riceve il suo `data:` di `hrefs`
+/// negli attributi che la collegavano (`href`, `xlink:href` per i lettori di SVG 1.1, o tutti
+/// e due, come `relinkOps`); la misura e il resto non cambiano. Le chiavi sono quelle delle
+/// immagini dopo, anche quando ricevono un id.
+export function embedOps(model: DocumentModel, linked: readonly LinkedImage[], hrefs: readonly string[], ids: NewIds): Arranged {
+  const plan = new Plan(model, ids);
+  linked.forEach(({ unit }, i) => {
+    const node = nodeOf(model, unit);
+    const now = hrefAttributes(node);
+    const attrs: Record<string, string> = {};
+    if (now.plain !== null || now.xlink === null) attrs.href = hrefs[i]!;
+    if (now.xlink !== null) attrs["xlink:href"] = hrefs[i]!;
+    plan.ops.push({ op: "set", id: plan.idOf(node), attrs });
+  });
+  return plan.finish(linked.map(({ unit }) => plan.keyOf(nodeOf(model, unit), unit.key)));
 }

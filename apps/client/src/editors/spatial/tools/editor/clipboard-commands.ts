@@ -22,7 +22,20 @@ import { snapDelta, wholeSteps } from "../grid";
 import { sceneBox, seenBox, toScene, toScreen } from "../../view";
 import { elemBounds, type Unit } from "../hit";
 import { foreignDrawing } from "../../import/foreign";
-import { copySvg, looksLikeSvg, pasteFrame, planPaste, readPaste, SVG_TYPE, type PasteProblem, type PasteSource } from "../clipboard";
+import {
+  appuntiCompletoDi,
+  copySvg,
+  leggiAppuntiDaEvento,
+  looksLikeSvg,
+  PASTE_PROBLEMS,
+  pasteFrame,
+  planPaste,
+  readPaste,
+  registraCronologia,
+  SVG_TYPE,
+  type PasteProblem,
+  type PasteSource,
+} from "../clipboard";
 import {
   browserCodec,
   budgetFor,
@@ -93,15 +106,6 @@ async function sliced<T>(run: Generator<number, T>, progress: (done: number) => 
   }
 }
 
-/// Perché un SVG non si incolla, a parole.
-const PASTE_PROBLEMS: Readonly<Record<PasteProblem, DrawKey>> = {
-  "too-large": "draw.paste.too_large",
-  malformed: "draw.paste.malformed",
-  "not-svg": "draw.paste.not_svg",
-  empty: "draw.paste.empty",
-  entities: "draw.paste.entities",
-};
-
 /// Un incolla che non viene dagli appunti, come un simbolo di una libreria:
 /// il nome del passo, il riquadro della scena dove va il primo SVG, come
 /// cambiano i suoi `href`, ciò che si dice dopo, e che cosa si fa quando è
@@ -147,6 +151,10 @@ export interface ClipboardCommandsContext {
   viewBounds: () => Bounds;
   inSight: (p: Point) => boolean;
   placeImages: (pictures: readonly Placed[], at: Point | null) => void;
+  /// I byte di `sources` come entrano nel disegno, con le loro misure: dentro il peso che il
+  /// disegno ha ancora, e se serve ridotti dopo averlo chiesto. `null` se non si fa, detto a voce;
+  /// `gone` dice se nel frattempo l'editor è cambiato.
+  encodeImages: (sources: readonly Blob[], gone: () => boolean) => Promise<Placed[] | null>;
   /// Fino a quando l'incolla dei tasti va nello stesso punto: Ctrl+Maiusc+V
   /// lo chiede, e l'evento del browser arriva subito dietro.
   inPlaceUntil: number;
@@ -167,8 +175,8 @@ export interface ClipboardCommandsContext {
 export function installClipboardCommands(ctx: EditorContext): void {
   const {
     life, has, measureText, pictureFonts, root, surface, progressBar, progressLabel, progressMeter, progressStop, editable, grownPage, newIds, announce,
-    objects, numberText, stepNow, viewArea, viewCenter, selectedUnits, showHandles, askDescriptions, withFaces, syncControls, commit, withLabels, select,
-    cancelGesture, target, gridOn, boundsOf, arranging, arrange, options
+    objects, numberText, snapStep, viewArea, viewCenter, selectedUnits, showHandles, askDescriptions, withFaces, syncControls, commit, withLabels, select,
+    cancelGesture, target, snapOn, boundsOf, arranging, arrange, options
   } = ctx;
   // --- Le immagini incollate --------------------------------------------------
 
@@ -196,7 +204,7 @@ export function installClipboardCommands(ctx: EditorContext): void {
   /// I byte di `file` come entrano nel disegno: così come sono se sono PNG,
   /// JPEG diritto, WebP o GIF; altrimenti ricodificati. `null` se non è
   /// un'immagine che il browser sa leggere.
-  const pictureOf = async (file: File, decoder: ImageCodec): Promise<Picture | null> => {
+  const pictureOf = async (file: Blob, decoder: ImageCodec): Promise<Picture | null> => {
     let bytes: Uint8Array;
     let decoded: Decoded | null;
     try {
@@ -236,6 +244,57 @@ export function installClipboardCommands(ctx: EditorContext): void {
     }).then((answer) => answer !== null);
   };
 
+  /// I byte di `sources` come entrano nel disegno, dentro il peso che resta: `null` se non si fa,
+  /// detto a voce. `codec` c'è.
+  async function encodeImages(sources: readonly Blob[], gone: () => boolean): Promise<Placed[] | null> {
+    if (codec === null) {
+      announce(t("draw.image.unreadable"));
+      return null;
+    }
+    const pictures: Picture[] = [];
+    try {
+      for (const source of sources) {
+        const picture = await pictureOf(source, codec);
+        if (picture !== null) pictures.push(picture);
+      }
+      if (gone()) return null;
+      if (pictures.length === 0) {
+        announce(t("draw.image.unreadable"));
+        return null;
+      }
+      const docBytes = utf8Length(ctx.engine.text);
+      const budget = budgetFor(docBytes, pictures.length);
+      if (budget < MIN_ROOM) {
+        announce(t("draw.image.full", { limit: sizeText(MAX_EDIT_BYTES) }));
+        return null;
+      }
+      const limits = limitsFor(pictures.map((picture) => picture.encoded.bytes.length), budget);
+      if (pictures.some((picture, i) => picture.encoded.bytes.length > limits[i]!)) {
+        if (!(await askReduce(pictures, limits, budget < MAX_IMAGE_BYTES))) return null;
+        if (gone()) return null;
+        announce(t("draw.image.reducing"));
+        for (const [i, picture] of pictures.entries()) {
+          if (picture.encoded.bytes.length <= limits[i]!) continue;
+          const reduced = await reduce(picture.decoded, limits[i]!);
+          if (reduced === null) {
+            announce(t("draw.image.failed"));
+            return null;
+          }
+          picture.encoded = reduced;
+        }
+        if (gone()) return null;
+      }
+      return pictures.map((picture) => ({
+        width: picture.decoded.width,
+        height: picture.decoded.height,
+        href: dataUri(picture.encoded.type, picture.encoded.bytes),
+      }));
+    } finally {
+      for (const picture of pictures) picture.decoded.close();
+    }
+  }
+  ctx.encodeImages = encodeImages;
+
   /// `files` sul foglio, in un gesto solo: al cursore se si vede, o al
   /// centro della vista, scelti, con lo strumento della selezione.
   async function addImages(files: readonly File[], at: Point | null): Promise<void> {
@@ -248,50 +307,12 @@ export function installClipboardCommands(ctx: EditorContext): void {
     ctx.asking = true;
     cancelGesture();
     const loaded = ctx.loads;
-    const pictures: Picture[] = [];
     try {
-      for (const file of files) {
-        const picture = await pictureOf(file, codec);
-        if (picture !== null) pictures.push(picture);
-      }
       const gone = (): boolean => ctx.disposed || ctx.loads !== loaded || !editable();
-      if (gone()) return;
-      if (pictures.length === 0) {
-        announce(t("draw.image.unreadable"));
-        return;
-      }
-      const docBytes = utf8Length(ctx.engine.text);
-      const budget = budgetFor(docBytes, pictures.length);
-      if (budget < MIN_ROOM) {
-        announce(t("draw.image.full", { limit: sizeText(MAX_EDIT_BYTES) }));
-        return;
-      }
-      const limits = limitsFor(pictures.map((picture) => picture.encoded.bytes.length), budget);
-      if (pictures.some((picture, i) => picture.encoded.bytes.length > limits[i]!)) {
-        if (!(await askReduce(pictures, limits, budget < MAX_IMAGE_BYTES))) return;
-        if (gone()) return;
-        announce(t("draw.image.reducing"));
-        for (const [i, picture] of pictures.entries()) {
-          if (picture.encoded.bytes.length <= limits[i]!) continue;
-          const reduced = await reduce(picture.decoded, limits[i]!);
-          if (reduced === null) {
-            announce(t("draw.image.failed"));
-            return;
-          }
-          picture.encoded = reduced;
-        }
-        if (gone()) return;
-      }
-      placeImages(
-        pictures.map((picture) => ({
-          width: picture.decoded.width,
-          height: picture.decoded.height,
-          href: dataUri(picture.encoded.type, picture.encoded.bytes),
-        })),
-        at,
-      );
+      const placed = await encodeImages(files, gone);
+      if (placed === null || gone()) return;
+      placeImages(placed, at);
     } finally {
-      for (const picture of pictures) picture.decoded.close();
       ctx.asking = false;
     }
   }
@@ -306,7 +327,7 @@ export function installClipboardCommands(ctx: EditorContext): void {
     // Le immagini stanno in ciò che si vede tutto, anche sul foglio girato.
     const view = seenBox(ctx.camera, viewArea());
     const distance = COPY_STEP_PX / ctx.camera.scale;
-    const step = gridOn() ? wholeSteps(distance, stepNow()) : distance;
+    const step = snapOn() ? wholeSteps(distance, snapStep()) : distance;
     // La scala del livello: una unità della scena vale `1 / k` unità sue.
     const k = Math.sqrt(Math.abs(to.matrix[0] * to.matrix[3] - to.matrix[1] * to.matrix[2]));
     const ops: Op[] = [...to.prelude];
@@ -317,7 +338,7 @@ export function installClipboardCommands(ctx: EditorContext): void {
       let box = placeImage(picture.width, picture.height, view, [base[0] + i * step, base[1] + i * step]);
       // Con l'aggancio, l'angolo in alto a sinistra va sull'incrocio più
       // vicino.
-      if (gridOn()) box = translated(box, ...snapDelta(box.min, 0, 0, stepNow()))!;
+      if (snapOn()) box = translated(box, ...snapDelta(box.min, 0, 0, snapStep()))!;
       const [cx, cy] = apply(to.inverse, [(box.min[0] + box.max[0]) / 2, (box.min[1] + box.max[1]) / 2]);
       const w = (box.max[0] - box.min[0]) / k;
       const h = (box.max[1] - box.min[1]) / k;
@@ -458,6 +479,13 @@ export function installClipboardCommands(ctx: EditorContext): void {
       if (event !== copyEvent) copyRound++;
       return;
     }
+    // Il Completo copia dal motore (K6 T11): il browser non scrive più, lo fa lui.
+    const completo = appuntiCompletoDi(options.motore);
+    if (completo !== null) {
+      event.preventDefault();
+      void completo.copia(kind);
+      return;
+    }
     const data = event.clipboardData;
     if (data === null) return;
     const units = selectedUnits();
@@ -491,6 +519,11 @@ export function installClipboardCommands(ctx: EditorContext): void {
   /// «Copia» e «Taglia» dal menu: la copia che il browser manda col comando.
   /// Dove non la manda, si dice di usare i tasti.
   const clipboardCommand = (kind: "copy" | "cut"): void => {
+    const completo = appuntiCompletoDi(options.motore);
+    if (completo !== null) {
+      void completo.copia(kind);
+      return;
+    }
     commanded = kind;
     let sent: boolean;
     try {
@@ -663,7 +696,7 @@ export function installClipboardCommands(ctx: EditorContext): void {
       const inView = at !== null && inSight(at);
       const base: Point = inView ? at : toScene(ctx.camera, viewCenter());
       const distance = COPY_STEP_PX / ctx.camera.scale;
-      const step = gridOn() ? wholeSteps(distance, stepNow()) : roundDelta(distance);
+      const step = snapOn() ? wholeSteps(distance, snapStep()) : roundDelta(distance);
       // Gli incolla di seguito dello stesso SVG si scostano; uno che sa dove
       // va, no.
       const lone = !inPlace && how.box === undefined && sources.length === 1 ? sources[0]!.text : null;
@@ -683,8 +716,8 @@ export function installClipboardCommands(ctx: EditorContext): void {
           const frame = pasteFrame(source, model);
           const offset = (first + i) * step;
           delta = [roundDelta(base[0] + offset - (frame.min[0] + frame.max[0]) / 2), roundDelta(base[1] + offset - (frame.min[1] + frame.max[1]) / 2)];
-          if (gridOn()) {
-            const [sx, sy] = snapDelta(translated(frame, delta[0], delta[1])!.min, 0, 0, stepNow());
+          if (snapOn()) {
+            const [sx, sy] = snapDelta(translated(frame, delta[0], delta[1])!.min, 0, 0, snapStep());
             delta = [delta[0] + sx, delta[1] + sy];
           }
         }
@@ -732,6 +765,13 @@ export function installClipboardCommands(ctx: EditorContext): void {
   /// «Incolla» e «Incolla nello stesso punto» dal menu: gli appunti letti
   /// dalla shell, se lo lascia fare; altrimenti si dice di usare i tasti.
   async function pasteFromMenu(inPlace: boolean): Promise<void> {
+    // Il Completo incolla dal motore (K6 T11): gli appunti li legge lui, e «Nello
+    // stesso punto» è la sua variante `edit.pasteInPlace`.
+    const completo = appuntiCompletoDi(options.motore);
+    if (completo !== null) {
+      await completo.incollaDaMenu(inPlace ? { comando: "edit.pasteInPlace", etichetta: t("draw.paste.in_place") } : {});
+      return;
+    }
     const at = ctx.cursor;
     let items: readonly ClipboardEntry[];
     try {
@@ -777,6 +817,17 @@ export function installClipboardCommands(ctx: EditorContext): void {
     const inPlace = event.timeStamp <= ctx.inPlaceUntil;
     ctx.inPlaceUntil = -Infinity;
     if (!ownsClipboard(event)) return;
+    // Il Completo incolla dal motore (K6 T11): gli appunti li legge da qui, subito.
+    // Ctrl+Maiusc+V è «Nello stesso punto», come nel motore (`edit.pasteInPlace`).
+    const completo = appuntiCompletoDi(options.motore);
+    if (completo !== null) {
+      const lettura = leggiAppuntiDaEvento(event.clipboardData);
+      if (lettura !== null) {
+        event.preventDefault();
+        void completo.incolla(lettura, inPlace ? { comando: "edit.pasteInPlace", etichetta: t("draw.paste.in_place") } : {});
+      }
+      return;
+    }
     const carried = carriedBy(event.clipboardData);
     if (carried === null) {
       announce(t("draw.paste.nothing"));
@@ -785,6 +836,16 @@ export function installClipboardCommands(ctx: EditorContext): void {
     event.preventDefault();
     void pasteCarried(carried, ctx.cursor, inPlace);
   });
+  // La cronologia della superficie: «Cancella cronologia» del Completo la svuota
+  // (K6 T11). Il file e le sue versioni restano come sono.
+  if (options.motore) {
+    life.add(
+      registraCronologia(options.motore, () => {
+        ctx.history.clear();
+        syncControls();
+      }),
+    );
+  }
   life.listen(progressStop, "click", () => {
     if (ctx.pasting !== null) ctx.pasting.stopped = true;
   });

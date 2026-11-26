@@ -24,6 +24,7 @@
 //   di fine resta di fine, e va al capo nuovo, così la freccia si rivolge
 //   dall'altra parte.
 
+import { outsideTree } from "./hit/unit";
 import type { ConnectorFacts } from "../scene/classify";
 import { connectorAttrs, writeConnectorEnd, writeLabelPlace, type Anchor, type ConnectorEnd, type ConnectorKind } from "../scene/connectors";
 import { elementChildren, type ContainerNode, type DocumentModel, type ElementPart } from "../scene/model";
@@ -80,7 +81,7 @@ function connectorsOf(model: DocumentModel, units: readonly Unit[]): Line[] {
   const children = new Map<ElementPart, ElementPart[]>();
   const out: Line[] = [];
   for (const unit of units) {
-    if (unit.role !== "connector") continue;
+    if (unit.role !== "connector" || outsideTree(unit)) continue;
     let node: ElementPart = model.root;
     for (const at of unit.path) {
       let list = children.get(node);

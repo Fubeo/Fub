@@ -86,7 +86,7 @@ altrimenti l'operazione è rifiutata con `missing-target`.
 |---|---|---|---|
 | `add` | `parent`, `pos`, `elem` oppure `raw` | inserisce l'elemento | `remove` con lo stesso `id`, o col percorso |
 | `remove` | `target` | elimina l'elemento con i suoi figli | `add` con l'elemento tolto e il suo posto |
-| `set` | `id`, oppure `#root`; `attrs` (una stringa, oppure `null` per togliere); `part` facoltativo, su una risorsa | cambia attributi; con `part`, quelli di una parte della risorsa | `set` con i valori precedenti, e lo stesso `part` |
+| `set` | `id`, oppure `#root`; `attrs` (una stringa, oppure `null` per togliere); `part` facoltativo, su una risorsa; `tag` facoltativo, su una forma | cambia attributi; con `part`, quelli di una parte della risorsa; con `tag`, anche il tipo della forma | `set` con i valori precedenti, lo stesso `part` e il `tag` di prima |
 | `text` | `id`, `lines` (una riga è una stringa, o la lista del suo testo e dei suoi [pezzi](scene-format-text.md)), `joins` facoltativo | sostituisce le righe di un `text` | `text` con le righe precedenti, pezzi compresi, e i `joins` di prima se l'operazione ne aveva o una riga aveva un `fub:join` |
 | `move` | `target`, `parent`, `pos` | sposta l'elemento: ordine o livello | `move` alla posizione precedente |
 | `ident` | `path`, `tag`, `id` (oppure `null` per togliere) | dà un id a un elemento modificabile che non ne ha, o gli toglie quello che ha | `ident` con l'id di prima, o con `id: null` |
@@ -127,7 +127,7 @@ Altri dettagli:
     spazi, senza niente prima del primo o dopo l'ultimo.
   - Un elemento che, letto in quel posto, il formato ammette passa dagli
     stessi controlli di `elem` (§4): valori nei limiti di §5, id nella forma
-    degli id nuovi, niente carta della pagina, livelli solo sotto la radice,
+    degli id nuovi, niente carta della pagina, livelli solo sotto la radice o in un livello,
     titolo e descrizione della radice solo con `meta`, tratti che si
     leggono. Il `d` di ogni tratto si riscrive col contorno ricalcolato, al
     suo posto o, se manca, in fondo al tag d'apertura; il resto resta com'è
@@ -149,7 +149,9 @@ Altri dettagli:
   del prefisso solo se nient'altro la usa.
 - **`meta`:** una stringa vuota scrive `<title/>` o `<desc/>`, come ogni
   elemento senza testo; `null` toglie l'elemento.
-- **`move`:** un livello sta solo sotto la radice; `title` e `desc` non
+- **`move`:** un livello sta solo sotto la radice o in un livello, dove è un
+  sottolivello; `set` scrive `fub:layer` su un figlio della radice o su un
+  sottolivello, mai su un gruppo dentro un livello; `title` e `desc` non
   entrano né escono dalla radice. Un elemento che spostandosi cambierebbe
   ruolo o namespace è rifiutato con `invalid-elem`.
 - **Id toccati:** un `set` su un gruppo o un livello riporta anche gli id dei
@@ -166,6 +168,19 @@ Altri dettagli:
   una parte non cambia. Su ciò che non è una risorsa, o con un `part` che non
   è una lista di indici, è `invalid-elem`; una parte che non c'è, anche
   dentro il testo di un titolo, è `missing-target`.
+- **`set` con `tag`: il tipo di una forma.** Come in VectorCraft, una forma
+  deformata (un punto spostato, una distorsione) diventa un tracciato al suo
+  posto: `tag` è il tipo nuovo, uno di `path`, `rect`, `circle`, `ellipse`,
+  `polygon` e `polyline`, e `attrs` toglie con `null` la geometria del tipo di
+  prima e scrive quella del tipo nuovo (`d` per un `path`). L'elemento tiene
+  id, attributi e figli, e si riscrive in forma canonica (§6); l'inversa è un
+  `set` col `tag` di prima e la sua geometria. Cambia tipo solo una foglia
+  disegnata come forma: un gruppo, un livello, una linea, un testo o un tipo
+  uguale a quello che c'è sono `invalid-elem`, come una geometria del tipo di
+  prima che resterebbe scritta, `tag` insieme a `part`, e un tracciato in un
+  documento con uno `<style>` o sotto una freccia (`marker-*`, sull'elemento o
+  su chi lo contiene), che lo renderebbero estraneo. Una forma solo spostata,
+  scalata o ruotata non cambia tipo: prende una `transform`.
 - **Tavole:** una tavola cambia insieme alla sua carta, in un `batch`. Alla
   fine di ogni operazione le tavole e le carte che ha toccato vanno insieme,
   altrimenti è `invalid-elem`; un `add` oltre 1 000 tavole è `limit`:
@@ -374,7 +389,7 @@ così com'è.
   solo `set` di `transform` alla fine del gesto. Gli stati intermedi non si
   registrano.
 - **Fusione:** due voci consecutive con lo stesso nome, fatte di `set` sulle
-  stesse chiavi degli stessi elementi, e delle stesse parti, o di due `batch`
+  stesse chiavi degli stessi elementi, e delle stesse parti e con lo stesso `tag`, o di due `batch`
   di quei `set` nello stesso ordine, a meno di 500 ms l'una dall'altra e
   senza altri cambiamenti in mezzo, diventano una voce sola: resta la prima
   inversa e l'ultima operazione in avanti, e l'undo resta esatto. Così una
@@ -437,101 +452,8 @@ devono verificare renderebbe il test circolare.
 { "name": "add-first-stroke", "input": "<svg …>…</svg>", "ops": [ { "op": "add", "parent": "l3f8a0c2d", "pos": { "last": true }, "elem": { "tag": "path", "attrs": { } } } ], "expect": { "outcome": "applied", "text": "<svg …>…</svg>" } }
 ```
 
-| # | Nome | Verifica |
-|---|---|---|
-| 1 | `add-first-stroke` | primo tratto in un livello vuoto |
-| 2 | `add-last-in-layer` | aggiunta in cima all'ordine visivo |
-| 3 | `add-after-anchor` | inserimento dopo un fratello |
-| 4 | `add-to-self-closing-group` | genitore `<g/>` riscritto in forma aperta |
-| 5 | `remove-middle` | nessuna riga vuota residua |
-| 6 | `remove-last-line` | rimozione dell'ultimo figlio |
-| 7 | `remove-with-foreign-neighbors` | i byte estranei vicini restano identici |
-| 8 | `set-transform` | solo `transform` cambia, l'inchiostro resta |
-| 9 | `set-null-removes-attr` | `null` toglie l'attributo |
-| 10 | `set-on-foreign` | rifiuto `foreign` |
-| 11 | `text-lines-emoji` | offset UTF-16 con coppie surrogate |
-| 12 | `move-z-order` | ordine nello stesso genitore |
-| 13 | `move-to-other-layer` | cambio di livello |
-| 14 | `move-into-descendant` | rifiuto `cycle` |
-| 15 | `batch-group` | raggruppamento: `add` del gruppo e `move` dei figli |
-| 16 | `batch-partial-failure` | rifiuto con l'indice dell'operazione fallita |
-| 17 | `duplicate-id-identical` | `applied` senza modifiche |
-| 18 | `duplicate-id-different` | rifiuto `duplicate-id` |
-| 19 | `locked-layer` | rifiuto `locked` |
-| 20 | `crlf-input` | operazione calcolata sul testo a LF; `text` consegnato con i CRLF originali |
-| 21 | `bom-input` | BOM conservato |
-| 22 | `paper-is-locked` | la carta non si modifica |
-| 23 | `unknown-fub-attr-preserved` | attributo `fub:*` sconosciuto conservato dopo un `set` |
-| 24 | `inkscape-attr-preserved` | attributo `inkscape:*` conservato |
-| 25 | `network-stroke-d-recomputed` | `d` arrivato dalla rete scartato e ricalcolato |
-| 26 | `mixed-eol` | file con CRLF e LF misti: i terminatori non toccati restano identici |
-| 27 | `page-grow` | `page` allarga insieme `viewBox` e carta |
-| 28 | `meta-title` | `meta` crea il `<title>` mancante |
-| 29 | `adopt-foreign` | «Modifica» su un SVG estraneo |
-| 30 | `ident-then-set` | `ident` e `set` nello stesso `batch` su un elemento senza id |
-| 31 | `remove-foreign-by-path` | `remove` di un elemento estraneo senza id, indirizzato con il percorso |
-| 32 | `set-self-closing-group` | `set` su un `<g/>` autochiuso, riscritto per intero |
-| 33 | `first-under-root` | `first` sotto la radice va dopo titolo e carta |
-| 34 | `text-inherited-size` | interlinea di una riga nuova dal corpo ereditato |
-| 35 | `root-units-guides` | `set` su `#root` scrive unità e guide nell'ordine della radice; la geometria resta |
-| 36 | `root-guides-remove` | `null` toglie le guide, l'unità resta |
-| 37 | `root-guides-invalid` | guide fuori grammatica: rifiuto `invalid-elem` |
-| 38 | `root-units-other-prefix` | l'unità col prefisso che il documento lega al namespace di FubDraw |
-| 39 | `root-other-attr` | sulla radice un attributo che cambia con `page`: rifiuto `invalid-elem` |
-| 40 | `locked-group` | un oggetto dentro un gruppo bloccato non cambia: rifiuto `locked` |
-| 41 | `locked-group-add` | dentro un gruppo bloccato non si aggiunge niente: rifiuto `locked` |
-| 42 | `locked-object-unlock` | una forma bloccata si cambia ancora: un `set` la sblocca |
-| 43 | `add-raw-foreign` | `add` con `raw` scrive l'elemento estraneo così com'è, e l'inversa lo toglie col percorso |
-| 44 | `add-raw-sequence` | un `raw` con un elemento del formato e uno estraneo; l'inversa è un `batch` che li toglie dall'ultimo al primo |
-| 45 | `add-raw-duplicate-id` | un `raw` con dentro un id già presente: rifiuto `duplicate-id` |
-| 46 | `text-runs` | una riga coi pezzi, sulla stessa riga del file e con gli attributi in ordine canonico |
-| 47 | `text-runs-canonical` | i pezzi in forma canonica; l'inversa riporta i pezzi di prima |
-| 48 | `text-runs-foreign-piece` | un pezzo con un attributo della riga: rifiuto `invalid-elem` |
-| 49 | `add-text-runs` | `add` di un testo coi pezzi e la tipografia nuova, come lo scrive un duplicato |
-| 50 | `add-defs-first` | la `fub-defs` va dopo il titolo e prima della carta |
-| 51 | `add-gradient-use` | un `batch` aggiunge una sfumatura e la dà a un rettangolo, col ripiego |
-| 52 | `remove-resource-in-use` | togliere una sfumatura usata: rifiuto `in-use` |
-| 53 | `collect-private` | un `set` che toglie l'ultimo riferimento toglie la sfumatura privata e la `fub-defs` vuota; l'inversa le rimette |
-| 54 | `collect-keeps-unowned` | una sfumatura senza `fub:role` resta |
-| 55 | `collect-cascade` | togliere l'oggetto toglie il motivo privato e la sfumatura privata del suo contenuto |
-| 56 | `add-resource-dangling` | una risorsa con un id a cui un elemento estraneo rimanda già: rifiuto `duplicate-id` |
-| 57 | `set-missing-resource` | un `fill` verso una risorsa che non c'è: rifiuto `invalid-elem` |
-| 58 | `add-raw-resources` | un `raw` con una sfumatura e un motivo che la usa, nella stessa `defs` |
-| 59 | `filter-closed-list` | un filtro con `feTurbulence`: rifiuto `invalid-elem` |
-| 60 | `text-path-runs` | `text` su un testo su tracciato sostituisce il contenuto del `textPath` coi pezzi e ne tiene gli attributi; l'inversa rimette la riga di prima |
-| 61 | `text-joins` | `text` con `joins` su un testo in area: ogni riga ha il suo `fub:join`, la prima nessuno; l'inversa rimette righe e `joins` di prima |
-| 62 | `text-path-one-line` | un testo su tracciato ha una riga sola: `text` con due righe, rifiuto `invalid-elem` |
-| 63 | `add-text-path` | un `batch` aggiunge la `defs` col tracciato e il testo che lo segue con `xlink:href` e i pezzi; l'inversa toglie l'uno e l'altro |
-| 64 | `remove-text-collects-path` | togliere un testo su tracciato toglie il suo tracciato privato e la `fub-defs` rimasta vuota; l'inversa li rimette |
-| 65 | `board-first` | la prima tavola nasce dalla pagina: un `batch` aggiunge il `view` con `first`, dopo la carta, e dà `fub:board` alla carta |
-| 66 | `board-add` | una tavola nuova con la sua carta, dopo l'ultima carta e dopo l'ultima tavola |
-| 67 | `board-paper-mismatch` | una tavola e la sua carta con geometrie diverse: rifiuto `invalid-elem` |
-| 68 | `board-move` | un `batch` cambia insieme il `viewBox` della tavola e la geometria della carta |
-| 69 | `board-set-alone` | il `viewBox` di una tavola senza la sua carta: rifiuto `invalid-elem` |
-| 70 | `board-remove-alone` | togliere una tavola e lasciare la sua carta: rifiuto `invalid-elem` |
-| 71 | `board-remove-last` | togliere l'ultima tavola: la carta perde `fub:board` e `page` la riporta sulla pagina |
-| 72 | `page-skips-board-papers` | `page` in un disegno con le tavole cambia soltanto la radice |
-| 73 | `board-free-paper` | una tavola nuova accanto alla carta della pagina: rifiuto `invalid-elem` |
-| 74 | `anchor-pdf` | impronta e pagine in coda alla radice di annotazioni che non le avevano; l'inversa le toglie |
-| 75 | `add-page-group` | la prima annotazione di una pagina nasce in un `batch` col suo gruppo `p0003`, dopo `p0001` e prima di `p0005` |
-| 76 | `set-swatch-stop` | un `batch` cambia col `part` il punto di un campione e il ripiego di chi lo usa; chi sta in un livello bloccato tiene il suo |
-| 77 | `set-part-not-resource` | `set` con `part` su un oggetto: rifiuto `invalid-elem` |
-| 78 | `add-connector` | un connettore a gomito agganciato a due rettangoli: `fub:shape`, `fub:geom`, `fub:from` e `fub:to` vanno subito dopo l'id, prima di `d`, in quest'ordine; l'inversa lo toglie |
-| 79 | `set-connector-free` | un `batch` stacca un capo: `set` cambia `fub:geom` e `d` e toglie `fub:from` con `null`; l'inversa lo rimette al suo posto e il testo torna a quello di prima byte per byte, anche su un motore aperto dal testo di dopo |
-| 80 | `add-label` | l'etichetta di un rettangolo nel suo gruppo, dopo di lui: `fub:inside` e `fub:wrap` vanno subito dopo l'id, prima di `x` e `y`, in quest'ordine; l'inversa la toglie |
-| 81 | `remove-style-in-use` | togliere uno [stile](scene-format-styles.md) che un oggetto segue: rifiuto `in-use` |
-| 82 | `collect-keeps-style` | togliere l'ultimo oggetto che segue uno stile lascia lo stile e la sua sfumatura privata |
-| 83 | `remove-style-collects-private` | un `batch` toglie `fub:style` da chi segue e poi lo stile: la raccolta toglie anche la sua sfumatura privata e la `fub-defs` rimasta vuota |
-| 84 | `add-symbol-instance` | un `batch` aggiunge la `defs` con un [simbolo](scene-format-symbols.md) e una sua istanza: il simbolo ha l'id di una risorsa, il suo contenuto quello di un oggetto, e `use` scrive `transform` prima di `href`; l'inversa toglie l'una e l'altra |
-| 85 | `remove-symbol-in-use` | togliere un simbolo che un'istanza usa: rifiuto `in-use` |
-| 86 | `symbol-cycle` | un'istanza di un simbolo dentro il simbolo stesso: rifiuto `cycle` |
-| 87 | `remove-instance-keeps-symbol` | togliere l'ultima istanza lascia il simbolo, che non si raccoglie mai |
-| 88 | `move-into-symbol` | un rettangolo del livello in fondo a un simbolo: resta un oggetto col suo id, rientrato come il contenuto del simbolo |
-| 89 | `add-repeat` | un `batch` fa una [ripetizione](scene-format-repeats.md) di un rettangolo: il gruppo con `fub:repeat` subito dopo l'id, l'originale spostato dentro e due copie; l'inversa toglie le copie, rimette l'originale e toglie il gruppo |
-| 90 | `remove-original-in-use` | togliere l'originale di una ripetizione che ha copie: rifiuto `in-use` |
-| 91 | `unset-repeat-in-use` | togliere `fub:repeat` a un gruppo che ha copie: rifiuto `in-use` |
-| 92 | `set-repeat-rewrites-copies` | un `batch` cambia la ripetizione da griglia a radiale e riscrive le trasformazioni delle copie, che restano copie |
-| 93 | `repeat-over-foreign-use` | `fub:repeat` su un gruppo con un `use` estraneo verso un fratello: rifiuto `duplicate-id` |
+La tabella dei vettori, uno per riga col numero, il nome e ciò che
+verifica, sta in [vettori delle operazioni](scene-operations-vectors.md).
 
 Oltre ai campi dell'esempio, ogni vettore ha `description`. `expect` può avere
 `reason` e `index` per un rifiuto; `duplicate`, `inverse` ed `edits`, cioè le

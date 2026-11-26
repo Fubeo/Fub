@@ -1,7 +1,6 @@
 // @vitest-environment happy-dom
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { markdown } from "@codemirror/lang-markdown";
-import { ensureSyntaxTree } from "@codemirror/language";
 import { history } from "@codemirror/commands";
 import { EditorState, Prec } from "@codemirror/state";
 import { EditorView, runScopeHandlers } from "@codemirror/view";
@@ -13,9 +12,12 @@ import { renderMarkdown } from "../render";
 import { blocksMode } from "../blocks/index";
 import { mountReadingHeader } from "./header";
 import { mountMarkdown } from "../mount";
+import { loadKatex } from "../math";
+import { loadLazyParts } from "../../../../../ui/lazy-part";
 import type { MarkdownResourceChange, MarkdownResources } from "../../../../../ui/markdown-resources";
 import corpus from "../../../../../__fixtures__/corpus-syntax.json";
 import skin from "../../../../../theme/scrittoio/skin.css?raw";
+import { parsedView } from "../test-support";
 
 // La testata della pagina (T6, E3): la stessa in Scrittura e in Lettura.
 // Copertina, icona, titolo, proprietà in evidenza, «Altre N», «Aggiungi una
@@ -27,6 +29,18 @@ afterEach(() => {
   for (const view of views.splice(0)) view.destroy();
   document.body.replaceChildren();
   vi.unstubAllGlobals();
+});
+// La Lettura del corpus chiede KaTeX (`loadKatex`) e le righe delle proprietà
+// scaldano i loro pezzi (`lazyPart`): `import()` che il caso non aspetta. Sotto
+// carico arrivavano dopo la fine del file, e il primo `console` di un modulo
+// arrivato tardi (l'avviso di KaTeX sul modo quirks) trovava il worker già in
+// chiusura: «Closing rpc while "onUserConsoleLog" was pending» (#444). Prima di
+// finire il file carica e aspetta KaTeX e ogni pezzo pigro creato dai moduli
+// che importa, chiesto o no da un caso: né `loadKatex` né `lazyPart` dicono
+// quali richieste sono già partite, e così ciò che i casi hanno chiesto
+// arriva di sicuro dentro il file.
+afterAll(async () => {
+  await Promise.all([loadKatex(), loadLazyParts()]);
 });
 
 const NOTE = [
@@ -61,8 +75,7 @@ function mount(doc: string, display: PropertiesDisplay = "visible", readOnly = f
       ],
     }),
   });
-  ensureSyntaxTree(view.state, view.state.doc.length, 1000);
-  view.dispatch({});
+  parsedView(view);
   views.push(view);
   return view;
 }
@@ -70,8 +83,8 @@ function mount(doc: string, display: PropertiesDisplay = "visible", readOnly = f
 const header = (view: EditorView) => view.dom.querySelector<HTMLElement>(".cm-fub-page")!;
 const rows = (root: ParentNode) => [...root.querySelectorAll<HTMLElement>(".cm-fub-page-prop")].map((row) => row.dataset.key);
 const toggle = (root: ParentNode) => root.querySelector<HTMLButtonElement>(".cm-fub-page-props-more");
-const press = (target: HTMLElement, key: string) =>
-  target.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));
+const press = (target: HTMLElement, key: string, init: KeyboardEventInit = {}) =>
+  target.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, ...init }));
 
 describe("la testata in Scrittura", () => {
   it("mette in ordine copertina, icona, titolo, proprietà e poi il testo", () => {
@@ -199,6 +212,23 @@ describe("la testata in Scrittura", () => {
     expect(root.querySelector("button.cm-fub-page-prop-value")).toBeNull();
     expect(root.querySelector(".cm-fub-page-cover-tools")).toBeNull();
     expect(toggle(root)).not.toBeNull();
+  });
+
+  it("nel titolo Invio, Esc e ↓ che chiudono una composizione (WebKit: codice 229) restano del metodo d'immissione", () => {
+    const view = mount(NOTE);
+    const title = header(view).querySelector<HTMLInputElement>(".cm-fub-page-title")!;
+    const before = view.state.doc.toString();
+    title.focus();
+    title.value = "Nota nuova";
+    for (const key of ["Enter", "Escape", "ArrowDown"]) {
+      expect(press(title, key, { keyCode: 229 }), key).toBe(true);
+    }
+    expect(document.activeElement).toBe(title);
+    expect(title.value).toBe("Nota nuova");
+    expect(view.state.doc.toString()).toBe(before);
+    press(title, "Escape");
+    expect(title.value).not.toBe("Nota nuova");
+    expect(document.activeElement).not.toBe(title);
   });
 
   it("una battuta nel testo non rifà la testata", () => {
@@ -465,10 +495,69 @@ describe("la riga degli strumenti della testata", () => {
     };
   }
 
-  it("nasconde dalla fine ciò che non ci sta, e «⋯» lo offre e lo fa", () => {
+  /// L'osservatore delle misure come nel browser: chiama chi osserva un
+  /// elemento quando il layout gli ha dato una misura (`layout()`), mai per
+  /// un elemento fuori dal documento. Quello di happy-dom non chiama mai.
+  function fakeObserver(): { layout: () => void; restore: () => void } {
+    const original = globalThis.ResizeObserver;
+    const watched: Array<{ callback: ResizeObserverCallback; target: Element; observer: ResizeObserver }> = [];
+    class LayoutObserver {
+      constructor(private readonly callback: ResizeObserverCallback) {}
+      observe(target: Element): void {
+        watched.push({ callback: this.callback, target, observer: this as unknown as ResizeObserver });
+      }
+      unobserve(): void {}
+      disconnect(): void {
+        for (let i = watched.length - 1; i >= 0; i -= 1) if (watched[i]!.observer === (this as unknown as ResizeObserver)) watched.splice(i, 1);
+      }
+    }
+    globalThis.ResizeObserver = LayoutObserver as unknown as typeof ResizeObserver;
+    return {
+      layout: () => {
+        for (const { callback, target, observer } of [...watched]) {
+          if (target.isConnected) callback([{ target } as ResizeObserverEntry], observer);
+        }
+      },
+      restore: () => {
+        globalThis.ResizeObserver = original;
+      },
+    };
+  }
+
+  it("non misura la riga finché è fuori dal documento: la misura il primo layout", () => {
     const restore = fakeWidths(300);
+    const observer = fakeObserver();
+    // Ogni lettura di `scrollWidth` su una riga staccata: in WebKit rifà
+    // stile e layout di tutto il documento, per una misura che vale zero.
+    const proto = HTMLElement.prototype;
+    const faked = Object.getOwnPropertyDescriptor(proto, "scrollWidth")!;
+    let detachedReads = 0;
+    Object.defineProperty(proto, "scrollWidth", {
+      configurable: true,
+      get(this: HTMLElement) {
+        if (this.classList.contains("cm-fub-page-tools") && !this.isConnected) detachedReads += 1;
+        return faked.get!.call(this) as number;
+      },
+    });
     try {
       const view = mount("---\nstato: aperto\n---\nTesto");
+      expect(detachedReads).toBe(0);
+      observer.layout();
+      const hidden = [...header(view).querySelectorAll<HTMLButtonElement>(".cm-fub-page-tool")].map((button) => button.hidden);
+      expect(hidden).toEqual([false, false, true, false]);
+    } finally {
+      Object.defineProperty(proto, "scrollWidth", faked);
+      observer.restore();
+      restore();
+    }
+  });
+
+  it("nasconde dalla fine ciò che non ci sta, e «⋯» lo offre e lo fa", () => {
+    const restore = fakeWidths(300);
+    const observer = fakeObserver();
+    try {
+      const view = mount("---\nstato: aperto\n---\nTesto");
+      observer.layout();
       const tools = [...header(view).querySelectorAll<HTMLButtonElement>(".cm-fub-page-tool")];
       expect(tools.map((button) => [button.getAttribute("aria-label") ?? button.textContent, button.hidden])).toEqual([
         ["Aggiungi un'icona", false],
@@ -483,19 +572,23 @@ describe("la riga degli strumenti della testata", () => {
       items[0]!.click();
       expect(view.state.doc.toString()).toContain("description: \n---\nTesto");
     } finally {
+      observer.restore();
       restore();
     }
   });
 
   it("con posto per tutti non nasconde niente, e il menu ha solo le opzioni della pagina", () => {
     const restore = fakeWidths(600);
+    const observer = fakeObserver();
     try {
       const view = mount("---\nstato: aperto\n---\nTesto");
+      observer.layout();
       expect([...header(view).querySelectorAll<HTMLButtonElement>(".cm-fub-page-tool")].some((button) => button.hidden)).toBe(false);
       header(view).querySelector<HTMLButtonElement>(".cm-fub-page-more")!.click();
       expect(document.querySelectorAll("[role=menuitem]")).toHaveLength(0);
       expect(document.querySelectorAll("[role=menuitemcheckbox]").length).toBeGreaterThan(0);
     } finally {
+      observer.restore();
       restore();
     }
   });

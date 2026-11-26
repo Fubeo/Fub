@@ -2,7 +2,7 @@
 //! grande, e dove va il tempo.
 //!
 //! ```text
-//! cargo run --release -p fub-host --example apertura_30k
+//! cargo run --release -p fub-host --example open_30k
 //! ```
 //!
 //! Tre scenari sulla stessa cartella, e tre domande diverse:
@@ -15,6 +15,8 @@
 //!    chiude e riapre l'app.
 //! 3. **Tiepido** — poche note toccate mentre l'app era chiusa: la scansione
 //!    è quasi tutta cache, ma le note cambiate si rileggono per intero.
+//!
+//! Le note toccate prima del tiepido sono `FUB_APERTURA_TOCCATE` (default 100).
 //!
 //! Il numero di note è parametrico (`FUB_APERTURA_N`, default 30000): il banco
 //! vero gira a 30k, e una prova piccola a 200 basta per vedere la forma delle
@@ -148,10 +150,18 @@ fn seed(root: &Utf8Path, n: usize) {
     });
 }
 
-/// Tocca le prime `n.min(100)` note: le riscrive con un suffisso, come un
+/// Quante note toccare prima del tiepido: `FUB_APERTURA_TOCCATE`, default 100.
+fn touched_from_env() -> usize {
+    std::env::var("FUB_APERTURA_TOCCATE")
+        .ok()
+        .map(|v| v.parse().expect("FUB_APERTURA_TOCCATE must be an integer"))
+        .unwrap_or(100)
+}
+
+/// Tocca le prime `touched.min(n)` note: le riscrive con un suffisso, come un
 /// salvataggio fatto ad app chiusa.
-fn touches(root: &Utf8Path, n: usize) {
-    for the in 0..n.min(100) {
+fn touches(root: &Utf8Path, n: usize, touched: usize) {
+    for the in 0..touched.min(n) {
         let path = root.join(format!("Nota {the}.md"));
         let mut b = std::fs::read_to_string(&path).unwrap();
         b.push_str(" tocco\n");
@@ -178,8 +188,11 @@ fn print_report(name: &str, sub: &OpeningSub, open_ms: Duration, index_ms: Durat
     println!("{:<18} {:>9} {:>5}", "phase", "ms", "n");
     for phase in [
         "open",
+        "entries_load",
+        "entries_decode",
         "scan_vault",
         "catch_up",
+        "restore",
         "fotografia",
         "fetta",
         "plan_batch",
@@ -187,7 +200,13 @@ fn print_report(name: &str, sub: &OpeningSub, open_ms: Duration, index_ms: Durat
         "graph_sources",
         "rebuild_graph",
         "reconcile",
+        "rejoin",
         "flush_indexes",
+        "ricerca_drain",
+        "ricerca_segmenti",
+        "ricerca_commit",
+        "ricerca_reload",
+        "ricerca_manifest",
         "store_entries",
         "collect_doc_data",
     ] {
@@ -246,6 +265,6 @@ fn main() {
 
     // 4. Si chiude, si toccano poche note ad app chiusa, poi la riapertura.
     host.close_vault(&root).unwrap();
-    touches(&root, n);
+    touches(&root, n, touched_from_env());
     scenario(&host, &root, "tiepido", &sub);
 }

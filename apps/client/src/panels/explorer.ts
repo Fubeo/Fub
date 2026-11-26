@@ -78,6 +78,7 @@ import { mountExplorerTypes, type ExplorerTypes } from "./explorer-types";
 import { addBookmark, loadBookmarks, type BookmarkTarget } from "../state/bookmarks";
 import { openCurrentInNewWindow } from "../state/document-windows";
 import { flushPendingSave, renameKeepingBuffer, type RenameResult } from "../state/document-session";
+import { placedTitle, renamedPath as renamedPagePath } from "../state/page-rename";
 import { contextMenuItems, hasContextMenuViews, type ContextTarget } from "../ui/context-views";
 import { trashManyWithConfirm, trashWithConfirm } from "./trash";
 import { mountTreeSelection, type TreeSelection } from "./explorer-selection";
@@ -95,6 +96,7 @@ import type { ResourceKind } from "../host/contract";
 import { api } from "../host/ipc";
 import { engineExtension, engineWarmup, type EngineWarmup } from "./engine-warmup";
 import { primaryClicksOnly } from "../ui/primary-clicks";
+import { composingKey } from "../kit/ime";
 
 const fileListEl = $("#file-list");
 /// Il moto della cartella appena aperta o chiusa, finché l'albero non si
@@ -357,7 +359,7 @@ export function mountExplorer(lifetime: Lifetime): void {
   selection = mountTreeSelection({
     list: fileListEl,
     currentDoc: () => state.currentDoc,
-    trash: (paths) => trashManyWithConfirm(paths),
+    trash: async (paths) => (await trashManyWithConfirm(paths)) > 0,
     move: (paths) => pickMoveFolders(paths),
     group: (paths) => groupIntoNewFolder(paths),
     copy: (paths) => copyEntries(paths),
@@ -368,6 +370,13 @@ export function mountExplorer(lifetime: Lifetime): void {
   lifetime.add(() => {
     selection = null;
   });
+  // Una voce che sparisce esce dalla scelta quando il kernel lo dice, anche se
+  // l'ha spostata, rinominata o cestinata un altro programma: la barra non
+  // offre mai un percorso che non c'è più (IMP-1803).
+  lifetime.add(onEvent("document_renamed", (event) => selection?.forget(event.from)));
+  lifetime.add(onEvent("document_removed", (event) => selection?.forget(event.id)));
+  lifetime.add(onEvent("entry_renamed", (event) => selection?.forget(event.from)));
+  lifetime.add(onEvent("entry_removed", (event) => selection?.forget(event.id)));
   // «Tutte le note» sta subito sopra l'albero; la barra della scelta multipla
   // sta subito sotto.
   fileListEl.before(allTitleEl);
@@ -445,7 +454,7 @@ export function mountExplorer(lifetime: Lifetime): void {
     const next = entries.find((entry) => entry.spec.key === FILES_LEGACY_FOLDER_PAGES)?.value === true;
     if (next === legacyPages) return;
     legacyPages = next;
-    await refreshFromKernel(true);
+    await expected(refreshFromKernel(true));
   });
   void readLegacyPages();
   // Gli XMP e le miniature nell'albero (T26): cambiano soltanto ciò che si
@@ -1377,9 +1386,10 @@ async function pickMoveFolder(id: string): Promise<void> {
 /// Lo stesso selettore per più note insieme (la scelta multipla dell'albero):
 /// le cartelle escluse sono quelle che non portano da nessuna parte per **tutte**
 /// le note (la casa comune, le note stesse), e lo spostamento va in fila — un
-/// rifiuto di una non ferma le altre, perché `moveIntoFolder` lo dice da sé.
-async function pickMoveFolders(ids: readonly string[]): Promise<void> {
-  if (ids.length === 0) return;
+/// rifiuto di una non ferma le altre, e `moveNotesInto` le dice tutte.
+/// `false` se non si è spostato niente perché chi sceglie ha annullato.
+async function pickMoveFolders(ids: readonly string[]): Promise<boolean> {
+  if (ids.length === 0) return false;
   // Un selettore con filtro e non un menu contestuale: le cartelle di un vault
   // vero sono centinaia, e un menu senza posizione né scorrimento non le regge.
   const folders = await vaultFolders(FOLDER_PICK);
@@ -1402,33 +1412,45 @@ async function pickMoveFolders(ids: readonly string[]): Promise<void> {
     ],
     more: other,
   });
-  if (choice === null) return;
+  if (choice === null) return false;
+  const notes: string[] = [];
   for (const id of ids) {
     if (folderRowOf(id)) await moveFolderInto(id, choice);
-    else await moveIntoFolder(id, choice);
+    else notes.push(id);
   }
+  await moveNotesInto(notes, choice);
+  return true;
 }
 
 /// «In una cartella nuova»: la cartella nasce nella casa comune delle note
-/// scelte (la radice visibile, se ne hanno più d'una) e le note ci entrano con
-/// lo stesso spostamento del menu. Se la cartella non nasce, nessuna si muove.
-async function groupIntoNewFolder(ids: readonly string[]): Promise<void> {
-  if (ids.length === 0) return;
+/// scelte (la radice visibile, se ne hanno più d'una), e il dialogo dice dove
+/// prima che si scriva il nome. Le note ci entrano con lo stesso spostamento
+/// del menu. Se la cartella non nasce, nessuna si muove: `false`, come per un
+/// dialogo annullato, e la scelta torna.
+async function groupIntoNewFolder(ids: readonly string[]): Promise<boolean> {
+  if (ids.length === 0) return false;
   const homes = new Set(ids.map(parentOf));
   const parent = homes.size === 1 ? [...homes][0]! : (state.activeSpace ?? "");
-  const name = (await promptText({ title: t("explorer.selection.group"), label: t("explorer.new_folder") }))?.trim();
-  if (!name) return;
+  const name = (await promptText({
+    title: t("explorer.selection.group"),
+    label: parent ? t("explorer.selection.group_where", { folder: parent }) : t("explorer.selection.group_where_root"),
+  }))?.trim();
+  if (!name) return false;
   const wanted = parent ? `${parent}/${name}` : name;
+  let made: string;
   try {
-    await createFolder(wanted);
+    // Il percorso che il kernel ha creato davvero (normalizzato): le note
+    // vanno lì, non nella stringa chiesta.
+    made = await createFolder(wanted);
   } catch (e) {
     notify(t("explorer.new_folder_failed", { folder: wanted, reason: errorText(e) }), "guasto");
-    return;
+    return false;
   }
-  for (const folder of [parent, wanted]) if (folder) state.expanded.add(folder);
+  for (const folder of [parent, made]) if (folder) state.expanded.add(folder);
   saveExpanded();
-  for (const id of ids) await moveIntoFolder(id, wanted);
+  await moveNotesInto(ids, made);
   await refreshFromKernel(true);
+  return true;
 }
 
 /// Quante cartelle chiede il selettore di destinazione: più di un livello
@@ -2297,6 +2319,8 @@ function startNewFolder(parent: string): void {
     }
   };
   field.addEventListener("keydown", (e) => {
+    // Invio ed Esc della composizione scelgono il candidato, non il nome.
+    if (composingKey(e)) return;
     if (e.key === "Enter") void confirm();
     else if (e.key === "Escape") close();
   });
@@ -2389,6 +2413,7 @@ function startRename(row: HTMLElement, id: string, preset?: string, problem?: st
   };
 
   input.addEventListener("keydown", (e) => {
+    if (composingKey(e)) return;
     if (e.key === "Enter") void confirm();
     else if (e.key === "Escape") cancel();
   });
@@ -2412,19 +2437,13 @@ function reportRenameCollision(outcome: RenameResult, typed: string): boolean {
   );
   return true;
 }
-/// Il path che una rinomina in posto dà alla voce: per una nota cambia il
-/// nome pagina e restano cartella ed estensione, per una cartella l'ultimo
-/// segmento.
+/// Il path che una rinomina in posto dà alla voce, con la regola del titolo
+/// (`placedTitle`, IMP-2800): un nome semplice resta nella cartella, uno «/»
+/// in testa o la cartella stessa in testa partono dalla radice. Una nota
+/// tiene la sua estensione.
 function renamedPath(from: string, newName: string, folder = false): string {
-  if (folder) {
-    const parent = parentOf(from);
-    return normalizedName(parent ? `${parent}/${newName}` : newName);
-  }
-  const slash = from.lastIndexOf("/");
-  const dir = slash === -1 ? "" : from.slice(0, slash + 1);
-  const dot = from.lastIndexOf(".");
-  const ext = dot > slash ? from.slice(dot) : "";
-  return normalizedName(`${dir}${newName}${ext}`);
+  if (folder) return normalizedName(placedTitle(parentOf(from), newName));
+  return renamedPagePath(from, newName);
 }
 
 async function renameDoc(from: string, newPageName: string, typed?: string): Promise<void> {
@@ -2807,38 +2826,74 @@ async function moveIntoFolder(id: string, folderPath: string): Promise<void> {
   const to = folderPath ? `${folderPath}/${childName(id)}` : childName(id);
   if (to === id || moving.has(id)) return;
   if (await ensureSaved()) return;
-  moving.add(id);
-  markMoving(id, true);
-  try {
-    const outcome = await renameKeepingBuffer(id, to);
-    if (outcome.kind === "collision") {
-      notify(
-        t("explorer.move_failed", {
-          doc: id,
-          folder: folderPath || t("explorer.root"),
-          reason: t("explorer.destination_open"),
-        }),
-        "guasto",
-      );
-      return;
-    }
-  } catch (e) {
-    notify(
-      t("explorer.move_failed", {
-        doc: id,
-        folder: folderPath || t("explorer.root"),
-        reason: errorText(e),
-      }),
-      "guasto",
-    );
+  const refused = await moveNote(id, folderPath);
+  if (refused !== null) {
+    notify(t("explorer.move_failed", { doc: id, folder: folderPath || t("explorer.root"), reason: refused }), "guasto");
     return;
-  } finally {
-    moving.delete(id);
-    markMoving(id, false);
   }
   if (folderPath) state.expanded.add(folderPath);
   saveExpanded();
   await refreshDocuments();
+}
+
+/// Lo spostamento di una nota, senza avvisi: `null` se è al posto nuovo (o
+/// c'era già), altrimenti il motivo per cui è rimasta dov'era. Chi chiama ha
+/// già messo in salvo i buffer, e lo dice lui.
+async function moveNote(id: string, folderPath: string): Promise<string | null> {
+  const to = folderPath ? `${folderPath}/${childName(id)}` : childName(id);
+  if (to === id) return null;
+  if (moving.has(id)) return t("explorer.move_in_flight");
+  moving.add(id);
+  markMoving(id, true);
+  try {
+    const outcome = await renameKeepingBuffer(id, to);
+    return outcome.kind === "collision" ? t("explorer.destination_open") : null;
+  } catch (e) {
+    return errorText(e);
+  } finally {
+    moving.delete(id);
+    markMoving(id, false);
+  }
+}
+
+/// Più note nella stessa cartella (la scelta dell'albero, il trascinamento di
+/// una scelta, «In una cartella nuova»): una alla volta, perché ogni rinomina
+/// riscrive i link delle altre, ma **un racconto solo** (IMP-3804). Mentre
+/// vanno, un avviso dice a che punto sono; alla fine dice quante sono
+/// arrivate, e ogni nota rimasta indietro ha il suo avviso col suo motivo.
+/// Nessuna resta indietro in silenzio, e nessuna si perde: una nota che non
+/// si sposta è ancora dov'era, col suo nome.
+async function moveNotesInto(ids: readonly string[], folderPath: string): Promise<void> {
+  if (ids.length === 0) return;
+  if (ids.length === 1) {
+    await moveIntoFolder(ids[0]!, folderPath);
+    return;
+  }
+  if (await ensureSaved()) return;
+  const folder = folderPath || t("explorer.root");
+  const total = String(ids.length);
+  const progress = notify(t("explorer.moving_many", { n: total, folder, done: "0" }));
+  const refused: Array<{ id: string; reason: string }> = [];
+  let done = 0;
+  try {
+    for (const id of ids) {
+      const reason = await moveNote(id, folderPath);
+      if (reason === null) done += 1;
+      else refused.push({ id, reason });
+      progress.rewrite(t("explorer.moving_many", { n: total, folder, done: String(done + refused.length) }));
+    }
+  } finally {
+    progress.withdraw();
+    if (folderPath) state.expanded.add(folderPath);
+    saveExpanded();
+    await refreshDocuments();
+  }
+  if (refused.length === 0) {
+    notify(t("explorer.moved_many", { n: String(done), folder }));
+    return;
+  }
+  notify(t("explorer.moved_some", { done: String(done), n: total, folder, left: String(refused.length) }), "guasto");
+  for (const { id, reason } of refused) notify(t("explorer.move_failed", { doc: id, folder, reason }), "guasto");
 }
 
 /// Progresso dello spostamento sulla riga (U11): `aria-busy` finché il rename
@@ -2879,12 +2934,17 @@ function wireRootDropTarget(lifetime: Lifetime): void {
 /// nella scelta, tutte le scelte, una alla volta e con lo stesso comando del
 /// menu. Una cartella non entra in sé stessa né in una figlia: la si salta.
 async function moveGroupInto(dragged: NonNullable<typeof drag>, folder: string): Promise<void> {
+  // Come i gesti della barra: le note trascinate escono dalla scelta quando
+  // partono, non quando arrivano, o la fine di uno spostamento lungo
+  // cancellerebbe la scelta fatta nel frattempo (IMP-1803).
+  if (dragged.group.length > 1) selection?.clear();
+  const notes: string[] = [];
   for (const path of dragged.group) {
     if (path === folder || folder.startsWith(`${path}/`) || parentOf(path) === folder) continue;
     if (folderRowOf(path) || (path === dragged.path && dragged.kind === "folder")) await moveFolderInto(path, folder);
-    else await moveIntoFolder(path, folder);
+    else notes.push(path);
   }
-  if (dragged.group.length > 1) selection?.clear();
+  await moveNotesInto(notes, folder);
 }
 
 /// La cartella che riceve un rilascio da fuori sotto `target`: la cartella

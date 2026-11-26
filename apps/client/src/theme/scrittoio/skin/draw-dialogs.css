@@ -161,6 +161,34 @@
 .draw-commands-empty:empty {
   display: none;
 }
+/* Una voce che non vale adesso si vede attenuata, col suo perché (K6 T9a). */
+.draw-commands-row[aria-disabled="true"] .draw-commands-label {
+  color: var(--muted);
+}
+/* La riga attiva come nel prototipo: il testo verde, senza il fondo del
+   riquadro del kit. Il filo a sinistra è il segno che l'a11y chiede a un'opzione
+   attiva (bench/a11y-rules.mjs, modalComboboxGap: fondo, contorno, ombra o bordo):
+   il testo verde da solo non lo dà. */
+.draw-commands-list > .kit-list-highlight {
+  display: none;
+}
+.draw-commands-row[data-active] {
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+/* Le righe della tavolozza stanno una sotto l'altra, come nel prototipo (28 px
+   per riga): il gap di 2 px che la lista del kit mette fra le sue figlie qui
+   non c'è. Il kit non cambia. */
+.draw-commands-dialog .draw-commands-list {
+  gap: 0;
+}
+/* La croce di cancellazione del browser non c'è nel prototipo, il cui campo non
+   ha il fuoco: qui si cancella con la tastiera. Fub non ha una regola sua per i
+   campi di ricerca (cercata nel tema e nel kit). */
+.draw-commands-field input::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+  appearance: none;
+  display: none;
+}
 /* «Personalizza la barra…»: una riga per strumento, con la casella, il
    nome e le frecce; la riga presa si trascina. */
 .draw-toolbar-dialog {

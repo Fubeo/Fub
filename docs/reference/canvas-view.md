@@ -107,7 +107,12 @@ sono spenti.
 - **Il doppio tocco** di un dito nel vuoto (entro 300 ms e 24 px) mette lì
   una scheda di testo già in scrittura, come il doppio clic; sopra una
   scheda, un filo o un controllo no. Il doppio clic del mouse ha la stessa
-  regola: su una porta o su un filo non mette niente (IMP-053).
+  regola: su una porta o su un filo non mette niente (IMP-053). La scheda
+  ha l'angolo in alto a sinistra nel punto, sulla griglia; se lì coprirebbe
+  un'altra scheda va al posto libero più vicino (`nearFreeSpot`, come
+  «Aggiungi testo»), così non nasconde quelle accanto (IMP-3808). Vale anche per il clic
+  dello strumento Testo e per «Aggiungi qui › Testo» del tasto destro. La scheda che nasce collegata
+  (Collega nel vuoto, Ctrl+Maiusc+Invio) resta dove dice il filo.
 - **Dalla tastiera** «Menu radiale» (`canvas.radial`, in fondo al menu del
   tasto destro nel vuoto: `Maiusc+F10`) lo apre al centro della vista, col
   fuoco sulla prima voce; col mouse nel punto del clic.
@@ -387,7 +392,11 @@ scrive i nomi sulle schede.
   con Maiusc di 32 e con Alt+Maiusc di 1 (`canvas.nudge.<lato>.fine`).
 - **F6 e Maiusc+F6** (`EditorSurface.zone`): la lavagna, il navigatore se si
   vede, la colonna degli strumenti, la riga delle opzioni; poi la shell passa
-  all'ispettore. **Maiusc+F10** apre il menu della scheda scelta.
+  all'ispettore. **Maiusc+F10** o il tasto **Menu**, col fuoco sulla lavagna o
+  su una scheda, aprono il menu della scheda scelta accanto a lei: la tela
+  prende il tasto e manda al riquadro un `contextmenu` senza punto, lo stesso
+  del tasto destro letto come «dalla tastiera»; un `contextmenu` del sistema
+  subito dopo non ne apre un secondo. In un campo il tasto resta del campo.
 - **Il nome di una scheda** (`cardLabel`, l'`aria-label` del nodo) dice la
   specie e il nome come la testata del menu, il gruppo che la contiene più da
   vicino, le schede collegate con l'etichetta del filo e il colore: «Scheda di

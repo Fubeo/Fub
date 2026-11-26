@@ -315,7 +315,7 @@ pub const APPEARANCE_MOTION: &str = "appearance.motion";
 /// Lo rispettano i loop di disegno della shell e, su macOS, la webview.
 pub const APPEARANCE_FRAME_RATE: &str = "appearance.frame-rate";
 /// I tetti offerti dal pannello, dal più alto.
-pub const FRAME_RATE_CAPS: [u32; 7] = [240, 165, 144, 120, 90, 60, 30];
+pub const FRAME_RATE_CAPS: [u32; 8] = [240, 180, 165, 144, 120, 90, 60, 30];
 /// Chi disegna le pagine della webview su Linux (WebKitGTK): `auto` lascia
 /// il percorso di WebKit e avvisa dei problemi noti, `gpu` lo stesso senza
 /// proposte, `cpu` chiede il disegno col processore
@@ -811,6 +811,7 @@ pub fn core_settings() -> Vec<SettingSpec> {
     settings.extend(service_settings());
     settings.extend(live_settings());
     settings.extend(viewer_settings());
+    settings.push(map_tile_hosts_spec());
     #[cfg(feature = "craft")]
     settings.extend(craft_settings());
     // **Le famiglie del kernel, tutte, e non una a una.** Quelle righe erano
@@ -1707,6 +1708,18 @@ pub fn user_value_problem(
     key: &str,
     value: &fub_abi::settings::SettingValue,
 ) -> Option<fub_abi::PluginError> {
+    if key == crate::map_tiles::MAP_TILE_HOSTS {
+        let fub_abi::settings::SettingValue::List(hosts) = value else {
+            return None;
+        };
+        let wrong = hosts
+            .iter()
+            .find(|host| !crate::map_tiles::is_host_name(host.trim()))?;
+        return Some(fub_abi::PluginError::BadArgs(Text::message(
+            C_REJECTED_TILE_HOST,
+            vec![Arg::text("value", wrong)],
+        )));
+    }
     let text = value.as_text()?;
     if key == fub_kernel::locale::TIMEZONE {
         if text.is_empty() || crate::wall::known_zone(text) {
@@ -1753,6 +1766,24 @@ fn viewer_settings() -> Vec<SettingSpec> {
         .grouped(Text::key(C_GROUP_VIEWER))
         .for_machine(),
     ]
+}
+
+/// Gli host delle tessere della vista Mappa: di macchina, perché far uscire
+/// una richiesta è una scelta di chi usa questo PC — un vault scaricato non
+/// la porta con sé. Vuota di serie: nessuna richiesta senza un sì. Non
+/// `program_writable`: un componente non si apre la rete da solo. Nella
+/// Privacy, accanto a ciò che decide cosa lascia la macchina.
+fn map_tile_hosts_spec() -> SettingSpec {
+    SettingSpec::new(
+        crate::map_tiles::MAP_TILE_HOSTS,
+        Text::key(C_MAP_TILE_HOSTS),
+        SettingKind::List {
+            default: Vec::new(),
+        },
+    )
+    .describing(Text::key(C_MAP_TILE_HOSTS_DESC))
+    .grouped(Text::key(C_GROUP_PRIVACY))
+    .for_machine()
 }
 
 /// La sessione live: di macchina, perché la porta è una regola del firewall di
@@ -2194,6 +2225,9 @@ const C_PUBLISH_SERVER_URL_DESC: &str = "core.publish.server_url.desc";
 const C_GROUP_LIVE: &str = "core.group.live";
 const C_REJECTED_TIMEZONE: &str = "core.settings.rejected.timezone";
 const C_REJECTED_SERVER_URL: &str = "core.settings.rejected.server_url";
+const C_REJECTED_TILE_HOST: &str = "core.settings.rejected.tile_host";
+const C_MAP_TILE_HOSTS: &str = "core.map.tile_hosts";
+const C_MAP_TILE_HOSTS_DESC: &str = "core.map.tile_hosts.desc";
 const C_GROUP_VIEWER: &str = "core.group.viewer";
 const C_VIEWER_HOSTS: &str = "core.viewer.hosts";
 const C_VIEWER_HOSTS_DESC: &str = "core.viewer.hosts.desc";
@@ -2344,13 +2378,17 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with("host.grid.no_surface", "Un provider della griglia deve dichiarare almeno una superficie.")
         .with("host.drawing.unserved", "Il Motore del disegno non c'è in questa versione di Fub: il disegno usa gli strumenti semplici.")
         .with("host.drawing.engine_off", "Il Motore del disegno è spento in questo vault: il disegno usa gli strumenti semplici.")
+        .with("host.drawing.complete_off", "Il Disegno completo è spento in questo vault: il disegno usa gli strumenti di Fub. Si riaccende in Componenti.")
+        .with("host.drawing.complete_missing", "Il Disegno completo non c'è in questa versione di Fub: il disegno usa gli strumenti di Fub.")
+        .with("host.drawing.not_done", "Questo comando del disegno non è ancora pronto in Fub.")
         .with("host.drawing.instance", "Il disegno aperto «{instance}» non c'è più: va riaperto.")
         .with("host.drawing.stopped", "Il Motore del disegno si è fermato sul disegno «{instance}»: si può riprovare.")
         .with("host.drawing.poisoned", "Il Motore del disegno si è fermato: si può riprovare.")
+        .with("host.drawing.prefs_newer", "Le preferenze del Motore del disegno vengono da una versione più nuova di Fub: questa le usa ma non le cambia.")
+        .with("host.drawing.prefs_broken", "Le preferenze del Motore del disegno non si leggono: per cambiarle ancora, azzerale in Impostazioni › Disegni.")
         .with("host.grid.not_bytes", "La superficie della griglia «{surface}» non è della versione a byte.")
         .with("host.grid.surface_format", "La superficie della griglia «{surface}» non apre «{doc}»: è di un altro formato.")
         .with("host.grid.source_too_large", "La sorgente della griglia pesa {bytes} byte, più del limite.")
-        .with("host.grid.source_revision", "La sorgente della griglia non ha la revisione con cui è arrivata.")
         .with("host.wasm.reentrant", "Il componente è stato richiamato mentre era già al lavoro.")
         .with("host.wasm.missing_export", "Il componente non esporta «{interface}».")
         .with("host.wasm.memory_budget", "I componenti hanno finito la memoria: ne tengono già {used} MiB su {ceiling}. Chiudi o disattiva un plugin e riprova.")
@@ -2422,6 +2460,17 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with("host.web.clip.plan", "Salverebbe {url} come nuova nota nella cartella «{folder}».")
         .with("host.web.clip.plan_root", "Salverebbe {url} come nuova nota nella radice del vault.")
         .with("host.web.clip.no_network", "Questa finestra non ha accesso alla rete: la pagina non si può scaricare.")
+        .with("host.net.relay_unavailable", "Fub non è riuscito ad avviare la richiesta di rete: chiudi qualche finestra o programma e riprova.")
+        .with("host.map.tile.not_https", "«{url}» non è un indirizzo https di tessere: servono https, nessuna porta diversa da 443, niente credenziali, query o frammento.")
+        .with("host.map.tile.not_allowed", "Le tessere di {site} non sono ammesse su questo computer: aggiungi il sito in Impostazioni › Privacy › Tessere delle mappe.")
+        .with("host.map.tile.no_network", "Questa finestra non ha accesso alla rete: le tessere non si possono scaricare.")
+        .with("host.map.tile.busy", "Troppe tessere in attesa: riprova fra poco.")
+        .with("host.map.tile.timeout", "{site} non ha mandato la tessera in tempo.")
+        .with("host.map.tile.network", "{site} non risponde: controlla la connessione.")
+        .with("host.map.tile.redirect", "{site} ha mandato altrove la richiesta della tessera: i redirect non si seguono.")
+        .with("host.map.tile.status", "{site} ha risposto {status} alla richiesta della tessera.")
+        .with("host.map.tile.too_large", "Una tessera di {site} supera 1 MiB e non si mostra.")
+        .with("host.map.tile.bad_type", "Una tessera di {site} non è un'immagine che la mappa accetti ({kind}).")
         .with("host.control.not_base64", "I byte non sono in base64.")
         .with("host.wasm.render_parts", "Una resa con parti UI non si consegna ancora a un componente.")
         .with("host.control.no_answer", "L'app non risponde sul canale di controllo: {reason}")
@@ -2429,6 +2478,10 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with("host.control.bad_reply", "La risposta del canale di controllo non si legge: {reason}")
         .with("host.control.busy", "L'app sta già servendo troppe domande: riprova.")
         .with("host.sync.kdf_unsupported", "Il server della sincronizzazione è di un'altra versione e non accetta la protezione di questa chiave del vault: aggiorna Fub o il server, poi riprova.")
+        .with("host.sync.key_epoch_changed", "La chiave del vault è cambiata su un altro dispositivo: chiedi un invito nuovo e accettalo qui prima di sincronizzare.")
+        .with("host.sync.rekey_epoch_changed", "La chiave del vault è cambiata mentre preparavi il cambio: sincronizza di nuovo, poi riprova.")
+        .with("host.sync.read_only_no_key", "Questo vault non ha ancora una chiave sul server, e la sincronizzazione in sola lettura non può crearla: sincronizza prima da un dispositivo che invia.")
+        .with("host.sync.outbox_unserved_key", "Le modifiche in attesa di sincronizzazione sono cifrate con una chiave del vault che il server non ha più. Restano su questo dispositivo, intatte; la sincronizzazione si ferma finché non vengono recuperate.")
         .with("host.control.too_large", "Domanda troppo grande o interrotta.")
         .with("host.control.unreadable", "Domanda illeggibile.")
         .with("host.control.bad_token", "Il token del canale di controllo non è valido.")
@@ -2961,6 +3014,15 @@ pub fn core_catalog() -> Vec<StringCatalog> {
             "«{value}» non è un indirizzo di server valido. Scrivi un indirizzo https://, \
              oppure http:// solo verso 127.0.0.1, ::1 o localhost; vuoto vuol dire nessun server.",
         )
+        .with(
+            C_REJECTED_TILE_HOST,
+            "«{value}» non è un nome di host. Scrivi soltanto il nome, per esempio tile.openstreetmap.org: senza https://, porta o percorso.",
+        )
+        .with(C_MAP_TILE_HOSTS, "Tessere delle mappe")
+        .with(
+            C_MAP_TILE_HOSTS_DESC,
+            "I siti da cui la vista Mappa di una Base può scaricare le tessere, quando premi «Attiva». Vuota, le mappe restano offline e nessuna richiesta esce dal computer.",
+        )
         .with(C_GROUP_VIEWER, "Visore web")
         .with(C_VIEWER_HOSTS, "Siti approvati")
         .with(
@@ -3096,13 +3158,17 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with("host.grid.no_surface", "A grid provider must declare at least one surface.")
         .with("host.drawing.unserved", "The drawing engine is not in this build of Fub: the drawing uses the simple tools.")
         .with("host.drawing.engine_off", "The drawing engine is off in this vault: the drawing uses the simple tools.")
+        .with("host.drawing.complete_off", "Complete drawing is off in this vault: the drawing uses Fub's own tools. Turn it back on in Components.")
+        .with("host.drawing.complete_missing", "Complete drawing is not in this build of Fub: the drawing uses Fub's own tools.")
+        .with("host.drawing.not_done", "This drawing command is not ready in Fub yet.")
         .with("host.drawing.instance", "The open drawing “{instance}” is gone: open it again.")
         .with("host.drawing.stopped", "The drawing engine stopped on the drawing “{instance}”: you can try again.")
         .with("host.drawing.poisoned", "The drawing engine stopped: you can try again.")
+        .with("host.drawing.prefs_newer", "The drawing engine preferences come from a newer version of Fub: this one uses them but does not change them.")
+        .with("host.drawing.prefs_broken", "The drawing engine preferences cannot be read: to change them again, reset them in Settings › Drawings.")
         .with("host.grid.not_bytes", "The grid surface “{surface}” is not a byte surface.")
         .with("host.grid.surface_format", "The grid surface “{surface}” does not open “{doc}”: it belongs to another format.")
         .with("host.grid.source_too_large", "The grid source is {bytes} bytes, more than the limit.")
-        .with("host.grid.source_revision", "The grid source does not have the revision it arrived with.")
         .with("host.wasm.reentrant", "The component was called again while it was already working.")
         .with("host.wasm.missing_export", "The component does not export “{interface}”.")
         .with("host.wasm.memory_budget", "Components have run out of memory: they already hold {used} MiB of {ceiling}. Close or turn off a plugin and try again.")
@@ -3174,6 +3240,17 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with("host.web.clip.plan", "Would save {url} as a new note in the folder “{folder}”.")
         .with("host.web.clip.plan_root", "Would save {url} as a new note at the root of the vault.")
         .with("host.web.clip.no_network", "This window has no network access: the page cannot be downloaded.")
+        .with("host.net.relay_unavailable", "Fub could not start the network request: close a few windows or programs and try again.")
+        .with("host.map.tile.not_https", "“{url}” is not an https tile address: it needs https, no port other than 443, and no credentials, query or fragment.")
+        .with("host.map.tile.not_allowed", "Tiles from {site} are not allowed on this computer: add the site in Settings › Privacy › Map tiles.")
+        .with("host.map.tile.no_network", "This window has no network access: tiles cannot be downloaded.")
+        .with("host.map.tile.busy", "Too many tiles waiting: try again shortly.")
+        .with("host.map.tile.timeout", "{site} did not send the tile in time.")
+        .with("host.map.tile.network", "{site} does not answer: check the connection.")
+        .with("host.map.tile.redirect", "{site} sent the tile request elsewhere: redirects are not followed.")
+        .with("host.map.tile.status", "{site} answered {status} to the tile request.")
+        .with("host.map.tile.too_large", "A tile from {site} is larger than 1 MiB and is not shown.")
+        .with("host.map.tile.bad_type", "A tile from {site} is not an image the map accepts ({kind}).")
         .with("host.control.not_base64", "The bytes are not base64.")
         .with("host.wasm.render_parts", "A render with UI parts cannot be handed to a component yet.")
         .with("host.control.no_answer", "The app does not answer on the control channel: {reason}")
@@ -3181,6 +3258,10 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with("host.control.bad_reply", "The control channel answer cannot be read: {reason}")
         .with("host.control.busy", "The app is already serving too many requests: try again.")
         .with("host.sync.kdf_unsupported", "The sync server is a different version and does not accept the protection of this vault key: update Fub or the server, then try again.")
+        .with("host.sync.key_epoch_changed", "The vault key changed on another device: ask for a new invite and accept it here before syncing.")
+        .with("host.sync.rekey_epoch_changed", "The vault key changed while you were preparing the change: sync again, then retry.")
+        .with("host.sync.read_only_no_key", "This vault has no key on the server yet, and read-only sync cannot create one: sync first from a device that sends.")
+        .with("host.sync.outbox_unserved_key", "The changes waiting to sync are encrypted with a vault key the server no longer has. They stay on this device, intact; sync stops until they are recovered.")
         .with("host.control.too_large", "Request too large or interrupted.")
         .with("host.control.unreadable", "Unreadable request.")
         .with("host.control.bad_token", "The control channel token is not valid.")
@@ -3703,6 +3784,15 @@ pub fn core_catalog() -> Vec<StringCatalog> {
             C_REJECTED_SERVER_URL,
             "“{value}” is not a valid server address. Write an https:// address, \
              or http:// only towards 127.0.0.1, ::1 or localhost; empty means no server.",
+        )
+        .with(
+            C_REJECTED_TILE_HOST,
+            "“{value}” is not a host name. Write only the name, for example tile.openstreetmap.org: no https://, port or path.",
+        )
+        .with(C_MAP_TILE_HOSTS, "Map tiles")
+        .with(
+            C_MAP_TILE_HOSTS_DESC,
+            "The sites from which a Base's Map view may download tiles, when you press “Enable”. Empty, maps stay offline and no request leaves the computer.",
         )
         .with(C_GROUP_VIEWER, "Web viewer")
         .with(C_VIEWER_HOSTS, "Approved sites")

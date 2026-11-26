@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LinkTarget } from "../../../../host/contract";
 import type { VaultFontPort } from "../../../spatial/fonts/vault";
 import { openLifetime } from "../../../../ui/lifetime";
+import { Race } from "../../../../ui/race";
 import {
   drawingTitle,
   embedOwnText,
@@ -326,6 +327,42 @@ describe("i media del vault dentro una nota", () => {
     expect(root.querySelector("img")?.hasAttribute("src")).toBe(false);
   });
 
+  it("un giro scaduto mentre aspetta i lease non segna le immagini come mancanti", async () => {
+    // La resa si smonta (o si rifà) con i lease in volo: il lease nato tardi
+    // torna `null`, e il giro vecchio non deve dire «immagine mancante» sulle
+    // immagini che c'erano. Lo ferma il cancello del giro (`ui/race.ts`).
+    let release!: () => void;
+    const slow = new Promise<void>((resolve) => (release = resolve));
+    const root = html([
+      '<img data-vault-src="a.png" alt="a">',
+      '<span class="embed" data-embed-page="b.png">b.png</span>',
+      '<div class="embed" data-embed-path="c.png">c.png</div>',
+    ].join(""));
+    const { media, closed } = port({ "a.png": "a.png", "b.png": "b.png", "c.png": "c.png" }, slow);
+    const asked: string[] = [];
+    const open = media.open;
+    media.open = (id) => {
+      asked.push(id);
+      return open(id);
+    };
+    const life = openLifetime();
+    const race = new Race();
+    const running = race.last((expected) => hydrateVaultMedia(root, "n.md", expected, life, media));
+    // I lease sono partiti: il giro aspetta solo loro.
+    await vi.waitFor(() => expect(asked).toHaveLength(3));
+    race.cancel();
+    life.close();
+    release();
+    await expect(running).resolves.toBeUndefined();
+    // Il giro scade al primo cancello; gli altri rami finiscono dopo.
+    await vi.waitFor(() => expect(closed.sort()).toEqual(["h-a.png", "h-b.png", "h-c.png"]));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(root.querySelector(".image-missing")).toBeNull();
+    expect(root.querySelector(".unresolved")).toBeNull();
+    expect(root.querySelector("[data-vault-media=unresolved]")).toBeNull();
+    expect(root.querySelector("img")?.getAttribute("alt")).toBe("a");
+  });
+
   it("un PDF incorporato diventa un collegamento, non un lease", async () => {
     const root = html('<span class="embed" data-embed-page="doc.pdf">doc.pdf</span>');
     const { media, opened } = port({ "doc.pdf": "doc.pdf" });
@@ -444,8 +481,8 @@ describe("i disegni dentro una nota", () => {
     const { media, opened, closed, named } = port({});
     const life = openLifetime();
     const drawing = { doc: ACQUA, name: "Ciclo dell'acqua" };
-    await showEmbeddedDrawing(root, bare!, drawing, life, media);
-    await showEmbeddedDrawing(root, aliased!, drawing, life, media);
+    await showEmbeddedDrawing(root, bare!, drawing, same, life, media);
+    await showEmbeddedDrawing(root, aliased!, drawing, same, life, media);
     expect(bare!.dataset.vaultMedia).toBe("loaded");
     expect(bare!.querySelector("img")!.alt).toBe("Ciclo dell'acqua");
     expect(aliased!.querySelector("img")!.alt).toBe("Il ciclo");
@@ -462,9 +499,39 @@ describe("i disegni dentro una nota", () => {
     const slot = root.querySelector<HTMLElement>(".embed")!;
     const { media } = port({});
     media.open = () => Promise.reject(new Error("sparito"));
-    await showEmbeddedDrawing(root, slot, { doc: ACQUA, name: "Ciclo dell'acqua" }, openLifetime(), media);
+    await showEmbeddedDrawing(root, slot, { doc: ACQUA, name: "Ciclo dell'acqua" }, same, openLifetime(), media);
     expect(slot.dataset.vaultMedia).toBe("unresolved");
     expect(slot.classList.contains("unresolved")).toBe(true);
+    expect(slot.textContent).toBe("acqua");
+  });
+
+  it("un giro scaduto mentre aspetta il lease di `![[disegno]]` non segna lo slot come non risolto", async () => {
+    // La resa si smonta con il lease in volo: il lease nato tardi si chiude e
+    // torna `null`, e il giro vecchio non deve scrivere «non risolto» sullo
+    // slot. Lo ferma il cancello del giro, come per gli altri media.
+    let release!: () => void;
+    const slow = new Promise<void>((resolve) => (release = resolve));
+    const root = html('<span class="embed" data-embed-page="acqua">acqua</span>');
+    const slot = root.querySelector<HTMLElement>(".embed")!;
+    const { media, closed } = port({}, slow);
+    const asked: string[] = [];
+    const open = media.open;
+    media.open = (id) => {
+      asked.push(id);
+      return open(id);
+    };
+    const life = openLifetime();
+    const race = new Race();
+    const running = race.last((expected) => showEmbeddedDrawing(root, slot, { doc: ACQUA, name: "Ciclo dell'acqua" }, expected, life, media));
+    await vi.waitFor(() => expect(asked).toEqual([ACQUA]));
+    race.cancel();
+    life.close();
+    release();
+    await expect(running).resolves.toBeUndefined();
+    // Il lease nato a resa chiusa si chiude subito, e lo slot resta com'era.
+    expect(closed).toEqual([`h-${ACQUA}`]);
+    expect(slot.dataset.vaultMedia).toBe("pending");
+    expect(slot.classList.contains("unresolved")).toBe(false);
     expect(slot.textContent).toBe("acqua");
   });
 

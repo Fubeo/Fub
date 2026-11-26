@@ -1,7 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { markdown } from "@codemirror/lang-markdown";
-import { ensureSyntaxTree } from "@codemirror/language";
 import { history, undo } from "@codemirror/commands";
 import { EditorState, Prec } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
@@ -15,6 +14,7 @@ import { refreshPageHeader } from "../blocks/page";
 import type { NoteType, NoteTypeList, NoteTypeState } from "../../../../../state/note-types";
 import { noteTypeSource, typedChanges } from "./note-type";
 import { loadLazyParts } from "../../../../../ui/lazy-part";
+import { parsedView } from "../test-support";
 
 // Il tipo della nota nella testata (E5): le proprietà in evidenza del tipo,
 // la sua icona, l'avviso di un tipo guasto con «Scegli il tipo», e «In
@@ -70,8 +70,7 @@ function mount(doc: string, states: Record<string, NoteTypeState>, options: Part
       ],
     }),
   });
-  ensureSyntaxTree(view.state, view.state.doc.length, 1000);
-  view.dispatch({});
+  parsedView(view);
   views.push(view);
   return view;
 }

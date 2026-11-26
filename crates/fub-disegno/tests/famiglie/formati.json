@@ -1,0 +1,44 @@
+{
+  "casi": [
+    {
+      "$nota": "Inserisci… la fa l'app, che sceglie un'immagine del vault: il motore, che non lo vede, la rifiuta.",
+      "id": "file.place",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": {
+        "rifiuto": "unsupported"
+      }
+    },
+    {
+      "id": "file.place",
+      "fonte": "interfaccia",
+      "prova": "apps/client/src/editors/spatial/tools/editor/ritaglio-immagine.test.ts"
+    },
+    {
+      "id": "file.exportAs",
+      "fonte": "interfaccia",
+      "prova": "apps/client/src/editors/spatial/tools/editor/chrome/esporta.test.ts"
+    },
+    {
+      "id": "file.export.png",
+      "fonte": "interfaccia",
+      "prova": "apps/client/src/editors/spatial/tools/editor/chrome/esporta.test.ts"
+    },
+    {
+      "id": "file.export.svg",
+      "fonte": "interfaccia",
+      "prova": "apps/client/src/editors/spatial/tools/editor/chrome/esporta.test.ts"
+    },
+    {
+      "id": "file.export.pdf",
+      "fonte": "interfaccia",
+      "prova": "apps/client/src/editors/spatial/tools/editor/chrome/esporta.test.ts"
+    },
+    {
+      "id": "file.exportSelection",
+      "fonte": "interfaccia",
+      "prova": "apps/client/src/editors/spatial/tools/editor/chrome/esporta.test.ts"
+    }
+  ]
+}

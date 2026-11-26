@@ -726,7 +726,9 @@ mod tests {
             std::fs::set_permissions(&cli, std::fs::Permissions::from_mode(0o755)).unwrap();
         }
         let ws = fub_kernel::Workspace::new(&root, fub_kernel::FormatRegistry::new()).unwrap();
-        let ranged = Ranged::new(ws.resource_reader());
+        // Il file è appena nato: con l'orologio vero la revisione letta nei
+        // due secondi dopo non si ricorda (#318). Qui si prova la cache.
+        let ranged = Ranged::new(ws.resource_reader()).with_clock(crate::craft::ranged::long_after);
         let host = MemoryHost::new()
             .with_value(
                 core_spec(crate::settings::CRAFT_EDITOR_PATHS),

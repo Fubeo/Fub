@@ -19,7 +19,7 @@ export const DRAW: PartAnatomy = {
         "draw-export", "draw-export-text", "draw-rail", "draw-group", "draw-button", "kit-bar-button", "draw-zoom-level", "draw-layer-button",
         "draw-layer-state", "draw-swatch-frame", "draw-swatch", "draw-width-bar", "draw-size-glyph", "draw-pen-choice", "draw-pen-name", "draw-pen-gallery", "draw-pen-gallery-heading", "draw-pen-gallery-list", "draw-pen-gallery-item", "draw-pen-gallery-empty", "draw-pen-gallery-save", "draw-pen-preview", "draw-pen-saved-remove", "draw-pen-size", "draw-eraser-mode", "draw-eraser-mode-name", "draw-title",
         "draw-title-input", "draw-surface", "draw-zoom-box", "draw-navigator", "draw-navigator-sheets",
-        "draw-navigator-shapes", "draw-navigator-view", "draw-arrange", "draw-arrange-input", "draw-arrange-suffix", "draw-page",
+        "draw-navigator-shapes", "draw-navigator-view", "draw-engine-line", "draw-engine-point", "draw-engine-point-pieno", "draw-engine-handle", "draw-engine-text", "draw-engine-label", "draw-engine-highlight", "draw-engine-swatch", "draw-engine-swatch-scelto", "draw-arrange", "draw-arrange-input", "draw-arrange-suffix", "draw-page",
         "draw-sheet-name", "draw-grid", "draw-cursor", "draw-objects",
         "draw-objects-header", "draw-objects-title", "draw-objects-count", "draw-objects-empty",
         "draw-objects-filter", "draw-objects-search", "draw-objects-kind", "draw-objects-status", "draw-objects-tree",
@@ -42,6 +42,18 @@ export const DRAW: PartAnatomy = {
         "draw-properties-unit", "draw-properties-switch", "draw-properties-note",
         "draw-properties-error", "draw-properties-actions", "draw-properties-bar", "draw-properties-export",
         "draw-properties-menu", "draw-properties-contrast",
+        "draw-resources-swatches", "draw-resources-corpo", "draw-point-place", "draw-point-coord", "draw-contagocce-copia", "kit-number", "kit-number-box",
+        "draw-recolor-list", "draw-recolor-row", "draw-recolor-current", "draw-recolor-chip", "draw-recolor-code", "draw-recolor-arrow",
+        "draw-guide-head", "draw-guide-rule-name", "draw-guide-note", "draw-guide-grid", "draw-guide-row", "draw-guide-swatch",
+        "draw-guide-field", "draw-guide-rule",
+        "draw-guides", "draw-guide-line", "draw-guide-line-locked", "draw-guide-line-hot", "draw-guide-line-scelta",
+        "draw-guide-path", "draw-ritaglio", "draw-ritaglio-ombra", "draw-ritaglio-bordo", "draw-ritaglio-maniglia",
+        "draw-ritaglio-misura",
+        "draw-graph-data-body", "draw-graph-data-tools", "draw-graph-data-scroll", "draw-graph-data-table", "draw-graph-data-cell",
+        "draw-artboards", "draw-artboards-bar", "draw-artboards-list", "draw-artboards-item", "draw-artboards-number",
+        "draw-artboards-name", "draw-artboards-current", "draw-artboards-fields", "draw-artboards-name-field", "draw-artboards-art",
+        "draw-appearance-list", "draw-appearance-head", "draw-appearance-row", "draw-appearance-eye", "draw-appearance-name",
+        "draw-appearance-button", "draw-appearance-expand", "draw-view-goto-field",
       ],
     },
     {
@@ -53,11 +65,83 @@ export const DRAW: PartAnatomy = {
       ],
     },
     {
+      // Il cassetto «Tutti gli strumenti» (K6 T8): un popover del kit con la
+      // ricerca, i gruppi e le caselle degli strumenti.
+      name: "draw-drawer",
+      states: SELECTABLE,
+      hooks: [
+        "kit-popover", "draw-drawer-popover", "draw-drawer", "draw-drawer-head", "draw-drawer-title", "draw-drawer-note",
+        "draw-drawer-field", "draw-drawer-groups", "draw-drawer-group", "draw-drawer-heading", "draw-drawer-grid",
+        "draw-drawer-tool", "draw-drawer-icon", "draw-drawer-name", "draw-drawer-keys", "draw-drawer-empty",
+        "draw-drawer-edit",
+      ],
+    },
+    {
+      // I righelli di bordo del foglio (K6 T11, giro E): due righe SVG dentro il foglio,
+      // con le tacche e i numeri. Stanno sopra il disegno, e il puntatore le attraversa.
+      name: "draw-rulers",
+      states: SELECTABLE,
+      hooks: ["draw-ruler-x", "draw-ruler-y", "draw-ruler-tick", "draw-ruler-label"],
+    },
+    {
+      // Il menu dello zoom della banda (K6 T11): un popover del kit con le sue voci
+      // e il campo della percentuale. Il popover è `kit-popover`, già nel cassetto.
+      name: "draw-zoom-menu",
+      states: SELECTABLE,
+      hooks: [
+        "draw-zoom-popover", "draw-zoom-body", "draw-zoom-menu", "draw-zoom-item", "draw-zoom-separator", "draw-zoom-field",
+      ],
+    },
+    {
       name: "pdf-surface",
       states: [S("rest"), S("focused"), S("selected")],
       hooks: [
         "pdf-notice-messages", "pdf-pages", "pdf-page-input", "pdf-list", "pdf-list-page", "pdf-list-body",
         "pdf-list-marks",
+      ],
+    },
+    {
+      name: "align-section",
+      states: [S("rest"), S("focused")],
+      hooks: ["draw-align-to", "draw-align-group", "kit-button"],
+    },
+    {
+      name: "transform-section",
+      states: [S("rest"), S("focused")],
+      hooks: ["draw-transform-grid"],
+    },
+    {
+      name: "color-section",
+      states: [S("rest"), S("focused"), S("disabled")],
+      hooks: ["draw-color", "draw-color-wells", "draw-color-label", "draw-color-active", "draw-color-actions", "kit-color-well", "kit-color-well-button", "kit-color-well-name", "kit-button"],
+    },
+    {
+      // Design › Sfumatura (K6 T15, giro 5): il lato e il tipo, l'angolo, la striscia dei colori, i punti
+      // (il punto scelto) con il pozzo del kit, e le azioni.
+      name: "gradient-section",
+      states: [S("rest"), S("focused"), S("selected"), S("disabled")],
+      hooks: [
+        "draw-gradient", "draw-gradient-field", "draw-gradient-row", "draw-gradient-bar", "draw-gradient-stops",
+        "draw-gradient-stop", "draw-gradient-stop-chosen", "draw-gradient-actions", "draw-gradient-create",
+        // Le preimpostate (giro 6).
+        "draw-gradient-presets", "draw-gradient-presets-title", "draw-gradient-save", "draw-gradient-save-name",
+        "draw-gradient-presets-retry", "draw-gradient-presets-error",
+        "kit-color-well", "kit-color-well-button", "kit-color-well-name", "kit-number", "kit-button",
+      ],
+    },
+    {
+      name: "text-section",
+      states: [S("rest"), S("focused")],
+      hooks: ["draw-type", "draw-type-family", "draw-type-style", "draw-type-sizes", "draw-type-align", "kit-font-button"],
+    },
+    {
+      // Risorse › Campioni (K6 T14, giro 2): la griglia del kit, il campione scelto, le azioni e la
+      // finestra «Nuovo campione» col selettore del kit.
+      name: "swatches-section",
+      states: [S("rest"), S("focused"), S("selected"), S("disabled")],
+      hooks: [
+        "draw-resources-swatches", "draw-resources-swatches-actions", "draw-resources-swatches-label",
+        "draw-resources-swatches-picker", "kit-color", "kit-button",
       ],
     },
   ],

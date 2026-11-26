@@ -1,0 +1,224 @@
+// @vitest-environment happy-dom
+// L'ingresso del Completo (piano K6, T5): `apri` chiede l'indice e prepara il
+// nucleo, e basta; un indice che non arriva non ferma niente; la vita chiusa
+// butta gli esiti in volo. Con T11: la preparazione di uno strumento del motore
+// e la sua fila, che c'è solo a famiglia pronta.
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { openLifetime, type Lifetime } from "../../../ui/lifetime";
+import type { EsitoPrepara } from "./carica";
+import { apri, NUCLEO } from "./index";
+import { t } from "../strings";
+import { creaIndice, indiceDi, type VoceIndice } from "./indice";
+
+const lifetimes: Lifetime[] = [];
+afterEach(() => {
+  for (const life of lifetimes.splice(0)) life.close();
+});
+
+function vita(): Lifetime {
+  const life = openLifetime();
+  lifetimes.push(life);
+  return life;
+}
+
+/// Una voce dell'indice per uno strumento del motore, della famiglia `famiglia`.
+function voceStrumento(strumento: string, famiglia: string): VoceIndice {
+  return {
+    fonte: "strumento",
+    id: strumento,
+    chiamata: { strumento },
+    etichetta: { it: "Selezione diretta", en: "Direct Selection" },
+    posto: "colonna/scegli",
+    famiglia,
+    tasto: null,
+    effetto: "cambia",
+    finestra: false,
+  } as VoceIndice;
+}
+
+describe("la preparazione e la fila di uno strumento del motore", () => {
+  const ETICHETTE = { attivo: { it: "Attivo", en: "On" } };
+
+  it("uno strumento senza famiglia nell'indice non si prepara, e non ha fila", async () => {
+    const completo = apri({ motore: null, life: vita() }, {
+      indice: () => Promise.resolve(indiceDi({ voci: [] })),
+      prepara: () => Promise.resolve<EsitoPrepara>("pronta"),
+    });
+    expect(await completo.preparaStrumento("directSelection")).toBe(false);
+    expect(completo.fila("directSelection", { attivo: true }, vi.fn(), vita())).toBeNull();
+  });
+
+  it("la fila c'è solo con la famiglia pronta: prima della preparazione no, dopo sì, con i controlli del kit", async () => {
+    const completo = apri({ motore: null, life: vita() }, {
+      indice: () => Promise.resolve(indiceDi({ voci: [voceStrumento("directSelection", "nucleo")] })),
+      prepara: () => Promise.resolve<EsitoPrepara>("pronta"),
+      moduli: { "./famiglie/nucleo/index.ts": () => Promise.resolve({ default: { registra() {}, testi: ETICHETTE } }) },
+    });
+    // La famiglia non è stata chiesta dallo strumento: niente fila.
+    expect(completo.fila("directSelection", { attivo: true }, vi.fn(), vita())).toBeNull();
+    expect(await completo.preparaStrumento("directSelection")).toBe(true);
+    const fila = completo.fila("directSelection", { attivo: true }, vi.fn(), vita());
+    expect(fila?.element.querySelector(".kit-form-checkbox")).not.toBeNull();
+  });
+
+  it("una famiglia che non arriva non è pronta: il gesto non parte, e non c'è fila", async () => {
+    const completo = apri({ motore: null, life: vita() }, {
+      indice: () => Promise.resolve(indiceDi({ voci: [voceStrumento("directSelection", "nucleo")] })),
+      prepara: () => Promise.resolve<EsitoPrepara>({ errore: "motore" }),
+      moduli: { "./famiglie/nucleo/index.ts": () => Promise.resolve({ default: { registra() {}, testi: ETICHETTE } }) },
+    });
+    expect(await completo.preparaStrumento("directSelection")).toBe(false);
+    expect(completo.fila("directSelection", { attivo: true }, vi.fn(), vita())).toBeNull();
+  });
+});
+
+describe("apri", () => {
+  it("chiede l'indice e prepara il nucleo, nient'altro", async () => {
+    // L'indice si carica una volta sola (memorizzato): il montaggio dei tasti e il
+    // Completo lo chiedono entrambi, e il caricatore lo porta una volta.
+    const caricaIndice = vi.fn(() => Promise.resolve({ voci: [] }));
+    const indice = creaIndice(caricaIndice);
+    const prepara = vi.fn((_f: string) => Promise.resolve<EsitoPrepara>("pronta"));
+    const completo = apri({ motore: null, life: vita() }, { indice, prepara });
+    expect(caricaIndice).toHaveBeenCalledTimes(1);
+    expect(await completo.carica.famiglia(NUCLEO)).toEqual({ kind: "pronta" });
+    expect(prepara.mock.calls).toEqual([[NUCLEO]]);
+  });
+
+  it("un indice che non arriva non ferma il nucleo, e si richiede", async () => {
+    const indice = vi.fn()
+      .mockRejectedValueOnce(new Error("chunk"))
+      .mockResolvedValue(indiceDi({ voci: [] }));
+    const completo = apri({ motore: null, life: vita() }, { indice, prepara: () => Promise.resolve("pronta") });
+    expect(await completo.carica.famiglia(NUCLEO)).toEqual({ kind: "pronta" });
+    await expect(completo.indice()).resolves.toBeDefined();
+  });
+
+  it("la vita chiusa chiude il Completo: il nucleo in volo si butta", async () => {
+    let risolvi!: (e: EsitoPrepara) => void;
+    const life = vita();
+    const completo = apri({ motore: null, life }, {
+      indice: () => Promise.resolve(indiceDi({ voci: [] })),
+      prepara: () => new Promise((ok) => (risolvi = ok)),
+    });
+    const nucleo = completo.carica.famiglia(NUCLEO);
+    life.close();
+    risolvi("pronta");
+    expect(await nucleo).toEqual({ kind: "assente" });
+    expect(completo.carica.stato(NUCLEO).kind).not.toBe("pronta");
+  });
+
+  it("col motore senza sessione il nucleo è in errore «motore»", async () => {
+    const completo = apri({ motore: null, life: vita() }, { indice: () => Promise.resolve(indiceDi({ voci: [] })) });
+    expect(await completo.carica.famiglia(NUCLEO)).toEqual({ kind: "errore", perche: "motore" });
+  });
+});
+
+/// Le azioni di un editor finto per le voci del menu e della ricerca.
+function azioniFinte(riprova = vi.fn()) {
+  return { strumento: vi.fn(), client: vi.fn(), riprova };
+}
+
+describe("menu e ricerca del Completo (K6 T9a)", () => {
+  it("il menu dice che l'indice non si è caricato, e «Riprova» lo chiede di nuovo", async () => {
+    const completo = apri({ motore: null, life: vita() }, {
+      indice: () => Promise.reject(new Error("chunk")),
+      prepara: () => Promise.resolve("pronta"),
+    });
+    const riprova = vi.fn();
+    const menu = await completo.menu(() => [], azioniFinte(riprova));
+    expect(menu[0]).toMatchObject({ label: "Il catalogo dei comandi non si è caricato.", disabled: true });
+    menu[1]?.run?.();
+    expect(riprova).toHaveBeenCalledTimes(1);
+  });
+
+  it("la ricerca che non ha l'indice risponde null, perché chi la mostra dica «Riprova»", async () => {
+    const completo = apri({ motore: null, life: vita() }, {
+      indice: () => Promise.reject(new Error("chunk")),
+      prepara: () => Promise.resolve("pronta"),
+    });
+    expect(await completo.ricerca(() => [], azioniFinte())).toBeNull();
+  });
+
+  it("la prima ricerca carica l'indice, e nessuna famiglia", async () => {
+    const famiglia = vi.fn(() => Promise.resolve({ registra: () => undefined }));
+    const prepara = vi.fn((_f: string) => Promise.resolve<EsitoPrepara>("pronta"));
+    const completo = apri({ motore: null, life: vita() }, {
+      indice: () => Promise.resolve(indiceDi({ voci: [{ fonte: "motore", id: "a", chiamata: { comando: "disegno.a" }, etichetta: { it: "Voce a", en: "Item a" }, posto: "menu/oggetto", famiglia: "forme", tasto: null, effetto: "cambia", finestra: false }] })),
+      prepara,
+      moduli: { "./famiglie/forme/index.ts": famiglia },
+    });
+    const prima = prepara.mock.calls.length;
+    const righe = await completo.ricerca(() => [], azioniFinte());
+    expect(righe?.map((riga) => riga.label)).toEqual(["Voce a"]);
+    expect(prepara.mock.calls.length).toBe(prima);
+    expect(famiglia).not.toHaveBeenCalled();
+  });
+
+  it("col motore spento le voci del motore sono spente, e lo dicono", async () => {
+    const completo = apri({ motore: null, life: vita() }, {
+      indice: () => Promise.resolve(indiceDi({ voci: [{ fonte: "motore", id: "a", chiamata: { comando: "disegno.a" }, etichetta: { it: "Voce a", en: "Item a" }, posto: "menu/oggetto", famiglia: "forme", tasto: "Ctrl+J", effetto: "cambia", finestra: false }] })),
+      prepara: () => Promise.resolve("pronta"),
+    });
+    const menu = await completo.menu(() => [], azioniFinte());
+    const oggetto = menu.find((item) => item.label === "Oggetto");
+    const voci = typeof oggetto?.items === "object" ? oggetto.items : [];
+    expect(voci[0]).toMatchObject({ label: "Voce a", hint: "Ctrl+J", disabled: true, description: "Motore del disegno spento." });
+  });
+});
+
+/// I soli tasti che il clic di una trasformazione usa: la selezione e l'annuncio.
+function tastiDelClic(selezione: () => readonly string[], annuncia: (testo: string) => void): NonNullable<Parameters<typeof apri>[1]>["tasti"] {
+  return { selezione, annuncia } as unknown as NonNullable<Parameters<typeof apri>[1]>["tasti"];
+}
+
+describe("il clic di una trasformazione (T13, giro 5)", () => {
+  // La voce del comando della Ruota come la dà l'indice: una finestra, della famiglia trasforma.
+  const ruota = {
+    fonte: "motore",
+    id: "object.rotate",
+    chiamata: { comando: "disegno.object.rotate" },
+    etichetta: { it: "Ruota…", en: "Rotate…" },
+    posto: "menu/oggetto/trasforma",
+    famiglia: "trasforma",
+    tasto: null,
+    effetto: "cambia",
+    finestra: true,
+  } as VoceIndice;
+
+  it("senza selezione non apre la finestra e dice perché, con il motivo che c'è già", async () => {
+    const annuncia = vi.fn();
+    const completo = apri({ motore: null, life: vita() }, {
+      indice: () => Promise.resolve(indiceDi({ voci: [ruota] })),
+      prepara: () => Promise.resolve<EsitoPrepara>("pronta"),
+      tasti: tastiDelClic(() => [], annuncia),
+    });
+    await completo.indice();
+    completo.clicStrumento("rotate", { x: 10, y: 20 });
+    expect(annuncia).toHaveBeenCalledWith(t("draw.disabled.no_selection"));
+  });
+
+  it("con una selezione il clic non dice che manca la selezione", async () => {
+    const annuncia = vi.fn();
+    const completo = apri({ motore: null, life: vita() }, {
+      indice: () => Promise.resolve(indiceDi({ voci: [ruota] })),
+      prepara: () => Promise.resolve<EsitoPrepara>("pronta"),
+      tasti: tastiDelClic(() => ["oa1a1a1a1"], annuncia),
+    });
+    await completo.indice();
+    completo.clicStrumento("rotate", { x: 10, y: 20 });
+    expect(annuncia).not.toHaveBeenCalledWith(t("draw.disabled.no_selection"));
+  });
+
+  it("uno strumento senza finestra non fa niente, nemmeno con la selezione vuota", async () => {
+    const annuncia = vi.fn();
+    const completo = apri({ motore: null, life: vita() }, {
+      indice: () => Promise.resolve(indiceDi({ voci: [ruota] })),
+      prepara: () => Promise.resolve<EsitoPrepara>("pronta"),
+      tasti: tastiDelClic(() => [], annuncia),
+    });
+    await completo.indice();
+    completo.clicStrumento("selection", { x: 10, y: 20 });
+    expect(annuncia).not.toHaveBeenCalled();
+  });
+});

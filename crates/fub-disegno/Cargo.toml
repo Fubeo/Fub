@@ -21,6 +21,9 @@ vectorcraft-engine = { workspace = true, default-features = false }
 vectorcraft-tools = { workspace = true }
 vectorcraft-svg = { workspace = true }
 vectorcraft-doc = { workspace = true }
+# Le librerie di campioni di base (`swatch.library.add`): la regola di Fub le legge per controllare
+# libreria e campioni prima del motore, con le sue parole, e per tradurre la copia nel formato.
+vectorcraft-color = { workspace = true }
 vectorcraft-geom = { workspace = true }
 # La `FontDb` del motore, riempita con i caratteri di Fub (`src/motore.rs`).
 vectorcraft-text = { workspace = true, default-features = false }
@@ -30,6 +33,17 @@ fub-scene = { workspace = true }
 serde_json = { workspace = true }
 uuid = { workspace = true }
 
+[features]
+# Il Disegno completo (piano K6): compila `src/famiglie/`, lo stato pigro di
+# ognuna delle 26 famiglie della mappa e la via generica dei comandi
+# `disegno.<id>` del motore. Non accende feature del motore: le famiglie di
+# oggi non ne vogliono, e importatori, PDF, script e plug-in restano fuori
+# comunque. Spento, restano i tre comandi di K5, gli strumenti e i gesti.
+default = ["completo"]
+completo = []
+
 [dev-dependencies]
 # L'oracolo a pixel, per confrontare ciò che disegna il motore con la scena.
 fub-testkit = { workspace = true, features = ["pixel"] }
+# Le parole del gergo di `apps/client/src/i18n/gergo.ts`, lette da `ts_indice`.
+regex = { workspace = true }

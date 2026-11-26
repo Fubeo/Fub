@@ -109,7 +109,6 @@ use fub_abi::transfer::{
     ArtifactHandle, ArtifactSink, ExportProvider, ExportReport, ExportRequest, ExportTarget,
     TransferNote, PLUGIN_EXPORT_LIMIT,
 };
-use fub_abi::ui::UiOption;
 use fub_format_svg::FORMAT_ID;
 use fub_scene::export::print::{self, Setup};
 use fub_scene::export::{
@@ -159,13 +158,34 @@ pub const DRAW_EXCALIDRAW: &str = "draw.excalidraw";
 /// tavola.
 pub const DRAW_DRAWIO: &str = "draw.drawio";
 
-/// L'impostazione dello spazio di lavoro dell'editor: Completo, con tutto, o
-/// Semplice, per disegnare a mano o col dito.
+/// L'impostazione dello spazio di lavoro dell'editor: un id. Il valore è un
+/// testo e non una scelta fra valori fissi, perché uno spazio salvato
+/// (`DRAW_WORKSPACES_KEY`) non è un valore che lo schema conosce, e il kernel
+/// scarterebbe una scelta fuori dall'elenco. Un id che nessuno conosce vale
+/// Completo (il client lo legge così, `editors/spatial/preferences.ts`).
 pub const DRAW_WORKSPACE_KEY: &str = "draw.workspace";
-/// I valori dello spazio di lavoro: il primo è quello di serie. Sono i nomi
-/// che l'editor conosce (`Workspace` in `tools/registry.ts`), e il test del
-/// client `editors/spatial/draw-settings-mirror.test.ts` li confronta.
-pub const DRAW_WORKSPACES: [&str; 2] = ["full", "simple"];
+/// Gli spazi di serie, il primo è quello di serie. I primi due sono quelli
+/// dell'editor (`Workspace` in `tools/registry.ts`, Completo e Semplice); gli
+/// otto dopo sono i preset del Disegno completo (`completo/spazi.ts`), nell'ordine
+/// del menu. Il test del client `editors/spatial/draw-settings-mirror.test.ts`
+/// li confronta.
+pub const DRAW_WORKSPACES: [&str; 10] = [
+    "full",
+    "simple",
+    "completo-classico",
+    "automazione",
+    "impaginazione",
+    "pittura",
+    "ricalco",
+    "stampa-e-prova",
+    "tipografia",
+    "web",
+];
+/// Gli spazi di lavoro salvati dall'utente: un elenco di stringhe JSON, una per
+/// spazio, ciascuna con la sua versione (`"v": 1`). Chi la scrive lascia come
+/// stanno le voci che non legge: una voce rotta o di una versione più nuova non
+/// si sovrascrive, e non si cancella.
+pub const DRAW_WORKSPACES_KEY: &str = "draw.workspaces";
 /// L'impostazione degli strumenti della colonna, in ordine: vuota, la colonna
 /// di serie. Uno strumento che non c'è resta raggiungibile dai tasti e dalla
 /// ricerca dei comandi.
@@ -176,6 +196,23 @@ pub const DRAW_TEMPLATES_KEY: &str = "draw.templates";
 pub const DRAW_TEMPLATES_DEFAULT: &str = "Templates";
 /// L'impostazione dei suggerimenti brevi dell'editor.
 pub const DRAW_SUGGESTIONS_KEY: &str = "draw.suggestions";
+/// I tasti del Disegno completo cambiati dall'utente: un testo JSON con la sua
+/// versione, `{"v":1,"insieme":…,"tasti":{"<comando>":"Mod-K"|null}}`; vuoto,
+/// i tasti del motore. Lo legge e lo scrive il client
+/// (`editors/spatial/completo/tasti-utente.ts`): un valore rotto o di una
+/// versione più nuova non si sovrascrive, e una scrittura che non riesce
+/// lascia il valore di prima.
+pub const DRAW_KEYS_KEY: &str = "draw.keys";
+/// Le preferenze del motore del disegno cambiate dall'utente (Impostazioni ›
+/// Disegni › «Motore del disegno», `prefs.set` e i preset delle famiglie): un
+/// testo JSON con la sua versione, `{"v":1,"prefs":{"<chiave>":<valore>}}`, con
+/// le sole chiavi cambiate; vuoto, quelle di serie. Lo legge e lo scrive
+/// l'host (`crates/fub-host/src/drawing.rs`): le cartelle del motore non ci
+/// sono mai, un valore rotto o di una versione più nuova si legge come può e
+/// non si sovrascrive, una scrittura che non riesce lascia il valore di prima.
+pub const DRAW_ENGINE_PREFS_KEY: &str = "draw.motore";
+/// La versione di [`DRAW_ENGINE_PREFS_KEY`] che questo Fub scrive.
+pub const DRAW_ENGINE_PREFS_VERSION: u64 = 1;
 
 /// La densità di riferimento dei pixel CSS: 96 per pollice.
 const CSS_DPI: f32 = 96.0;
@@ -196,14 +233,18 @@ const E_WRITE: &str = "e_write";
 const S_GROUP: &str = "s_group";
 const S_WORKSPACE: &str = "s_workspace";
 const S_WORKSPACE_DESC: &str = "s_workspace_desc";
-const S_FULL: &str = "s_full";
-const S_SIMPLE: &str = "s_simple";
+const S_WORKSPACES: &str = "s_workspaces";
+const S_WORKSPACES_DESC: &str = "s_workspaces_desc";
 const S_TOOLBAR: &str = "s_toolbar";
 const S_TOOLBAR_DESC: &str = "s_toolbar_desc";
 const S_TEMPLATES: &str = "s_templates";
 const S_TEMPLATES_DESC: &str = "s_templates_desc";
 const S_SUGGESTIONS: &str = "s_suggestions";
 const S_SUGGESTIONS_DESC: &str = "s_suggestions_desc";
+const S_KEYS: &str = "s_keys";
+const S_KEYS_DESC: &str = "s_keys_desc";
+const S_ENGINE_PREFS: &str = "s_engine_prefs";
+const S_ENGINE_PREFS_DESC: &str = "s_engine_prefs_desc";
 
 /// Lo schema delle impostazioni dei disegni.
 ///
@@ -225,21 +266,31 @@ const S_SUGGESTIONS_DESC: &str = "s_suggestions_desc";
 /// - **I suggerimenti** sono della **macchina**: spegnerli è una preferenza di
 ///   chi usa l'editor, non del vault. La scrive la casella «Non mostrare più
 ///   suggerimenti», quindi dall'interfaccia; non `program_writable`.
+/// - **I tasti del Disegno completo** sono della **macchina**, come le altre
+///   scorciatoie: sono le mani di chi usa l'editor. Li scrive la sezione
+///   «Disegno completo» di Impostazioni › Scorciatoie; non `program_writable`.
+/// - **Le preferenze del motore** sono della **macchina**, come i tasti: sono
+///   le abitudini di chi disegna (incrementi, guide, unità). Le scrive l'host
+///   dopo un comando che le cambia, dalla sezione «Motore del disegno» o
+///   dall'editor; non `program_writable`.
 pub fn settings() -> Vec<SettingSpec> {
-    let [full, simple] = DRAW_WORKSPACES;
+    let [full, ..] = DRAW_WORKSPACES;
     vec![
         SettingSpec::new(
             DRAW_WORKSPACE_KEY,
             Text::key(S_WORKSPACE),
-            SettingKind::Choice {
+            SettingKind::Text {
                 default: full.into(),
-                options: vec![
-                    UiOption::new(full, Text::key(S_FULL)),
-                    UiOption::new(simple, Text::key(S_SIMPLE)),
-                ],
             },
         )
         .describing(Text::key(S_WORKSPACE_DESC))
+        .grouped(Text::key(S_GROUP)),
+        SettingSpec::new(
+            DRAW_WORKSPACES_KEY,
+            Text::key(S_WORKSPACES),
+            SettingKind::List { default: vec![] },
+        )
+        .describing(Text::key(S_WORKSPACES_DESC))
         .grouped(Text::key(S_GROUP)),
         SettingSpec::new(
             DRAW_TOOLBAR_KEY,
@@ -266,6 +317,26 @@ pub fn settings() -> Vec<SettingSpec> {
         .describing(Text::key(S_SUGGESTIONS_DESC))
         .grouped(Text::key(S_GROUP))
         .for_machine(),
+        SettingSpec::new(
+            DRAW_KEYS_KEY,
+            Text::key(S_KEYS),
+            SettingKind::Text {
+                default: String::new(),
+            },
+        )
+        .describing(Text::key(S_KEYS_DESC))
+        .grouped(Text::key(S_GROUP))
+        .for_machine(),
+        SettingSpec::new(
+            DRAW_ENGINE_PREFS_KEY,
+            Text::key(S_ENGINE_PREFS),
+            SettingKind::Text {
+                default: String::new(),
+            },
+        )
+        .describing(Text::key(S_ENGINE_PREFS_DESC))
+        .grouped(Text::key(S_GROUP))
+        .for_machine(),
     ]
 }
 
@@ -290,14 +361,18 @@ pub fn catalog() -> Vec<StringCatalog> {
         .with(S_WORKSPACE, "Spazio di lavoro")
         .with(
             S_WORKSPACE_DESC,
-            "Completo offre tutti gli strumenti, l'ispettore e i menu; \
-             Semplice ha pulsanti grandi per disegnare a mano o col dito: \
-             penna, evidenziatore, gomma, forme di base e immagini. \
-             Tutto resta raggiungibile dai tasti e dalla ricerca dei comandi, \
-             e «Completo» è a un clic. Vale subito anche per i disegni aperti.",
+            "Lo spazio scelto dalla banda del disegno: «full» è Completo, con tutto; \
+             «simple» è Semplice, con pulsanti grandi per disegnare a mano o col dito. \
+             Vale anche uno spazio del Disegno completo o uno salvato. Un nome \
+             che non si conosce vale Completo. Vale subito anche per i disegni aperti.",
         )
-        .with(S_FULL, "Completo")
-        .with(S_SIMPLE, "Semplice")
+        .with(S_WORKSPACES, "Spazi di lavoro salvati")
+        .with(
+            S_WORKSPACES_DESC,
+            "Gli spazi che hai salvato dal menu dello spazio di lavoro, con la \
+             colonna, la scheda, le sezioni e i righelli. Si scelgono e si \
+             gestiscono dalla banda del disegno.",
+        )
         .with(S_TOOLBAR, "Strumenti della colonna")
         .with(
             S_TOOLBAR_DESC,
@@ -319,6 +394,22 @@ pub fn catalog() -> Vec<StringCatalog> {
              fare in quel momento. Si spengono anche dalla casella «Non mostrare \
              più suggerimenti» che accompagna ognuno, e valgono per questa \
              macchina.",
+        )
+        .with(S_KEYS, "Tasti del Disegno completo")
+        .with(
+            S_KEYS_DESC,
+            "I tasti dei comandi del Disegno completo cambiati da te, e \
+             l'insieme di tasti scelto. Si cambiano in Impostazioni › \
+             Scorciatoie, nella sezione «Disegno completo», e valgono per \
+             questa macchina.",
+        )
+        .with(S_ENGINE_PREFS, "Preferenze del motore del disegno")
+        .with(
+            S_ENGINE_PREFS_DESC,
+            "Le preferenze del motore del Disegno completo cambiate da te: \
+             incrementi, guide, griglia, unità e i preset salvati. Si cambiano \
+             nella sezione «Motore del disegno» qui sotto o dall'editor, e \
+             valgono per questa macchina.",
         ),
         choice::in_english(annotated::in_english(annotate::in_english(
             create::in_english(StringCatalog::new("en")),
@@ -334,14 +425,19 @@ pub fn catalog() -> Vec<StringCatalog> {
         .with(S_WORKSPACE, "Workspace")
         .with(
             S_WORKSPACE_DESC,
-            "Full offers every tool, the inspector and the menus; Simple has \
-             large buttons for drawing by hand or with a finger: pen, \
-             highlighter, eraser, basic shapes and images. Everything \
-             stays reachable from keys and the command search, and «Full» is \
-             one click away. Takes effect at once, open drawings included.",
+            "The workspace chosen from the drawing's band: «full» is Full, with \
+             everything; «simple» is Simple, with large buttons for drawing by \
+             hand or with a finger. A workspace of the full drawing or a saved \
+             one is valid too. A name that is not known means Full. Takes \
+             effect at once, open drawings included.",
         )
-        .with(S_FULL, "Full")
-        .with(S_SIMPLE, "Simple")
+        .with(S_WORKSPACES, "Saved workspaces")
+        .with(
+            S_WORKSPACES_DESC,
+            "The workspaces you saved from the workspace menu, with their \
+             column, tab, sections and rulers. They are chosen and managed from \
+             the drawing's band.",
+        )
         .with(S_TOOLBAR, "Tool column")
         .with(
             S_TOOLBAR_DESC,
@@ -362,6 +458,21 @@ pub fn catalog() -> Vec<StringCatalog> {
             "Shows short tips in the drawing editor about what can be done at \
              that moment. They also turn off from the «Don’t show tips again» box \
              that comes with each one, and apply to this machine.",
+        )
+        .with(S_KEYS, "Complete drawing keys")
+        .with(
+            S_KEYS_DESC,
+            "The keys of the Complete drawing commands you changed, and the \
+             chosen key set. They are changed in Settings › Shortcuts, in the \
+             «Complete drawing» section, and apply to this machine.",
+        )
+        .with(S_ENGINE_PREFS, "Drawing engine preferences")
+        .with(
+            S_ENGINE_PREFS_DESC,
+            "The preferences of the Complete drawing engine you changed: \
+             increments, guides, grid, units and the saved presets. They are \
+             changed in the «Drawing engine» section below or from the \
+             editor, and apply to this machine.",
         ),
     ])
 }
@@ -477,7 +588,7 @@ mod tests {
     }
 
     #[test]
-    fn the_settings_are_four_in_one_group_with_their_defaults() {
+    fn the_settings_are_seven_in_one_group_with_their_defaults() {
         use fub_abi::settings::{SettingScope, SettingValue};
         let specs = settings();
         let keys: Vec<_> = specs.iter().map(|spec| spec.key.as_str()).collect();
@@ -485,21 +596,28 @@ mod tests {
             keys,
             [
                 "draw.workspace",
+                "draw.workspaces",
                 "draw.toolbar",
                 "draw.templates",
-                "draw.suggestions"
+                "draw.suggestions",
+                "draw.keys",
+                "draw.motore"
             ]
         );
         assert_eq!(
             keys,
             [
                 DRAW_WORKSPACE_KEY,
+                DRAW_WORKSPACES_KEY,
                 DRAW_TOOLBAR_KEY,
                 DRAW_TEMPLATES_KEY,
-                DRAW_SUGGESTIONS_KEY
+                DRAW_SUGGESTIONS_KEY,
+                DRAW_KEYS_KEY,
+                DRAW_ENGINE_PREFS_KEY
             ]
         );
-        // Il vault, tranne i suggerimenti, che sono di chi usa la macchina.
+        // Il vault, tranne i suggerimenti, i tasti e le preferenze del
+        // motore, che sono di chi usa la macchina.
         let scopes: Vec<_> = specs.iter().map(|spec| spec.scope).collect();
         assert_eq!(
             scopes,
@@ -507,13 +625,16 @@ mod tests {
                 SettingScope::Vault,
                 SettingScope::Vault,
                 SettingScope::Vault,
+                SettingScope::Vault,
+                SettingScope::Machine,
+                SettingScope::Machine,
                 SettingScope::Machine
             ]
         );
         // Un componente non cambia lo spazio di lavoro o la colonna e non
         // spegne i suggerimenti da sé: soltanto la cartella è di tutti.
         let writable: Vec<_> = specs.iter().map(|spec| spec.program_writable).collect();
-        assert_eq!(writable, [false, false, true, false]);
+        assert_eq!(writable, [false, false, false, true, false, false, false]);
 
         let defaults: Vec<_> = specs.iter().map(|spec| spec.kind.default_value()).collect();
         assert_eq!(
@@ -521,21 +642,20 @@ mod tests {
             [
                 SettingValue::Text("full".into()),
                 SettingValue::List(vec![]),
+                SettingValue::List(vec![]),
                 SettingValue::Text("Templates".into()),
                 SettingValue::Toggle(true),
+                SettingValue::Text(String::new()),
+                SettingValue::Text(String::new()),
             ]
         );
-        let SettingKind::Choice { options, .. } = &specs[0].kind else {
-            panic!("lo spazio di lavoro è una scelta")
-        };
-        let workspaces: Vec<_> = options.iter().map(|option| option.value.as_str()).collect();
-        assert_eq!(workspaces, DRAW_WORKSPACES);
-        assert_eq!(workspaces, ["full", "simple"]);
-        let named: Vec<_> = options
-            .iter()
-            .map(|option| said(&option.label, "it"))
-            .collect();
-        assert_eq!(named, ["Completo", "Semplice"]);
+        // Lo spazio è un id di testo: gli spazi di serie sono dieci, i due di
+        // Fub e gli otto del Completo, e il primo è quello di serie.
+        assert!(matches!(specs[0].kind, SettingKind::Text { .. }));
+        assert_eq!(DRAW_WORKSPACES.len(), 10);
+        assert_eq!(&DRAW_WORKSPACES[..2], ["full", "simple"]);
+        assert_eq!(said(&specs[1].label, "it"), "Spazi di lavoro salvati");
+        assert_eq!(said(&specs[1].label, "en"), "Saved workspaces");
 
         // Tutte nel gruppo «Disegni», con etichetta e descrizione scritte in
         // entrambe le lingue (una chiave senza voce si leggerebbe nuda).
@@ -553,15 +673,15 @@ mod tests {
             }
         }
         assert_eq!(said(&specs[0].label, "it"), "Spazio di lavoro");
-        assert_eq!(said(&specs[1].label, "it"), "Strumenti della colonna");
-        assert_eq!(said(&specs[2].label, "it"), "Cartella dei modelli");
+        assert_eq!(said(&specs[2].label, "it"), "Strumenti della colonna");
+        assert_eq!(said(&specs[3].label, "it"), "Cartella dei modelli");
         // L'interruttore dei suggerimenti parla come l'editor: stessa parola
         // nell'etichetta e nella descrizione, e il nome della casella è
         // quello che l'editor mostra (apostrofo tipografico nell'inglese).
-        assert_eq!(said(&specs[3].label, "it"), "Suggerimenti brevi");
-        assert_eq!(said(&specs[3].label, "en"), "Short tips");
-        let it = said(&specs[3].description, "it");
-        let en = said(&specs[3].description, "en");
+        assert_eq!(said(&specs[4].label, "it"), "Suggerimenti brevi");
+        assert_eq!(said(&specs[4].label, "en"), "Short tips");
+        let it = said(&specs[4].description, "it");
+        let en = said(&specs[4].description, "en");
         assert!(it.contains("suggerimenti"), "{it}");
         assert!(it.contains("«Non mostrare più suggerimenti»"), "{it}");
         assert!(en.contains("tips"), "{en}");

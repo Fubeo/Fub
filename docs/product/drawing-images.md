@@ -78,7 +78,70 @@ anche lasciarla senza, e ritrovarla poi fra i problemi della verifica:
 ## Ritagli
 
 Un'immagine ritagliata da una versione precedente o da un altro programma
-mostra soltanto la parte del ritaglio, e resta intera nel file; l'editor non
-ritaglia più (decisione 0231). Come stanno i ritagli e le maschere è in
+mostra soltanto la parte del ritaglio, e resta intera nel file. Nello spazio
+Semplice l'editor non ritaglia (decisione 0231); nel Disegno completo sì, con
+Ritaglia immagine. Come stanno i ritagli e le maschere è in
 [Disegni, ritagli e maschere](drawing-masks.md).
+
+## Nel Disegno completo
+
+Le voci delle immagini del Disegno completo fanno quello che fanno in
+VectorCraft. Le fa l'editor, non il motore: solo l'editor legge i file del
+vault e sa decodificare le immagini. Il motore, se le riceve, le rifiuta come
+non supportate.
+
+| Voce | Che cosa fa |
+|---|---|
+| File › Inserisci… | Sceglie un'immagine del vault e la mette dove è il cursore, collegata al file: è la stessa cosa di Ctrl+I ([Dal vault](#dal-vault)). |
+| Oggetto › Ritaglia immagine | Apre un riquadro sulla prima immagine scelta, e la scelta si stringe a lei. |
+| Incorpora immagine | Le immagini scelte collegate a un file ricevono i byte di quel file: il disegno non dipende più dal vault. |
+
+### Ritaglia immagine
+
+Il riquadro parte da ciò che dell'immagine si vede: tutta, o il ritaglio che
+ha già.
+
+- **Maniglie**: le otto maniglie lo tirano. Con Maiusc tiene le proporzioni,
+  con Alt cresce dal centro.
+- **Interno**: trascinare dentro il riquadro lo sposta.
+- **Limiti**: il riquadro resta sempre dentro l'immagine, con almeno un punto
+  per lato.
+- **Fuori dal riquadro**: l'immagine è scurita, compresa la parte che un
+  ritaglio precedente aveva tolto. Un clic lì non fa niente.
+
+Per finire:
+
+- Invio, il doppio clic o di nuovo Ritaglia immagine ritagliano, in un passo
+  di annulla.
+- Un riquadro uguale a ciò che si vede non cambia niente.
+- Esc lascia l'immagine com'era.
+- Cambiare la scelta, aprire un altro disegno o passare alla sola lettura
+  chiudono il riquadro senza scrivere.
+
+Un'immagine ruotata o inclinata gira insieme al suo riquadro.
+
+Il ritaglio si scrive in modo diverso da VectorCraft, per non perdere dati.
+VectorCraft riscrive i pixel; qui il ritaglio è il `clipPath` dell'immagine,
+come in [Disegni, ritagli e maschere](drawing-masks.md). Quindi:
+
+- i byte e il collegamento al file restano;
+- la misura sul foglio resta;
+- un altro ritaglio può ridare la parte tolta.
+
+Un'immagine con un ritaglio che l'editor non sa cambiare (una forma che non è
+un rettangolo, o una maschera) lo dice: prima si toglie con Oggetto ›
+Maschera di ritaglio › Rilascia. Il codice dello strumento è in
+`apps/client/src/editors/spatial/tools/editor/ritaglio-immagine.ts`.
+
+### Incorpora immagine
+
+Legge ogni file collegato. Per i byte valgono il peso massimo e la riduzione
+delle immagini [incollate](#incollate): oltre il limite, l'editor chiede prima
+di ridurre l'immagine. La misura sul foglio non cambia. Il nuovo contenuto
+sostituisce `href`, `xlink:href` o tutti e due, come li aveva l'immagine.
+
+Se un file non si legge, nessuna immagine cambia, e l'editor dice quale file
+manca. Il disegno non cambia neanche se, mentre si legge, viene aperto un altro
+disegno o passa alla sola lettura. Tutte le immagini incorporate insieme si
+annullano con un solo passo.
 

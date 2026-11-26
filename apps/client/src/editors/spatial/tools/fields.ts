@@ -49,7 +49,8 @@ import { orientationOf, orientedRect, presetOf, presetRect, PRESETS, type Preset
 import { angleOf, frameSize, MIN_SIZE, scales, type Frame } from "./frame";
 import type { Grid } from "./grid";
 import { ANCHORS, type Anchor, type Look, type LookChange } from "./look";
-import { DASHES, type Dash, type OutlineChange, type OutlineLook } from "./outline";
+import type { GradientSummary } from "./gradients";
+import { DASHES, type Cap, type Dash, type Join, type OutlineChange, type OutlineDetails, type OutlineLook } from "./outline";
 import {
   ACTION_LABELS,
   type ActionId,
@@ -205,6 +206,17 @@ export function lookUnit(unit: LengthUnit): LengthUnit {
 }
 
 /// La selezione, come la legge l'editor.
+/// Le sfumature della selezione per la sezione Sfumatura del Completo: quella del riempimento e quella
+/// del contorno (manca il colore che nessuna parte mostra), e perché non si cambiano.
+export interface SelectionGradients {
+  readonly fill?: GradientSummary;
+  readonly stroke?: GradientSummary;
+  /// Un oggetto scelto è bloccato, lui o un contenitore.
+  readonly locked: boolean;
+  /// Gli oggetti scelti sono soltanto testi: la scena non scrive la sfumatura dei caratteri.
+  readonly onlyText: boolean;
+}
+
 export interface SelectionFacts {
   /// Le chiavi degli oggetti scelti, una per riga.
   readonly keys: string;
@@ -218,6 +230,12 @@ export interface SelectionFacts {
   readonly look: Look;
   /// Il contorno dei contorni scelti; `null` se non ce ne sono.
   readonly outline: OutlineLook | null;
+  /// Il tratteggio e il lucchetto dei contorni scelti, per la sezione Contorno del Completo (K6 T15,
+  /// giro 5); senza, o `null`, la sezione non li sa.
+  readonly outlineDetails?: OutlineDetails | null;
+  /// Le sfumature del riempimento e del contorno, per la sezione Sfumatura del Completo (K6 T15,
+  /// giro 5); senza, la sezione non le sa.
+  readonly gradients?: SelectionGradients;
   /// Vero se c'è a che cosa allinearli: la pagina, per un oggetto solo.
   readonly alignable: boolean;
   /// Gli oggetti scelti che disegnano qualcosa: quelli che si distribuiscono.
@@ -447,6 +465,10 @@ export function propertiesView(input: FieldsInput): PropertiesView {
   const { selection, unit } = input;
   const has = (feature: Feature): boolean => input.features.has(feature);
   const fields: Partial<Record<FieldId, FieldState>> = {};
+  // Il metodo di fusione dell'oggetto scelto: non è un campo del pannello del Semplice; lo legge la
+  // sezione Trasparenza del Completo, dalla vista (K6 T15, giro 2).
+  let blend: PropertiesView["blend"];
+  let outlineView: PropertiesView["outline"];
   const actions: Partial<Record<ActionId, ActionState>> = {};
 
   if (selection !== null) {
@@ -515,6 +537,14 @@ export function propertiesView(input: FieldsInput): PropertiesView {
       // Un tratteggio che non è del menu c'è, col suo valore.
       if (outline.dash === "custom") dashes.push({ value: "custom", label: t("draw.outline.custom", { value: outline.custom ?? "" }) });
       if (outline.dashable) fields.dash = { kind: "choice", label: t("draw.properties.dash"), value: outline.dash, options: dashes };
+      // Gli estremi, gli angoli e i trattini uno per uno, per la sezione Contorno del Completo.
+      const details = selection.outlineDetails;
+      if (outline.dashable && details != null) {
+        const cap: Cap | null = outline.cap;
+        const join: Join | null = outline.join;
+        const dashLengths = details.lengths === null ? null : details.lengths.map((length) => toUnit(length, thin));
+        outlineView = { cap, join, dashes: dashLengths, locked: details.locked };
+      }
     }
     // Le punte delle linee, se il livello le offre e ci sono linee che ne
     // abbiano.
@@ -528,6 +558,7 @@ export function propertiesView(input: FieldsInput): PropertiesView {
     // Le parole, per un testo libero solo che le riscrive senza perdere
     // niente.
     if (selection.words != null) fields.content = { kind: "text", label: t("draw.properties.content"), value: selection.words };
+    if (look.blend.count > 0) blend = { value: look.blend.value, count: look.blend.count };
     if (look.size.count > 0) {
       const { size, weight } = look;
       const preset = size.value === null || weight.value === null ? undefined : TEXT_PRESETS.find((each) => Math.abs(each.size - size.value!) < 1e-6 && each.weight === weight.value);
@@ -656,6 +687,9 @@ export function propertiesView(input: FieldsInput): PropertiesView {
     editable: input.editable,
     fields,
     actions,
+    blend,
+    ...(outlineView === undefined ? {} : { outline: outlineView }),
+    ...(selection?.gradients === undefined ? {} : { gradients: selection.gradients }),
     exportSelection: selection !== null && input.exportSelection === true,
     swatches: input.swatches,
     recent: input.recent,

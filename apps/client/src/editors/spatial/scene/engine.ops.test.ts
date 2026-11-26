@@ -168,6 +168,56 @@ describe("set sulla radice", () => {
   });
 });
 
+describe("set con tag: una forma cambia tipo al suo posto", () => {
+  const D = "M500 100L700 100L720 240L480 220Z";
+  const toPath: Op = { op: "set", id: "o2b3c4d5e", tag: "path", attrs: { x: null, y: null, width: null, height: null, rx: null, ry: null, d: D } };
+
+  it("il rettangolo diventa tracciato con gli stessi attributi, e l'annulla rimette il rettangolo identico", () => {
+    const source = BASE.replace(R2, '    <rect id="o2b3c4d5e" x="500" y="100" width="200" height="120" fill="#e69f00" opacity="0.5" stroke-dasharray="4 2"><title>Tetto</title></rect>');
+    const engine = SceneEngine.open(source);
+    const out = apply(engine, toPath);
+    expect(out.text).toContain('<path id="o2b3c4d5e"');
+    expect(out.text).toContain(`d="${D}"`);
+    expect(out.text).toContain('fill="#e69f00"');
+    expect(out.text).toContain('opacity="0.5"');
+    expect(out.text).toContain('stroke-dasharray="4 2"');
+    expect(out.text).toContain("<title>Tetto</title>");
+    expect(out.text).not.toMatch(/<path[^>]* (x|width|height)="/);
+    expect(out.inverse).toMatchObject({ op: "set", id: "o2b3c4d5e", tag: "rect" });
+    expect(applied(engine.undo(out.undo)).text).toBe(source);
+  });
+
+  it("ellisse e cerchio diventano tracciati; l'annulla torna esatto", () => {
+    const engine = SceneEngine.open(BASE);
+    const out = apply(engine, { op: "set", id: "o1a2b3c4d", tag: "path", attrs: { cx: null, cy: null, rx: null, ry: null, d: "M180 200C180 160 420 160 420 200Z" } });
+    expect(out.text).toContain('<path id="o1a2b3c4d"');
+    expect(applied(engine.undo(out.undo)).text).toBe(BASE);
+  });
+
+  it("rifiuta la geometria di prima lasciata, un tag che non è una forma e lo stesso tag", () => {
+    rejects(BASE, { op: "set", id: "o2b3c4d5e", tag: "path", attrs: { d: D } }, "invalid-elem");
+    rejects(BASE, { ...toPath, tag: "line" } as unknown as Op, "invalid-elem");
+    rejects(BASE, { ...toPath, tag: "g" } as unknown as Op, "invalid-elem");
+    rejects(BASE, { op: "set", id: "o2b3c4d5e", tag: "rect", attrs: {} }, "invalid-elem");
+  });
+
+  it("verso un tracciato rifiuta un documento con un foglio di stile o con le frecce", () => {
+    rejects(BASE.replace(TITLE, `${TITLE}\n  <style>rect{fill:red}</style>`), toPath, "invalid-elem");
+    // Una freccia su un rettangolo rende già estraneo l'oggetto.
+    rejects(BASE.replace(R2, R2.replace("/>", ' marker-end="url(#m)"/>')), toPath, "foreign");
+    // Uno strato con le frecce è estraneo, e i suoi oggetti non si raggiungono.
+    rejects(BASE.replace(L1, L1.replace(">", ' marker-end="none">')), toPath, "missing-target");
+    // Una freccia altrove non conta.
+    const altrove = BASE.replace(R3, R3.replace("<rect", "<path").replace(/ x="800" y="100" width="200" height="120"/, ' d="M0 0L10 10" stroke="#000000" marker-end="none"'));
+    expect(applied(SceneEngine.open(altrove).apply(toPath)).text).toContain('<path id="o2b3c4d5e"');
+  });
+
+  it("non tocca uno strato o un gruppo, e rifiuta tag con part", () => {
+    rejects(BASE, { op: "set", id: "l3f8a0c2d", tag: "path", attrs: { d: D } }, "invalid-elem");
+    rejects(BASE, { ...toPath, part: [0] }, "invalid-elem");
+  });
+});
+
 describe("anchor", () => {
   const HEX = "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08";
   const OTHER = "0".repeat(64);
@@ -433,7 +483,7 @@ describe("add con raw", () => {
     for (const raw of [
       '<rect width="10" height="10"/>',
       '<rect id="z" width="10" height="10"/>',
-      '<g id="l1b2c3d4e" fub:layer="Dentro"/>',
+      '<g id="o1b2c3d4e"><g id="l1b2c3d4e" fub:layer="Dentro"/></g>',
       '<rect id="o9z8y7x6w" fub:role="paper" width="10" height="10"/>',
       '<g id="o9z8y7x6w"><rect width="1" height="1"/></g>',
       `<path id="o9z8y7x6w" fub:tool="pen" fub:brush="${BRUSH}" fub:ink="1 s100 cxypt"/>`,

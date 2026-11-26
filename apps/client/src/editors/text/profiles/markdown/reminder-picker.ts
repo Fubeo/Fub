@@ -23,6 +23,7 @@ import {
   writeReminder,
   type ReminderTime,
 } from "./task-reminder";
+import { composingKey } from "../../../../kit/ime";
 
 /// Il riquadro aperto, uno per finestra: aprirne un altro chiude questo.
 let open: PopoverHandle | null = null;
@@ -239,7 +240,7 @@ export function openReminderPicker(view: EditorView, pos: number, anchor: Popove
     }
   });
   own.listen(input, "keydown", (event) => {
-    if (event.key !== "Enter" || event.isComposing) return;
+    if (event.key !== "Enter" || composingKey(event)) return;
     event.preventDefault();
     if (input.value.trim() === "") return;
     const parsed = understood();

@@ -130,8 +130,10 @@ export interface SurfaceMenu {
   };
   /// Dove aprire il menu quando la richiesta non porta un punto (il tasto
   /// Menu, Maiusc+F10): sotto il cursore o la cosa scelta, in coordinate della
-  /// finestra. Senza, il menu si apre sul riquadro.
-  readonly at?: { readonly x: number; readonly y: number };
+  /// finestra (`menuBelow`). `avoid` è il riquadro di quella cosa, che il
+  /// menu non copre quando ha posto altrove. Senza, il menu si apre sul
+  /// riquadro.
+  readonly at?: { readonly x: number; readonly y: number; readonly avoid?: SelectionBox };
   /// Le voci per ciò che sta sotto il puntatore, in gruppi separati da
   /// `MENU_RULE`: al più nove voci e quattro gruppi.
   readonly context?: readonly SurfaceMenuEntry[];
@@ -239,8 +241,9 @@ export interface SlashPanelEvents {
   /// I titoli della pagina, per l'anteprima dell'Indice.
   outline(): readonly { readonly level: number; readonly text: string }[];
   /// Ctrl+/, o Invio senza risultati: la palette di tutti i comandi, con ciò
-  /// che si è scritto.
-  palette(query: string): void;
+  /// che si è scritto. Assente (l'editor di una scheda della lavagna): niente
+  /// palette, perché i comandi agirebbero sul documento del riquadro.
+  palette?(query: string): void;
   /// Presente quando il «/» agisce su una selezione.
   readonly transform?: SlashTransform;
 }
@@ -264,12 +267,21 @@ export interface SlashPanel {
 }
 
 /// Ciò che la shell dà alla superficie per il menu «/» nel testo.
+/// Che cosa il «/» di una superficie può offrire oltre alle sue azioni.
+export interface SlashScope {
+  /// I comandi del vault (la sezione «vault»): solo dove il documento della
+  /// superficie è quello del riquadro.
+  readonly commands: boolean;
+}
+
 export interface SlashMenuHost {
   /// L'impostazione `editor.slash`: spenta, il «/» è testo.
   enabled(): boolean;
   /// Un pannello nuovo. `has` dice quali azioni dell'editor la superficie sa
-  /// eseguire adesso.
-  panel(events: SlashPanelEvents, has: (id: string) => boolean): SlashPanel;
+  /// eseguire adesso; `scope.commands` falso (l'editor di una scheda della
+  /// lavagna) toglie i comandi del vault, che agirebbero sul documento del
+  /// riquadro e non sul testo della scheda.
+  panel(events: SlashPanelEvents, has: (id: string) => boolean, scope?: SlashScope): SlashPanel;
   /// Una voce è stata scelta, e il «/query» è già sparito: la shell la
   /// ricorda fra i recenti e, se è un comando, lo esegue accanto al cursore
   /// (`anchor`) dell'editor che sta in `owner`.
@@ -277,4 +289,15 @@ export interface SlashMenuHost {
   /// La palette di tutti i comandi accanto al cursore, già filtrata da
   /// `query`.
   palette(query: string, owner: HTMLElement, anchor: SelectionBox | null): void;
+}
+
+/// Il punto `SurfaceMenu.at` per il riquadro `box` della cosa scelta (il
+/// cursore, la cella, la scheda): sotto di lei, allineato al suo inizio, e
+/// col riquadro da non coprire.
+export function menuBelow(box: SelectionBox): NonNullable<SurfaceMenu["at"]> {
+  return {
+    x: Math.round(box.left),
+    y: Math.round(box.bottom) + 4,
+    avoid: { left: box.left, top: box.top, right: box.right, bottom: box.bottom },
+  };
 }

@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:fub="https://fubeo.github.io/ns/scene/1" fub:version="1" viewBox="0 0 700 300" width="700" height="300" fub:guides="x 120; y 50 board=b3c3c3c3c; x 30 layer=l1a2b3c4d locked; x 130 layer=l1a2b3c4d; y 55 board=b3c3c3c3c layer=l1a2b3c4d">
+  <rect id="fub-paper" fub:role="paper" fub:board="b1a1a1a1a" x="0" y="0" width="300" height="300" fill="#ffffff"/>
+  <rect id="c2b2b2b2b" fub:role="paper" fub:board="b3c3c3c3c" x="400" y="0" width="200" height="200" fill="#ffffff"/>
+  <view id="b1a1a1a1a" fub:role="board" viewBox="0 0 300 300">
+    <title>Copertina</title>
+  </view>
+  <view id="b3c3c3c3c" fub:role="board" viewBox="400 0 200 200">
+    <title>Retro</title>
+  </view>
+  <g id="l0f0f0f0f" fub:layer="Sfondo">
+    <rect id="o9c9c9c9c" x="10" y="10" width="20" height="20" fill="#cccccc"/>
+  </g>
+  <g id="l1a2b3c4d" fub:layer="Livello 1">
+    <rect id="oa1a1a1a1" x="50" y="50" width="100" height="50" fill="#ff0000"/>
+    <rect id="ob2b2b2b2" x="450" y="50" width="60" height="50" fill="#000000"/>
+  </g>
+</svg>

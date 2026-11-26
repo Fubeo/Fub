@@ -7,8 +7,8 @@
 ## La testata del foglio
 
 Dice dove sei e se è salvato: la cartella disegnata, il vault (il nome scelto o la cartella) e le
-cartelle, che si aprono nell'esplora, il nome, che si rinomina col doppio clic o F2, poi «Salvato» con la
-spunta e «…». Il formato lo dice la figura della linguetta, col nome per il lettore di schermo. Uno stato
+cartelle, che si aprono nell'esplora, il nome, che si rinomina col doppio clic, F2 o scrivendo col fuoco
+sul nome (la prima lettera apre il campo e ne è l'inizio), poi «Salvato» con la spunta e «…». Il formato lo dice la figura della linguetta, col nome per il lettore di schermo. Uno stato
 da notare («Sola lettura») è un chip accanto al percorso; «Si scrive», lo stato normale, lo dice la
 banda, sul telefono «…». Sul telefono resta il nome; in piedi il foglio è largo quanto lo schermo e
 «Salvato» è la spunta (il punto se in sospeso; errore e conflitto restano parole rosse). Sotto il titolo di una nota c'è la [riga dei dati](editor-note-facts.md): modifica, collegamenti, etichette.
@@ -166,6 +166,13 @@ ondulato. Senza i blocchi il titolo del cursore ha «H2» nel margine, che apre 
 vuota un segnaposto. Le righe vuote dopo un blocco reso (tabella, richiamo, embed) sono
 alte zero, e lo stacco è del blocco; col cursore su una di loro la riga si vede e prende
 lo stacco, così il testo sotto non si sposta. Invio su un recinto senza chiusura la scrive; `[] ` diventa `- [ ] `.
+Chi scrive il Markdown a mano ottiene quello che ha scritto: `**grassetto**` battuto
+segno per segno resta grassetto; la `]` battuta subito dopo una casella è quella già
+messa (niente `- [ ]]`); sulla voce che Invio ha appena aperto, `- `, `* ` o `1. `
+cambiano il segno della voce invece di annidarne una a vista; un blocco `$$…$$`
+scritto su una riga resta testo, chiusura compresa, finché il cursore non ne esce, e
+poi si disegna. Invio sul menu dei linguaggi di ` ```mermaid ` va nel corpo, e la
+` ``` ` scritta sopra la chiusura già messa è quella; `[!tip]` è sorgente finché si scrive.
 
 In un elenco Invio continua la voce (puntata, numerata o compito, rinumerando
 quelle dopo). Invio su una voce vuota esce dall'elenco con un paragrafo vero:
@@ -246,11 +253,11 @@ coordina il buffer, il salvataggio o il fan-out delle modifiche.
 Una nota che va a capo tutta CRLF (scritta su Windows, per esempio) resta
 tutta CRLF: l'editor la apre con quel separatore, e ogni a capo che scrive
 (Invio, le azioni della barra e del «/», le proprietà, la griglia delle
-tabelle, il completamento, l'incolla e il trascinamento) prende quello della
-nota. Una nota già mista si normalizza a LF, com'è sempre stato. Chi compone
-un inserimento lo fa con `"\n"` e conta le posizioni lì, perché un a capo vale
-una posizione qualunque sia il separatore; il testo prende gli a capo della
-nota solo all'ultimo (`editors/text/line-breaks.ts`).
+tabelle, il completamento, l'incolla, il trascinamento, Vim) prende quello
+della nota. Una nota già mista si normalizza a LF, com'è sempre stato. Chi
+compone un inserimento lo fa con `"\n"`, e un filtro sulle transazioni porta
+ogni a capo nudo al separatore della nota (`editors/text/line-breaks.ts`);
+Vim legge le righe unite da `"\n"` (`editors/text/vim-lines.ts`).
 
 ## Undo, redo e selezione
 
@@ -294,7 +301,10 @@ cronologia del documento (`version.keep`, con la nota datata del conflitto):
 una conservazione fallita non scarta niente, e un tasto premuto mentre si
 conserva rende la lettura superata, col conflitto ancora aperto
 ([versioni](vault-recupero-e-versioni.md#versioning)). Una bozza recuperata senza revisione di base, su un file che
-esiste, rientra direttamente in conflitto invece di sovrascriverlo.
+esiste, rientra direttamente in conflitto invece di sovrascriverlo. Una
+bozza che ha lo stesso testo del file, come quella lasciata da una chiusura
+veloce a salvataggio già arrivato, non è un conflitto: si toglie da sola alla
+riapertura. Una bozza diversa dal file resta finché la persona non sceglie.
 
 Un testo che nessun formato serve, come un SVG, non passa da `write_document`,
 che il kernel rifiuterebbe: la sessione lo scrive a byte con `resource_write`
@@ -313,9 +323,9 @@ La preview usa le forme prodotte dal provider e le policy della webview. I
 blocchi HTML attraversano l'allowlist del sanitizzatore prima di diventare nodi
 DOM; classi e attributi `data-*` scritti nella nota non possono imitare i
 contratti privati della shell. Script, iframe, handler e URL di risorsa remoti
-restano inattivi. Un blocco senza elementi consentiti resta sorgente leggibile.
-Il Markdown dentro un blocco HTML non viene reinterpretato. Un link `https` apre
-il browser, o il [visore web](../reference/permissions-and-security.md#visore-web).
+restano inattivi; un `<img src>` si risolve come un'immagine Markdown (dei
+`data-*` restano solo i due canali dell'immagine scritti dal sanitizzatore). Un
+blocco senza elementi consentiti resta sorgente, e il suo Markdown non si rilegge. Un link `https` apre il browser, o il [visore web](../reference/permissions-and-security.md#visore-web).
 
 La UI dichiarativa di un plugin WASM passa da `UiNode::validate_untrusted()`
 prima di raggiungere la shell; `Html` e `WebView` sono rifiutati per

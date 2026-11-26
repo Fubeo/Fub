@@ -36,10 +36,21 @@
 //   motore manca e riapre una sessione nuova quando lo si chiede (il motore
 //   riacceso, «Riprova»).
 //
-// La penna, l'evidenziatore, la gomma e la nota non passano mai di qua: sono
-// di Fub, e non chiamano il motore.
+// - **Il tracciato aperto (T12).** La penna di Bézier e gli strumenti a più
+//   clic (`A_PIU_CLIC` di `tracciati.ts`) al rilascio mandano un'anteprima: se
+//   il motore dice `busy`, il tracciato resta aperto, i suoi segni si vedono,
+//   e il clic dopo lo continua (stesso strumento e stessa revisione: il ponte
+//   tiene il gesto). Lo chiudono Invio o Esc (il tasto va al motore), o lo
+//   strumento cambiato (un `commit` senza tasti): un passo solo, col nome e la
+//   selezione di partenza del primo clic. Un testo che cambia sotto (un'altra
+//   superficie, il file riletto) lo chiude allo stesso modo, prima che la
+//   copia del motore vada avanti (`tieniAperto` della sessione): i punti
+//   messi restano nel file.
+//
+// L'inchiostro, l'evidenziatore, la gomma e la nota non passano mai di qua:
+// sono di Fub, e non chiamano il motore.
 
-import { MAX_GESTURE_EVENTS, type DrawingFrame, type DrawingLoss, type DrawingOutcome, type DrawingPointer, type DrawingRefusal, type DrawingTool } from "../../../host/contract";
+import { DRAWING_COMMAND_TOOL_OPTION, DRAWING_COMMAND_TOOL_STATE, MAX_GESTURE_EVENTS, type DrawingAnchor, type DrawingFrame, type DrawingInput, type DrawingLoss, type DrawingOutcome, type DrawingOverlay, type DrawingPointer, type DrawingRefusal, type DrawingTool, type DrawingToolState } from "../../../host/contract";
 import type { InkSample } from "../../../ink/sample";
 import type { Teardown } from "../../../ui/lifetime";
 import type { PaintNode } from "../painter/paint";
@@ -49,12 +60,25 @@ import { parseWireOp, type Op, type Reason } from "../scene/ops";
 import type { Elem } from "../scene/serialize";
 import { plural, t, type DrawKey } from "../strings";
 import { gesture as asGesture, transformedMatrix, transformValue } from "../tools/edit";
+import { agganciDelMotore } from "../tools/grid";
 import { ADDED, DOUBLE_TAP_MS, DOUBLE_TAP_PX, DRAG_PX, HIT_PX } from "../tools/editor/constants";
 import type { EditorContext } from "../tools/editor/context";
-import { layerRefusal, layerTitle } from "../tools/editor/helpers";
+import { layerRefusal, layerTitle, matrixText } from "../tools/editor/helpers";
 import type { GestureBase, MotoreGesture } from "../tools/editor/types";
 import type { ToolId } from "../tools/registry";
-import type { GestoMotore, MotoreAssente, SessioneMotore } from "./sessione";
+import { motivoDelRifiuto, motivoDelRifiutoDelloStrumento } from "./rifiuto";
+import { CodaGommaPunti, STRUMENTO_GOMMA_PUNTI } from "./gomma-punti";
+import { CodaPennello, STRUMENTO_PENNELLO } from "./pennello-tondo";
+import type { ArgomentiRifiutati, GestoMotore, MotoreAssente, SessioneMotore } from "./sessione";
+import { cursoreDelloStrumento, motoreDelloStrumento, StatiStrumenti } from "./strumento";
+import { Scrittura, STRUMENTI_CHE_SCRIVONO } from "./scrittura";
+import { A_PIU_CLIC, segniComeForma, STRUMENTI_DEI_TRACCIATI, tieneLaMisura } from "./tracciati";
+
+/// Gli strumenti che scelgono un oggetto a clic e restano aperti fra un clic e
+/// l'altro finché il motore dice `busy`: la Fusione (il primo oggetto, poi il
+/// secondo che fa la fusione). Il doppio clic e l'Alt+clic aprono le opzioni.
+const SCELGONO_A_CLIC: ReadonlySet<string> = new Set(["blend"]);
+import { toScreen } from "../view";
 
 /// Quanto un gesto aspetta il motore che si sta ancora aprendo.
 export const ATTESA_APERTURA_MS = 2_000;
@@ -112,6 +136,11 @@ export interface MotoreAperto extends MotoreDelDisegno {
 /// Ciò che `motoreDa` tiene: la sessione, l'apertura in corso, il perché
 /// manca, o il disegno finito (chiuso da chi l'ha aperto, o dalla
 /// `DocumentSession` che non c'è più).
+/// I tasti che vanno a uno strumento del motore fuori da un gesto: Invio ed Esc
+/// chiudono il tracciato aperto, e tutti vanno allo strumento che li prende
+/// (`DrawingToolState.claims_keys`).
+export type TastoDelloStrumento = "Enter" | "Escape" | "Delete" | "Backspace";
+
 type StatoMotore = SessioneMotore | "apertura" | MotoreAssente | "finito";
 
 /// Il motore che `apri` apre (`apriSessione` di `sessione.ts`), riaperto con
@@ -434,6 +463,73 @@ export interface GestiMotoreContext {
   motoreSamples: (g: MotoreGesture, samples: readonly InkSample[]) => void;
   motoreEnd: (g: MotoreGesture) => void;
   motoreCancel: (g: MotoreGesture) => void;
+  /// Lo strumento del motore scelto (il suo id nel motore), o `null` se lo
+  /// strumento è uno di quelli di oggi (K6 T8). Con lui il gesto manda
+  /// `DrawingTool::Engine`, e lo strumento di prima non cambia finché questo
+  /// non è pronto.
+  motoreTool: string | null;
+  /// Sceglie lo strumento del motore `id` (o nessuno, con `null`). La sua
+  /// famiglia si prepara con `prepara`; se non arriva, lo strumento di prima
+  /// resta e lo si dice.
+  sceltaMotore: (id: string | null) => void;
+  /// Torna alla Selezione: col Completo aperto quella di VectorCraft (`selection`),
+  /// come fa lui dopo Esc su un tracciato o all'uscita dal testo; senza, quella di Fub.
+  tornaAllaSelezione: () => void;
+  /// Lo stato dello strumento del motore `id`, dall'ultimo esito che l'ha
+  /// portato; `null` se non ne ha ancora.
+  statoStrumento: (id: string) => DrawingToolState | null;
+  /// Rilegge dal motore lo stato dello strumento `id` e lo registra, anche se
+  /// ne aveva già uno: dopo un comando che lo cambia (i punti scelti, T12).
+  rileggiStato: (id: string) => void;
+  /// Avvisa a ogni stato registrato di uno strumento del motore, con il suo id
+  /// (`StatiStrumenti.ascolta`). Il ritorno smette questo ascoltatore.
+  ascoltaStati: (ascolto: (id: string) => void) => Teardown;
+  /// Avvisa quando cambia lo strumento del motore scelto, e quando la sua
+  /// preparazione finisce (la famiglia è pronta, o non è arrivata). Il ritorno
+  /// smette questo ascoltatore.
+  ascoltaStrumentoMotore: (ascolto: () => void) => Teardown;
+  /// La famiglia dello strumento del motore `id` si prepara: risolve `true` se
+  /// è pronta. Di serie è pronta da sé; il Completo la porta con la sua
+  /// preparazione (`completo/index.ts`).
+  preparaStrumento: (id: string) => Promise<boolean>;
+  /// Manda l'opzione `chiave` (con il valore JSON `valore`) dello strumento
+  /// `id` (`disegno.strumento.opzione`). Il gesto dopo la vede; un gesto in
+  /// corso no.
+  opzioneMotore: (id: string, chiave: string, valore: unknown) => void;
+  /// Un clic senza trascinare con uno strumento del motore (il suo id e il punto
+  /// del clic nel disegno): il Completo apre la finestra della forma, se la
+  /// forma ne ha una. Di serie non fa niente.
+  /// `doppio`: il doppio clic o l'Alt+clic di uno strumento che sceglie a clic
+  /// (la Fusione apre le sue opzioni).
+  clicStrumento: (strumento: string, punto: { readonly x: number; readonly y: number }, doppio?: boolean) => void;
+  /// Un trascinamento di uno strumento del motore che ha cambiato il disegno (il suo id), dopo che
+  /// l'esito è entrato: il Completo apre i Dati del grafico appena disegnato, come VectorCraft
+  /// (`Dialog("graphData")`). Di serie non fa niente.
+  gestoFinito: (strumento: string) => void;
+  /// Invio o Esc, quando nessun gesto è in corso: chiude il tracciato aperto
+  /// della penna (il tasto va al motore, che lo chiude a modo suo); senza
+  /// tracciato aperto, Esc con uno strumento dei tracciati torna alla
+  /// Selezione. `true` se il tasto è servito.
+  motoreTasto: (tasto: TastoDelloStrumento) => boolean;
+  /// Una freccia durante il trascinamento di uno strumento del motore: va
+  /// allo strumento, nell'anteprima del gesto, come in VectorCraft (la Forma
+  /// parametrica e le forme ne cambiano i numeri mentre si trascina; uno
+  /// strumento che non la prende la ignora). `true` se il gesto c'è.
+  motoreFreccia: (tasto: DrawingInput) => boolean;
+  /// La Gomma dei punti (K6 T12, giro 2): a rilascio, il tratto del trascinamento
+  /// va al motore in un solo comando (`gomma-punti.ts`).
+  gommaPuntiEnd: (punti: readonly Point[]) => void;
+  /// Il mouse passa sul foglio senza premere, nel punto `p` della scena; `null`
+  /// quando esce dal foglio o preme. Con uno strumento del motore scelto il
+  /// passaggio va al motore (cursore e segni, come in VectorCraft).
+  motoreSopra: (p: Point | null) => void;
+  /// La vista è cambiata (zoom, spostamento, rotazione): i segni che restano
+  /// sul foglio senza un gesto (la Misura, il passaggio) si rifanno alla
+  /// scala nuova, come VectorCraft che li ridisegna a ogni fotogramma.
+  /// Facoltativo: la vista nasce prima dei gesti del motore.
+  motoreVista?: () => void;
+  /// Il Pennello tondo (K6 T12, giro 2): a rilascio il colpo va al motore in un solo comando col colore.
+  pennelloEnd: (punti: readonly Point[], colore: string) => void;
 }
 
 /// Ciò che il gesto tiene e gli altri pezzi non leggono.
@@ -452,6 +548,10 @@ interface Interno {
   perso: boolean;
   /// Il gesto è stato annullato da chi disegna (`motoreCancel`).
   annullato: boolean;
+  /// Lascia partire i comandi che la sessione tiene fermi mentre il gesto è
+  /// nel motore (`SessioneMotore.trattieni`); `lasciato` dopo la prima volta.
+  lascia: () => void;
+  lasciato: boolean;
 }
 
 /// Monta i gesti sul motore.
@@ -460,12 +560,204 @@ export function installGestiMotore(ctx: EditorContext): void {
   const interni = new WeakMap<MotoreGesture, Interno>();
   /// L'esito dell'ultimo gesto applicato: il gesto dopo parte da lì.
   let ultimo: Promise<unknown> = Promise.resolve();
+  /// Lo stato degli strumenti del motore fra un gesto e l'altro (K6 T8).
+  const stati = new StatiStrumenti();
+  /// La preparazione della famiglia di ogni strumento del motore scelto: il
+  /// gesto aspetta, e risolve `false` se non arriva.
+  const preparazioni = new Map<string, Promise<boolean>>();
+  /// Chi ascolta il cambio di strumento del motore o della sua preparazione.
+  const cambi = new Set<() => void>();
+  const avvisa = (): void => {
+    for (const ascolto of [...cambi]) if (cambi.has(ascolto)) ascolto();
+  };
+  // I punti della Selezione diretta stanno sul foglio a gesto fermo
+  // (`tools/editor/marks.ts`): un altro strumento, o un suo stato nuovo coi
+  // punti scelti, li ridisegna.
+  cambi.add(() => ctx.showHandles());
+  stati.ascolta(() => ctx.showHandles());
+  ctx.motoreTool = null;
+  /// Il tracciato aperto di uno strumento a più clic: il gesto del primo
+  /// clic (il nome del passo e la selezione di partenza) e quello dell'ultimo
+  /// (la sua catena porta il `commit` che lo chiude).
+  let aperto: { readonly primo: MotoreGesture; ultimo: MotoreGesture } | null = null;
+  /// Toglie il tracciato aperto dalla sessione (`tieniAperto`): ogni volta
+  /// che `aperto` cambia.
+  let lasciaAperto: Teardown = () => {};
+  /// La tastiera del testo che si scrive (K6 T16): la casella nascosta, gli
+  /// ingressi che aspettano il loro fotogramma e la richiesta in volo.
+  const scrittura = new Scrittura(ctx.surface, {
+    manda: (inputs) => {
+      ingressi.push(...inputs);
+      programmaScrittura();
+    },
+    esci: () => {
+      chiudiAperto([{ kind: "key", key: "Escape", code: "Escape", pressed: true }]);
+      ctx.tornaAllaSelezione();
+      ctx.surface.focus({ preventScroll: true });
+    },
+    chiudi: () => {
+      chiudiAperto([]);
+    },
+    annulla: () => {
+      if (!chiudiAperto([])) return;
+      ctx.surface.focus({ preventScroll: true });
+      // Il passo del testo è l'ultimo appena arriva: Ctrl+Z toglie lui.
+      void ultimo.then(() => {
+        if (!ctx.disposed) ctx.undo();
+      });
+    },
+  });
+  /// I segni dell'ultima Misura (la linea e le sue misure), in coordinate di
+  /// scena: restano sul foglio fino alla misura dopo, come in VectorCraft
+  /// (`xform/measure.rs`), e tornano se quella si annulla con Esc. Li toglie
+  /// lo strumento cambiato.
+  let misura: readonly DrawingOverlay[] | null = null;
+  const mostraMisura = (): void => {
+    if (misura !== null && tieneLaMisura(ctx.motoreTool)) ctx.showShape(segniComeForma(misura, ctx.camera.scale), IDENTITY);
+  };
+  const ingressi: DrawingInput[] = [];
+  let fotogrammaScrittura: number | null = null;
+  let scritturaInVolo = false;
+  /// Il testo aperto non è più: via la casella e ciò che aspettava.
+  const lasciaScrittura = (): void => {
+    if (fotogrammaScrittura !== null) cancelAnimationFrame(fotogrammaScrittura);
+    fotogrammaScrittura = null;
+    scrittura.chiudi(ctx.surface);
+  };
+  ctx.life.add(() => {
+    ingressi.length = 0;
+    lasciaScrittura();
+  });
+  // Di serie la famiglia è pronta da sé; il Completo la sostituisce con la sua
+  // preparazione (`ctx.preparaStrumento`), che porta la famiglia dall'indice.
+  // Di serie il clic non fa niente: il Completo lo sostituisce (`completo/index.ts`).
+  ctx.clicStrumento = () => undefined;
+  ctx.gestoFinito = () => undefined;
+  ctx.preparaStrumento = (id) => {
+    const porta = ctx.options.preparaMotore;
+    return porta === undefined ? Promise.resolve(true) : porta(id).catch(() => false);
+  };
+
+  /// Il cursore della superficie per lo strumento del motore scelto: la croce se la voce è accesa e lo strumento
+  /// disegna; altrimenti il cursore che lo strumento dice, o quello di serie finché il suo stato non si legge.
+  const applyToolCursor = (): void => {
+    const id = ctx.motoreTool;
+    ctx.surface.style.cursor = cursoreDelloStrumento(id, id === null ? undefined : stati.stato(id)?.cursor, ctx.preciseCursors);
+  };
+  ctx.applyToolCursor = applyToolCursor;
+
+  /// Sceglie lo strumento del motore `id`, o torna a quelli di oggi con
+  /// `null`. Il gesto in corso si annulla (come per ogni cambio di strumento).
+  /// Se la famiglia non arriva, lo strumento di prima torna e lo si dice.
+  const sceltaMotore = (id: string | null): void => {
+    if (id === ctx.motoreTool) return;
+    // Il tracciato aperto si chiude com'è, in un passo, prima di cambiare.
+    chiudiAperto([]);
+    ctx.cancelGesture();
+    ctx.motoreSopra(null);
+    if (misura !== null) {
+      misura = null;
+      ctx.showShape(null, IDENTITY);
+    }
+    if (id === null) {
+      ctx.motoreTool = null;
+      ctx.surface.style.cursor = "";
+      avvisa();
+      return;
+    }
+    const precedente = ctx.motoreTool;
+    // Lo strumento lasciato perde i suoi punti scelti (il motore ne prepara uno
+    // nuovo): i tasti che prendeva tornano alle scorciatoie.
+    const lasciato = precedente === null ? null : stati.stato(precedente);
+    if (precedente !== null && lasciato !== null && lasciato.claims_keys !== undefined) {
+      const { claims_keys: _, ...senza } = lasciato;
+      stati.registra(precedente, senza, false);
+    }
+    ctx.motoreTool = id;
+    applyToolCursor();
+    const pronta = ctx.preparaStrumento(id);
+    preparazioni.set(id, pronta);
+    avvisa();
+    void pronta.then((ok) => {
+      if (ctx.disposed) return;
+      if (!ok && ctx.motoreTool === id) {
+        ctx.motoreTool = precedente;
+        ctx.announce(t("draw.engine.prepare.failed"));
+      }
+      // Pronta: lo stato dello strumento si legge subito, così la sua fila
+      // c'è prima del primo gesto.
+      if (ok && ctx.motoreTool === id && stati.stato(id) === null) leggiStato(id);
+      // La fine della preparazione avvisa: la fila dello strumento si monta solo
+      // ora che la sua famiglia è pronta (o si toglie, se non è arrivata).
+      avvisa();
+    });
+  };
+  ctx.sceltaMotore = sceltaMotore;
+  ctx.tornaAllaSelezione = (): void => {
+    if ((ctx.completoMotore?.() ?? null) !== null) sceltaMotore("selection");
+    else ctx.pickTool("select");
+  };
+
+  /// Legge lo stato dello strumento `id` (`disegno.strumento.stato`), in fila
+  /// con i gesti come un'opzione, e lo registra. Senza motore, o con un esito
+  /// senza stato, non fa niente: la fila arriva col primo gesto.
+  const leggiStato = (id: string, forza = false): void => {
+    const sessione = porta?.adesso();
+    if (sessione === undefined || sessione === null || sessione === "apertura") return;
+    const done = ultimo
+      .then(() => sessione.comando({ id: DRAWING_COMMAND_TOOL_STATE, selection: [], value: { strumento: id } }))
+      .then((esito) => {
+        if (ctx.disposed || esito === null || "kind" in esito) return;
+        if (esito.state && (forza || stati.stato(id) === null)) {
+          stati.registra(id, esito.state);
+          if (ctx.motoreTool === id) applyToolCursor();
+        }
+      })
+      .catch((error: unknown) => {
+        console.error(error);
+      });
+    ultimo = done;
+  };
+  ctx.statoStrumento = (id) => stati.stato(id);
+  ctx.rileggiStato = (id) => leggiStato(id, true);
+  ctx.ascoltaStati = (ascolto) => stati.ascolta(ascolto);
+  ctx.ascoltaStrumentoMotore = (ascolto) => {
+    cambi.add(ascolto);
+    return () => {
+      cambi.delete(ascolto);
+    };
+  };
+
+  /// Manda l'opzione dello strumento `id` (`disegno.strumento.opzione`). Va in
+  /// fila con i gesti, così il gesto dopo la vede e quello in corso no. Un
+  /// esito con lo stato dello strumento lo registra; senza motore non fa niente.
+  ctx.opzioneMotore = (id, chiave, valore) => {
+    const sessione = porta?.adesso();
+    if (sessione === undefined || sessione === null || sessione === "apertura") return;
+    const done = ultimo
+      .then(() => sessione.comando({ id: DRAWING_COMMAND_TOOL_OPTION, selection: [], value: { strumento: id, chiave, valore } }))
+      .then((esito) => {
+        if (esito === null) return;
+        if ("kind" in esito) {
+          // Un valore che il motore non prende si dice con la sua frase.
+          if (esito.kind === "argomenti" && !ctx.disposed) ctx.announce(esito.message);
+          return;
+        }
+        if (esito.state) stati.registra(id, esito.state);
+      })
+      .catch((error: unknown) => {
+        console.error(error);
+      });
+    ultimo = done;
+  };
 
   const evento = (kind: DrawingPointer["kind"], sample: { readonly x: number; readonly y: number; readonly p?: number }): DrawingPointer => ({
     kind,
     x: sample.x,
     y: sample.y,
-    pressure: kind === "up" ? 0 : (sample.p ?? 0.5),
+    // Un campione senza pressione (il mouse, un dito) è premuto in pieno, come in VectorCraft
+    // (`PointerEvent::new`, pressione 1): il Pennello ne fa un contorno uniforme.
+    pressure: kind === "up" ? 0 : (sample.p ?? 1),
     shift: ctx.shift,
     alt: ctx.alt,
     cmd: ctx.free,
@@ -494,10 +786,149 @@ export function installGestiMotore(ctx: EditorContext): void {
     ctx.kept = lette === null ? null : { index: ctx.currentIndex(), keys: ctx.inOrder(keys).join("\n"), frame: lette };
   };
 
+  /// I punti scelti dello strumento del motore `motore`, per la richiesta di
+  /// base del gesto: niente se non ne ha.
+  const puntiPortati = (motore: string | null): { anchors?: DrawingAnchor[] } => {
+    const punti = motore === null ? [] : (stati.stato(motore)?.anchors ?? []);
+    return punti.length > 0 ? { anchors: [...punti] } : {};
+  };
+
+  /// La richiesta di base di un gesto con lo strumento `tool` sul livello
+  /// `layer`, presa adesso: la stessa per un gesto e per un passaggio del
+  /// mouse, perché il motore tiene lo strumento preparato fra i due solo se
+  /// è uguale (`gesti/strumento.rs`, «chiave»).
+  const baseDelGesto = (tool: DrawingTool, layer: string | null, motore: string | null): Omit<GestoMotore, "phase" | "events"> => {
+    const shape = tool !== "select";
+    const { color, width } = ctx.style();
+    return {
+      tool,
+      layer,
+      selection: [...ctx.selection],
+      zoom: ctx.camera.scale,
+      snap: { grid: ctx.snapOn() ? ctx.snapStep() : null, free: ctx.free, ...agganciDelMotore(ctx.grid) },
+      style: shape ? { stroke: color, width, fill: null } : null,
+      // Il Testo scrive la parola del testo nuovo, che poi si cambia
+      // nel campo «Testo» dell'ispettore.
+      text: tool === "text" ? t("draw.text.new") : null,
+      frame: shape ? null : cornicePerIlMotore(),
+      // I punti che lo strumento ha scelto al gesto di prima, e che il
+      // foglio mostra pieni: il motore li rimette nella selezione.
+      ...puntiPortati(motore),
+    };
+  };
+
+  // --- Il passaggio del mouse ------------------------------------------------
+  //
+  // Come in VectorCraft, il mouse che passa sul foglio senza premere va allo
+  // strumento del motore scelto: la Selezione diretta illumina il punto sotto
+  // il mouse e cambia il cursore, la Penna col tracciato aperto mostra il
+  // segmento che seguirà. Un passaggio è un'anteprima con un solo evento
+  // `move`, al più uno per fotogramma e uno in volo; non scrive niente e non
+  // cambia lo stato registrato dello strumento (solo il cursore e i segni).
+
+  /// L'ultimo punto del mouse non ancora mandato, e il fotogramma che lo manda.
+  let sopra: Point | null = null;
+  let fotogrammaSopra: number | null = null;
+  let sopraInVolo = false;
+  /// Cresce a ogni uscita del mouse (o gesto, o strumento cambiato): un esito
+  /// partito prima è vecchio e non rimette i segni.
+  let giroSopra = 0;
+  /// I segni del passaggio sono sul foglio, e quelli che il motore ha dato.
+  let segniSopra = false;
+  let ultimiSopra: readonly DrawingOverlay[] = [];
+
+  const togliSegniSopra = (): void => {
+    if (!segniSopra) return;
+    segniSopra = false;
+    if (ctx.current === null) {
+      ctx.showShape(null, IDENTITY);
+      mostraMisura();
+    }
+  };
+
+  ctx.motoreSopra = (p) => {
+    if (p === null || ctx.motoreTool === null || ctx.current !== null || porta === undefined) {
+      giroSopra += 1;
+      sopra = null;
+      if (fotogrammaSopra !== null) cancelAnimationFrame(fotogrammaSopra);
+      fotogrammaSopra = null;
+      togliSegniSopra();
+      return;
+    }
+    sopra = p;
+    if (fotogrammaSopra === null && !sopraInVolo) fotogrammaSopra = requestAnimationFrame(mandaSopra);
+  };
+  ctx.life.add(() => {
+    if (fotogrammaSopra !== null) cancelAnimationFrame(fotogrammaSopra);
+  });
+
+  /// I segni del passaggio, con la misura che resta, alla scala di adesso.
+  /// `false` se non ce n'è nessuno.
+  const mostraSopra = (id: string): boolean => {
+    const conMisura = misura !== null && tieneLaMisura(id) ? misura : [];
+    const segni = segniComeForma([...conMisura, ...ultimiSopra], ctx.camera.scale);
+    if (segni === null) return false;
+    segniSopra = true;
+    ctx.showShape(segni, IDENTITY);
+    return true;
+  };
+  ctx.motoreVista = () => {
+    if (ctx.disposed || ctx.current !== null) return;
+    const id = ctx.motoreTool;
+    if (segniSopra && id !== null) mostraSopra(id);
+    else mostraMisura();
+  };
+
+  const mandaSopra = (): void => {
+    fotogrammaSopra = null;
+    const p = sopra;
+    const id = ctx.motoreTool;
+    const sessione = porta?.adesso();
+    if (p === null || id === null || ctx.current !== null || ctx.disposed || sopraInVolo) return;
+    if (sessione === undefined || sessione === null || sessione === "apertura") return;
+    if (ctx.folio !== undefined || ctx.isolatedNode() !== null) return;
+    sopra = null;
+    sopraInVolo = true;
+    const giro = giroSopra;
+    const layer = ctx.has("layers") ? (ctx.currentLayer()?.id ?? null) : null;
+    const richiesta: GestoMotore = { ...baseDelGesto(motoreDelloStrumento(id), layer, id), phase: "preview", events: [evento("move", { x: p[0], y: p[1] })] };
+    const done = ultimo
+      .then(() => sessione.gesto(richiesta))
+      .then((esito) => {
+        // Un gesto cominciato, un altro strumento, o il mouse uscito: il
+        // passaggio è vecchio.
+        if (ctx.disposed || ctx.current !== null || ctx.motoreTool !== id || giro !== giroSopra) return;
+        if (esito === null || "kind" in esito || esito.refused !== null) {
+          togliSegniSopra();
+          return;
+        }
+        if (esito.state) ctx.surface.style.cursor = cursoreDelloStrumento(id, esito.state.cursor, ctx.preciseCursors);
+        // Misura e ispeziona legge il tracciato sotto il mouse accanto alla misura che resta.
+        ultimiSopra = esito.preview?.overlays ?? [];
+        if (!mostraSopra(id)) togliSegniSopra();
+      })
+      .catch((error: unknown) => {
+        console.error(error);
+      })
+      .finally(() => {
+        sopraInVolo = false;
+        if (sopra !== null && fotogrammaSopra === null && !ctx.disposed) fotogrammaSopra = requestAnimationFrame(mandaSopra);
+      });
+    ultimo = done;
+  };
+
   const motoreBegin = (base: GestureBase): MotoreGesture | null => {
     if (porta === undefined || ctx.folio !== undefined || ctx.isolatedNode() !== null) return null;
-    const tool = STRUMENTI_DEL_MOTORE.get(ctx.tool);
+    // Lo strumento del motore scelto (K6 T8) manda il suo id; gli altri sono
+    // quelli di K5.
+    const motore = ctx.motoreTool;
+    const tool = motore !== null ? motoreDelloStrumento(motore) : STRUMENTI_DEL_MOTORE.get(ctx.tool);
     if (tool === undefined || porta.adesso() === null) return null;
+    // Un clic mentre si scrive chiude il testo com'è, in un passo, prima del
+    // gesto nuovo: il clic dopo è un testo nuovo, o un altro strumento.
+    if (aperto !== null && scrive(aperto.ultimo)) chiudiAperto([]);
+    // I segni del passaggio del mouse lasciano il posto a quelli del gesto.
+    ctx.motoreSopra(null);
     const layer = ctx.has("layers") ? (ctx.currentLayer()?.id ?? null) : null;
     const g: MotoreGesture = {
       ...base,
@@ -510,7 +941,7 @@ export function installGestiMotore(ctx: EditorContext): void {
       frame: null,
       ended: false,
       intent: tool === "select" ? null : "shape",
-      label: tool === "select" ? "draw.action.move" : ctx.toolLabel(ctx.tool),
+      label: tool === "select" ? "draw.action.move" : motore !== null ? "draw.engine.tool" : ctx.toolLabel(ctx.tool),
       before: ctx.selection,
       layer,
       matrix: null,
@@ -519,52 +950,66 @@ export function installGestiMotore(ctx: EditorContext): void {
       lines: null,
     };
     const precedente = ultimo;
-    const shape = tool !== "select";
     // La richiesta di base si prende quando parte: dopo l'esito del gesto
     // di prima, con la selezione che ha lasciato.
-    const avvio = precedente.then(() => porta.pronta(ATTESA_APERTURA_MS)).then((sessione) => {
-      if (sessione === null || ctx.disposed) return null;
-      g.before = ctx.selection;
-      const { color, width } = ctx.style();
-      return {
-        sessione,
-        base: {
-          tool,
-          layer,
-          selection: [...ctx.selection],
-          zoom: ctx.camera.scale,
-          snap: { grid: ctx.gridOn() ? ctx.stepNow() : null, free: ctx.free },
-          style: shape ? { stroke: color, width, fill: null } : null,
-          // Il Testo scrive la parola del testo nuovo, che poi si cambia
-          // nel campo «Testo» dell'ispettore.
-          text: tool === "text" ? t("draw.text.new") : null,
-          frame: shape ? null : cornicePerIlMotore(),
-        },
-      };
-    });
-    interni.set(g, { avvio, catena: avvio, from: null, hit: null, frame: null, perso: false, annullato: false });
+    // La famiglia dello strumento del motore: il gesto aspetta che sia pronta,
+    // e se non arriva non parte (lo strumento di prima è già tornato).
+    const attesa = motore === null ? Promise.resolve(true) : (preparazioni.get(motore) ?? Promise.resolve(true));
+    const avvio = precedente
+      .then(() => attesa)
+      .then((pronta) => (pronta ? porta.pronta(ATTESA_APERTURA_MS) : null))
+      .then((sessione) => {
+        if (sessione === null || ctx.disposed) return null;
+        // Un comando a metà gesto (la guida dei colori che legge) farebbe
+        // scartare il gesto al motore: la sessione lo tiene fermo fino alla
+        // fine del gesto (`lasciaComandi`).
+        const inner = interni.get(g);
+        if (inner !== undefined && !inner.lasciato) inner.lascia = sessione.trattieni();
+        g.before = ctx.selection;
+        return { sessione, base: baseDelGesto(tool, layer, motore) };
+      });
+    interni.set(g, { avvio, catena: avvio, from: null, hit: null, frame: null, perso: false, annullato: false, lascia: () => {}, lasciato: false });
     return g;
   };
   ctx.motoreBegin = motoreBegin;
 
+  /// Il gesto `g` è finito nel motore: i comandi chiesti intanto partono.
+  const lasciaComandi = (g: MotoreGesture): void => {
+    const inner = interni.get(g)!;
+    if (inner.lasciato) return;
+    inner.lasciato = true;
+    inner.lascia();
+  };
+
   /// Manda `events` nella fase `phase`, dopo le richieste già partite del
   /// gesto: l'esito, o `null` se non c'è (motore assente, sessione chiusa,
   /// gesto che non è partito).
-  const send = (g: MotoreGesture, phase: GestoMotore["phase"], events: DrawingPointer[]): Promise<DrawingOutcome | null> => {
+  const send = (g: MotoreGesture, phase: GestoMotore["phase"], events: DrawingPointer[], inputs: DrawingInput[] = []): Promise<DrawingOutcome | null> => {
     const inner = interni.get(g)!;
     g.sent += events.length;
     const request = inner.catena.then(() => inner.avvio).then(async (started) => {
       if (started === null || inner.perso) return null;
-      const outcome = await started.sessione.gesto({ ...started.base, phase, events });
+      const outcome = await started.sessione.gesto({ ...started.base, phase, events, ...(inputs.length > 0 ? { inputs } : {}) });
       if (outcome !== null && !("kind" in outcome)) {
         // Le parti che il gesto ha trovato vanno nel chip «N parti restano
         // come sono» (`standing.ts`).
         if (outcome.losses.length > 0) porta!.trovate(outcome.losses);
+        // Lo stato dello strumento del motore che ha fatto il gesto: il gesto
+        // dopo lo legge, e il cursore del foglio segue lo strumento scelto.
+        if (typeof g.tool === "object" && outcome.state) {
+          // Un'anteprima a metà gesto tiene lo stato senza rifare i pannelli
+          // (a ogni fotogramma costerebbe il disegno fluido); l'esito che
+          // chiude il gesto, o un'anteprima dopo il rilascio, avvisa.
+          stati.registra(g.tool.engine.id, outcome.state, phase !== "preview" || g.ended);
+          if (ctx.motoreTool === g.tool.engine.id) applyToolCursor();
+        }
         return outcome;
       }
       // Il motore è mancato a metà: fermo (`outcome` dice perché), o la
       // sessione chiusa mentre la richiesta era in volo (spento, o il
-      // disegno finito).
+      // disegno finito). Un gesto che il motore rifiuta per i suoi argomenti
+      // si annulla allo stesso modo, con la frase del motore; la sessione
+      // resta aperta per il gesto dopo.
       perso(g, outcome ?? porta!.assente());
       return null;
     }).catch((error: unknown): null => {
@@ -579,10 +1024,11 @@ export function installGestiMotore(ctx: EditorContext): void {
   /// strada, si annulla. Via l'anteprima, la selezione di prima, niente si
   /// scrive, e lo si dice col motivo; il gesto dopo fa da sé (`motoreBegin`
   /// trova il motore che manca). Una volta per gesto.
-  const perso = (g: MotoreGesture, assente: MotoreAssente | null): void => {
+  const perso = (g: MotoreGesture, assente: MotoreAssente | ArgomentiRifiutati | null): void => {
     const inner = interni.get(g)!;
     if (inner.perso) return;
     inner.perso = true;
+    lasciaComandi(g);
     g.pending.length = 0;
     if (ctx.disposed || inner.annullato) return;
     clearPreview(g);
@@ -590,6 +1036,10 @@ export function installGestiMotore(ctx: EditorContext): void {
     ctx.showHandles();
     // Senza un perché, è il disegno che finisce: non c'è niente da dire.
     if (assente === null) return;
+    if (assente.kind === "argomenti") {
+      ctx.announce(assente.message);
+      return;
+    }
     const reason = assente.perche === "spento" ? "draw.reason.engine_off" : "draw.reason.engine_stopped";
     ctx.announce(t("draw.rejected", { reason: t(reason) }));
   };
@@ -665,8 +1115,20 @@ export function installGestiMotore(ctx: EditorContext): void {
         ctx.selection = ctx.inOrder(outcome.selection);
         ctx.syncControls();
       }
-      ctx.showShape(elemDi(preview?.shape ?? null), layerMatrix(g.layer));
-      g.marquee = riquadroDi(preview?.marquee ?? null);
+      // La forma nuova; senza, i segni del motore (il tracciato aperto della
+      // penna), che stanno in coordinate di scena.
+      const forma = elemDi(preview?.shape ?? null);
+      if (forma !== null && scrive(g)) {
+        anteprimaDelTesto(g, forma, preview?.overlays ?? []);
+        ctx.showHandles();
+        return;
+      }
+      if (forma !== null) ctx.showShape(forma, layerMatrix(g.layer));
+      else ctx.showShape(segniComeForma(preview?.overlays ?? [], ctx.camera.scale), IDENTITY);
+      // Il riquadro di selezione: nel campo suo, o fra i segni del motore
+      // (la Selezione diretta lo dice come un segno `marquee`).
+      const segnoRiquadro = (preview?.overlays ?? []).find((s): s is Extract<DrawingOverlay, { kind: "marquee" }> => s.kind === "marquee");
+      g.marquee = riquadroDi(preview?.marquee ?? null) ?? riquadroDi(segnoRiquadro?.rect ?? null);
       g.matrix = matriceDi(preview?.matrix ?? null);
       if (g.matrix === null) {
         ctx.painter.setDraft(null);
@@ -688,12 +1150,87 @@ export function installGestiMotore(ctx: EditorContext): void {
     });
   };
 
+  /// Il gesto `g` è di uno strumento che scrive (K6 T16).
+  const scrive = (g: MotoreGesture): boolean => typeof g.tool === "object" && STRUMENTI_CHE_SCRIVONO.has(g.tool.engine.id);
+
+  /// Chiede il fotogramma che manderà gli ingressi del testo.
+  const programmaScrittura = (): void => {
+    if (fotogrammaScrittura !== null || ctx.disposed) return;
+    fotogrammaScrittura = requestAnimationFrame(() => {
+      fotogrammaScrittura = null;
+      mandaScrittura();
+    });
+  };
+
+  /// Gli ingressi scritti dall'ultimo fotogramma, in una richiesta d'anteprima
+  /// dopo le richieste del testo aperto; una alla volta, e quelli arrivati nel
+  /// frattempo partono al fotogramma dopo.
+  const mandaScrittura = (): void => {
+    const a = aperto;
+    if (a === null || scritturaInVolo || ingressi.length === 0 || ctx.disposed) return;
+    const g = a.ultimo;
+    const lotto = ingressi.splice(0);
+    scritturaInVolo = true;
+    void send(g, "preview", [], lotto).then((esito) => {
+      scritturaInVolo = false;
+      if (ctx.disposed || aperto !== a) return;
+      if (esito !== null && esito.refused === null) showPreview(g, esito);
+      if (ingressi.length > 0) programmaScrittura();
+    });
+  };
+
+  /// L'anteprima del testo che si scrive: il testo nelle coordinate del suo
+  /// livello, il cursore e la selezione del motore in quelle della scena, e il
+  /// testo del disegno che si sta cambiando nascosto sotto. La casella nascosta
+  /// va sul cursore, per la finestra dell'IME.
+  const anteprimaDelTesto = (g: MotoreGesture, forma: Elem, segni: readonly DrawingOverlay[]): void => {
+    const id = forma.attrs.id;
+    const { id: _tolto, ...attrs } = forma.attrs;
+    const testo: Elem = id === undefined ? forma : { ...forma, attrs };
+    const nelLivello: Elem = { tag: "g", attrs: { transform: matrixText(layerMatrix(g.layer)) }, children: [testo] };
+    const cursore = segniComeForma(segni, ctx.camera.scale);
+    ctx.showShape({ tag: "g", attrs: {}, children: cursore === null ? [nelLivello] : [nelLivello, cursore] }, IDENTITY);
+    const sotto = id === undefined ? null : ctx.currentIndex().get(id);
+    ctx.painter.setDraft(sotto === null ? null : { hidden: new Set(sotto.paints) });
+    const riga = segni.find((s): s is Extract<DrawingOverlay, { kind: "line" }> => s.kind === "line");
+    if (riga !== undefined) {
+      const [ax, ay] = toScreen(ctx.camera, riga.a);
+      const [bx, by] = toScreen(ctx.camera, riga.b);
+      scrittura.posa(Math.min(ax, bx), Math.min(ay, by), Math.hypot(bx - ax, by - ay));
+    }
+  };
+
   /// Via l'anteprima del gesto.
   const clearPreview = (g: MotoreGesture): void => {
     g.matrix = null;
     g.marquee = null;
     ctx.showShape(null, IDENTITY);
     ctx.painter.setDraft(null);
+  };
+
+  /// Il rilascio della Misura: gli ultimi eventi come anteprima, i cui segni
+  /// restano sul foglio, poi il `commit`, che non cambia il disegno. La
+  /// sessione rimette lo strumento a capo dopo il `commit`: i segni li tiene
+  /// il client.
+  const misuraFinita = (g: MotoreGesture, eventi: DrawingPointer[]): void => {
+    const ultimi = send(g, "preview", eventi);
+    const done = ultimi.then((anteprima) => {
+      if (ctx.disposed) return;
+      if (anteprima !== null && anteprima.refused === null) {
+        const segni = anteprima.preview?.overlays ?? [];
+        misura = segni.length > 0 ? segni : null;
+      }
+      const outcome = send(g, "commit", []);
+      void outcome.finally(() => lasciaComandi(g));
+      return outcome.then((esito) => {
+        if (ctx.disposed) return;
+        if (esito === null) clearPreview(g);
+        else applyOutcome(g, esito, tapOf(g));
+        mostraMisura();
+        ctx.showHandles();
+      });
+    });
+    ultimo = done;
   };
 
   const motoreEnd = (g: MotoreGesture): void => {
@@ -706,8 +1243,35 @@ export function installGestiMotore(ctx: EditorContext): void {
     // Gli eventi oltre il tetto di una richiesta partono prima, come
     // anteprime che non si disegnano.
     for (const pezzo of pezzi.slice(0, -1)) void send(g, "preview", pezzo);
+    // Il secondo clic vicino al primo: dopo il suo rilascio, il doppio clic.
+    const doppio = doppioClicDi(g);
+    if (typeof g.tool === "object" && SCELGONO_A_CLIC.has(g.tool.engine.id)) {
+      // Il primo oggetto scelto resta aperto finché il motore dice `busy`; il
+      // doppio clic o l'Alt+clic chiudono la scelta (nel motore) e aprono la
+      // finestra delle opzioni dello strumento.
+      const strumento = g.tool.engine.id;
+      const giu = interni.get(g)!.from;
+      const conAlt = pezzi.flat().some((e) => e.kind === "down" && e.alt);
+      tieniAperto(g, pezzi[pezzi.length - 1] ?? []);
+      if (doppio !== null) mandaDoppioClic(g, doppio);
+      const punto = doppio ?? (conAlt && giu !== null ? { x: giu[0], y: giu[1] } : null);
+      if (punto !== null) void ultimo.finally(() => ctx.clicStrumento(strumento, punto, true));
+      return;
+    }
+    if (typeof g.tool === "object" && (A_PIU_CLIC.has(g.tool.engine.id) || STRUMENTI_CHE_SCRIVONO.has(g.tool.engine.id))) {
+      tieniAperto(g, pezzi[pezzi.length - 1] ?? []);
+      if (doppio !== null) mandaDoppioClic(g, doppio);
+      return;
+    }
+    if (typeof g.tool === "object" && tieneLaMisura(g.tool.engine.id)) {
+      misuraFinita(g, pezzi[pezzi.length - 1] ?? []);
+      return;
+    }
     const outcome = send(g, "commit", pezzi[pezzi.length - 1] ?? []);
+    // Prima dell'esito: chi lo applica può chiedere un comando.
+    void outcome.finally(() => lasciaComandi(g));
     const tap = tapOf(g);
+    const clic = clicDi(g);
     const done = outcome.then((esito) => {
       if (ctx.disposed) return;
       if (esito === null) {
@@ -716,10 +1280,282 @@ export function installGestiMotore(ctx: EditorContext): void {
         return;
       }
       applyOutcome(g, esito, tap);
+      if (clic !== null) ctx.clicStrumento(clic.strumento, clic.punto);
+      else if (typeof g.tool === "object" && esito.refused === null && esito.ops !== null) ctx.gestoFinito(g.tool.engine.id);
+      seguiCambio(esito);
+    });
+    ultimo = done;
+    if (doppio !== null) mandaDoppioClic(g, doppio);
+  };
+  ctx.motoreEnd = motoreEnd;
+
+  /// Il clic di prima di uno strumento del motore, per riconoscere il doppio
+  /// clic: lo strumento, il punto di scena, quando, con che puntatore.
+  let clicPrima: { readonly strumento: string; readonly x: number; readonly y: number; readonly tempo: number; readonly pointer: MotoreGesture["pointer"] } | null = null;
+
+  /// Il punto del doppio clic se `g` è il secondo clic di uno strumento del
+  /// motore vicino al primo (`DOUBLE_TAP_MS`, `DOUBLE_TAP_PX` in pixel dello
+  /// schermo, lo stesso strumento e puntatore), come i clic di VectorCraft:
+  /// giù, su, giù, su e poi il doppio clic a parte. Un doppio clic consuma i
+  /// due clic: il terzo ricomincia.
+  const doppioClicDi = (g: MotoreGesture): { readonly x: number; readonly y: number } | null => {
+    const clic = typeof g.tool === "object" ? clicDi(g) : null;
+    const prima = clicPrima;
+    clicPrima = null;
+    if (clic === null) return null;
+    const tempo = performance.now();
+    const { x, y } = clic.punto;
+    const vicino =
+      prima !== null &&
+      prima.strumento === clic.strumento &&
+      prima.pointer === g.pointer &&
+      tempo - prima.tempo <= DOUBLE_TAP_MS &&
+      Math.hypot(x - prima.x, y - prima.y) * ctx.camera.scale <= DOUBLE_TAP_PX[g.pointer];
+    if (vicino) return { x, y };
+    clicPrima = { strumento: clic.strumento, x, y, tempo, pointer: g.pointer };
+    return null;
+  };
+
+  /// Manda il doppio clic al motore dopo il secondo clic `g`. Il testo che si
+  /// scrive lo prende nello stesso tracciato aperto (la parola sotto il
+  /// cursore), senza chiuderlo; ogni altro strumento lo riceve come un gesto
+  /// suo, in coda a quello del clic: la penna sul tracciato aperto, la
+  /// Selezione col commit (il testo che passa al Testo, il gruppo isolato).
+  const mandaDoppioClic = (g: MotoreGesture, punto: { readonly x: number; readonly y: number }): void => {
+    const doppio = evento("double_click", { x: punto.x, y: punto.y });
+    const a = aperto;
+    if (a !== null && a.ultimo === g && scrive(g)) {
+      const esito = send(g, "preview", [doppio]);
+      ultimo = esito.then((e) => {
+        if (ctx.disposed || aperto !== a || e === null || e.refused !== null) return;
+        if (e.state?.busy === true) showPreview(g, e);
+        seguiCambio(e);
+      });
+      return;
+    }
+    const g2 = motoreBegin({ stroke: g.stroke, pointer: g.pointer, page: null });
+    if (g2 === null) return;
+    g2.pending.push(doppio);
+    motoreEnd(g2);
+  };
+
+  /// Lo strumento a cui il motore chiede di passare dopo un gesto (il doppio
+  /// clic della Selezione su un testo passa al Testo): lo si sceglie come dalla
+  /// colonna, solo se si lavora con uno strumento del motore.
+  const seguiCambio = (esito: DrawingOutcome): void => {
+    const verso = esito.state?.switch_tool;
+    if (verso === undefined || ctx.motoreTool === null || verso === ctx.motoreTool || ctx.disposed) return;
+    sceltaMotore(verso);
+  };
+
+  /// Il rilascio di uno strumento a più clic: gli ultimi eventi come
+  /// anteprima. Se il motore lavora ancora (`busy`), il tracciato resta
+  /// aperto coi suoi segni; se ha finito da sé, si chiude subito.
+  const tieniAperto = (g: MotoreGesture, eventi: DrawingPointer[]): void => {
+    aperto = { primo: aperto?.primo ?? g, ultimo: g };
+    lasciaAperto();
+    lasciaAperto = () => {};
+    const ultimi = send(g, "preview", eventi);
+    // Il clic è finito: un comando dopo chiude il tracciato aperto, in un
+    // passo (`SessioneMotore.comando`), invece di farlo scartare.
+    void ultimi.finally(() => lasciaComandi(g));
+    const done = ultimi.then((esito) => {
+      // Chiuso nel frattempo (Invio, Esc, lo strumento cambiato), o un
+      // clic dopo che lo continua: niente da fare qui.
+      if (ctx.disposed || aperto?.ultimo !== g) return;
+      if (esito === null) {
+        aperto = null;
+        lasciaScrittura();
+        clearPreview(g);
+        ctx.showHandles();
+        return;
+      }
+      if (esito.refused === null && esito.state?.busy === true) {
+        // Lo strumento che scrive vuole la tastiera: la casella prima
+        // dell'anteprima, che la posa sul cursore.
+        if (esito.state.wants_text && scrive(g)) scrittura.apri(t("draw.engine.type.box"));
+        showPreview(g, esito);
+        proteggiAperto(g);
+        return;
+      }
+      chiudiAperto([]);
+      seguiCambio(esito);
     });
     ultimo = done;
   };
-  ctx.motoreEnd = motoreEnd;
+
+  /// Il tracciato aperto all'ultimo clic `g` non si perde se il testo cambia
+  /// sotto: il primo sync della sessione lo chiude prima di partire, in un
+  /// passo come Invio (il `commit` senza tasti, come lo strumento cambiato).
+  const proteggiAperto = (g: MotoreGesture): void => {
+    void interni.get(g)!.avvio.then((started) => {
+      const a = aperto;
+      if (started === null || ctx.disposed || a === null || a.ultimo !== g) return;
+      lasciaAperto();
+      lasciaAperto = started.sessione.tieniAperto({
+        chiusura: () => {
+          if (aperto === a) aperto = null;
+          lasciaAperto = () => {};
+          // Ciò che si è scritto e non è ancora partito va col commit.
+          const scritti = ingressi.splice(0);
+          lasciaScrittura();
+          return { ...started.base, phase: "commit", events: [], ...(scritti.length > 0 ? { inputs: scritti } : {}) };
+        },
+        chiuso: (esito) => {
+          if (esito !== null && "kind" in esito) {
+            perso(g, esito);
+            chiusoCon(a, null);
+            return;
+          }
+          if (esito !== null && esito.losses.length > 0) porta!.trovate(esito.losses);
+          chiusoCon(a, esito);
+        },
+      });
+    });
+  };
+
+  /// L'esito del `commit` che ha chiuso il tracciato aperto `a`: un passo col
+  /// nome e la selezione di partenza del primo clic.
+  const chiusoCon = (a: { readonly primo: MotoreGesture; ultimo: MotoreGesture }, esito: DrawingOutcome | null): void => {
+    if (ctx.disposed) return;
+    const g = a.ultimo;
+    g.before = a.primo.before;
+    g.label = a.primo.label;
+    if (esito === null) {
+      clearPreview(g);
+      ctx.showHandles();
+      return;
+    }
+    applyOutcome(g, esito, null);
+  };
+
+  /// Chiude il tracciato aperto con i tasti `inputs` (nessuno: lo strumento
+  /// cambiato): il `commit` va dopo le richieste dell'ultimo clic, e l'esito
+  /// è un passo col nome e la selezione di partenza del primo. `false` se non
+  /// c'era un tracciato aperto.
+  const chiudiAperto = (inputs: DrawingInput[]): boolean => {
+    const a = aperto;
+    if (a === null) return false;
+    aperto = null;
+    lasciaAperto();
+    lasciaAperto = () => {};
+    // Ciò che si è scritto e aspetta il suo fotogramma parte col commit, prima
+    // del tasto che chiude.
+    const tutti = [...ingressi.splice(0), ...inputs];
+    lasciaScrittura();
+    const done = send(a.ultimo, "commit", [], tutti).then((esito) => chiusoCon(a, esito));
+    ultimo = done;
+    return true;
+  };
+
+  ctx.motoreFreccia = (tasto) => {
+    const g = ctx.current;
+    if (g?.kind !== "motore" || g.ended || typeof g.tool !== "object" || g.last === null || ctx.disposed) return false;
+    if (g.frame !== null) cancelAnimationFrame(g.frame);
+    g.frame = null;
+    // I punti non ancora mandati vanno prima del tasto, nella stessa richiesta.
+    const events = g.pending.splice(0, MAX_GESTURE_EVENTS);
+    void send(g, "preview", events, [tasto]).then((outcome) => {
+      if (g.ended || ctx.disposed || ctx.current !== g) return;
+      if (outcome !== null) showPreview(g, outcome);
+      if (g.pending.length > 0) schedule(g);
+    });
+    return true;
+  };
+
+  /// Il tasto `tasto` allo strumento del motore scelto, se lui lo prende
+  /// prima delle scorciatoie (`DrawingToolState.claims_keys`, come
+  /// `Tool::claims_key` di VectorCraft: la Larghezza con dei punti scelti
+  /// prende Canc ed Esc): un gesto senza puntatore, col solo tasto, che si
+  /// chiude in un passo. `false` se non lo prende, o se un gesto è in corso.
+  const tastoPreso = (tasto: TastoDelloStrumento): boolean => {
+    const motore = ctx.motoreTool;
+    if (motore === null || ctx.current !== null || ctx.disposed) return false;
+    if (!(stati.stato(motore)?.claims_keys ?? []).includes(tasto)) return false;
+    const g = motoreBegin({ stroke: 0, pointer: "mouse", page: null });
+    if (g === null) return false;
+    g.ended = true;
+    const esito = send(g, "commit", [], [{ kind: "key", key: tasto, code: tasto, pressed: true }]);
+    void esito.finally(() => lasciaComandi(g));
+    ultimo = esito.then((e) => {
+      if (ctx.disposed) return;
+      if (e === null) {
+        clearPreview(g);
+        ctx.showHandles();
+        return;
+      }
+      applyOutcome(g, e, null);
+    });
+    return true;
+  };
+
+  ctx.motoreTasto = (tasto) => {
+    if (aperto !== null) return chiudiAperto([{ kind: "key", key: tasto, code: tasto, pressed: true }]);
+    if (tastoPreso(tasto)) return true;
+    if (tasto === "Escape" && ctx.motoreTool !== null && STRUMENTI_DEI_TRACCIATI.has(ctx.motoreTool)) {
+      ctx.tornaAllaSelezione();
+      return true;
+    }
+    return false;
+  };
+
+  // La Gomma dei punti (K6 T12, giro 2): a rilascio il tratto va al motore in
+  // un solo comando, uno alla volta (`gomma-punti.ts`). Dopo la chiusura
+  // dell'editor non parte più niente e non si dice più niente.
+  const applicaEsitoGomma = (esito: DrawingOutcome): void => {
+    if (esito.refused !== null) {
+      ctx.select(esito.selection);
+      if (esito.refused === "empty") ctx.announce(t("draw.gomma_punti.vuota"));
+      else ctx.announce(t("draw.rejected", { reason: t(motivoDelRifiuto(esito.refused) ?? "draw.reason.invalid") }));
+      return;
+    }
+    const read = opsDellEsito(esito.ops);
+    if ("reason" in read) {
+      console.error(`motore del disegno: un'operazione dell'esito non vale (${read.reason}): ${read.detail}`);
+      ctx.announce(t("draw.rejected", { reason: t("draw.reason.invalid") }));
+      return;
+    }
+    if (read.ops.length > 0 && ctx.commit("draw.engine.tool", asGesture(read.ops)) === null) return;
+    ctx.select(esito.selection);
+    if (read.ops.length > 0) ctx.announce(`${t("draw.engine.done")} ${ctx.objects()}`);
+  };
+  const gomma = new CodaGommaPunti({
+    sessione: async () => {
+      if (porta === undefined || ctx.disposed) return null;
+      // Come il gesto del motore: la famiglia dello strumento dev'essere pronta.
+      const pronta = await (preparazioni.get(STRUMENTO_GOMMA_PUNTI) ?? Promise.resolve(true));
+      return pronta ? porta.pronta(ATTESA_APERTURA_MS) : null;
+    },
+    selezione: () => ctx.selection,
+    esito: (esito) => {
+      if (!ctx.disposed) applicaEsitoGomma(esito);
+    },
+    dici: (frase) => {
+      if (!ctx.disposed) ctx.announce(t(frase));
+    },
+    rifiutati: (rifiutati) => {
+      if (!ctx.disposed) ctx.announce(rifiutati.message);
+    },
+  });
+  ctx.gommaPuntiEnd = (punti) => gomma.lancia(punti);
+  // Il Pennello tondo (K6 T12, giro 2): un colpo, un comando, col colore di adesso (`pennello-tondo.ts`).
+  const pennello = new CodaPennello({
+    sessione: async () => {
+      if (porta === undefined || ctx.disposed) return null;
+      const pronta = await (preparazioni.get(STRUMENTO_PENNELLO) ?? Promise.resolve(true));
+      return pronta ? porta.pronta(ATTESA_APERTURA_MS) : null;
+    },
+    esito: (esito) => {
+      if (!ctx.disposed) applicaEsitoGomma(esito);
+    },
+    dici: (frase) => {
+      if (!ctx.disposed) ctx.announce(t(frase));
+    },
+    rifiutati: (rifiutati) => {
+      if (!ctx.disposed) ctx.announce(rifiutati.message);
+    },
+  });
+  ctx.pennelloEnd = (punti, colore) => pennello.lancia(punti, colore);
 
   /// Un tocco della Selezione su un oggetto, senza trascinare: per il doppio
   /// tocco, che isola un gruppo come oggi.
@@ -728,6 +1564,18 @@ export function installGestiMotore(ctx: EditorContext): void {
     if (g.tool !== "select" || g.intent !== "move" || inner.hit === null || inner.from === null || g.last === null || ctx.shift) return null;
     const moved = Math.hypot(g.last.x - inner.from[0], g.last.y - inner.from[1]) * ctx.camera.scale;
     return moved <= DRAG_PX[g.pointer] ? { key: inner.hit, at: inner.from, time: performance.now() } : null;
+  };
+
+  /// Un clic senza trascinare con uno strumento del motore: il suo id e il punto
+  /// del clic, con lo stesso criterio del tocco (`DRAG_PX`, in pixel dello
+  /// schermo). `null` se il gesto ha trascinato o non c'è uno strumento del motore.
+  const clicDi = (g: MotoreGesture): { readonly strumento: string; readonly punto: { readonly x: number; readonly y: number } } | null => {
+    const strumento = ctx.motoreTool;
+    const inner = interni.get(g)!;
+    if (strumento === null || inner.from === null || g.last === null) return null;
+    const moved = Math.hypot(g.last.x - inner.from[0], g.last.y - inner.from[1]) * ctx.camera.scale;
+    if (moved > DRAG_PX[g.pointer]) return null;
+    return { strumento, punto: { x: inner.from[0], y: inner.from[1] } };
   };
 
   /// L'esito del rilascio: le operazioni in un passo, la selezione, e lo si
@@ -781,6 +1629,13 @@ export function installGestiMotore(ctx: EditorContext): void {
     const apart = Math.hypot(tap.at[0] - previous.at[0], tap.at[1] - previous.at[1]) * ctx.camera.scale;
     if (apart > DOUBLE_TAP_PX[g.pointer]) return false;
     const unit = ctx.currentIndex().get(tap.key);
+    // Il doppio clic su un testo ci entra (K6 T16): le parole si cambiano nel
+    // campo «Testo» dell'ispettore, e la conferma è un passo solo.
+    if (unit !== null && unit.role === "text") {
+      ctx.lastTap = null;
+      ctx.showHandles();
+      return ctx.focusWords();
+    }
     if (unit === null || !ctx.isolable(unit) || !ctx.isolate(unit, tap.at, g.pointer)) return false;
     ctx.lastTap = null;
     return true;
@@ -788,6 +1643,9 @@ export function installGestiMotore(ctx: EditorContext): void {
 
   /// Che cosa si dice di un gesto che ha scritto.
   const said = (g: MotoreGesture, inner: Interno): string => {
+    // Uno strumento del motore (K6 T12) non è una forma di K5: lo si dice
+    // com'è, col conto degli oggetti.
+    if (typeof g.tool === "object") return `${t("draw.engine.done")} ${ctx.objects()}`;
     if (g.intent === "shape") return `${t(g.tool === "text" ? "draw.added.text" : ADDED[g.tool as "rect" | "ellipse" | "line" | "arrow"])} ${ctx.objects()}`;
     const units = ctx.selectedUnits();
     const moved = plural(units.length, "draw.moved.one", "draw.moved.other");
@@ -808,6 +1666,12 @@ export function installGestiMotore(ctx: EditorContext): void {
   /// dicono gli strumenti di oggi.
   const refuse = (g: MotoreGesture, refused: DrawingRefusal): void => {
     ctx.showHandles();
+    // Il Contagocce dice perché non legge un'immagine, con la sua frase (K6 T14, giro 7).
+    const strumento = typeof g.tool === "object" ? g.tool.engine.id : null;
+    if (motivoDelRifiutoDelloStrumento(refused, strumento) === "draw.contagocce.immagine") {
+      ctx.announce(t("draw.contagocce.immagine"));
+      return;
+    }
     switch (refused) {
       case "empty":
         if (g.tool === "select") ctx.announceSelection();
@@ -846,9 +1710,22 @@ export function installGestiMotore(ctx: EditorContext): void {
     if (g.frame !== null) cancelAnimationFrame(g.frame);
     g.frame = null;
     g.pending.length = 0;
-    // Il motore lascia il gesto solo se ne ha visto qualcosa.
-    if (g.sent > 0) void send(g, "cancel", []);
+    // Il motore lascia il gesto solo se ne ha visto qualcosa; con lui, il
+    // tracciato aperto che il gesto continuava.
+    if (g.sent > 0) {
+      void send(g, "cancel", []).finally(() => lasciaComandi(g));
+      aperto = null;
+      ingressi.length = 0;
+      lasciaScrittura();
+      lasciaAperto();
+      lasciaAperto = () => {};
+    } else {
+      lasciaComandi(g);
+    }
     clearPreview(g);
+    // La misura di prima torna dopo che chi annulla ha pulito le anteprime
+    // (`clearPreviews` in `curvature-tool.ts`).
+    if (typeof g.tool === "object" && tieneLaMisura(g.tool.engine.id)) queueMicrotask(mostraMisura);
     if (g.before.join("\n") !== ctx.selection.join("\n")) ctx.select(g.before);
   };
   ctx.motoreCancel = motoreCancel;

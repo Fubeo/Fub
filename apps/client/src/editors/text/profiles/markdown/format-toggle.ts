@@ -157,12 +157,19 @@ const keyOf = (marks: ElementMarks): string => `${marks.from}:${marks.openTo}:${
 
 /// Gli elementi di `before` che `local` non tocca nei segni e che in `after`
 /// non si leggono più com'erano.
-function lostElements(before: string, after: string, local: ChangeSet): Read[] {
+function lostElements(before: string, after: string, local: ChangeSet, typed: boolean): Read[] {
   const deleted = new Set<number>();
   local.iterChanges((fromA, toA) => {
     for (let at = fromA; at < toA; at++) deleted.add(at);
   });
   const now = readSigns(after).elements;
+  // Chi scrive soltanto segni cambia il formato a mano: `**gr*` e un'altra `*`
+  // fanno di un corsivo il grassetto che si stava scrivendo, e quel corsivo
+  // non va salvato come `<em>`.
+  let onlySignsTyped = typed && !local.empty;
+  local.iterChanges((fromA, toA, _fromB, _toB, inserted) => {
+    if (fromA !== toA || !inserted.length || !onlySigns(inserted.toString())) onlySignsTyped = false;
+  });
   const out: Read[] = [];
   for (const read of readSigns(before).elements.values()) {
     const { from, openTo, closeFrom, to } = read.marks;
@@ -177,7 +184,8 @@ function lostElements(before: string, after: string, local: ChangeSet): Read[] {
     // I segni si possono raggruppare in un altro modo (`*a*` dentro un
     // grassetto nuovo fa `***a***`): l'elemento resta se un altro dello
     // stesso tipo ha lo stesso testo, più soltanto segni.
-    const same = [...now.values()].some((other) => other.element === read.element
+    // Con soltanto segni scritti basta un elemento di qualunque tipo.
+    const same = [...now.values()].some((other) => (onlySignsTyped || other.element === read.element)
       && other.marks.openTo <= mapped.openTo && mapped.closeFrom <= other.marks.closeFrom
       && onlySigns(after.slice(other.marks.openTo, mapped.openTo) + after.slice(mapped.closeFrom, other.marks.closeFrom)));
     if (!same) out.push(read);
@@ -261,8 +269,10 @@ function sound(
 /// `*b</del>*` la `a` fa di `*a` un'apertura mancata, e `al*<sub>fa</sub>*`
 /// non è più corsivo. Gli elementi coi segni spenti passano al tag gemello,
 /// che regge qualunque vicino: i loro tag, nelle posizioni di prima, vuoti
-/// se ogni segno rimasto regge ancora. Vanno messi dopo `changes`.
-export function brokenTwins(state: EditorState, changes: ChangeSet): Edit[] {
+/// se ogni segno rimasto regge ancora. Vanno messi dopo `changes`. `typed`
+/// per la battuta della tastiera: i segni scritti a mano cambiano il formato
+/// di proposito (`**gr*` e `*` fanno il grassetto, non `*<em>gr</em>*`).
+export function brokenTwins(state: EditorState, changes: ChangeSet, typed = false): Edit[] {
   const lines = new Set<number>();
   let multiline = false;
   changes.iterChanges((fromA, toA, _fromB, _toB, inserted) => {
@@ -285,7 +295,7 @@ export function brokenTwins(state: EditorState, changes: ChangeSet): Edit[] {
     if (local.apply(Text.of([line.text])).toString() !== text) continue;
     // Senza un carattere di segno la riga non ha elementi da perdere.
     if (!SIGN_IN_LINE.test(line.text)) continue;
-    for (const { element, marks } of lostElements(line.text, text, local)) {
+    for (const { element, marks } of lostElements(line.text, text, local, typed)) {
       const tag = HTML_TWIN[element];
       if (!tag) continue;
       tags.push(

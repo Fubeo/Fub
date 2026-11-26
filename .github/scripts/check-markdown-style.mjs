@@ -2,6 +2,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { markdownUnder } from "./doc-files.mjs";
 
 const root = process.cwd();
 const roots = [
@@ -13,17 +14,9 @@ const roots = [
   "CHANGELOG.md",
 ];
 
-function walk(dir) {
-  if (!fs.existsSync(dir)) return [];
-  return fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
-    const full = path.join(dir, entry.name);
-    return entry.isDirectory() ? walk(full) : [full];
-  });
-}
-
 const files = [
   ...roots.map((file) => path.join(root, file)).filter(fs.existsSync),
-  ...walk(path.join(root, "docs")).filter((file) => file.endsWith(".md")),
+  ...markdownUnder(path.join(root, "docs")),
 ];
 
 const errors = [];

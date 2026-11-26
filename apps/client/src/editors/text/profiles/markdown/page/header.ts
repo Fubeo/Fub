@@ -34,6 +34,7 @@ import { featuredProperties, propertiesElement, samePageProperties, type PagePro
 import type { NoteType, NoteTypeList, NoteTypeState } from "../../../../../state/note-types";
 import { openTypeChooser, TYPE_KEY, typeIconElement, typeNoticeElement, typeStamp } from "./note-type";
 import { errorText } from "../../../../../host/errors";
+import { composingKey } from "../../../../../kit/ime";
 
 export type { PageProperties } from "./featured";
 
@@ -225,6 +226,10 @@ export interface PageHost {
   focusText(): void;
   /// Il titolo è cambiato fuori dal testo (una rinomina riuscita).
   refresh(): void;
+  /// Annulla e ripeti della nota, da Ctrl+Z e Ctrl+Maiusc+Z (o Ctrl+Y) nel
+  /// titolo che non ha una modifica sua: un passo per tasto.
+  undo?(): void;
+  redo?(): void;
   /// L'altezza della testata è cambiata.
   measure(): void;
   /// «Altre N proprietà» aperto o chiuso.
@@ -397,7 +402,7 @@ export function renderPageHeader(data: PageData, host: PageHost, life: Lifetime,
   // ↑ ↓ fra il titolo e le voci della testata; dall'ultima, il testo.
   if (host.writing) {
     life.listen(root, "keydown", (event) => {
-      if (event.isComposing || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+      if (composingKey(event) || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
       if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
       const stops = pageStops(root);
       const index = stops.indexOf(event.target as HTMLElement);
@@ -426,6 +431,14 @@ function titleHeading(data: PageData): HTMLElement {
   title.setAttribute("aria-level", "1");
   title.textContent = data.title;
   return title;
+}
+
+/// Ctrl (o Cmd)+Z annulla; con Maiusc, o Ctrl+Y, ripete.
+function historyKey(event: KeyboardEvent): "undo" | "redo" | null {
+  if (!(event.ctrlKey || event.metaKey) || event.altKey) return null;
+  const key = event.key.toLowerCase();
+  if (key === "z") return event.shiftKey ? "redo" : "undo";
+  return key === "y" && !event.shiftKey ? "redo" : null;
 }
 
 /// Il titolo in Scrittura: un campo. Invio o l'uscita rinominano, Esc torna
@@ -466,7 +479,21 @@ function titleField(data: PageData, host: PageHost, root: HTMLElement, life: Lif
     host.refresh();
   };
   life.listen(title, "keydown", (event) => {
-    if (event.isComposing) return;
+    if (composingKey(event)) return;
+    // Il titolo senza una modifica sua non ha niente da annullare: Ctrl+Z vale
+    // per la nota, come col fuoco nel testo, invece di non fare niente (o di
+    // lasciar fare a WebKit un annulla suo, un passo sì e uno no). Chi ha
+    // scritto nel titolo annulla prima ciò che ha scritto lì (IMP-6105).
+    const history = historyKey(event);
+    if (history && title.value === data.title) {
+      const run = history === "undo" ? host.undo : host.redo;
+      if (run) {
+        event.preventDefault();
+        event.stopPropagation();
+        run();
+      }
+      return;
+    }
     if (event.key === "Enter") {
       event.preventDefault();
       event.stopPropagation();
@@ -715,6 +742,12 @@ interface PageMenuAction {
 /// quando i pulsanti non ci stanno, si nascondono dalla fine (non «⋯», che
 /// resta l'ultimo) e il menu «⋯» li offre. Si rifà a ogni cambio di
 /// larghezza; un pulsante nascosto torna appena c'è posto.
+///
+/// La riga nasce fuori dal documento (la testata si costruisce prima che
+/// CodeMirror la monti): lì non ha larghezza, e la prima misura la fa
+/// l'osservatore, appena la riga ha un posto, prima del disegno. Misurarla
+/// staccata non serve e costa: WebKit, per `scrollWidth`, rifà prima lo stile e
+/// il layout di tutto il documento, a metà dell'aggiornamento dell'editor.
 export function fitTools(tools: HTMLElement, more: HTMLButtonElement, life: Lifetime): void {
   const fit = () => {
     const buttons = [...tools.querySelectorAll<HTMLButtonElement>(":scope > .cm-fub-page-tool")].filter((button) => button !== more);
@@ -723,8 +756,9 @@ export function fitTools(tools: HTMLElement, more: HTMLButtonElement, life: Life
       buttons[index]!.hidden = true;
     }
   };
-  fit();
-  if (typeof ResizeObserver !== "function") return;
+  const observable = typeof ResizeObserver === "function";
+  if (tools.isConnected || !observable) fit();
+  if (!observable) return;
   let width = -1;
   const observer = new ResizeObserver(() => {
     const next = tools.clientWidth;

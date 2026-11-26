@@ -108,6 +108,22 @@ riempie del colore dopo il riferimento.
 
   Con `fub:role="swatch"` e un'altra forma è una risorsa senza ciclo di
   vita, come senza `fub:role`.
+- **Il gruppo di colori** è un nome che raccoglie dei campioni, in ordine:
+  ogni membro porta `fub:group` col nome del gruppo e i membri stanno in fila
+  nella stessa `defs`. Non c'è un elemento del gruppo, né una versione nuova.
+
+  ```xml
+  <linearGradient id="r2b2b2b2b" fub:role="swatch" fub:name="Arancio" fub:group="Caldi" gradientUnits="userSpaceOnUse"><stop stop-color="#e69f00"/></linearGradient>
+  <linearGradient id="r3c3c3c3c" fub:role="swatch" fub:name="Giallo" fub:group="Caldi" gradientUnits="userSpaceOnUse"><stop stop-color="#f0e442"/></linearGradient>
+  ```
+
+  Non è un gruppo, e resta byte per byte com'è, un `fub:group` vuoto o di soli
+  spazi, col nome di un campione, di un motivo, `[None]` o `[Registration]`, su
+  una risorsa che non è un campione (una `radialGradient`, un `pattern`, un
+  campione rotto), o coi membri sparsi fra altri campioni o in due `defs`: i
+  campioni restano campioni senza gruppo. Un gruppo senza membri non si scrive:
+  chi toglie l'ultimo campione toglie il gruppo, e un comando che ne farebbe uno
+  vuoto si rifiuta.
 
 ## 3. I valori
 
@@ -358,8 +374,11 @@ dell'immagine: quelle di `x y width height`, dopo il suo `transform`
   spaziatura, un corpo sopra la linea di base e 0,35 sotto, a partire
   dall'ancora; il contorno si somma. La regione si arrotonda in fuori ai
   centesimi.
-- **Il contenuto** non ha id, e scrive lo stile che ereditava, perché una
-  risorsa non eredita niente da chi la usa. In un `clipPath` scrive anche
+- **Il contenuto** non ha id, salvo la forma di un `clipPath`, che ne ha
+  uno di risorsa (`r…`): è la forma che «Modifica maschera» sceglie e
+  cambia con un `set` sulla parte `[0]` del `clipPath`. Un lettore che non
+  lo conosce lo ignora. Il contenuto scrive lo stile che ereditava, perché
+  una risorsa non eredita niente da chi la usa. In un `clipPath` scrive anche
   `fill="#000000"` quando non aveva riempimento; i motivi diventano il loro
   ripiego e i marcatori se ne vanno. In una `mask` non entrano motivi,
   marcatori, ritagli, maschere e filtri.
@@ -520,6 +539,8 @@ riscritture.
   `userSpaceOnUse` senza `x2`, come FubDraw lo scrive, e con lui chi lo usa,
   e li conserva byte per byte; un campione senza `gradientUnits` lo legge
   come una risorsa senza ciclo di vita.
+- **Un lettore che non conosce i gruppi di colori** ignora `fub:group`: vede
+  i campioni senza gruppo e conserva l'attributo come gli altri `fub:*`.
 - **Un lettore che non conosce i motivi del documento** legge un motivo
   come una risorsa senza ciclo di vita: resta, e duplicare chi lo usa lo
   condivide. Una campitura è un `pattern` privato come gli altri.

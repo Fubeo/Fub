@@ -14,7 +14,8 @@ flowchart LR
 ```
 
 Le proprietà delle note restano nelle note. Il file `.base` dice soltanto quali
-note vedere e come mostrarle.
+note vedere e come mostrarle. Una Base non elenca mai i file `.base`, il suo
+compreso, qualunque sia il filtro (`derive`, in `crates/fub-features/src/base.rs`).
 
 ## Che cosa contiene un file
 
@@ -45,7 +46,7 @@ facoltative:
 | `summaries` | i riepiloghi (conteggio, somma, media, minimo, massimo…) |
 | `limit` | quante righe al massimo, da 1 a 10000 |
 | `search` | un testo da cercare fra i valori delle righe |
-| `map` | le coordinate e il fornitore dei tasselli, per la vista mappa |
+| `map` | le coordinate e il fornitore dei tasselli, per [la vista mappa](bases-map.md) |
 | `fub` | il blocco di Fub per il calendario e la linea del tempo (vedi sotto) |
 
 ## Calendario e linea del tempo
@@ -141,8 +142,7 @@ date si perdono; passare fra calendario e linea del tempo lascia solo `view`.
 
 Un filtro è `all` (nessun filtro), oppure un albero con `and`, `or` o `not`,
 oppure una condizione. Una condizione dice su che cosa agisce (`property`,
-`file`, `formula` o `tag`), con quale operatore (`op`) e con quale valore
-(`value`).
+`file`, `formula` o `tag`), con quale operatore (`op`) e con quale valore (`value`).
 
 | Operatore | Vero quando |
 |---|---|
@@ -179,6 +179,7 @@ Il modello ha dei limiti fissi. Oltre, il file non si legge come Base.
 | una vista | 64 KiB |
 | i riepiloghi di una vista | 32 |
 | la lunghezza di una formula | 8 KiB |
+| le note del vault che una Base legge (due domande all'indice; oltre, lo dice e non ne mostra una parte) | 20000 |
 
 ## Come si scrive il file
 
@@ -255,13 +256,13 @@ contenuto, fino al riquadro; dentro una nota sta in colonna col testo.
 
 Sopra la Base c'è una barra. A sinistra le viste del file come linguette, con
 la figura del loro tipo: un clic sceglie la vista. Quando manca spazio (sotto i
-700 px della pagina, o quando le viste sono tante da non stare nella barra) le
-viste non scelte restano solo la figura, col nome nel titolo, e quella scelta
-resta in vista; sotto i 420 px anche quella scelta. Se nemmeno così stanno,
-le ultime passano in «Altre N viste», l'ultima delle linguette (una freccia e
-il numero), che le elenca in un menu; la vista scelta resta sempre nella
-barra. Subito dopo le linguette, «+» aggiunge una vista nuova (vedi sotto). A
-destra gli attrezzi:
+700 px della pagina, o con tante viste) le viste non scelte restano la figura,
+col nome nel titolo; sotto i 420 px anche la scelta. Se nemmeno così stanno, le
+ultime passano in «Altre N viste» (una freccia e il numero), che le elenca in un
+menu; la scelta resta sempre nella barra. Se nemmeno lei sta accanto agli
+attrezzi (al telefono) la barra va su due file: sopra le linguette, col nome
+della scelta, e «+»; sotto gli attrezzi e «Nuova». Subito dopo le linguette,
+«+» aggiunge una vista nuova (vedi sotto). A destra gli attrezzi:
 
 | Attrezzo | Che cosa fa | Che cosa scrive |
 |---|---|---|
@@ -293,11 +294,9 @@ le salva; se non si salvano, il gesto non parte e la barra lo dice.
 La riga di ricerca diventa filtro quando ogni suo pezzo è una proprietà con un
 valore (`[stato:Arrivata]`, `[valore:>3000]`), unito con uno spazio (tutte vere)
 o con `OR`, anche negato (`-[stato:Prenotata]`). Il testo libero no: la Base
-dice perché non lo scrive e lascia il filtro com'era. Una proprietà che non è
-una colonna e che le righe lette non hanno si applica lo stesso (le righe
-portano solo le proprietà che la vista chiede), ma la Base avverte di
-controllare il nome: un nome sbagliato non diventa in silenzio un filtro che
-non trova niente. Le scelte e i valori suggeriti vengono dalle righe lette
+dice perché non lo scrive e lascia il filtro com'era. Una proprietà che nessuna
+nota ha si applica lo stesso, ma la Base avverte di controllare il nome: un
+nome sbagliato non diventa in silenzio un filtro che non trova niente. Le scelte e i valori suggeriti vengono dalle righe lette
 prima del filtro, così un filtro che non trova niente si corregge.
 
 Nella forma a vista una proprietà che nelle righe è sempre una data o sempre
@@ -319,8 +318,9 @@ forma a vista non sa dire (un `or`, un `not` su una proprietà) resta come riga
 di ricerca, e la Base lo dice; uno che neppure la ricerca sa dire (una formula,
 un valore lista) la Base non lo riscrive, lo dice, e si cambia dal file `.base`.
 
-Le proprietà che Filtro e Proprietà propongono sono quelle che le righe caricate
-hanno, con i loro valori come suggerimenti.
+Filtro e Proprietà propongono le proprietà delle note del vault (prima quelle
+delle righe, al più 200 nomi) coi loro valori, anche in una Base appena creata;
+a `derive` vanno solo quelle del piano (`required_props`, tutte con `all_properties`).
 
 Il gesto non scrive, e la barra lo dice sotto le etichette, quando:
 
@@ -345,11 +345,11 @@ modello li legge; l'elenco delle viste (`op: "parse"`) porta il tipo di ognuna (
 
 «+» apre il menu «Nuova vista»: Tabella, Schede, Elenco, Bacheca, Mappa,
 Calendario, Linea del tempo. La vista nuova prende il primo nome libero del tipo («Tabella», «Tabella 2»…) e
-**eredita il filtro e le colonne** della vista aperta; una bacheca prende come
-corsie il raggruppamento della vista aperta o la sua prima colonna che è una
-proprietà, una mappa le coordinate della vista aperta o le proprietà `lat` e
+**eredita il filtro e le colonne** della vista aperta; una bacheca prende le
+corsie che dice [La bacheca della Base](bases-kanban.md), mai una data; una
+mappa le coordinate della vista aperta o le proprietà `lat` e
 `lon` (`latitude`/`longitude`) delle righe, un calendario la data della vista
-aperta o la prima proprietà delle righe che ha per valori delle date (la
+aperta o la proprietà data che più note della vista hanno (la
 linea del tempo la prende come inizio, e la seconda come fine). Senza
 corsie, senza coordinate o senza date la voce è spenta e dice perché. Sono
 più scritture, una chiave per volta come ogni gesto: `base.view.add` aggiunge la vista in fondo al file, poi `base.view.set`

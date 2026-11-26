@@ -125,6 +125,9 @@ import {
   type Control,
   type NumberProblem,
 } from "./settings-model";
+import { composingKey } from "../kit/ime";
+import { DRAW_KEYS_SETTING, dimenticaTastiDisegno, riempiTastiDisegno } from "./settings-disegno";
+import { DRAW_ENGINE_SETTING, dimenticaMotore, motoreVisibile, riempiMotore } from "./settings-motore";
 
 /// Le righe risolte per chiave: è ciò con cui una scheda ritrova il valore di
 /// una chiave che ha composto invece di leggerla da un elenco.
@@ -716,6 +719,8 @@ function close(): void {
   rowErrors.clear();
   writtenRows.clear();
   openDetails.clear();
+  dimenticaTastiDisegno();
+  dimenticaMotore();
   release = null;
   renderedTab = null;
   renderedForm = null;
@@ -1325,7 +1330,13 @@ async function renderForm(): Promise<HTMLElement[]> {
   // come settanta righe senza gruppo la cui etichetta è una chiave nuda. Le
   // disegna la scheda dei componenti, accanto a chi le ha chieste, che è
   // l'unico posto in cui significano qualcosa.
-  const entries = formRows(await settings());
+  const all = await settings();
+  const entries = formRows(all);
+  // Le preferenze del motore del disegno non sono una riga: sono il riquadro
+  // «Motore del disegno» nel gruppo dei disegni (`settings-motore.ts`).
+  const motore = all.find((entry) => entry.spec.key === DRAW_ENGINE_SETTING);
+  const vault = state.vaultRoot;
+  const conMotore = motore !== undefined && motoreVisibile(vault) ? motore : null;
   const nodes: HTMLElement[] = [];
   if (entries.length === 0) nodes.push(row("muted settings-note", t("settings.none")));
   const themes = await themeCatalog().catch(() => []);
@@ -1365,11 +1376,28 @@ async function renderForm(): Promise<HTMLElement[]> {
       if (link !== null && owner) parts.body.append(renderLinkedFolder({ lifetime: owner, rerender: render }, link));
       for (const diagnosis of themeDiagnoses()) parts.body.append(renderDiagnosis(diagnosis));
     }
+    if (conMotore !== null && group.title === conMotore.spec.group) await appendMotore(parts.body, conMotore);
     nodes.push(parts.section);
   }
-  nodes.push(await renderProfiles(groups.length));
+  // Il gruppo dei disegni senza altre righe da mostrare: il riquadro ha la
+  // sezione sua, con lo stesso titolo.
+  let sections = groups.length;
+  if (conMotore !== null && !groups.some((group) => group.title === conMotore.spec.group)) {
+    const parts = sectionBlock(conMotore.spec.group || t("settings.group.other"), sections++);
+    await appendMotore(parts.body, conMotore);
+    nodes.push(parts.section);
+  }
+  nodes.push(await renderProfiles(sections));
   formSnapshots.set(nodes, snapshot);
   return nodes;
+}
+
+/// Il riquadro «Motore del disegno» in fondo al gruppo dei disegni.
+async function appendMotore(body: HTMLElement, entry: SettingEntry): Promise<void> {
+  const owner = settingsLifetime;
+  const vault = state.vaultRoot;
+  if (!owner || owner.closed || !motoreVisibile(vault)) return;
+  await riempiMotore(body, entry, { vault, vita: owner, ridisegna: () => void render() });
 }
 
 /// Le chiavi che hanno un gesto loro altrove, e che nel form generico sarebbero
@@ -2032,6 +2060,10 @@ const OWN_LIST_FIELDS = new Map<string, () => Promise<OwnListField>>([
   [
     "uri.allowed",
     () => import("../ui/uri-allowed-field").then(({ uriAllowedField, describeUriAllowed }) => ({ field: uriAllowedField, describe: describeUriAllowed })),
+  ],
+  [
+    "map.tile-hosts",
+    () => import("../ui/map-tile-hosts-field").then(({ mapTileHostsField, describeMapTileHosts }) => ({ field: mapTileHostsField, describe: describeMapTileHosts })),
   ],
   [
     "sync.exclude",
@@ -3111,6 +3143,18 @@ async function renderShortcuts(): Promise<HTMLElement[]> {
     for (const command of fromShell) addCommand(shell, command, command.title, command.description);
     finish(shell);
   }
+  // I comandi del Disegno completo (K6 T9c): il loro modulo arriva solo a
+  // riquadro aperto (`settings-disegno.ts`), e i tasti stanno in `draw.keys`.
+  const drawKeys = byKey.get(DRAW_KEYS_SETTING);
+  if (drawKeys) {
+    const drawing = sectionBlock(t("settings.drawing_keys.title"), index++, { hint: t("settings.drawing_keys.hint") });
+    const changed = await riempiTastiDisegno(drawing.body, drawKeys, {
+      scrivi: (action) => write(action),
+      ridisegna: () => void render(),
+    });
+    markModified(drawing, changed);
+    nodes.push(drawing.section);
+  }
   if (count === 0) nodes.push(row("muted settings-note", t("settings.shortcuts.none")));
   return nodes;
 }
@@ -3240,7 +3284,7 @@ function renderCatalogSearch(installed: InstalledPluginInfo[]): HTMLElement {
     });
   });
   search.addEventListener("keydown", (event) => {
-    if (event.key === "Enter") { event.preventDefault(); run.click(); }
+    if (event.key === "Enter" && !composingKey(event)) { event.preventDefault(); run.click(); }
   });
   const form = document.createElement("div");
   form.className = "settings-actions";

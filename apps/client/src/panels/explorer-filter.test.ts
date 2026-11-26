@@ -99,6 +99,11 @@ describe("il campo sopra l'albero", () => {
     input.dispatchEvent(empty);
     expect(empty.defaultPrevented).toBe(false);
     await type("guida");
+    // Esc che chiude una composizione (WebKit: codice 229) non svuota il campo.
+    const composing = new KeyboardEvent("keydown", { key: "Escape", keyCode: 229, bubbles: true, cancelable: true });
+    input.dispatchEvent(composing);
+    expect(composing.defaultPrevented).toBe(false);
+    expect(input.value).toBe("guida");
     const full = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
     input.dispatchEvent(full);
     expect(full.defaultPrevented).toBe(true);

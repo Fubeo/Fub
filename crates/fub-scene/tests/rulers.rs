@@ -49,6 +49,8 @@ fn le_guide_dei_casi() {
                 for (a, e) in actual.iter().zip(&expected) {
                     assert_eq!(a["axis"], e["axis"], "{value:?}");
                     assert_eq!(a["locked"], e["locked"], "{value:?}");
+                    assert_eq!(a["board"], e["board"], "{value:?}");
+                    assert_eq!(a["layer"], e["layer"], "{value:?}");
                     assert_eq!(a["at"].as_f64(), e["at"].as_f64(), "{value:?}");
                 }
             }
@@ -77,7 +79,9 @@ fn una_guida_non_ha_segno() {
         [Guide {
             axis: Axis::Y,
             at: 0.0,
-            locked: false
+            locked: false,
+            board: None,
+            layer: None,
         }]
     );
     assert!(guides[0].at.is_sign_positive());

@@ -35,7 +35,7 @@ export interface SheetCursorContext {
 export function installSheetCursor(ctx: EditorContext): void {
   const {
     life, surface, live, cursorMark,
-    editable, currentIndex, announce, coordText, labelOf, showCursor, setCamera, stepNow, viewArea, viewCenter, cancelGesture, handlers
+    editable, currentIndex, announce, coordText, labelOf, showCursor, setCamera, snapStep, viewArea, viewCenter, cancelGesture, handlers
   } = ctx;
   // --- Il cursore del foglio ----------------------------------------------------
   //
@@ -125,8 +125,8 @@ export function installSheetCursor(ctx: EditorContext): void {
   const moveCursorOnGrid = (x: number, y: number, lines: number): void => {
     const [cx, cy] = cursorPoint();
     placeCursor([
-      x === 0 ? snapValue(cx, stepNow()) : lineBeyond(cx, stepNow(), sign(x), lines),
-      y === 0 ? snapValue(cy, stepNow()) : lineBeyond(cy, stepNow(), sign(y), lines),
+      x === 0 ? snapValue(cx, snapStep()) : lineBeyond(cx, snapStep(), sign(x), lines),
+      y === 0 ? snapValue(cy, snapStep()) : lineBeyond(cy, snapStep(), sign(y), lines),
     ]);
   };
   ctx.moveCursorOnGrid = moveCursorOnGrid;

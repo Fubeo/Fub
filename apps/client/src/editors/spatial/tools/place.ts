@@ -106,9 +106,9 @@ function heading(parent: ContainerNode, node: ElementPart): boolean {
   return parent.parent === null && (role === "paper" || role === "board" || role === "defs");
 }
 
-/// Il genere di id di `node`: un livello ha il suo.
+/// Il genere di id di `node`: un livello, anche un sottolivello, ha il suo.
 function kindOf(node: ElementPart): IdKind {
-  return node.parent?.parent === null && node.details?.role === "layer" ? "layer" : "object";
+  return node.details?.role === "layer" ? "layer" : "object";
 }
 
 /// La chiave con cui l'editor sceglie `node`: l'id, o `@` e il percorso.

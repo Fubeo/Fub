@@ -48,10 +48,80 @@ Sotto la selezione ferma ci sono le sue misure, larghezza per altezza, e la
 barra della selezione si mette sotto di loro; mentre si ridimensiona le
 misure seguono, e mentre si gira l'angolo.
 
-Nella banda di stato dello Scrittoio il disegno dice lo zoom (un clic torna al
-100%), l'angolo della vista girata (un clic la raddrizza), la vista dei
-contorni (un clic torna al disegno pieno), dove sta il puntatore, la misura
-della selezione e quanti oggetti ci sono o sono scelti.
+Nella banda di stato dello Scrittoio il disegno dice lo zoom, l'angolo della
+vista girata (un clic la raddrizza), la vista dei contorni (un clic torna al
+disegno pieno), le misure (dove sta il puntatore, accanto alla misura della
+selezione: un'unica voce, aggiornata al più una volta per fotogramma) e quanti
+oggetti ci sono o sono scelti.
+
+Nel Disegno completo lo zoom apre un menu: ingrandisci, riduci, zoom al 100%,
+adatta tavola alla finestra (la tavola di adesso; senza tavole, tutto), adatta
+tutto alla finestra, e sotto un campo dove si scrive la percentuale. Un
+valore fuori dai limiti della vista (dal 10% al 3200%) lo dice e lo zoom non
+cambia. Il menu si apre con Invio o Spazio, le frecce vanno fra le voci, Esc lo
+chiude e riporta il fuoco alla voce dello zoom. Negli altri spazi di lavoro e nel
+Semplice, un clic sulla voce dello zoom torna al 100%, come prima. Gli stessi
+comandi stanno in Ctrl+/ e nella ricerca dei comandi.
+
+Nel Disegno completo, ≡ › Visualizza ha la griglia («Mostra griglia» e
+«Aggancia alla griglia», le stesse impostazioni del Semplice), «Aggancia ai
+pixel», «Guide sensibili», «Aggancia al punto», «Aggancia ai glifi», «Mostra
+griglia trasparenza», il contorno, i righelli del bordo del foglio
+(«Mostra righelli»), «Nascondi bordi», «Nascondi riquadro di delimitazione» e
+«Nascondi tavole da disegno», «Reimposta rotazione vista», che è spenta finché
+la vista non è girata, e «Vai alla tavola da disegno…», spenta se il disegno non
+ha tavole. Le voci stanno in sette file, separate da una riga: griglia e
+aggancio; guide e agganci del motore; trasparenza, contorno e righelli; bordi,
+riquadro e tavole; la croce di precisione; la rotazione; la tavola da
+inquadrare. Le
+voci «Nascondi» hanno la spunta quando nascondono davvero. «Usa cursori di
+precisione» mette la croce al posto del cursore degli strumenti che disegnano
+(penna, matita, forme, pennelli e gomma dei punti di ancoraggio); la scelta resta
+su questa macchina, come la griglia.
+
+«Aggancia ai pixel» porta i punti di un rettangolo, di un tracciato, di uno
+spostamento e di una copia su interi della scena. Un pixel è un'unità del file,
+cioè un px CSS (1/96 di pollice): un pt vale 4/3 di pixel. Lo zoom non lo
+cambia: a 200% un pixel della scena sono due pixel dello schermo. Se la griglia
+aggancia anche lei, vince la griglia, come nel motore; le righe della griglia
+restano quelle che si vedono. Le frecce spostano la selezione fino al pixel
+seguente, e con Maiusc di cinque. Nel Semplice l'aggancio al pixel non agisce:
+il valore resta salvato con la griglia, e lì i punti non si arrotondano.
+
+«Guide sensibili», «Aggancia al punto» e «Aggancia ai glifi» sono gli
+interruttori di VectorCraft, con i suoi valori di serie: le prime due accese, la
+terza spenta. Valgono per gli strumenti del motore. Con le guide accese, un bordo
+o un punto tirato vicino al bordo, al centro o a un punto di un altro oggetto ci
+va sopra, e si vedono le linee della guida. Con le guide spente, «Aggancia al
+punto» porta il punto preso sul punto più vicino di un altro oggetto; spente
+tutte e due, il puntatore resta dov'è. Con la griglia che aggancia, le guide non
+agiscono, come in VectorCraft. «Aggancia ai glifi» arriva al motore, ma il motore
+la usa solo con i testi.
+
+La griglia di trasparenza mette la carta a scacchi, dove il foglio non ha un
+fondo suo: un PDF di sfondo, con la sua pagina, la copre. «Nascondi bordi»
+toglie il contorno di ogni oggetto scelto. «Nascondi riquadro di delimitazione»
+toglie la cornice della selezione, le sue maniglie, le misure e il rotore: senza
+maniglie non si ridimensiona né si gira la selezione con il mouse, ma la si
+sposta ancora trascinandola. «Nascondi tavole da disegno» toglie alle carte
+delle tavole il bordo, l'ombra e il nome: le carte restano, col loro fondo.
+«Vai alla tavola da disegno…» apre un dialogo con le tavole in ordine, che parte
+da quella di adesso: «Vai» la inquadra nella finestra, Annulla ed Esc non
+cambiano la vista. Un clic su una tavola nella sezione «Tavole» del Design la
+inquadra allo stesso modo. I righelli stanno sul bordo in alto e a sinistra
+del foglio, con le tacche e i numeri nell'unità del documento; non spostano il
+disegno, e con la vista girata non si leggono. Lo stato dei righelli non si
+salva nel file. Gli interruttori della vista (trasparenza, bordi, riquadro, tavole,
+agganci e guide) si ricordano come la griglia, nelle sue stesse impostazioni:
+non cambiano il file e non entrano nella cronologia. Le altre voci di Visualizza
+(l'anteprima dei pixel, la modalità presentazione e lo schermo intero, il
+widget d'angolo, le viste salvate) non ci
+sono ancora: non compaiono nel menu.
+
+Il navigatore si accende e si spegne dalla banda, con la voce «Navigatore» nel
+Disegno completo, o da Vista nel Semplice. La panoramica mostra tutto il
+disegno e il riquadro di ciò che si vede; un clic porta la vista lì, e il
+riquadro si trascina. Si rilegge al più una volta per fotogramma.
 
 ## La testa
 
@@ -80,6 +150,13 @@ cui viene. Un comando spento dice perché, e i comandi usati da poco stanno in
 cima. Con uno strumento che disegna c'è anche «Menu radiale», che apre il
 radiale in mezzo alla vista da tastiera. La palette dello Scrittoio resta
 `Ctrl+Maiusc+P`.
+
+Con il Disegno completo aperto, `Ctrl+/` e il menu ≡ «Disegno» cercano fra i
+comandi del motore, dal loro indice: ogni voce col suo posto e il tasto che la
+fa partire ([i tasti](drawing-keys.md)), in italiano e in inglese. Un comando che non vale per la selezione resta visibile,
+spento, col suo perché; Invio su di lui non fa niente e ripete il perché. Se
+l'indice non arriva, lo dicono, con «Riprova». Finché nessuna funzione del
+Completo è pronta, l'indice è vuoto e lo dicono anche loro.
 
 ## Girare il foglio
 

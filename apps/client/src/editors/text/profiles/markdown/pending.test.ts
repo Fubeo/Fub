@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import { markdown } from "@codemirror/lang-markdown";
 import { EditorState } from "@codemirror/state";
-import { ensureSyntaxTree } from "@codemirror/language";
 import { markdownGrammar } from "./grammar";
 import { liveGuide } from "../../live-reveal";
 import { guideAt, leafTyping, openMarksInView, pendingMarks, spaceClosing } from "./pending";
+import { parsed } from "./test-support";
 
 // La guida (B1–B4, F5). `|` è il cursore.
 
@@ -46,12 +46,11 @@ describe("il riconoscitore dei segni in sospeso", () => {
 
 function mk(spec: string, guide = true): EditorState {
   const head = spec.indexOf("|");
-  const state = EditorState.create({
+  const state = parsed(EditorState.create({
     doc: spec.replace("|", ""),
     selection: { anchor: head },
     extensions: [markdown({ base: markdownGrammar }), liveGuide.of(guide)],
-  });
-  ensureSyntaxTree(state, state.doc.length, 1000);
+  }));
   return state;
 }
 

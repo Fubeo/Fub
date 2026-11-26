@@ -1,0 +1,2103 @@
+{
+  "$nota": "I casi della famiglia livelli (piano K6, T15, giro 1): il menu ≡ › Selezione che si fa ora. Il disegno è livelli/base.svg: due rettangoli rossi (oa1a1a1a1, ob2b2b2b2), un blu (oc3c3c3c3) e un testo (ot4d4d4d4). Selezionare non cambia il documento: nessuna operazione, solo la selezione dopo. Giro 3 (K6 T15): i comandi di livello della scheda Livelli, con il livello scelto nella selezione; il livello bloccato si sblocca, non si rinomina; un livello non va dentro se stesso. Giro 3 (K6 T15): elimina, occhio e lucchetto del livello, con i loro rifiuti (livello bloccato, nessun livello, spostamento dentro se stesso). Giro 6 (K6 T12): «Maschere di ritaglio» sceglie i <g clip-path> del file (livelli/ritaglio-inkscape.svg). Giro 2 (K6 T15): layer.selectAll, layer.merge e layer.reverse. Unire vuole almeno due livelli e invertire almeno due righe dello stesso livello o gruppo, con il perché in italiano; un livello bloccato si rifiuta. Duplica e raccogli in un livello nuovo non sono ancora fatti: il livello nuovo nascerebbe dentro il livello radice del motore, che il file non scrive. Giro 7 (K6 T15): Seleziona testo per font (carattere.svg e i testi nascosti, bloccati o su un livello chiuso) e le opzioni della modifica globale, che rispondono con il conteggio di ciò che Avvia prenderebbe (uguali.svg); Avvia la modifica globale non è ancora fatto.",
+  "casi": [
+    {
+      "id": "select.same.fillColor",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "selezione": [
+          "oa1a1a1a1",
+          "ob2b2b2b2"
+        ]
+      }
+    },
+    {
+      "id": "select.same.strokeColor",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "selezione": [
+          "oa1a1a1a1",
+          "ob2b2b2b2",
+          "oc3c3c3c3",
+          "ot4d4d4d4"
+        ]
+      }
+    },
+    {
+      "id": "select.same.strokeWeight",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "selezione": [
+          "oa1a1a1a1",
+          "ob2b2b2b2",
+          "oc3c3c3c3",
+          "ot4d4d4d4"
+        ]
+      }
+    },
+    {
+      "id": "select.same.fillAndStroke",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "selezione": [
+          "oa1a1a1a1",
+          "ob2b2b2b2"
+        ]
+      }
+    },
+    {
+      "id": "select.same.opacity",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "selezione": [
+          "oa1a1a1a1",
+          "ob2b2b2b2",
+          "oc3c3c3c3",
+          "ot4d4d4d4"
+        ]
+      }
+    },
+    {
+      "id": "select.same.blendingMode",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "selezione": [
+          "oa1a1a1a1",
+          "ob2b2b2b2",
+          "oc3c3c3c3",
+          "ot4d4d4d4"
+        ]
+      }
+    },
+    {
+      "id": "select.same.appearance",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "selezione": [
+          "oa1a1a1a1",
+          "ob2b2b2b2"
+        ]
+      }
+    },
+    {
+      "id": "select.same.shapeType",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "selezione": [
+          "oa1a1a1a1",
+          "ob2b2b2b2",
+          "oc3c3c3c3"
+        ]
+      }
+    },
+    {
+      "id": "select.same.symbolInstance",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "selezione": []
+      }
+    },
+    {
+      "id": "select.object.allOnSameLayers",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "selezione": [
+          "oa1a1a1a1",
+          "ob2b2b2b2",
+          "oc3c3c3c3",
+          "ot4d4d4d4"
+        ]
+      }
+    },
+    {
+      "id": "select.object.textObjects",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": {
+        "selezione": [
+          "ot4d4d4d4"
+        ]
+      }
+    },
+    {
+      "id": "select.allOnArtboard",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": {
+        "selezione": [
+          "oa1a1a1a1",
+          "ob2b2b2b2",
+          "oc3c3c3c3",
+          "ot4d4d4d4"
+        ]
+      }
+    },
+    {
+      "id": "layer.delete",
+      "disegno": "doppio.svg",
+      "selezione": [],
+      "argomenti": {
+        "ids": [
+          5
+        ]
+      },
+      "dopo": "layer-delete-dopo.svg",
+      "atteso": {
+        "ops": [
+          {
+            "op": "remove",
+            "target": "l2b2b2b2b"
+          }
+        ]
+      }
+    },
+    {
+      "id": "layer.setProps",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "ids": [
+          6
+        ],
+        "visible": false
+      },
+      "dopo": "layer-hide-dopo.svg",
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "l1a2b3c4d",
+            "attrs": {
+              "display": "none"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "layer.setProps",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "ids": [
+          6
+        ],
+        "locked": true
+      },
+      "dopo": "layer-lock-dopo.svg",
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "l1a2b3c4d",
+            "attrs": {
+              "fub:locked": "true"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "layer.setProps",
+      "disegno": "bloccato.svg",
+      "selezione": [],
+      "argomenti": {
+        "ids": [
+          3
+        ],
+        "locked": false
+      },
+      "dopo": "layer-unlock-dopo.svg",
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "l1a2b3c4d",
+            "attrs": {
+              "fub:locked": null
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "layer.setProps",
+      "disegno": "bloccato.svg",
+      "selezione": [],
+      "argomenti": {
+        "ids": [
+          3
+        ],
+        "name": "X"
+      },
+      "atteso": {
+        "rifiuto": "locked"
+      }
+    },
+    {
+      "id": "layer.delete",
+      "disegno": "bloccato.svg",
+      "selezione": [],
+      "argomenti": {
+        "ids": [
+          3
+        ]
+      },
+      "atteso": {
+        "rifiuto": "locked"
+      }
+    },
+    {
+      "id": "layer.delete",
+      "disegno": "doppio.svg",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "node.move",
+      "disegno": "doppio.svg",
+      "selezione": [],
+      "argomenti": {
+        "id": 3,
+        "parent": 3,
+        "index": 0
+      },
+      "atteso": {
+        "rifiuto": "unsupported"
+      }
+    },
+    {
+      "id": "layer.setProps",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "ids": [
+          6
+        ],
+        "name": "Sfondo"
+      },
+      "dopo": "layer-rename-dopo.svg",
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "l1a2b3c4d",
+            "attrs": {
+              "fub:layer": "Sfondo"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "layer.setProps",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "ids": [
+          6
+        ],
+        "name": "LLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLL"
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "layer.setProps",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "ids": [
+          6
+        ],
+        "name": "   "
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "layer.setProps",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "ids": [
+          6
+        ],
+        "name": "a\nb"
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "layer.setProps",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "ids": [
+          6
+        ],
+        "color": 3
+      },
+      "atteso": {
+        "rifiuto": "unsupported"
+      }
+    },
+    {
+      "id": "layer.setProps",
+      "disegno": "bloccato.svg",
+      "selezione": [],
+      "argomenti": {
+        "ids": [
+          3
+        ],
+        "visible": false
+      },
+      "dopo": "layer-hide-bloccato-dopo.svg",
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "l1a2b3c4d",
+            "attrs": {
+              "display": "none"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "layer.newSublayer",
+      "disegno": "tre-livelli.svg",
+      "selezione": [],
+      "argomenti": {
+        "parent": 5
+      },
+      "dopo": "sottolivello-dopo.svg",
+      "atteso": {
+        "ops": [
+          {
+            "op": "add",
+            "parent": "l2b2b2b2b",
+            "pos": {
+              "last": true
+            },
+            "elem": {
+              "tag": "g",
+              "attrs": {
+                "id": "l00000000",
+                "fub:layer": "Livello 4"
+              },
+              "children": []
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "layer.newSublayer",
+      "disegno": "tre-livelli.svg",
+      "selezione": [],
+      "argomenti": {
+        "parent": 7,
+        "bottom": true,
+        "name": "Schizzi"
+      },
+      "dopo": "sottolivello-sotto-dopo.svg",
+      "atteso": {
+        "ops": [
+          {
+            "op": "add",
+            "parent": "l3c3c3c3c",
+            "pos": {
+              "first": true
+            },
+            "elem": {
+              "tag": "g",
+              "attrs": {
+                "id": "l00000000",
+                "fub:layer": "Schizzi"
+              },
+              "children": []
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "layer.newSublayer",
+      "disegno": "tre-livelli.svg",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "layer.newSublayer",
+      "disegno": "tre-livelli.svg",
+      "selezione": [],
+      "argomenti": {
+        "parent": 4
+      },
+      "atteso": {
+        "rifiuto": "unsupported"
+      }
+    },
+    {
+      "id": "layer.newSublayer",
+      "disegno": "bloccato.svg",
+      "selezione": [],
+      "argomenti": {
+        "parent": 3
+      },
+      "atteso": {
+        "rifiuto": "locked"
+      }
+    },
+    {
+      "id": "layer.collectInNew",
+      "disegno": "tre-livelli.svg",
+      "selezione": [
+        "ob2b2b2b2"
+      ],
+      "argomenti": {},
+      "dopo": "raccogli-dopo.svg",
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "add",
+                "parent": "l2b2b2b2b",
+                "pos": {
+                  "last": true
+                },
+                "elem": {
+                  "tag": "g",
+                  "attrs": {
+                    "id": "l00000000",
+                    "fub:layer": "Livello 4"
+                  },
+                  "children": []
+                }
+              },
+              {
+                "op": "move",
+                "target": "ob2b2b2b2",
+                "parent": "l00000000",
+                "pos": {
+                  "first": true
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "layer.collectInNew",
+      "disegno": "tre-livelli.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "ob2b2b2b2"
+      ],
+      "argomenti": {},
+      "dopo": "raccogli-due-livelli-dopo.svg",
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "add",
+                "parent": "l2b2b2b2b",
+                "pos": {
+                  "last": true
+                },
+                "elem": {
+                  "tag": "g",
+                  "attrs": {
+                    "id": "l00000000",
+                    "fub:layer": "Livello 4"
+                  },
+                  "children": []
+                }
+              },
+              {
+                "op": "move",
+                "target": "oa1a1a1a1",
+                "parent": "l00000000",
+                "pos": {
+                  "first": true
+                }
+              },
+              {
+                "op": "move",
+                "target": "ob2b2b2b2",
+                "parent": "l00000000",
+                "pos": {
+                  "after": "oa1a1a1a1"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "layer.collectInNew",
+      "disegno": "tre-livelli.svg",
+      "selezione": [],
+      "argomenti": {
+        "ids": [
+          3,
+          5
+        ]
+      },
+      "dopo": "raccogli-livelli-dopo.svg",
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "after": "fub-paper"
+                },
+                "elem": {
+                  "tag": "g",
+                  "attrs": {
+                    "id": "l00000000",
+                    "fub:layer": "Livello 4"
+                  },
+                  "children": []
+                }
+              },
+              {
+                "op": "move",
+                "target": "l1a2b3c4d",
+                "parent": "l00000000",
+                "pos": {
+                  "first": true
+                }
+              },
+              {
+                "op": "move",
+                "target": "l2b2b2b2b",
+                "parent": "l00000000",
+                "pos": {
+                  "after": "l1a2b3c4d"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "layer.collectInNew",
+      "disegno": "tre-livelli.svg",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "layer.collectInNew",
+      "disegno": "bloccato.svg",
+      "selezione": [],
+      "argomenti": {
+        "ids": [
+          3
+        ]
+      },
+      "atteso": {
+        "rifiuto": "locked"
+      }
+    },
+    {
+      "id": "layer.new",
+      "disegno": "doppio.svg",
+      "selezione": [],
+      "argomenti": {
+        "top": true
+      },
+      "dopo": "layer-new-dopo.svg",
+      "atteso": {
+        "ops": [
+          {
+            "op": "add",
+            "parent": "#root",
+            "pos": {
+              "last": true
+            },
+            "elem": {
+              "tag": "g",
+              "attrs": {
+                "id": "l00000000",
+                "fub:layer": "Livello 3"
+              },
+              "children": []
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "layer.new",
+      "disegno": "doppio.svg",
+      "selezione": [],
+      "argomenti": {
+        "top": true,
+        "name": "Note",
+        "visible": false,
+        "locked": true
+      },
+      "dopo": "layer-new-nascosto-dopo.svg",
+      "atteso": {
+        "ops": [
+          {
+            "op": "add",
+            "parent": "#root",
+            "pos": {
+              "last": true
+            },
+            "elem": {
+              "tag": "g",
+              "attrs": {
+                "id": "l00000000",
+                "fub:layer": "Note",
+                "fub:locked": "true",
+                "display": "none"
+              },
+              "children": []
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "layer.new",
+      "disegno": "doppio.svg",
+      "selezione": [],
+      "argomenti": {
+        "below": true
+      },
+      "dopo": "layer-new-sotto-carta-dopo.svg",
+      "atteso": {
+        "ops": [
+          {
+            "op": "add",
+            "parent": "#root",
+            "pos": {
+              "after": "l1a2b3c4d"
+            },
+            "elem": {
+              "tag": "g",
+              "attrs": {
+                "id": "l00000000",
+                "fub:layer": "Livello 3"
+              },
+              "children": []
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "layer.new",
+      "disegno": "senza-carta.svg",
+      "selezione": [],
+      "argomenti": {
+        "below": true
+      },
+      "dopo": "layer-new-sotto-dopo.svg",
+      "atteso": {
+        "ops": [
+          {
+            "op": "add",
+            "parent": "#root",
+            "pos": {
+              "after": "l1a2b3c4d"
+            },
+            "elem": {
+              "tag": "g",
+              "attrs": {
+                "id": "l00000000",
+                "fub:layer": "Livello 3"
+              },
+              "children": []
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "layer.new",
+      "disegno": "doppio.svg",
+      "selezione": [],
+      "argomenti": {
+        "name": "LLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLL"
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "layer.new",
+      "disegno": "doppio.svg",
+      "selezione": [],
+      "argomenti": {
+        "color": "#ff0000"
+      },
+      "atteso": {
+        "rifiuto": "unsupported"
+      }
+    },
+    {
+      "id": "layer.setProps",
+      "disegno": "sola-lettura.svg",
+      "selezione": [],
+      "argomenti": {
+        "ids": [
+          3
+        ],
+        "name": "X"
+      },
+      "atteso": {
+        "rifiuto": "unsupported"
+      }
+    },
+    {
+      "id": "layer.setProps",
+      "disegno": "sola-lettura.svg",
+      "selezione": [],
+      "argomenti": {
+        "ids": [
+          3
+        ],
+        "visible": false
+      },
+      "atteso": {
+        "rifiuto": "unsupported"
+      }
+    },
+    {
+      "id": "layer.delete",
+      "disegno": "sola-lettura.svg",
+      "selezione": [],
+      "argomenti": {
+        "ids": [
+          3
+        ]
+      },
+      "atteso": {
+        "rifiuto": "unsupported"
+      }
+    },
+    {
+      "id": "layer.new",
+      "disegno": "sola-lettura.svg",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": {
+        "rifiuto": "unsupported"
+      }
+    },
+    {
+      "id": "layer.setProps",
+      "disegno": "estraneo.svg",
+      "selezione": [],
+      "argomenti": {
+        "ids": [
+          1
+        ],
+        "name": "Altro"
+      },
+      "atteso": {
+        "rifiuto": "unmapped"
+      }
+    },
+    {
+      "id": "layer.setProps",
+      "disegno": "estraneo.svg",
+      "selezione": [],
+      "argomenti": {
+        "ids": [
+          1
+        ],
+        "visible": false
+      },
+      "atteso": {
+        "rifiuto": "unmapped"
+      }
+    },
+    {
+      "id": "layer.delete",
+      "disegno": "estraneo.svg",
+      "selezione": [],
+      "argomenti": {
+        "ids": [
+          1
+        ]
+      },
+      "atteso": {
+        "rifiuto": "unmapped"
+      }
+    },
+    {
+      "id": "layer.new",
+      "disegno": "estraneo.svg",
+      "selezione": [],
+      "argomenti": {
+        "top": true
+      },
+      "dopo": "layer-new-estraneo-dopo.svg",
+      "atteso": {
+        "ops": [
+          {
+            "op": "add",
+            "parent": "#root",
+            "pos": {
+              "last": true
+            },
+            "elem": {
+              "tag": "g",
+              "attrs": {
+                "id": "l00000000",
+                "fub:layer": "Livello 2"
+              },
+              "children": []
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "select.object.clippingMasks",
+      "disegno": "ritaglio-inkscape.svg",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": {
+        "selezione": [
+          "og1g1g1g1"
+        ]
+      }
+    },
+    {
+      "id": "select.object.clippingMasks",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "select.same.fontFamily",
+      "disegno": "testi.svg",
+      "selezione": [
+        "ot1a1a1a1"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "selezione": [
+          "ot1a1a1a1",
+          "ot2b2b2b2",
+          "ot3c3c3c3",
+          "ot4d4d4d4",
+          "ot6f6f6f6"
+        ]
+      }
+    },
+    {
+      "id": "select.same.fontFamily",
+      "disegno": "testi.svg",
+      "selezione": [
+        "oe7e7e7e7"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "select.same.fontFamilyStyle",
+      "disegno": "testi.svg",
+      "selezione": [
+        "ot1a1a1a1"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "selezione": [
+          "ot1a1a1a1",
+          "ot2b2b2b2",
+          "ot4d4d4d4",
+          "ot6f6f6f6"
+        ]
+      }
+    },
+    {
+      "id": "select.same.fontFamilyStyleSize",
+      "disegno": "testi.svg",
+      "selezione": [
+        "ot1a1a1a1"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "selezione": [
+          "ot1a1a1a1",
+          "ot2b2b2b2",
+          "ot6f6f6f6"
+        ]
+      }
+    },
+    {
+      "id": "select.same.fontSize",
+      "disegno": "testi.svg",
+      "selezione": [
+        "ot1a1a1a1"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "selezione": [
+          "ot1a1a1a1",
+          "ot2b2b2b2",
+          "ot3c3c3c3",
+          "ot5e5e5e5",
+          "ot6f6f6f6"
+        ]
+      }
+    },
+    {
+      "id": "select.same.textFillColor",
+      "disegno": "testi.svg",
+      "selezione": [
+        "ot1a1a1a1"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "selezione": [
+          "ot1a1a1a1",
+          "ot2b2b2b2",
+          "ot3c3c3c3",
+          "ot4d4d4d4",
+          "ot6f6f6f6"
+        ]
+      }
+    },
+    {
+      "id": "select.same.textStrokeColor",
+      "disegno": "testi.svg",
+      "selezione": [
+        "ot5e5e5e5"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "selezione": [
+          "ot3c3c3c3",
+          "ot5e5e5e5"
+        ]
+      }
+    },
+    {
+      "id": "select.object.strayPoints",
+      "disegno": "tracciati.svg",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": {
+        "selezione": [
+          "ps3c3c3c3"
+        ]
+      }
+    },
+    {
+      "id": "select.object.openPaths",
+      "disegno": "tracciati.svg",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": {
+        "selezione": [
+          "op1a1a1a1"
+        ]
+      }
+    },
+    {
+      "id": "layer.selectAll",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "id": 6
+      },
+      "atteso": {
+        "selezione": [
+          "oa1a1a1a1",
+          "ob2b2b2b2",
+          "oc3c3c3c3",
+          "ot4d4d4d4"
+        ]
+      }
+    },
+    {
+      "id": "layer.selectAll",
+      "disegno": "doppio.svg",
+      "selezione": [],
+      "argomenti": {
+        "id": 5
+      },
+      "atteso": {
+        "selezione": [
+          "ob2b2b2b2"
+        ]
+      }
+    },
+    {
+      "id": "layer.selectAll",
+      "disegno": "bloccato.svg",
+      "selezione": [],
+      "argomenti": {
+        "id": 3
+      },
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "layer.selectAll",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "layer.selectAll",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "id": 77
+      },
+      "atteso": {
+        "rifiuto": "unmapped"
+      }
+    },
+    {
+      "id": "layer.merge",
+      "disegno": "doppio.svg",
+      "selezione": [],
+      "argomenti": {
+        "ids": [
+          3,
+          5
+        ]
+      },
+      "dopo": "layer-merge-dopo.svg",
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "move",
+                "target": "oa1a1a1a1",
+                "parent": "l2b2b2b2b",
+                "pos": {
+                  "first": true
+                }
+              },
+              {
+                "op": "remove",
+                "target": "l1a2b3c4d"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "layer.merge",
+      "disegno": "doppio.svg",
+      "selezione": [],
+      "argomenti": {
+        "ids": [
+          5,
+          3
+        ]
+      },
+      "dopo": "layer-merge-ultimo-dopo.svg",
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "move",
+                "target": "ob2b2b2b2",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "after": "oa1a1a1a1"
+                }
+              },
+              {
+                "op": "remove",
+                "target": "l2b2b2b2b"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "layer.merge",
+      "disegno": "bloccato.svg",
+      "selezione": [],
+      "argomenti": {
+        "ids": [
+          3,
+          5
+        ]
+      },
+      "atteso": {
+        "rifiuto": "locked"
+      }
+    },
+    {
+      "id": "layer.merge",
+      "disegno": "doppio.svg",
+      "selezione": [],
+      "argomenti": {
+        "ids": [
+          3
+        ]
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "layer.merge",
+      "disegno": "doppio.svg",
+      "selezione": [],
+      "argomenti": {
+        "ids": [
+          2,
+          4
+        ]
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "layer.merge",
+      "disegno": "doppio.svg",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "layer.merge",
+      "disegno": "doppio.svg",
+      "selezione": [],
+      "argomenti": {
+        "ids": [
+          3,
+          77
+        ]
+      },
+      "atteso": {
+        "rifiuto": "unmapped"
+      }
+    },
+    {
+      "id": "layer.merge",
+      "disegno": "sola-lettura.svg",
+      "selezione": [],
+      "argomenti": {
+        "ids": [
+          3,
+          5
+        ]
+      },
+      "atteso": {
+        "rifiuto": "unsupported"
+      }
+    },
+    {
+      "id": "layer.reverse",
+      "disegno": "doppio.svg",
+      "selezione": [],
+      "argomenti": {
+        "ids": [
+          3,
+          5
+        ]
+      },
+      "dopo": "layer-reverse-dopo.svg",
+      "atteso": {
+        "ops": [
+          {
+            "op": "move",
+            "target": "l2b2b2b2b",
+            "parent": "#root",
+            "pos": {
+              "after": "fub-paper"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "layer.reverse",
+      "disegno": "bloccato.svg",
+      "selezione": [],
+      "argomenti": {
+        "ids": [
+          3,
+          5
+        ]
+      },
+      "atteso": {
+        "rifiuto": "locked"
+      }
+    },
+    {
+      "id": "layer.reverse",
+      "disegno": "doppio.svg",
+      "selezione": [],
+      "argomenti": {
+        "ids": [
+          3
+        ]
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "layer.reverse",
+      "disegno": "doppio.svg",
+      "selezione": [],
+      "argomenti": {
+        "ids": [
+          2,
+          4
+        ]
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "layer.reverse",
+      "disegno": "sovrapposti-un-livello.svg",
+      "selezione": [],
+      "argomenti": {
+        "ids": [
+          2,
+          3
+        ]
+      },
+      "dopo": "layer-reverse-oggetti-dopo.svg",
+      "atteso": {
+        "ops": [
+          {
+            "op": "move",
+            "target": "ob2b2b2b2",
+            "parent": "l1a2b3c4d",
+            "pos": {
+              "first": true
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "layer.reverse",
+      "disegno": "doppio.svg",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "layer.reverse",
+      "disegno": "sola-lettura.svg",
+      "selezione": [],
+      "argomenti": {
+        "ids": [
+          3,
+          5
+        ]
+      },
+      "atteso": {
+        "rifiuto": "unsupported"
+      }
+    },
+    {
+      "id": "layer.showAll",
+      "disegno": "tre-livelli-altri-nascosti.svg",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "set",
+                "id": "l1a2b3c4d",
+                "attrs": {
+                  "display": null
+                }
+              },
+              {
+                "op": "set",
+                "id": "l3c3c3c3c",
+                "attrs": {
+                  "display": null
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "mostra-tutti-dopo-altri.svg"
+    },
+    {
+      "id": "layer.showAll",
+      "disegno": "tre-livelli.svg",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "layer.showAll",
+      "disegno": "tre-livelli-nascosto-sbloccato.svg",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "l3c3c3c3c",
+            "attrs": {
+              "display": null
+            }
+          }
+        ]
+      },
+      "dopo": "mostra-tutti-nascosto.svg"
+    },
+    {
+      "id": "layer.showAll",
+      "disegno": "tre-livelli-nascosto-bloccato.svg",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "l3c3c3c3c",
+            "attrs": {
+              "display": null
+            }
+          }
+        ]
+      },
+      "dopo": "mostra-tutti-nascosto-bloccato.svg"
+    },
+    {
+      "id": "layer.showAll",
+      "disegno": "tre-livelli-ricetta-nascosta.svg",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "l2b2b2b2b",
+            "attrs": {
+              "display": null
+            }
+          }
+        ]
+      },
+      "dopo": "mostra-tutti-ricetta.svg"
+    },
+    {
+      "id": "layer.showAll",
+      "disegno": "tre-livelli-inchiostro-nascosto.svg",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "l2b2b2b2b",
+            "attrs": {
+              "display": null
+            }
+          }
+        ]
+      },
+      "dopo": "mostra-tutti-inchiostro.svg"
+    },
+    {
+      "id": "layer.showAll",
+      "disegno": "tre-livelli-sottolivello-nascosto.svg",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "l9d9d9d9d",
+            "attrs": {
+              "display": null
+            }
+          }
+        ]
+      },
+      "dopo": "mostra-tutti-sottolivello.svg"
+    },
+    {
+      "id": "layer.unlockAll",
+      "disegno": "tre-livelli-altri-bloccati.svg",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "set",
+                "id": "l1a2b3c4d",
+                "attrs": {
+                  "fub:locked": null
+                }
+              },
+              {
+                "op": "set",
+                "id": "l3c3c3c3c",
+                "attrs": {
+                  "fub:locked": null
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "sblocca-tutti-dopo-blocca.svg"
+    },
+    {
+      "id": "layer.unlockAll",
+      "disegno": "tre-livelli.svg",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "layer.unlockAll",
+      "disegno": "tre-livelli-bloccato-mostrato.svg",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "l3c3c3c3c",
+            "attrs": {
+              "fub:locked": null
+            }
+          }
+        ]
+      },
+      "dopo": "sblocca-tutti-bloccato.svg"
+    },
+    {
+      "id": "layer.unlockAll",
+      "disegno": "tre-livelli-nascosto-bloccato.svg",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "l3c3c3c3c",
+            "attrs": {
+              "fub:locked": null
+            }
+          }
+        ]
+      },
+      "dopo": "sblocca-tutti-nascosto-bloccato.svg"
+    },
+    {
+      "id": "select.object.pointText",
+      "disegno": "sel-testi.svg",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": { "selezione": ["ot1t1t1t1", "ot3t3t3t3"] }
+    },
+    {
+      "id": "select.object.pointText",
+      "disegno": "sel-testi.svg",
+      "selezione": ["ot2t2t2t2"],
+      "argomenti": {},
+      "atteso": { "selezione": ["ot1t1t1t1", "ot3t3t3t3"] }
+    },
+    {
+      "id": "select.object.areaText",
+      "disegno": "sel-testi.svg",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": { "selezione": ["ot2t2t2t2"] }
+    },
+    {
+      "id": "select.object.pointText",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": { "selezione": ["ot4d4d4d4"] }
+    },
+    {
+      "id": "select.object.areaText",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": { "rifiuto": "empty" }
+    },
+    {
+      "id": "select.object.pointText",
+      "disegno": "sel-livello-bloccato.svg",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": { "rifiuto": "empty" }
+    },
+    {
+      "id": "select.object.pointText",
+      "disegno": "sel-livello-nascosto.svg",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": { "rifiuto": "empty" }
+    },
+    {
+      "id": "select.font",
+      "disegno": "carattere.svg",
+      "selezione": [],
+      "argomenti": { "family": "Inter" },
+      "atteso": { "selezione": ["ot1a1a1a1", "ot3c3c3c3", "ot4d4d4d4"] }
+    },
+    {
+      "id": "select.font",
+      "disegno": "carattere.svg",
+      "selezione": [],
+      "argomenti": { "family": "Georgia" },
+      "atteso": { "selezione": ["ot2b2b2b2", "ot3c3c3c3"] }
+    },
+    {
+      "id": "select.font",
+      "disegno": "carattere.svg",
+      "selezione": ["oe7e7e7e7"],
+      "argomenti": { "family": "Georgia" },
+      "atteso": { "selezione": ["ot2b2b2b2", "ot3c3c3c3"] }
+    },
+    {
+      "id": "select.font",
+      "disegno": "carattere.svg",
+      "selezione": ["oi8b8b8b8"],
+      "argomenti": { "family": "Inter" },
+      "atteso": { "selezione": ["ot1a1a1a1", "ot3c3c3c3", "ot4d4d4d4"] }
+    },
+    {
+      "id": "select.font",
+      "disegno": "carattere.svg",
+      "prima": [{ "id": "select.font", "argomenti": { "family": "Inter" } }],
+      "selezione": [],
+      "argomenti": { "family": "Inter" },
+      "atteso": { "selezione": ["ot1a1a1a1", "ot3c3c3c3", "ot4d4d4d4"] }
+    },
+    {
+      "id": "select.font",
+      "disegno": "carattere.svg",
+      "selezione": [],
+      "argomenti": { "family": "Courier New" },
+      "atteso": { "errore": "bad_args" }
+    },
+    {
+      "id": "select.font",
+      "disegno": "carattere.svg",
+      "selezione": [],
+      "argomenti": { "family": "Inter", "style": "Italic" },
+      "atteso": { "errore": "bad_args" }
+    },
+    {
+      "id": "select.font",
+      "disegno": "testi.svg",
+      "selezione": [],
+      "argomenti": { "family": "Inter", "style": "Italic" },
+      "atteso": { "selezione": ["ot3c3c3c3"] }
+    },
+    {
+      "id": "select.font",
+      "disegno": "testi.svg",
+      "selezione": [],
+      "argomenti": { "family": "Georgia" },
+      "atteso": { "selezione": ["ot5e5e5e5"] }
+    },
+    {
+      "id": "select.font",
+      "disegno": "sel-testi.svg",
+      "selezione": [],
+      "argomenti": { "family": "Inter" },
+      "atteso": { "selezione": ["ot1t1t1t1", "ot2t2t2t2", "ot3t3t3t3"] }
+    },
+    {
+      "id": "select.font",
+      "disegno": "sel-livello-bloccato.svg",
+      "selezione": [],
+      "argomenti": { "family": "Inter" },
+      "atteso": { "errore": "bad_args" }
+    },
+    {
+      "id": "select.font",
+      "disegno": "sel-livello-nascosto.svg",
+      "selezione": [],
+      "argomenti": { "family": "Inter" },
+      "atteso": { "errore": "bad_args" }
+    },
+    {
+      "id": "select.globalEditOptions",
+      "disegno": "uguali.svg",
+      "selezione": ["oa1a1a1a1"],
+      "argomenti": {},
+      "atteso": { "lettura": { "appearance": false, "size": false, "artboards": "all", "includeCanvas": true, "count": 5 } }
+    },
+    {
+      "id": "select.globalEditOptions",
+      "disegno": "uguali.svg",
+      "selezione": ["oa1a1a1a1"],
+      "argomenti": { "size": true },
+      "atteso": { "lettura": { "appearance": false, "size": true, "artboards": "all", "includeCanvas": true, "count": 4 } }
+    },
+    {
+      "id": "select.globalEditOptions",
+      "disegno": "uguali.svg",
+      "selezione": ["oa1a1a1a1"],
+      "argomenti": { "appearance": true },
+      "atteso": { "lettura": { "appearance": true, "size": false, "artboards": "all", "includeCanvas": true, "count": 4 } }
+    },
+    {
+      "id": "select.globalEditOptions",
+      "disegno": "uguali.svg",
+      "selezione": ["oa1a1a1a1"],
+      "argomenti": { "includeCanvas": false },
+      "atteso": { "lettura": { "appearance": false, "size": false, "artboards": "all", "includeCanvas": false, "count": 4 } }
+    },
+    {
+      "id": "select.globalEditOptions",
+      "disegno": "uguali.svg",
+      "selezione": ["oa1a1a1a1"],
+      "argomenti": { "size": true, "appearance": true, "includeCanvas": false },
+      "atteso": { "lettura": { "appearance": true, "size": true, "artboards": "all", "includeCanvas": false, "count": 3 } }
+    },
+    {
+      "id": "select.globalEditOptions",
+      "disegno": "uguali.svg",
+      "selezione": ["oa1a1a1a1"],
+      "prima": [{ "id": "select.globalEditOptions", "argomenti": { "size": true } }],
+      "argomenti": {},
+      "atteso": { "lettura": { "appearance": false, "size": true, "artboards": "all", "includeCanvas": true, "count": 4 } }
+    },
+    {
+      "id": "select.globalEditOptions",
+      "disegno": "uguali.svg",
+      "selezione": ["oa1a1a1a1"],
+      "prima": [{ "id": "select.globalEditOptions", "argomenti": { "size": true } }],
+      "argomenti": { "size": true },
+      "atteso": { "lettura": { "appearance": false, "size": true, "artboards": "all", "includeCanvas": true, "count": 4 } }
+    },
+    {
+      "id": "select.globalEditOptions",
+      "disegno": "uguali.svg",
+      "selezione": ["oa1a1a1a1"],
+      "argomenti": { "artboards": "1" },
+      "atteso": { "lettura": { "appearance": false, "size": false, "artboards": "1", "includeCanvas": true, "count": 5 } }
+    },
+    {
+      "id": "select.globalEditOptions",
+      "disegno": "uguali.svg",
+      "selezione": ["oa1a1a1a1"],
+      "argomenti": { "artboards": "x" },
+      "atteso": { "errore": "bad_args" }
+    },
+    {
+      "id": "select.globalEditOptions",
+      "disegno": "uguali.svg",
+      "selezione": ["oa1a1a1a1"],
+      "argomenti": { "size": "si" },
+      "atteso": { "errore": "bad_args" }
+    },
+    {
+      "id": "select.globalEditOptions",
+      "disegno": "uguali.svg",
+      "selezione": ["od4d4d4d4"],
+      "argomenti": {},
+      "atteso": { "lettura": { "appearance": false, "size": false, "artboards": "all", "includeCanvas": true, "count": 1 } }
+    },
+    {
+      "id": "select.globalEditOptions",
+      "disegno": "base.svg",
+      "selezione": ["oa1a1a1a1"],
+      "argomenti": {},
+      "atteso": { "lettura": { "appearance": false, "size": false, "artboards": "all", "includeCanvas": true, "count": 1 } }
+    },
+    {
+      "id": "select.globalEditOptions",
+      "disegno": "uguali.svg",
+      "selezione": ["oa1a1a1a1", "ob2b2b2b2"],
+      "argomenti": {},
+      "atteso": { "lettura": { "appearance": false, "size": false, "artboards": "all", "includeCanvas": true, "count": 0 } }
+    },
+    {
+      "id": "select.globalEditOptions",
+      "disegno": "uguali.svg",
+      "selezione": ["ot6f6f6f6"],
+      "argomenti": {},
+      "atteso": { "lettura": { "appearance": false, "size": false, "artboards": "all", "includeCanvas": true, "count": 0 } }
+    },
+    {
+      "id": "layer.hideOthers",
+      "disegno": "tre-livelli.svg",
+      "selezione": [
+        "ob2b2b2b2"
+      ],
+      "argomenti": {},
+      "dopo": "tre-livelli-altri-nascosti.svg",
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "set",
+                "id": "l1a2b3c4d",
+                "attrs": {
+                  "display": "none"
+                }
+              },
+              {
+                "op": "set",
+                "id": "l3c3c3c3c",
+                "attrs": {
+                  "display": "none"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "layer.lockOthers",
+      "disegno": "tre-livelli.svg",
+      "selezione": [
+        "ob2b2b2b2"
+      ],
+      "argomenti": {},
+      "dopo": "tre-livelli-altri-bloccati.svg",
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "set",
+                "id": "l1a2b3c4d",
+                "attrs": {
+                  "fub:locked": "true"
+                }
+              },
+              {
+                "op": "set",
+                "id": "l3c3c3c3c",
+                "attrs": {
+                  "fub:locked": "true"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "layer.hideOthers",
+      "disegno": "doppio.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {},
+      "dopo": "doppio-altri-nascosti.svg",
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "l2b2b2b2b",
+            "attrs": {
+              "display": "none"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "layer.lockOthers",
+      "disegno": "doppio.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {},
+      "dopo": "doppio-altri-bloccati.svg",
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "l2b2b2b2b",
+            "attrs": {
+              "fub:locked": "true"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "layer.hideOthers",
+      "disegno": "tre-livelli.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "oc3c3c3c3"
+      ],
+      "argomenti": {},
+      "dopo": "tre-livelli-mezzo-nascosto.svg",
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "l2b2b2b2b",
+            "attrs": {
+              "display": "none"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "layer.hideOthers",
+      "disegno": "tre-livelli-uno-bloccato-uno-nascosto.svg",
+      "selezione": [
+        "oc3c3c3c3"
+      ],
+      "argomenti": {},
+      "dopo": "tre-livelli-tutti-nascosti-ma-uno.svg",
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "l1a2b3c4d",
+            "attrs": {
+              "display": "none"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "layer.lockOthers",
+      "disegno": "tre-livelli-uno-bloccato-uno-nascosto.svg",
+      "selezione": [
+        "oc3c3c3c3"
+      ],
+      "argomenti": {},
+      "dopo": "tre-livelli-tutti-bloccati-ma-uno.svg",
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "l2b2b2b2b",
+            "attrs": {
+              "fub:locked": "true"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "layer.hideOthers",
+      "disegno": "doppio.svg",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "layer.lockOthers",
+      "disegno": "doppio.svg",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "layer.hideOthers",
+      "disegno": "doppio.svg",
+      "selezione": [],
+      "argomenti": {
+        "ids": [
+          3
+        ]
+      },
+      "dopo": "doppio-altri-nascosti.svg",
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "l2b2b2b2b",
+            "attrs": {
+              "display": "none"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "layer.hideOthers",
+      "disegno": "sola-lettura.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "rifiuto": "unsupported"
+      }
+    },
+    {
+      "id": "layer.delete",
+      "disegno": "doppio.svg",
+      "selezione": [],
+      "argomenti": {
+        "ids": [
+          1
+        ]
+      },
+      "atteso": {
+        "rifiuto": "unmapped"
+      }
+    },
+    {"$nota": "La Bacchetta magica: un clic sceglie gli oggetti col riempimento simile (32 di serie), come VectorCraft.", "id": "magicWand", "fonte": "strumento", "disegno": "uguali.svg", "gesto": [{"phase": "commit", "events": [{"kind": "down", "x": 70, "y": 45, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}, {"kind": "up", "x": 70, "y": 45, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}]}], "atteso": {"selezione": ["oa1a1a1a1", "ob2b2b2b2", "od4d4d4d4", "oe5e5e5e5", "oh9h9h9h9"]}},
+    {"$nota": "Maiusc aggiunge alla selezione.", "id": "magicWand", "fonte": "strumento", "disegno": "uguali.svg", "selezione": ["ot6f6f6f6"], "gesto": [{"phase": "commit", "events": [{"kind": "down", "x": 70, "y": 170, "pressure": 0.5, "shift": true, "alt": false, "cmd": false}, {"kind": "up", "x": 70, "y": 170, "pressure": 0.5, "shift": true, "alt": false, "cmd": false}]}], "atteso": {"selezione": ["ot6f6f6f6", "oc3c3c3c3"]}},
+    {"$nota": "Alt toglie dalla selezione.", "id": "magicWand", "fonte": "strumento", "disegno": "uguali.svg", "selezione": ["oa1a1a1a1", "oc3c3c3c3"], "gesto": [{"phase": "commit", "events": [{"kind": "down", "x": 70, "y": 170, "pressure": 0.5, "shift": false, "alt": true, "cmd": false}, {"kind": "up", "x": 70, "y": 170, "pressure": 0.5, "shift": false, "alt": true, "cmd": false}]}], "atteso": {"selezione": ["oa1a1a1a1"]}},
+    {"$nota": "Un clic nel vuoto toglie la selezione.", "id": "magicWand", "fonte": "strumento", "disegno": "uguali.svg", "selezione": ["oa1a1a1a1"], "gesto": [{"phase": "commit", "events": [{"kind": "down", "x": 160, "y": 100, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}, {"kind": "up", "x": 160, "y": 100, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}]}], "atteso": {"selezione": []}},
+    {"$nota": "Le opzioni sono della sessione: si leggono intere.", "id": "magicWand.options", "disegno": "uguali.svg", "argomenti": {}, "atteso": {"lettura": {"fillColor": true, "fillTolerance": 32.0, "strokeColor": false, "strokeTolerance": 32.0, "strokeWeight": false, "weightTolerance": 5.0, "opacity": false, "opacityTolerance": 5.0, "blendingMode": false}}},
+    {"$nota": "Le opzioni cambiate restano, nei limiti del motore.", "id": "magicWand.set", "disegno": "uguali.svg", "argomenti": {"strokeColor": true, "fillTolerance": 900}, "atteso": {"lettura": {"fillColor": true, "fillTolerance": 255.0, "strokeColor": true, "strokeTolerance": 32.0, "strokeWeight": false, "weightTolerance": 5.0, "opacity": false, "opacityTolerance": 5.0, "blendingMode": false}}},
+    {"$nota": "Le opzioni cambiate valgono per il clic dopo: la tolleranza 255 prende anche il nero del testo (il blu è più lontano).", "id": "magicWand", "fonte": "strumento", "disegno": "uguali.svg", "prima": [{"id": "magicWand.set", "argomenti": {"fillTolerance": 255}}], "gesto": [{"phase": "commit", "events": [{"kind": "down", "x": 70, "y": 45, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}, {"kind": "up", "x": 70, "y": 45, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}]}], "atteso": {"selezione": ["oa1a1a1a1", "ob2b2b2b2", "od4d4d4d4", "oe5e5e5e5", "ot6f6f6f6", "oh9h9h9h9"]}},
+    {"$nota": "Il comando dello strumento, col numero del motore dell'oggetto: sceglie i simili.", "id": "select.magicWand", "disegno": "uguali.svg", "argomenti": {"id": 3, "mode": "set"}, "atteso": {"selezione": ["oa1a1a1a1", "ob2b2b2b2", "od4d4d4d4", "oe5e5e5e5", "oh9h9h9h9"]}},
+    {"id": "magic_wand", "fonte": "pannello", "prova": "apps/client/src/editors/spatial/completo/famiglie/livelli/fila-bacchetta.test.ts"},
+    {"id": "layer.duplicate", "disegno": "doppio.svg", "selezione": [], "argomenti": {"ids": [3]}, "dopo": "layer-duplicate-dopo.svg", "atteso": {"ops": [{"op": "batch", "ops": [{"op": "add", "parent": "#root", "pos": {"after": "l1a2b3c4d"}, "elem": {"tag": "g", "attrs": {"id": "l00000000", "fub:layer": "Livello 1 copia"}, "children": []}}, {"op": "add", "parent": "l00000000", "pos": {"last": true}, "elem": {"tag": "path", "attrs": {"d": "M100 100 L200 100 L200 150 L100 150 Z", "fill": "#ff0000", "id": "o00000001"}}}]}]}},
+    {"id": "layer.duplicate", "disegno": "doppio.svg", "selezione": [], "argomenti": {"ids": [5]}, "dopo": "layer-duplicate-cima-dopo.svg", "atteso": {"ops": [{"op": "batch", "ops": [{"op": "add", "parent": "#root", "pos": {"last": true}, "elem": {"tag": "g", "attrs": {"id": "l00000000", "fub:layer": "Livello 2 copia"}, "children": []}}, {"op": "add", "parent": "l00000000", "pos": {"last": true}, "elem": {"tag": "path", "attrs": {"d": "M220 100 L280 100 L280 150 L220 150 Z", "fill": "#0000ff", "id": "o00000001"}}}]}]}},
+    {"id": "layer.duplicate", "disegno": "bloccato.svg", "selezione": [], "argomenti": {"ids": [3]}, "dopo": "layer-duplicate-bloccato-dopo.svg", "atteso": {"ops": [{"op": "batch", "ops": [{"op": "add", "parent": "#root", "pos": {"after": "l1a2b3c4d"}, "elem": {"tag": "g", "attrs": {"id": "l00000000", "fub:layer": "Livello 1 copia"}, "children": []}}, {"op": "add", "parent": "l00000000", "pos": {"last": true}, "elem": {"tag": "path", "attrs": {"d": "M100 100 L200 100 L200 150 L100 150 Z", "fill": "#ff0000", "id": "o00000001"}}}, {"op": "set", "id": "l00000000", "attrs": {"fub:locked": "true"}}]}]}},
+    {"id": "layer.duplicate", "disegno": "doppio.svg", "selezione": [], "argomenti": {}, "atteso": {"rifiuto": "empty"}},
+    {"id": "layer.duplicate", "disegno": "ritaglia-fatto.svg", "selezione": [], "argomenti": {"ids": [4]}, "dopo": "layer-duplicate-ritaglia-dopo.svg", "atteso": {"ops": [{"op": "batch", "ops": [{"op": "add", "parent": "fub-defs", "pos": {"last": true}, "elem": {"tag": "clipPath", "attrs": {"id": "r00000001", "fub:role": "private", "clipPathUnits": "userSpaceOnUse"}, "children": [{"tag": "path", "attrs": {"d": "M50 50 L150 50 L150 150 L50 150 Z", "fill": "#000000", "id": "r00000002"}}]}}, {"op": "add", "parent": "#root", "pos": {"after": "l1a2b3c4d"}, "elem": {"tag": "g", "attrs": {"id": "l00000000", "fub:layer": "Livello 1 copia", "clip-path": "url(#r00000001)"}, "children": []}}, {"op": "add", "parent": "l00000000", "pos": {"last": true}, "elem": {"tag": "path", "attrs": {"d": "M0 0 L200 0 L200 200 L0 200 Z", "fill": "#ff0000", "id": "o00000003"}}}]}]}},
+    {"id": "layer.move", "disegno": "doppio.svg", "selezione": [], "argomenti": {"ids": [2], "target": 5}, "dopo": "layer-move-dopo.svg", "atteso": {"ops": [{"op": "move", "target": "oa1a1a1a1", "parent": "l2b2b2b2b", "pos": {"after": "ob2b2b2b2"}}]}},
+    {"id": "layer.move", "disegno": "doppio.svg", "selezione": [], "argomenti": {"ids": [3], "target": 5, "place": "above"}, "dopo": "layer-move-sopra-dopo.svg", "atteso": {"ops": [{"op": "move", "target": "l2b2b2b2b", "parent": "#root", "pos": {"after": "fub-paper"}}]}},
+    {"id": "layer.move", "disegno": "doppio.svg", "selezione": [], "argomenti": {"ids": [2], "target": 5, "copy": true}, "dopo": "layer-move-copia-dopo.svg", "atteso": {"ops": [{"op": "add", "parent": "l2b2b2b2b", "pos": {"last": true}, "elem": {"tag": "path", "attrs": {"d": "M100 100 L200 100 L200 150 L100 150 Z", "fill": "#ff0000", "id": "o00000001"}}}]}},
+    {"id": "layer.move", "disegno": "bloccato.svg", "selezione": [], "argomenti": {"ids": [2], "target": 5, "copy": true}, "dopo": "layer-move-copia-bloccato-dopo.svg", "atteso": {"ops": [{"op": "add", "parent": "l2b2b2b2b", "pos": {"last": true}, "elem": {"tag": "path", "attrs": {"d": "M100 100 L200 100 L200 150 L100 150 Z", "fill": "#ff0000", "id": "o00000001"}}}]}},
+    {"id": "layer.move", "disegno": "bloccato.svg", "selezione": [], "argomenti": {"ids": [2], "target": 5}, "atteso": {"rifiuto": "locked"}},
+    {"id": "layer.move", "disegno": "bloccato.svg", "selezione": [], "argomenti": {"ids": [4], "target": 3}, "atteso": {"rifiuto": "locked"}},
+    {"id": "layer.move", "disegno": "doppio.svg", "selezione": [], "argomenti": {"ids": [3], "target": 2}, "atteso": {"rifiuto": "unsupported"}},
+    {"id": "layer.move", "disegno": "doppio.svg", "selezione": [], "argomenti": {"ids": [2]}, "atteso": {"rifiuto": "empty"}},
+    {"id": "layer.move", "disegno": "doppio.svg", "selezione": [], "argomenti": {"target": 5}, "atteso": {"rifiuto": "empty"}},
+    {"id": "layer.clippingMask.toggle", "disegno": "ritaglia.svg", "selezione": [], "argomenti": {"id": 4}, "dopo": "ritaglia-dopo.svg", "atteso": {"ops": [{"op": "batch", "ops": [{"op": "add", "parent": "#root", "pos": {"first": true}, "elem": {"tag": "defs", "attrs": {"id": "fub-defs"}, "children": [{"tag": "clipPath", "attrs": {"id": "r00000000", "fub:role": "private", "clipPathUnits": "userSpaceOnUse"}, "children": [{"tag": "path", "attrs": {"d": "M50 50 L150 50 L150 150 L50 150 Z", "fill": "#000000", "id": "r00000001"}}]}]}}, {"op": "remove", "target": "ob2b2b2b2"}, {"op": "set", "id": "l1a2b3c4d", "attrs": {"clip-path": "url(#r00000000)"}}]}]}},
+    {"id": "layer.clippingMask.toggle", "disegno": "ritaglia-fatto.svg", "selezione": [], "argomenti": {"id": 4}, "dopo": "ritaglia-rilasciato-dopo.svg", "atteso": {"ops": [{"op": "batch", "ops": [{"op": "add", "parent": "l1a2b3c4d", "pos": {"first": true}, "elem": {"tag": "path", "attrs": {"d": "M50 50 L150 50 L150 150 L50 150 Z", "fill": "none", "id": "o00000000"}}}, {"op": "set", "id": "l1a2b3c4d", "attrs": {"clip-path": null}}]}]}},
+    {"id": "layer.clippingMask.toggle", "disegno": "ritaglia-gruppo.svg", "selezione": ["og1g1g1g1"], "argomenti": {}, "dopo": "ritaglia-gruppo-dopo.svg", "atteso": {"ops": [{"op": "batch", "ops": [{"op": "add", "parent": "#root", "pos": {"first": true}, "elem": {"tag": "defs", "attrs": {"id": "fub-defs"}, "children": [{"tag": "clipPath", "attrs": {"id": "r00000000", "fub:role": "private", "clipPathUnits": "userSpaceOnUse"}, "children": [{"tag": "path", "attrs": {"d": "M50 50 L150 50 L150 150 L50 150 Z", "fill": "#000000", "id": "r00000001"}}]}]}}, {"op": "remove", "target": "ob2b2b2b2"}, {"op": "set", "id": "og1g1g1g1", "attrs": {"clip-path": "url(#r00000000)"}}]}]}},
+    {"id": "layer.clippingMask.toggle", "disegno": "ritaglia.svg", "selezione": [], "argomenti": {}, "atteso": {"rifiuto": "empty"}},
+    {"id": "layer.clippingMask.toggle", "disegno": "ritaglia.svg", "selezione": ["oa1a1a1a1"], "argomenti": {}, "atteso": {"rifiuto": "empty"}},
+    {"id": "layer.clippingMask.toggle", "disegno": "ritaglia.svg", "selezione": [], "argomenti": {"id": 2}, "atteso": {"rifiuto": "unsupported"}},
+    {"id": "layer.clippingMask.toggle", "disegno": "bloccato.svg", "selezione": [], "argomenti": {"id": 3}, "atteso": {"rifiuto": "locked"}},
+    {"id": "layer.clippingMask.toggle", "disegno": "ritaglia-vuoto.svg", "selezione": [], "argomenti": {"id": 4}, "atteso": {"rifiuto": "empty"}},
+    {"id": "layer.clippingMask.toggle", "disegno": "ritaglia-gruppo-in-cima.svg", "selezione": [], "argomenti": {"id": 6}, "atteso": {"rifiuto": "unsupported"}},
+    {"id": "layer.clippingMask.toggle", "disegno": "ritaglia-gruppo-in-cima.svg", "selezione": ["og1g1g1g1"], "argomenti": {}, "dopo": "ritaglia-gruppo-in-cima-dopo.svg", "atteso": {"ops": [{"op": "batch", "ops": [{"op": "add", "parent": "#root", "pos": {"first": true}, "elem": {"tag": "defs", "attrs": {"id": "fub-defs"}, "children": [{"tag": "clipPath", "attrs": {"id": "r00000000", "fub:role": "private", "clipPathUnits": "userSpaceOnUse"}, "children": [{"tag": "path", "attrs": {"d": "M40 0 L60 0 L60 20 L40 20 Z", "fill": "#000000", "id": "r00000001"}}]}]}}, {"op": "remove", "target": "oc3c3c3c3"}, {"op": "set", "id": "og1g1g1g1", "attrs": {"clip-path": "url(#r00000000)"}}]}]}},
+    {"id": "layer.flatten", "disegno": "doppio.svg", "selezione": [], "argomenti": {"id": 3}, "dopo": "layer-flatten-dopo.svg", "atteso": {"ops": [{"op": "batch", "ops": [{"op": "move", "target": "ob2b2b2b2", "parent": "l1a2b3c4d", "pos": {"after": "oa1a1a1a1"}}, {"op": "remove", "target": "l2b2b2b2b"}]}]}},
+    {"id": "layer.flatten", "disegno": "doppio-altri-nascosti.svg", "selezione": [], "argomenti": {"id": 3}, "dopo": "layer-flatten-nascosto-dopo.svg", "atteso": {"ops": [{"op": "remove", "target": "l2b2b2b2b"}]}},
+    {"id": "layer.flatten", "disegno": "doppio-altri-nascosti.svg", "selezione": [], "argomenti": {"id": 5}, "atteso": {"rifiuto": "hidden"}},
+    {"id": "layer.flatten", "disegno": "bloccato.svg", "selezione": [], "argomenti": {"id": 5}, "atteso": {"rifiuto": "locked"}},
+    {"id": "layer.flatten", "disegno": "doppio.svg", "selezione": [], "argomenti": {}, "atteso": {"rifiuto": "empty"}},
+    {"id": "select.color", "disegno": "doppio.svg", "selezione": [], "argomenti": {"fill": "#ff0000"}, "atteso": {"selezione": ["oa1a1a1a1"]}},
+    {"id": "select.color", "disegno": "doppio.svg", "selezione": [], "argomenti": {}, "atteso": {"errore": "bad_args"}},
+    {"id": "select.color", "disegno": "doppio.svg", "selezione": [], "argomenti": {"fill": "rossastro"}, "atteso": {"errore": "bad_args"}},
+    {"id": "node.move", "disegno": "doppio.svg", "selezione": [], "argomenti": {"id": 2, "parent": 5, "index": 0}, "dopo": "node-move-dopo.svg", "atteso": {"ops": [{"op": "move", "target": "oa1a1a1a1", "parent": "l2b2b2b2b", "pos": {"first": true}}]}}
+  ]
+}

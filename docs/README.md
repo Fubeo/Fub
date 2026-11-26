@@ -47,7 +47,7 @@ flowchart LR
 | [Scrittura](product/editor-writing.md), [Link, sbirciata e pagine incorporate](product/editor-links.md) e [I commenti nel testo](product/editor-comments.md) | le modalità di una nota, i livelli di presenza, la riga dei suggerimenti e la concentrazione; il clic su un link, la sbirciata, l'incolla degli indirizzi e le pagine web; il passo commentato |
 | [Blocchi](product/editor-blocks.md), [Colori, colonne, persone e date](product/editor-note-extras.md), [Sposta in…](product/editor-move-to.md) e [Tabelle](product/editor-tables.md) | i blocchi di Scrittura; colori, ripiegabili, colonne, indice, persone e date nel file; un blocco in un'altra nota; i gesti delle tabelle in note, documenti e fogli |
 | [Tasto destro, mini-barra e «/»](product/editor-menus.md) e [i diagrammi](product/editor-diagrams.md) | i menu degli editor; il disegno Mermaid, il suo menu e i tasti del blocco |
-| [Basi (file `.base`)](product/bases.md), [il loro calendario](product/bases-calendar.md) e [la loro linea del tempo](product/bases-timeline.md), [la cella in modifica](product/bases-cell-edit.md) | le viste, i filtri, i limiti e che cosa si scrive sul file; il mese e le note trascinate fra i giorni; le barre fra due date; il testo di una cella quando la nota cambia da fuori |
+| [Basi (file `.base`)](product/bases.md), [la loro bacheca](product/bases-kanban.md), [il calendario](product/bases-calendar.md) [la linea del tempo](product/bases-timeline.md) e [la mappa](product/bases-map.md), [la cella in modifica](product/bases-cell-edit.md) | le viste, i filtri, i limiti e che cosa si scrive sul file; le corsie e la loro proprietà; il mese e le note trascinate fra i giorni; le barre fra due date; i segnaposti e le tessere ammesse dalla macchina; il testo di una cella quando la nota cambia da fuori |
 | [La testata](product/editor-header.md), [la riga dei dati](product/editor-note-facts.md), [la trasclusione viva](product/editor-transclusion.md) e [le schede vive](product/live-cards.md), con [la tabella in foglio](product/editor-table-sheet.md) e [le misure e Obsidian](product/live-cards-measures.md); [i tipi di nota](product/editor-note-types.md) | titolo, proprietà e copertina in cima alla nota; modifica, collegamenti ed etichette sotto il titolo; la sezione di un'altra nota che si scrive dove è riportata; un PDF, un foglio o un file Craft usato dentro la nota, quante schede regge e che cosa ne vede Obsidian |
 | [Correttore](product/proofing.md) | l'ortografia mentre si scrive |
 | [Documenti di Word](product/word-documents.md) | la videoscrittura nel vault |
@@ -80,7 +80,7 @@ dalla penna alle tavole, dall'import all'export, fino ai disegni grandi.
   [superficie dei fogli](architecture/grid-surface.md) e gli [editor dei componenti](architecture/component-editors.md)
 - [Inchiostro e strumenti](architecture/ink-and-tools.md),
   [l'inchiostro sulla lavagna](architecture/ink-on-canvas.md) e
-  [il disegno sul motore](architecture/disegno.md)
+  [il disegno sul motore](architecture/disegno.md), con [il completo](architecture/disegno-completo.md)
 - [Runtime dei plugin](architecture/plugin-runtime.md), i [provider WASM](architecture/wasm-providers.md) e [capability e sandbox](architecture/plugin-security.md)
 - [Lo strato dei motori](architecture/motori.md)
 
@@ -100,7 +100,7 @@ dalla penna alle tavole, dall'import all'export, fino ai disegni grandi.
   [layout su disco](reference/on-disk-layout.md) e
   [permessi e sicurezza](reference/permissions-and-security.md) (con [gli stili e la CSP](reference/styles-and-csp.md))
 - [Il formato della scena](reference/scene-format.md) con le sue
-  pagine di dettaglio, e le
+  pagine di dettaglio, fra cui [la ricetta di un oggetto](reference/scene-format-recipe.md), e le
   [operazioni sulla scena](reference/scene-operations.md)
 - [Le annotazioni PDF](reference/annotation-format.md), [l'esportazione in PDF](reference/pdf-export-format.md), la
   [proiezione dei documenti di videoscrittura](reference/rich-projection.md)
@@ -113,7 +113,7 @@ dalla penna alle tavole, dall'import all'export, fino ai disegni grandi.
   scalette](reference/canvas-import.md), [il controllo](reference/canvas-check.md),
   [l'inchiostro](reference/canvas-ink.md) (`fub:ink`) con [le ancore di pagina e
   di cella](reference/canvas-ink-anchors.md), e [gli estratti](reference/canvas-parts.md) (`fub:parts`)
-- [Il server MCP](reference/mcp-server.md) e [il clipper del browser](reference/web-clipper.md)
+- [Il server MCP](reference/mcp-server.md), [il clipper del browser](reference/web-clipper.md) e [le tessere delle mappe](reference/map-tiles.md)
 - [Le schede della lavagna](reference/canvas-cards.md): specie, schede vive e
   ferme, il contratto dei renderer; [la scheda dei file Craft](reference/canvas-craft.md)
 - [I tasti e i gesti della lavagna](reference/canvas-input.md), [la sua

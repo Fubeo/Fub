@@ -49,6 +49,7 @@ export {
   type MotifFacts,
   type Resolve,
   type Place,
+  placeWithin,
 } from "./classify/types";
 export { motifOf, swatchOf, styleKindOf, styleOf } from "./classify/facts";
 export { tagOf, svgAttribute, characterData, firstTitle, lineText, textPathOf, textPathTarget } from "./classify/attributes";

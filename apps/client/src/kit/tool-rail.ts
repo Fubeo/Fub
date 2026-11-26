@@ -120,6 +120,15 @@ export function createToolRail(options: ToolRailOptions): ToolRail {
     return slot.tools.find((tool) => tool.id === wanted) ?? slot.tools[0]!;
   };
 
+  /// I tasti della casella: quelli dello strumento mostrato, e la freccia di
+  /// lato se la casella ha una tendina (il triangolino non è un nome suo).
+  const paintKeys = (button: HTMLElement, tool: RailTool, quante: number): void => {
+    const lato = orientation === "vertical" ? "ArrowRight" : "ArrowUp";
+    const keys = [tool.ariaKeys, quante > 1 ? lato : ""].filter((each) => each).join(" ");
+    if (keys !== "") button.setAttribute("aria-keyshortcuts", keys);
+    else button.removeAttribute("aria-keyshortcuts");
+  };
+
   const paintSlot = (view: SlotView): void => {
     const tool = shownTool(view.slot);
     const { button } = view;
@@ -131,8 +140,7 @@ export function createToolRail(options: ToolRailOptions): ToolRail {
     if (figure) holder.append(figure);
     button.prepend(holder);
     button.setAttribute("aria-label", tool.label);
-    if (tool.ariaKeys) button.setAttribute("aria-keyshortcuts", tool.ariaKeys);
-    else button.removeAttribute("aria-keyshortcuts");
+    paintKeys(button, tool, view.slot.tools.length);
     // Il suggerimento porta anche la descrizione.
     setTooltip(button, toolTip(tool));
     button.setAttribute("aria-pressed", String(view.slot.tools.some((each) => each.id === active)));
@@ -199,7 +207,8 @@ export function createToolRail(options: ToolRailOptions): ToolRail {
     flyout = openPopover({
       anchor: view.button,
       content: menu,
-      role: "menu",
+      // La superficie è un dialogo non modale che contiene il menu: il menu è `menu` dentro.
+      role: "dialog",
       label: name,
       placement: orientation === "vertical" ? "right" : "top",
       align: "start",
@@ -333,6 +342,7 @@ export function createToolRail(options: ToolRailOptions): ToolRail {
   const setOrientation = (next: "vertical" | "horizontal"): void => {
     orientation = next;
     element.setAttribute("aria-orientation", next);
+    for (const view of views) paintKeys(view.button, shownTool(view.slot), view.slot.tools.length);
     element.dataset.orientation = next;
   };
   setOrientation(orientation);

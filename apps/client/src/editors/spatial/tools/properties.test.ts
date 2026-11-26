@@ -8,6 +8,8 @@ import { checkAccessibility, formatIssues } from "../../../ui/a11y-check";
 import { iconEl, iconNames } from "../../../ui/icons";
 import { openLifetime, type Lifetime } from "../../../ui/lifetime";
 import { closeContextMenu } from "../../../ui/menu";
+import { creaSezioni } from "../completo/sezioni";
+import { t } from "../strings";
 import {
   createProperties,
   type ActionState,
@@ -743,6 +745,184 @@ describe("le scelte e i pulsanti", () => {
     expect(formatIssues(checkAccessibility(host))).toBe("");
   });
 
+  it("nel Completo non ci sono i gruppi a icone degli allineamenti e della distribuzione, né Posizione e misure; il Semplice li mostra", () => {
+    state.actions = {
+      "align-left": { label: "Allinea a sinistra" },
+      "distribute-x": { label: "Distribuisci orizzontalmente" },
+    };
+    mount();
+    const barraDi = (id: string): HTMLElement => action(id).closest<HTMLElement>(".draw-properties-bar")!;
+    // Il Semplice: il gruppo c'è, e anche Posizione e misure.
+    expect(barraDi("align-left").hidden).toBe(false);
+    expect(panel.element.querySelector<HTMLElement>('[data-section="place"]')!.hidden).toBe(false);
+    panel.collegaSezioni(creaSezioni(), null, () => ({ numero: 0, punti: [] }));
+    panel.update(view());
+    expect(barraDi("align-left").hidden).toBe(true);
+    expect(barraDi("distribute-x").hidden).toBe(true);
+    expect(panel.element.querySelector<HTMLElement>('[data-section="place"]')!.hidden).toBe(true);
+    // Il Completo chiuso: il gruppo torna.
+    panel.collegaSezioni(null, null, () => ({ numero: 0, punti: [] }));
+    panel.update(view());
+    expect(barraDi("align-left").hidden).toBe(false);
+  });
+
+  it("una sezione del registro vede le misure della vista, e le rifà a ogni aggiornamento, senza il motore", async () => {
+    const sezioni = creaSezioni();
+    const visti: Array<number | null | undefined> = [];
+    sezioni.registra({ id: "misure", scheda: "design", titolo: "Misure", disegna: (contesto) => void visti.push(contesto.misure.x?.valore) });
+    const fotogramma = (): Promise<void> => new Promise((ok) => requestAnimationFrame(() => ok()));
+    state.x = 10;
+    mount();
+    panel.collegaSezioni(sezioni, null, () => ({ numero: 1, punti: [] }));
+    panel.update(view());
+    await fotogramma();
+    expect(visti[visti.length - 1]).toBe(10);
+    state.x = 25;
+    panel.update(view());
+    await fotogramma();
+    expect(visti[visti.length - 1]).toBe(25);
+  });
+
+  it("nel Completo i colori, lo spessore e il tratteggio non ci sono (li danno Colore e Contorno), le punte restano in «Punte»; il Semplice non cambia", async () => {
+    const sezioni = creaSezioni();
+    const visti: unknown[] = [];
+    sezioni.registra({ id: "colori", scheda: "design", titolo: "Colori", disegna: (contesto) => void visti.push(contesto.colori) });
+    const fotogramma = (): Promise<void> => new Promise((ok) => requestAnimationFrame(() => ok()));
+    const titolo = (id: SectionId): string => section(id).querySelector(".draw-properties-toggle-text")!.textContent!;
+    state.tips = { start: { shape: "none", size: "medium" }, end: { shape: "triangle", size: "medium" } };
+    mount();
+    // Il Semplice: il campo del riempimento c'è, con la sua sezione; il tratteggio è nel Contorno.
+    expect(field("fill").hidden).toBe(false);
+    expect(section("fill").hidden).toBe(false);
+    expect(field("dash").hidden).toBe(false);
+    expect(titolo("stroke")).toBe(t("draw.properties.stroke"));
+    // Il Completo aperto: i campi si tolgono subito, e la sezione Riempimento, rimasta vuota, con loro.
+    panel.collegaSezioni(sezioni, null, () => ({ numero: 1, punti: [] }));
+    expect(field("fill").hidden).toBe(true);
+    expect(section("fill").hidden).toBe(true);
+    expect(field("dash").hidden).toBe(true);
+    expect(field("tipEnd").hidden).toBe(false);
+    expect(section("stroke").hidden).toBe(false);
+    expect(titolo("stroke")).toBe(t("draw.properties.tips"));
+    // La sezione del registro vede il colore della vista, senza il motore.
+    panel.update(view());
+    await fotogramma();
+    expect(visti[visti.length - 1]).toEqual({ riempimento: { valore: "#0072b2" } });
+    // Il Completo chiuso: i campi tornano, e la sezione si chiama di nuovo Contorno.
+    panel.collegaSezioni(null, null, () => ({ numero: 0, punti: [] }));
+    expect(field("fill").hidden).toBe(false);
+    expect(section("fill").hidden).toBe(false);
+    expect(field("dash").hidden).toBe(false);
+    expect(titolo("stroke")).toBe(t("draw.properties.stroke"));
+  });
+
+  it("nel Completo «Punte» c'è solo se gli oggetti scelti hanno punte di Fub; le frecce sono quelle del Contorno", () => {
+    const sezioni = creaSezioni();
+    state.tips = { start: { shape: "none", size: "medium" }, end: { shape: "none", size: "medium" } };
+    mount();
+    // Il Semplice le mostra sempre, anche senza punte: è da lì che si mettono.
+    expect(field("tipEnd").hidden).toBe(false);
+    expect(section("stroke").hidden).toBe(false);
+    panel.collegaSezioni(sezioni, null, () => ({ numero: 1, punti: [] }));
+    expect(field("tipStart").hidden).toBe(true);
+    expect(field("tipEnd").hidden).toBe(true);
+    expect(section("stroke").hidden).toBe(true);
+    // Un oggetto con una punta di Fub: la sezione torna, con tutte e due le punte.
+    state.tips = { start: { shape: "none", size: "medium" }, end: { shape: "circle", size: "medium" } };
+    panel.update(view());
+    expect(field("tipStart").hidden).toBe(false);
+    expect(field("tipEnd").hidden).toBe(false);
+    expect(section("stroke").hidden).toBe(false);
+  });
+
+  it("la sezione del registro vede il contorno della vista: lo spessore nella sua unità, estremi, angoli, trattini, blocco", async () => {
+    const sezioni = creaSezioni();
+    const visti: unknown[] = [];
+    sezioni.registra({ id: "contorno", scheda: "design", titolo: "Contorno", disegna: (contesto) => void visti.push(contesto.misure.contorno) });
+    const fotogramma = (): Promise<void> => new Promise((ok) => requestAnimationFrame(() => ok()));
+    mount();
+    panel.collegaSezioni(sezioni, null, () => ({ numero: 1, punti: [] }));
+    const base = view();
+    panel.update({
+      ...base,
+      fields: { ...base.fields, strokeWidth: { kind: "number", label: "Spessore", value: 1.5, unit: "pt", units: {}, relative: false, places: 2, min: 0, max: 1000 } },
+      outline: { cap: "round", join: null, dashes: [3, 1.5], locked: false },
+    });
+    await fotogramma();
+    const contorno = visti[visti.length - 1] as { spessore: { valore: number; unita: string; allaScena: (v: number) => number } } & Record<string, unknown>;
+    expect(contorno).toMatchObject({ spessore: { valore: 1.5, unita: "pt", decimali: 2 }, estremi: "round", angoli: null, trattini: [3, 1.5], bloccato: false });
+    expect(contorno.spessore.allaScena(3)).toBeCloseTo(4);
+  });
+
+  it("la sezione del registro vede le sfumature della vista: riempimento, contorno, blocco e soli testi", async () => {
+    const sezioni = creaSezioni();
+    const visti: unknown[] = [];
+    sezioni.registra({ id: "sfumatura", scheda: "design", titolo: "Sfumatura", disegna: (contesto) => void visti.push(contesto.misure.sfumature) });
+    const fotogramma = (): Promise<void> => new Promise((ok) => requestAnimationFrame(() => ok()));
+    mount();
+    panel.collegaSezioni(sezioni, null, () => ({ numero: 1, punti: [] }));
+    const stops = [
+      { offset: 0, color: "#ffffff", opacity: 1 },
+      { offset: 1, color: "#000000", opacity: 0.5 },
+    ];
+    panel.update({
+      ...view(),
+      gradients: {
+        fill: { count: 2, gradients: 1, kind: "radial", stops, angle: -45 },
+        stroke: { count: 2, gradients: 0, kind: null, stops: null, angle: null },
+        locked: true,
+        onlyText: false,
+      },
+    });
+    await fotogramma();
+    expect(visti[visti.length - 1]).toEqual({
+      riempimento: { parti: 2, conSfumatura: 1, tipo: "radial", punti: stops, angolo: -45 },
+      contorno: { parti: 2, conSfumatura: 0, tipo: null, punti: null, angolo: null },
+      bloccato: true,
+      soloTesto: false,
+    });
+  });
+
+  it("nel Completo famiglia, corpo, peso, spaziatura e allineamento li danno Carattere e Paragrafo; l'enfasi resta; la sezione vede il testo della vista", async () => {
+    const sezioni = creaSezioni();
+    const visti: unknown[] = [];
+    sezioni.registra({ id: "carattere", scheda: "design", titolo: "Carattere", disegna: (contesto) => void visti.push(contesto.sel.testo) });
+    const fotogramma = (): Promise<void> => new Promise((ok) => requestAnimationFrame(() => ok()));
+    mount();
+    expect(field("anchor").hidden).toBe(false);
+    panel.collegaSezioni(sezioni, null, () => ({ numero: 1, punti: [] }));
+    expect(field("anchor").hidden).toBe(true);
+    expect(field("emphasis").hidden).toBe(false);
+    // Senza il campo della famiglia la selezione non ha testi: la sezione non ne vede.
+    panel.update(view());
+    await fotogramma();
+    expect(visti[visti.length - 1]).toBeUndefined();
+    // Un testo: la famiglia, il corpo, il peso, il corsivo, la spaziatura e l'allineamento dalla vista.
+    const conTesto = view();
+    panel.update({
+      ...conTesto,
+      fields: {
+        ...conTesto.fields,
+        family: { kind: "choice", label: "Carattere", value: "Inter, sans-serif", options: [{ value: "Inter, sans-serif", label: "Inter" }] },
+        size: { kind: "number", label: "Corpo", value: 12, unit: "pt", units: PERCENT_UNITS, relative: false, places: 1 },
+        weight: { kind: "choice", label: "Peso", value: "700", options: [{ value: "700", label: "Grassetto" }] },
+        spacing: { kind: "number", label: "Spaziatura", value: 5, unit: "%", units: PERCENT_UNITS, relative: false, places: 0 },
+      },
+    });
+    await fotogramma();
+    expect(visti[visti.length - 1]).toMatchObject({
+      famiglia: "Inter, sans-serif",
+      famiglie: [{ valore: "Inter, sans-serif", nome: "Inter" }],
+      corpo: { valore: 12, unita: "pt", decimali: 1 },
+      peso: 700,
+      corsivo: false,
+      spaziatura: 5,
+      allineamento: "start",
+    });
+    panel.collegaSezioni(null, null, () => ({ numero: 0, punti: [] }));
+    expect(field("anchor").hidden).toBe(false);
+  });
+
   it("i comandi partono; uno che adesso non si usa resta raggiungibile e dice perché", () => {
     state.actions = {
       "align-left": { label: "Allinea a sinistra" },
@@ -1082,5 +1262,28 @@ describe("il testo di più righe", () => {
     write(desc, "Una casa\ncol tetto");
     desc.blur();
     expect(calls).toEqual(["desc=Una casa", "desc=Una casa\ncol tetto"]);
+  });
+});
+
+describe("le sezioni del Design dal registro del Completo (T10)", () => {
+  /// Un fotogramma: il giro della lista parte col suo `requestAnimationFrame`.
+  const frame = (): Promise<void> => new Promise((ok) => requestAnimationFrame(() => ok()));
+  const idDesign = (): string[] => [...panel.element.querySelectorAll<HTMLElement>(".draw-properties-section[data-section]")].map((each) => each.dataset.section ?? "");
+
+  it("compaiono in coda al pannello, nell'ordine della mappa, e si tolgono col Completo", async () => {
+    const sezioni = creaSezioni();
+    sezioni.registra({ id: "tavole", scheda: "design", titolo: "Tavole da disegno", ordine: 3, disegna: ({ corpo }) => { corpo.textContent = "tavole"; } });
+    sezioni.registra({ id: "griglia", scheda: "design", titolo: "Griglia", ordine: 1, disegna: ({ corpo }) => { corpo.textContent = "griglia"; } });
+    sezioni.registra({ id: "solo-risorse", scheda: "risorse", titolo: "Risorse", disegna: () => undefined });
+    mount();
+    panel.collegaSezioni(sezioni, null, () => ({ numero: 0, punti: [] }));
+    await frame();
+    const ours = idDesign().filter((id) => id === "griglia" || id === "tavole");
+    expect(ours).toEqual(["griglia", "tavole"]);
+    expect(idDesign()).not.toContain("solo-risorse");
+    expect(panel.element.querySelector('[data-section="tavole"]')?.textContent).toContain("tavole");
+    panel.collegaSezioni(null, null, () => ({ numero: 0, punti: [] }));
+    await frame();
+    expect(idDesign().filter((id) => id === "griglia" || id === "tavole")).toEqual([]);
   });
 });

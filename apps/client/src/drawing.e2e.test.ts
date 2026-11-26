@@ -8,8 +8,8 @@
 // cablaggio è quello di `surface-modes.e2e.test.ts` — `main.ts` sulla scocca
 // vera, contro l'host finto — con il registro vero e nessuna famiglia finta.
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { CommandSpec, SettingEntry } from "./host/contract";
-import type { FakeHost } from "./host/fake";
+import type { CommandSpec, DrawingOutcome, SettingEntry } from "./host/contract";
+import type { DrawingFake, FakeHost } from "./host/fake";
 import { checkAccessibility, formatIssues } from "./ui/a11y-check";
 import { mountedTextEditors } from "./editors/text/test-support";
 import { DEFAULT_CURVE } from "./ink/input/pressure";
@@ -217,9 +217,15 @@ function drawWorkspace(value: string, source: "default" | "vault" = "vault"): Se
   };
 }
 
-/// Gli strumenti della colonna, coi primi delle tendine: il Completo e il
-/// Semplice hanno la stessa colonna, e cambiano i comandi.
+/// Gli strumenti della colonna del Semplice, coi primi delle tendine: la
+/// colonna di serie.
 const COLUMN_TOOLS = ["select", "hand", "pen", "eraser", "rect", "text"];
+/// La colonna del Completo col motore acceso: solo gli strumenti di
+/// VectorCraft, i primi di ogni casella, e «Tutti gli strumenti» in fondo.
+const COLUMN_TOOLS_COMPLETO = ["motore:selection", "motore:directSelection", "motore:lasso", "motore:pen", "motore:pencil", "motore:eraser", "motore:rectangle", "motore:type", "motore:rotate", "motore:width", "motore:shapeBuilder", "motore:gradient", "motore:eyedropper", "motore:hand", "all"];
+/// La colonna del Completo col motore spento: gli strumenti di Fub, che
+/// funzionano anche senza.
+const COLUMN_TOOLS_COMPLETO_SENZA_MOTORE = ["select", "pen", "eraser", "rect", "text", "hand", "all"];
 
 /// Lo spazio di lavoro del disegno nel riquadro attivo.
 const workspace = (): string | undefined => focusedPane().querySelector<HTMLElement>(".draw-editor")?.dataset.workspace;
@@ -495,13 +501,95 @@ describe("«Apri come sorgente accanto» su un disegno", () => {
   });
 });
 
+// Le risposte del motore alla copia, come nel banco delle righe per un disegno in
+// sola lettura (`tests/famiglie/nucleo/sola-lettura.svg`): la copia non cambia il
+// file, e le letture degli appunti passano. Nell'app un disegno in sola lettura
+// si apre come immagine inerte (`surface.ts`), senza il Completo: qui il Completo è
+// su un disegno modificabile, con le risposte che il motore dà alla copia.
+const SVG_COPIA =
+  '<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" width="100" height="50" viewBox="0 0 100 50">\n  <rect x="0" y="0" width="100" height="50" fill="#000000"/>\n</svg>\n';
+const PNG_COPIA = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
+const COPIA_IN_SOLA_LETTURA: DrawingFake = {
+  comando: (request, copia) => {
+    const esito = (extra: Partial<DrawingOutcome>): DrawingOutcome => ({
+      revision: copia.revision,
+      preview: null,
+      ops: null,
+      selection: [...request.selection],
+      losses: [],
+      refused: null,
+      frame: null,
+      ...extra,
+    });
+    switch (request.id) {
+      case "disegno.famiglia.prepara":
+        return esito({ reading: { stato: "pronta" } });
+      // Ctrl+A col motore è il suo «Seleziona tutto», come in VectorCraft.
+      case "disegno.select.all":
+        return esito({ selection: ["o1a2b3c4d"] });
+      case "disegno.edit.copy":
+        return esito({ refused: "empty" });
+      case "disegno.clipboard.flavours":
+        return esito({ reading: { flavours: ["text/plain", "image/svg+xml", "image/png"] } });
+      case "disegno.clipboard.exportSvg":
+        return esito({ reading: { svg: SVG_COPIA } });
+      case "disegno.clipboard.exportPng":
+        return esito({ reading: { dataBase64: PNG_COPIA, width: 100, height: 50, warnings: [] } });
+      case "disegno.clipboard.exportText":
+        return esito({ reading: { text: null } });
+      default:
+        return esito({ refused: "unsupported" });
+    }
+  },
+};
+
+describe("gli appunti del Completo con Ctrl+C", () => {
+  it("Ctrl+C copia: SVG, PNG e testo del motore arrivano agli appunti di sistema", async () => {
+    // Lo spazio è il Completo, come nei casi del Completo qui sopra.
+    await start(createFakeHost({ file: VAULT, draw: true, settings: [drawWorkspace("full", "default")], drawing: COPIA_IN_SOLA_LETTURA }));
+    await open("casa.svg");
+    // La colonna del Completo c'è solo quando il suo modulo è montato, e con lui gli appunti del motore.
+    await waitFor("la colonna del Completo", () => tools().join(",") === COLUMN_TOOLS_COMPLETO.join(","));
+    // Dopo l'avvio, così il modulo degli appunti è quello dell'app.
+    const { declareClipboard } = await import("./platform/clipboard");
+    const scritti: Record<string, Blob>[] = [];
+    const ritira = declareClipboard(() => Promise.resolve(), {
+      write: (contenuto) => {
+        scritti.push({ ...contenuto } as Record<string, Blob>);
+        return Promise.resolve();
+      },
+      read: () => Promise.resolve([]),
+      supports: (tipo) => tipo === "text/plain" || tipo === "image/svg+xml" || tipo === "image/png",
+    });
+    try {
+      focusedPane().querySelector<HTMLElement>(".draw-surface")!.focus();
+      press("a", { ctrlKey: true });
+      await settle();
+      // Ctrl+C: il browser manda l'evento di copia sulla superficie.
+      focusedPane()
+        .querySelector<HTMLElement>(".draw-surface")!
+        .dispatchEvent(new ClipboardEvent("copy", { bubbles: true, cancelable: true, clipboardData: new DataTransfer() }));
+      await waitFor("la copia arriva agli appunti di sistema", () => scritti.length === 1);
+      expect(await scritti[0]!["image/svg+xml"]!.text()).toBe(SVG_COPIA);
+      expect(await scritti[0]!["text/plain"]!.text()).toBe(SVG_COPIA);
+      expect(scritti[0]!["image/png"]!.type).toBe("image/png");
+    } finally {
+      ritira();
+    }
+  });
+});
+
 describe("uno screenshot incollato", () => {
   it("si annota, e il file su disco resta uno, con l'immagine dentro", async () => {
     // happy-dom non decodifica immagini: il browser dice soltanto le misure.
     vi.stubGlobal("createImageBitmap", async () => ({ width: 120, height: 80, close() {} }));
     try {
-      const host = await start();
+      // Lo screenshot entra nel Semplice, dove l'immagine si incolla da sé. Nel
+      // Completo l'incolla passa dal motore (K6 T11), e il banco finto non ha
+      // ancora `clipboard.importImage`: lì la prova è `appunti.test.ts`.
+      const host = await start(createFakeHost({ file: VAULT, draw: true, settings: [drawWorkspace("simple")] }));
       await open("casa.svg");
+      expect(workspace()).toBe("simple");
       const png = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13]);
       const data = new DataTransfer();
       data.items.add(new File([png], "schermata.png", { type: "image/png" }));
@@ -530,7 +618,9 @@ describe("lo spazio e la griglia del disegno", () => {
     const host = await start(createFakeHost({ file: VAULT, draw: true, settings: [drawWorkspace("full", "default")] }));
     await open("casa.svg");
     const editor = focusedPane().querySelector(".draw-editor");
-    expect(tools()).toEqual(COLUMN_TOOLS);
+    // La colonna del Completo c'è quando il suo modulo è montato: prima c'è quella semplice.
+    // Qui il motore non c'è: restano gli strumenti di Fub.
+    await waitFor("la colonna del Completo", () => tools().join(",") === COLUMN_TOOLS_COMPLETO_SENZA_MOTORE.join(","));
 
     await host.module.api.setSetting("draw.workspace", "simple");
     await waitFor("il Semplice", () => workspace() === "simple");
@@ -785,3 +875,281 @@ describe("«Esporta…» su un disegno", () => {
   });
 });
 
+
+// La scheda Livelli del Completo (K6 T15, giro 4): l'albero è quello nativo, e occhio, lucchetto e
+// rinomina passano dal motore coi numeri che `document.inspect` dà ai livelli. Il motore finto
+// conosce il livello `l1` della casa col numero 3, e risponde alle proprietà con le operazioni che
+// il motore vero scrive (`crates/fub-disegno/src/famiglie/livelli.rs`).
+function livelliFinti(bloccato: boolean): { fake: DrawingFake; chiamate: { id: string; value: unknown }[] } {
+  const chiamate: { id: string; value: unknown }[] = [];
+  const fake: DrawingFake = {
+    comando: (request, copia) => {
+      chiamate.push({ id: request.id, value: request.value });
+      const esito = (extra: Partial<DrawingOutcome>): DrawingOutcome => ({
+        revision: copia.revision,
+        preview: null,
+        ops: null,
+        selection: [...request.selection],
+        losses: [],
+        refused: null,
+        frame: null,
+        ...extra,
+      });
+      switch (request.id) {
+        case "disegno.famiglia.prepara":
+          return esito({ reading: { stato: "pronta" } });
+        case "disegno.document.inspect":
+          return esito({ reading: { layers: [{ id: 3, name: "l1", kind: "Layer", visible: true, locked: bloccato, children: [] }] } });
+        case "disegno.layer.setProps": {
+          const value = request.value as { visible?: boolean; locked?: boolean; name?: string };
+          const attrs: Record<string, string | null> = {};
+          if (value.visible !== undefined) attrs.display = value.visible ? null : "none";
+          if (value.locked !== undefined) attrs["fub:locked"] = value.locked ? "true" : null;
+          if (value.name !== undefined) attrs["fub:layer"] = value.name;
+          return esito({ ops: JSON.stringify([{ op: "set", id: "l1", attrs }]) });
+        }
+        case "disegno.layer.duplicate":
+          return esito({
+            ops: JSON.stringify([
+              {
+                op: "batch",
+                ops: [
+                  { op: "add", parent: "#root", pos: { after: "l1" }, elem: { tag: "g", attrs: { id: "l00000000", "fub:layer": "Livello 1 copia" }, children: [] } },
+                  { op: "add", parent: "l00000000", pos: { last: true }, elem: { tag: "path", attrs: { d: "M60 60 L140 60 L140 120 L60 120 Z", id: "o00000001" } } },
+                ],
+              },
+            ]),
+          });
+        case "disegno.layer.clippingMask.toggle":
+          return esito({
+            ops: JSON.stringify([
+              {
+                op: "batch",
+                ops: [
+                  {
+                    op: "add",
+                    parent: "#root",
+                    pos: { first: true },
+                    elem: {
+                      tag: "defs",
+                      attrs: { id: "fub-defs" },
+                      children: [
+                        {
+                          tag: "clipPath",
+                          attrs: { id: "r00000000", "fub:role": "private", clipPathUnits: "userSpaceOnUse" },
+                          children: [{ tag: "path", attrs: { d: "M60 60 L140 60 L140 120 L60 120 Z", fill: "#000000", id: "r00000001" } }],
+                        },
+                      ],
+                    },
+                  },
+                  { op: "remove", target: "o1a2b3c4d" },
+                  { op: "set", id: "l1", attrs: { "clip-path": "url(#r00000000)" } },
+                ],
+              },
+            ]),
+          });
+        case "disegno.layer.newSublayer":
+          return esito({
+            ops: JSON.stringify([{ op: "add", parent: "l1", pos: { last: true }, elem: { tag: "g", attrs: { id: "l00000000", "fub:layer": "Livello 2" }, children: [] } }]),
+          });
+        default:
+          return esito({ refused: "unsupported" });
+      }
+    },
+  };
+  return { fake, chiamate };
+}
+
+/// La riga del livello `l1` nella scheda Livelli dell'ispettore.
+const rigaLivello = (): HTMLElement | null => document.querySelector<HTMLElement>('.draw-object[data-key="l1"]');
+
+/// Apre la scheda Livelli e aspetta la riga del livello `l1`.
+async function schedaLivelli(): Promise<HTMLElement> {
+  const { selectInspectorTab } = await import("./ui/views");
+  await waitFor("la scheda Livelli", () => selectInspectorTab("draw.layers"));
+  await waitFor("la riga del livello", () => rigaLivello() !== null);
+  return rigaLivello()!;
+}
+
+describe("la scheda Livelli del Completo", () => {
+  it("l'occhio di un livello passa dal motore col suo numero, e il file lo scrive", async () => {
+    const { fake, chiamate } = livelliFinti(false);
+    const host = await start(createFakeHost({ file: VAULT, draw: true, settings: [drawWorkspace("full", "default")], drawing: fake }));
+    await open("casa.svg");
+    // La porta dei livelli c'è col Completo montato, come la sua colonna.
+    await waitFor("la colonna del Completo", () => tools().join(",") === COLUMN_TOOLS_COMPLETO.join(","));
+    await schedaLivelli();
+    rigaLivello()!.querySelector<HTMLElement>('[data-sign="hide"]')!.click();
+    await waitFor("il livello nascosto arriva al disco", () => written(host, "casa.svg").length === 1);
+    expect(written(host, "casa.svg")[0]).toMatch(/<g id="l1" fub:layer="Livello 1" display="none">/);
+    expect(chiamate.filter((c) => c.id === "disegno.layer.setProps")).toEqual([{ id: "disegno.layer.setProps", value: { ids: [3], visible: false } }]);
+    expect(chiamate.map((c) => c.id)).toContain("disegno.document.inspect");
+  });
+
+  it("un livello bloccato non si rinomina nel Completo: il doppio clic non apre il nome", async () => {
+    const bloccata = { ...VAULT, "casa.svg": HOUSE.replace('fub:layer="Livello 1"', 'fub:layer="Livello 1" fub:locked="true"') };
+    const { fake, chiamate } = livelliFinti(true);
+    const host = await start(createFakeHost({ file: bloccata, draw: true, settings: [drawWorkspace("full", "default")], drawing: fake }));
+    await open("casa.svg");
+    await waitFor("la colonna del Completo", () => tools().join(",") === COLUMN_TOOLS_COMPLETO.join(","));
+    await schedaLivelli();
+    rigaLivello()!.querySelector(".draw-object-label")!.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+    await settle();
+    expect(document.querySelector(".draw-object-rename")).toBeNull();
+    expect(chiamate.filter((c) => c.id === "disegno.layer.setProps")).toEqual([]);
+    expect(written(host, "casa.svg")).toEqual([]);
+    // Il lucchetto si toglie anche bloccato, dal motore; poi il doppio clic apre il nome.
+    rigaLivello()!.querySelector<HTMLElement>('[data-sign="lock"]')!.click();
+    await waitFor("il livello sbloccato arriva al disco", () => written(host, "casa.svg").length === 1);
+    expect(written(host, "casa.svg")[0]).toMatch(/<g id="l1" fub:layer="Livello 1">/);
+    expect(chiamate.filter((c) => c.id === "disegno.layer.setProps")).toEqual([{ id: "disegno.layer.setProps", value: { ids: [3], locked: false } }]);
+    rigaLivello()!.querySelector(".draw-object-label")!.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+    await waitFor("il campo del nome", () => document.querySelector(".draw-object-rename") !== null);
+  });
+
+  it("Duplica nel menu dei livelli passa dal motore: la copia va sopra e si disegna lì", async () => {
+    const { fake, chiamate } = livelliFinti(false);
+    const host = await start(createFakeHost({ file: VAULT, draw: true, settings: [drawWorkspace("full", "default")], drawing: fake }));
+    await open("casa.svg");
+    await waitFor("la colonna del Completo", () => tools().join(",") === COLUMN_TOOLS_COMPLETO.join(","));
+    const bottone = (): HTMLButtonElement | null => document.querySelector<HTMLButtonElement>(".draw-objects-menu:not([hidden])");
+    await schedaLivelli();
+    await waitFor("il bottone dei livelli", () => bottone() !== null);
+    bottone()!.click();
+    const voci = (): HTMLButtonElement[] => {
+      const aperti = document.querySelectorAll<HTMLElement>(".context-menu");
+      return aperti.length === 0 ? [] : [...aperti[aperti.length - 1]!.querySelectorAll<HTMLButtonElement>("button")];
+    };
+    const voce = (frase: string): HTMLButtonElement | undefined => voci().find((each) => each.querySelector(".menu-label")?.textContent === frase);
+    await waitFor("la voce Duplica", () => voce("Duplica «Livello 1»") !== undefined);
+    // Appiattisci c'è ma, con un livello solo, non serve.
+    expect(voce("Appiattisci tutto in «Livello 1»")?.getAttribute("aria-disabled")).toBe("true");
+    voce("Duplica «Livello 1»")!.click();
+    await waitFor("la copia arriva al disco", () => written(host, "casa.svg").length === 1);
+    expect(written(host, "casa.svg")[0]).toMatch(/<g id="l00000000" fub:layer="Livello 1 copia">\s*<path id="o00000001" d="M60 60 L140 60 L140 120 L60 120 Z"\/>/);
+    expect(chiamate.filter((c) => c.id === "disegno.layer.duplicate")).toEqual([{ id: "disegno.layer.duplicate", value: { ids: [3] } }]);
+    await waitFor("la riga della copia", () => document.querySelector('.draw-object[data-key="l00000000"]') !== null);
+  });
+
+  it("Nuovo sottolivello passa dal motore: il livello nuovo sta nel livello corrente, che resta lui", async () => {
+    const { fake, chiamate } = livelliFinti(false);
+    const host = await start(createFakeHost({ file: VAULT, draw: true, settings: [drawWorkspace("full", "default")], drawing: fake }));
+    await open("casa.svg");
+    await waitFor("la colonna del Completo", () => tools().join(",") === COLUMN_TOOLS_COMPLETO.join(","));
+    const bottone = (): HTMLButtonElement | null => document.querySelector<HTMLButtonElement>(".draw-objects-menu:not([hidden])");
+    await schedaLivelli();
+    await waitFor("il bottone dei livelli", () => bottone() !== null);
+    const voci = (): HTMLButtonElement[] => {
+      const aperti = document.querySelectorAll<HTMLElement>(".context-menu");
+      return aperti.length === 0 ? [] : [...aperti[aperti.length - 1]!.querySelectorAll<HTMLButtonElement>("button")];
+    };
+    const voce = (frase: string): HTMLButtonElement | undefined => voci().find((each) => each.querySelector(".menu-label")?.textContent === frase);
+    bottone()!.click();
+    await waitFor("la voce Nuovo sottolivello", () => voce("Nuovo sottolivello in «Livello 1»") !== undefined);
+    // Senza oggetti scelti non c'è niente da raccogliere.
+    expect(voce("Raccogli in un nuovo livello")?.getAttribute("aria-disabled")).toBe("true");
+    voce("Nuovo sottolivello in «Livello 1»")!.click();
+    await waitFor("il sottolivello arriva al disco", () => written(host, "casa.svg").length === 1);
+    expect(written(host, "casa.svg")[0]).toMatch(/<g id="l1" fub:layer="Livello 1">[\s\S]*<g id="l00000000" fub:layer="Livello 2">\s*<\/g>\s*<\/g>/);
+    expect(chiamate.filter((c) => c.id === "disegno.layer.newSublayer")).toEqual([{ id: "disegno.layer.newSublayer", value: { parent: 3 } }]);
+    await waitFor("la riga del sottolivello", () => document.querySelector('.draw-object[data-key="l00000000"]') !== null);
+    // Il livello corrente resta quello della radice: il menu elenca i livelli della radice soli.
+    bottone()!.click();
+    await waitFor("il menu dei livelli", () => voce("Nuovo sottolivello in «Livello 1»") !== undefined);
+    expect(voci().filter((each) => each.getAttribute("role") === "menuitemradio").map((each) => each.querySelector(".menu-label")?.textContent)).toEqual(["Livello 1"]);
+  });
+
+  it("la maschera di ritaglio del livello passa dal motore; poi la voce dice Rilascia, e su un livello vuoto è spenta", async () => {
+    const { fake, chiamate } = livelliFinti(false);
+    const host = await start(createFakeHost({ file: VAULT, draw: true, settings: [drawWorkspace("full", "default")], drawing: fake }));
+    await open("casa.svg");
+    await waitFor("la colonna del Completo", () => tools().join(",") === COLUMN_TOOLS_COMPLETO.join(","));
+    const bottone = (): HTMLButtonElement | null => document.querySelector<HTMLButtonElement>(".draw-objects-menu:not([hidden])");
+    await schedaLivelli();
+    await waitFor("il bottone dei livelli", () => bottone() !== null);
+    const voci = (): HTMLButtonElement[] => {
+      const aperti = document.querySelectorAll<HTMLElement>(".context-menu");
+      return aperti.length === 0 ? [] : [...aperti[aperti.length - 1]!.querySelectorAll<HTMLButtonElement>("button")];
+    };
+    const voce = (frase: string): HTMLButtonElement | undefined => voci().find((each) => each.querySelector(".menu-label")?.textContent === frase);
+    bottone()!.click();
+    await waitFor("la voce Crea maschera", () => voce("Crea maschera di ritaglio del livello «Livello 1»") !== undefined);
+    expect(voce("Crea maschera di ritaglio del livello «Livello 1»")!.getAttribute("aria-disabled")).not.toBe("true");
+    voce("Crea maschera di ritaglio del livello «Livello 1»")!.click();
+    await waitFor("il ritaglio arriva al disco", () => written(host, "casa.svg").length === 1);
+    const scritto = written(host, "casa.svg")[0]!;
+    expect(scritto).toMatch(/<clipPath id="r00000000" fub:role="private" clipPathUnits="userSpaceOnUse">/);
+    expect(scritto).toMatch(/<g id="l1" fub:layer="Livello 1" clip-path="url\(#r00000000\)">/);
+    expect(scritto).not.toContain('id="o1a2b3c4d"');
+    expect(chiamate.filter((c) => c.id === "disegno.layer.clippingMask.toggle")).toEqual([{ id: "disegno.layer.clippingMask.toggle", value: { id: 3 } }]);
+    // Ora il livello ritaglia: la stessa voce lo rilascia, anche se il livello non ha più oggetti.
+    bottone()!.click();
+    await waitFor("la voce Rilascia maschera", () => voce("Rilascia maschera di ritaglio del livello «Livello 1»") !== undefined);
+    expect(voce("Rilascia maschera di ritaglio del livello «Livello 1»")!.getAttribute("aria-disabled")).not.toBe("true");
+  });
+
+  it("con un gruppo scelto da solo la voce ritaglia il gruppo, non il livello, come in VectorCraft", async () => {
+    const conGruppo = {
+      ...VAULT,
+      "casa.svg": HOUSE.replace(/\n    (<rect[^\n]*)/, '\n    <g id="og1a1a1a1">\n      $1\n    </g>'),
+    };
+    const { fake, chiamate } = livelliFinti(false);
+    const host = await start(createFakeHost({ file: conGruppo, draw: true, settings: [drawWorkspace("full", "default")], drawing: fake }));
+    await open("casa.svg");
+    await waitFor("la colonna del Completo", () => tools().join(",") === COLUMN_TOOLS_COMPLETO.join(","));
+    const bottone = (): HTMLButtonElement | null => document.querySelector<HTMLButtonElement>(".draw-objects-menu:not([hidden])");
+    await schedaLivelli();
+    const rigaGruppo = (): HTMLElement | null => document.querySelector<HTMLElement>('.draw-object[data-key="og1a1a1a1"]');
+    if (rigaGruppo() === null) rigaLivello()!.querySelector<HTMLElement>(".draw-object-twisty")?.click();
+    await waitFor("la riga del gruppo", () => rigaGruppo() !== null);
+    rigaGruppo()!.querySelector<HTMLElement>(".draw-object-label")!.click();
+    await waitFor("il gruppo scelto", () => rigaGruppo()!.getAttribute("aria-selected") === "true");
+    const voci = (): HTMLButtonElement[] => {
+      const aperti = document.querySelectorAll<HTMLElement>(".context-menu");
+      return aperti.length === 0 ? [] : [...aperti[aperti.length - 1]!.querySelectorAll<HTMLButtonElement>("button")];
+    };
+    const voce = (frase: string): HTMLButtonElement | undefined => voci().find((each) => each.querySelector(".menu-label")?.textContent === frase);
+    bottone()!.click();
+    await waitFor("la voce del gruppo", () => voce("Crea maschera di ritaglio del gruppo scelto") !== undefined);
+    expect(voce("Crea maschera di ritaglio del livello «Livello 1»")).toBeUndefined();
+    voce("Crea maschera di ritaglio del gruppo scelto")!.click();
+    await waitFor("il comando del gruppo", () => chiamate.some((c) => c.id === "disegno.layer.clippingMask.toggle"));
+    expect(chiamate.filter((c) => c.id === "disegno.layer.clippingMask.toggle")).toEqual([{ id: "disegno.layer.clippingMask.toggle", value: {} }]);
+    await waitFor("il ritaglio arriva al disco", () => written(host, "casa.svg").length === 1);
+  });
+
+  it("su un livello vuoto Crea maschera di ritaglio è spenta e dice perché", async () => {
+    const vuota = { ...VAULT, "casa.svg": HOUSE.replace(/\n    <rect[^\n]*/, "") };
+    const { fake } = livelliFinti(false);
+    await start(createFakeHost({ file: vuota, draw: true, settings: [drawWorkspace("full", "default")], drawing: fake }));
+    await open("casa.svg");
+    await waitFor("la colonna del Completo", () => tools().join(",") === COLUMN_TOOLS_COMPLETO.join(","));
+    const bottone = (): HTMLButtonElement | null => document.querySelector<HTMLButtonElement>(".draw-objects-menu:not([hidden])");
+    await schedaLivelli();
+    await waitFor("il bottone dei livelli", () => bottone() !== null);
+    bottone()!.click();
+    const voce = (): HTMLButtonElement | undefined =>
+      [...document.querySelectorAll<HTMLButtonElement>(".context-menu button")].find(
+        (each) => each.querySelector(".menu-label")?.textContent === "Crea maschera di ritaglio del livello «Livello 1»",
+      );
+    await waitFor("la voce Crea maschera", () => voce() !== undefined);
+    expect(voce()!.getAttribute("aria-disabled")).toBe("true");
+    expect(voce()!.textContent).toContain("Il livello è vuoto");
+  });
+
+  it("nel Semplice l'albero resta com'era: i livelli non si cambiano, e il motore non sente niente", async () => {
+    const { fake, chiamate } = livelliFinti(false);
+    const host = await start(createFakeHost({ file: VAULT, draw: true, settings: [drawWorkspace("simple")], drawing: fake }));
+    await open("casa.svg");
+    await waitFor("il Semplice", () => workspace() === "simple");
+    await schedaLivelli();
+    // Il Semplice non ha i livelli fra le sue funzioni: la riga si guarda, non si tocca.
+    expect(rigaLivello()!.hasAttribute("data-toggles")).toBe(false);
+    rigaLivello()!.querySelector<HTMLElement>('[data-sign="hide"]')!.click();
+    rigaLivello()!.querySelector(".draw-object-label")!.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+    await settle();
+    expect(document.querySelector(".draw-object-rename")).toBeNull();
+    expect(written(host, "casa.svg")).toEqual([]);
+    expect(chiamate.filter((c) => c.id.startsWith("disegno.layer.") || c.id === "disegno.document.inspect")).toEqual([]);
+  });
+});

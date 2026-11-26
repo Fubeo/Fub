@@ -24,7 +24,7 @@
 // i più vecchi. Il segno di un passo che esce perché non si annulla, o non si
 // ripete, passa al punto prima.
 
-import type { DrawKey } from "../strings";
+import { t, type DrawKey } from "../strings";
 import { mergeUndo, type Applied, type Outcome, type Replayed, type SceneEngine, type Undo } from "../scene/engine";
 
 /// I passi che la pila ricorda: oltre, il più vecchio si dimentica.
@@ -33,13 +33,30 @@ export const HISTORY_LIMIT = 1000;
 /// Quanto può passare fra due passi perché si fondano, in millisecondi.
 export const MERGE_MS = 500;
 
+/// Il nome di un passo: una chiave delle parole del disegno, o un nome già
+/// detto, come il nome di un comando del motore che porta l'indice del
+/// Disegno completo (nella lingua di quando è partito).
+export type StepLabel = DrawKey | { readonly name: string };
+
+/// Il nome del passo a parole, per gli annunci e per il pannello.
+export function stepName(label: StepLabel): string {
+  return typeof label === "string" ? t(label) : label.name;
+}
+
+/// Due nomi uguali: solo così due passi vicini si fondono. Due comandi del
+/// motore diversi restano due passi.
+function sameLabel(a: StepLabel, b: StepLabel): boolean {
+  if (typeof a === "string" || typeof b === "string") return a === b;
+  return a.name === b.name;
+}
+
 /// Un gesto applicato.
 export interface Step {
   /// Il numero del passo, e il punto della cronologia dopo di lui: resta lo
   /// stesso quando il passo si fonde, si annulla o si ripete.
   readonly serial: number;
   /// Il nome del gesto, per gli annunci: «Annullato: Rettangolo».
-  readonly label: DrawKey;
+  readonly label: StepLabel;
   readonly undo: Undo;
   /// Quando è arrivata l'ultima operazione del passo; `-Infinity` per un
   /// passo chiuso, che non si fonde più.
@@ -145,13 +162,13 @@ export class History {
 
   /// Ricorda un gesto applicato, fuso col passo in cima se può: i passi da
   /// ripetere non valgono più, e nemmeno i loro segni.
-  record(label: DrawKey, applied: Applied): void {
+  record(label: StepLabel, applied: Applied): void {
     if (applied.duplicate) return;
     this.future.length = 0;
     this.changes++;
     const at = this.clock();
     const top = this.past[this.past.length - 1];
-    const near = top !== undefined && top.label === label && at - top.at <= MERGE_MS;
+    const near = top !== undefined && sameLabel(top.label, label) && at - top.at <= MERGE_MS;
     const merged = near ? mergeUndo(top.undo, applied.undo) : null;
     if (merged !== null) {
       this.past[this.past.length - 1] = { serial: top!.serial, label, undo: merged, at };

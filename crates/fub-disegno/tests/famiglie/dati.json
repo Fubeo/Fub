@@ -1,0 +1,29 @@
+{
+  "$nota": "I casi della famiglia «dati»: la lettura degli Attributi (`attributes.info`), che la sezione Attributi del Design usa per la regola di riempimento; gli `ids` tornano con l'id del file.",
+  "casi": [
+    {
+      "id": "attributes.info",
+      "disegno": "regola.svg",
+      "selezione": [
+        "oh9c9c9c9"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "lettura": {
+          "ids": [
+            "oh9c9c9c9"
+          ],
+          "overprintFill": false,
+          "overprintStroke": null,
+          "showCenter": false,
+          "imageMap": "none",
+          "url": "",
+          "note": "",
+          "fillRule": "evenOdd",
+          "reversed": false,
+          "recentUrls": []
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,541 @@
+Fub patch 0008-nessuna-radice-e-tabelle (UPSTREAM-API, to be proposed upstream).
+
+An engine that does not touch the disk, and its global tables counted and
+released (Fub plan K6, T28; docs/architecture/disegno-completo.md#il-disco).
+
+- engine/src/file_access.rs: AutomationRoots::deny_all(), empty roots that
+  are in force: check_read and check_write refuse every path with their error
+  (at cfb30d81 AutomationRoots::new(&[], &[]) returns None, and without roots
+  nothing is checked). With roots in force, the placed-document MEMO
+  (doc/src/placed_document.rs) does not read the disk.
+- text/src/fontdb/dirs.rs: set_system_fonts(false) empties the system font
+  folders: no scan and no fallback reads the disk.
+- engine/src/tables.rs (new): the global tables that grow with use, each with
+  its weight (<table>_bytes) and its release (release_<table>), in order:
+
+  crate                 table            Fub map family   releasable
+  vectorcraft-render    image_cache      immagini         yes
+  vectorcraft-render    placed_bitmaps   formati          yes
+  vectorcraft-render    halftone_cache   immagini         yes
+  vectorcraft-doc       placed_files     formati          yes
+  vectorcraft-doc       placed_reads     formati          yes
+  vectorcraft-effects   texture_cache    raster           yes
+  vectorcraft-color     user_profiles    colore           no
+  vectorcraft-text      font_faces       testo            no
+
+  user_profiles and font_faces cannot be released without breaking the open
+  documents that use them: their weight still counts (Fub DECISIONS.md, T28).
+  Left out, and the module says why: fixed-size tables (catalogs), glyph and
+  outline caches with their own cap, settings, per-thread caches, the MEMO
+  under deny_all, the recovery blob names and the plug-in intern.
+
+diff --git a/crates/color/src/cms.rs b/crates/color/src/cms.rs
+--- a/crates/color/src/cms.rs
++++ b/crates/color/src/cms.rs
+@@ -168,6 +168,14 @@ static USER: RwLock<Vec<Arc<IccProfile>>> = RwLock::new(Vec::new());
+ /// Counts the profiles [`register_icc`] has registered ([`profiles_generation`]).
+ static PROFILES_GENERATION: AtomicU64 = AtomicU64::new(0);
+ 
++/// Roughly how many bytes the profiles loaded by the user ([`register_icc`]) hold. They can't be
++/// released: documents and color settings name them.
++///
++/// Patch di Fub (`0008-nessuna-radice-e-tabelle`).
++pub fn user_profiles_bytes() -> usize {
++    USER.read().unwrap_or_else(|e| e.into_inner()).iter().map(|p| p.heap_bytes()).sum()
++}
++
+ fn builtin_rgb_cache(name: &str) -> Option<Arc<IccProfile>> {
+     static CACHE: Mutex<Vec<Arc<IccProfile>>> = Mutex::new(Vec::new());
+     let mut c = CACHE.lock().unwrap_or_else(|e| e.into_inner());
+diff --git a/crates/color/src/cms/icc.rs b/crates/color/src/cms/icc.rs
+--- a/crates/color/src/cms/icc.rs
++++ b/crates/color/src/cms/icc.rs
+@@ -80,6 +80,14 @@ fn text(t: &Option<ProfileText>) -> Option<String> {
+ }
+ 
+ impl IccProfile {
++    /// Roughly how many bytes of heap the profile holds: itself and the file it came from (its
++    /// parsed tables and transforms left out).
++    ///
++    /// Patch di Fub (`0008-nessuna-radice-e-tabelle`).
++    pub(crate) fn heap_bytes(&self) -> usize {
++        std::mem::size_of::<Self>() + self.name.capacity() + self.source.capacity()
++    }
++
+     pub fn from_profile(name: Option<String>, profile: ColorProfile) -> Result<Self, CmsError> {
+         let kind = match profile.color_space {
+             DataColorSpace::Rgb => ProfileKind::Rgb,
+diff --git a/crates/doc/src/mem.rs b/crates/doc/src/mem.rs
+--- a/crates/doc/src/mem.rs
++++ b/crates/doc/src/mem.rs
+@@ -236,6 +236,34 @@ impl Walk<'_> {
+     }
+ }
+ 
++impl Node {
++    /// Roughly how many bytes of heap this node and the art under it keep (children and mask art
++    /// included), in the estimate of [`Document::retained_bytes`]; art shared with something else
++    /// counts all the same.
++    ///
++    /// Patch di Fub (`0008-nessuna-radice-e-tabelle`): what a cache of art weighs.
++    pub fn heap_bytes(&self) -> usize {
++        let mut b = node_bytes(self, None);
++        for c in self.children().into_iter().flatten() {
++            b += c.heap_bytes();
++        }
++        if let Some(m) = &self.extras().mask {
++            b += m.art.heap_bytes();
++        }
++        b
++    }
++}
++
++impl Document {
++    /// Roughly how many bytes of heap this document keeps, in the estimate of
++    /// [`Document::retained_bytes`] (what a new document shares with it left out).
++    ///
++    /// Patch di Fub (`0008-nessuna-radice-e-tabelle`): what a cache of documents weighs.
++    pub fn heap_bytes(&self) -> usize {
++        self.retained_bytes(&Document::new(1.0, 1.0))
++    }
++}
++
+ /// One node's own heap: the node, and what it owns besides its children and mask art (counted
+ /// as nodes of their own). Its appearance counts unless `other`, its other version, shares it.
+ fn node_bytes(n: &Node, other: Option<&Node>) -> usize {
+diff --git a/crates/doc/src/placed_document.rs b/crates/doc/src/placed_document.rs
+--- a/crates/doc/src/placed_document.rs
++++ b/crates/doc/src/placed_document.rs
+@@ -313,6 +313,19 @@ fn full() -> MutexGuard<'static, FullFiles> {
+     FULL.lock().unwrap_or_else(PoisonError::into_inner)
+ }
+ 
++/// Bytes of the files read again that are kept.
++///
++/// Patch di Fub (`0008-nessuna-radice-e-tabelle`), like [`release_placed_files`].
++pub fn placed_files_bytes() -> usize {
++    full().iter().map(|(k, path, b)| k.capacity() + path.capacity() + b.capacity()).sum()
++}
++
++/// Forget the files read again: a placed document shown from its preview reads its file again
++/// when it needs it whole.
++pub fn release_placed_files() {
++    *full() = Vec::new();
++}
++
+ /// The file's bytes when they are at hand: stored (`blob` isn't just the preview) or read again
+ /// already. Never reads it.
+ pub fn full_bytes_cached(p: &PlacedDocument, blob: &ImageBlob) -> Option<Arc<Vec<u8>>> {
+@@ -434,6 +447,20 @@ impl Cache {
+     }
+ }
+ 
++/// Roughly how many bytes of heap the placed documents read and kept hold (their art and setup;
++/// the file's bytes belong to the documents that place it).
++///
++/// Patch di Fub (`0008-nessuna-radice-e-tabelle`), like [`release_placed_reads`].
++pub fn placed_reads_bytes() -> usize {
++    let reads: Vec<Arc<ReadDocument>> = cache().entries.values().map(|x| x.e.clone()).collect();
++    reads.iter().map(|e| e.art.heap_bytes() + e.doc.heap_bytes()).sum()
++}
++
++/// Forget the placed documents read: each is read again from its bytes when next drawn.
++pub fn release_placed_reads() {
++    cache().entries = std::collections::HashMap::new();
++}
++
+ /// `p`'s file (`bytes`) read, from the cache when it was read already: what the renderer draws a
+ /// placed document from. `None` when it can't be read (or no loader is registered).
+ pub fn read(p: &PlacedDocument, bytes: &Arc<Vec<u8>>) -> Option<Arc<ReadDocument>> {
+diff --git a/crates/effects/src/pixel.rs b/crates/effects/src/pixel.rs
+--- a/crates/effects/src/pixel.rs
++++ b/crates/effects/src/pixel.rs
+@@ -38,7 +38,7 @@ pub use artistic::{PAINT_DAUB_BRUSH_TYPES, PaintDaubBrush};
+ pub use blur::{SMART_BLUR_MODES, SmartBlurMode};
+ pub use brushstrokes::{STROKE_DIRECTIONS, StrokeDirection};
+ pub use distort::{GLASS_TEXTURES, GLASS_TEXTURES_LOADED, GlassTexture};
+-pub use loaded::{LOADED, LoadedTexture, TEXTURE_IMAGE, texture};
++pub use loaded::{LOADED, LoadedTexture, TEXTURE_IMAGE, release_texture_cache, texture, texture_cache_bytes};
+ pub use pixelate::{MEZZOTINT_TYPES, Mezzotint};
+ pub use sketch::{HALFTONE_TYPES, HalftonePattern};
+ pub use texture::{GRAIN_TYPES, Grain, LIGHT_DIRECTIONS, Light, TEXTURES, TEXTURES_LOADED, Texture};
+diff --git a/crates/effects/src/pixel/loaded.rs b/crates/effects/src/pixel/loaded.rs
+--- a/crates/effects/src/pixel/loaded.rs
++++ b/crates/effects/src/pixel/loaded.rs
+@@ -133,6 +133,19 @@ impl LoadedTexture {
+ /// The textures [`texture`] decoded last, with their PNG, the newest last.
+ static DECODED: Mutex<Vec<(Vec<u8>, Arc<LoadedTexture>)>> = Mutex::new(Vec::new());
+ 
++/// Bytes the textures kept for the next call hold (their PNG and their gray levels).
++///
++/// Patch di Fub (`0008-nessuna-radice-e-tabelle`), like [`release_texture_cache`].
++pub fn texture_cache_bytes() -> usize {
++    let decoded = DECODED.lock().unwrap_or_else(PoisonError::into_inner);
++    decoded.iter().map(|(png, t)| png.capacity() + t.gray.capacity()).sum()
++}
++
++/// Forget the textures kept: each is decoded again from its value when next used.
++pub fn release_texture_cache() {
++    *DECODED.lock().unwrap_or_else(PoisonError::into_inner) = Vec::new();
++}
++
+ /// The texture a [`TEXTURE_IMAGE`] value holds; `None` when it isn't base64 of a PNG. The last
+ /// [`KEEP`] textures decoded are kept for the next call, found by their PNG: values that differ
+ /// only in how the base64 is spaced share one.
+diff --git a/crates/engine/src/file_access.rs b/crates/engine/src/file_access.rs
+--- a/crates/engine/src/file_access.rs
++++ b/crates/engine/src/file_access.rs
+@@ -85,6 +85,15 @@ impl AutomationRoots {
+         Ok(Some(Arc::new(Self { read: open(read, Access::Read)?, write: open(write, Access::Write)? })))
+     }
+ 
++    /// Roots in force that grant no access of either kind: every path is refused, read or written.
++    /// For a host that gives the engine its files as bytes and wants it never to reach the disk
++    /// on its own (`new` with no roots means nothing is confined).
++    ///
++    /// Patch di Fub (`0008-nessuna-radice-e-tabelle`).
++    pub fn deny_all() -> Arc<Self> {
++        Arc::new(Self { read: Vec::new(), write: Vec::new() })
++    }
++
+     /// May the file or folder at `path` be read (or written)? It must lie inside one of the roots
+     /// of that kind. `Err` says why not.
+     pub fn check(&self, path: &str, access: Access) -> Result<(), String> {
+diff --git a/crates/engine/src/lib.rs b/crates/engine/src/lib.rs
+--- a/crates/engine/src/lib.rs
++++ b/crates/engine/src/lib.rs
+@@ -14,6 +14,7 @@ pub mod journal;
+ pub mod link_watch;
+ pub mod steps;
+ pub mod store;
++pub mod tables;
+ mod tooling;
+ pub mod units;
+ 
+diff --git a/crates/engine/src/tables.rs b/crates/engine/src/tables.rs
+new file mode 100644
+--- /dev/null
++++ b/crates/engine/src/tables.rs
+@@ -0,0 +1,116 @@
++//! The process-wide tables that grow with what documents and commands bring in: decoded images,
++//! bitmaps and reads of placed documents, halftone arts, textures, profiles and fonts the user
++//! added. A host that keeps the engine in a process of its own, among other work, weighs them
++//! against its memory budget ([`bytes`]) and empties those that can be emptied when it needs the
++//! memory back ([`release_all`]); each is filled again on demand.
++//!
++//! Not listed:
++//! - tables that can't grow past a small fixed size: the built-in libraries and profiles, the
++//!   proof and ink tables (a handful of entries each), the font database's glyph and outline
++//!   caches (capped by count and bytes), the view and color settings;
++//! - per-thread caches of one frame;
++//! - the files read lately for placing (`cmd::place::document`), kept only when no automation root
++//!   is in force: under [`crate::file_access::AutomationRoots::deny_all`] they stay empty;
++//! - the names of recovery blobs (`cmd::recovery`), pruned to about twice the live images and only
++//!   filled with a recovery folder;
++//! - what plug-in formats intern (feature `plugins`).
++//!
++//! Patch di Fub (`0008-nessuna-radice-e-tabelle`).
++
++/// One process-wide table.
++#[derive(Clone, Copy, Debug)]
++pub struct Table {
++    /// The crate that holds it (`vectorcraft-render`).
++    pub krate: &'static str,
++    /// Its name, unique among the tables.
++    pub name: &'static str,
++    /// What makes it grow, for people.
++    pub grows_with: &'static str,
++    /// Roughly how many bytes it holds now.
++    pub bytes: fn() -> usize,
++    /// Empty it, when that leaves the engine working (what it held is made again when needed);
++    /// `None` when it holds what documents name and can't be emptied.
++    pub release: Option<fn()>,
++}
++
++fn font_faces_bytes() -> usize {
++    vectorcraft_text::FontDb::global().faces_bytes()
++}
++
++static TABLES: [Table; 8] = [
++    Table {
++        krate: "vectorcraft-render",
++        name: "image_cache",
++        grows_with: "images drawn (decoded pixels, within the image cache budget)",
++        bytes: vectorcraft_render::image_cache_bytes,
++        release: Some(vectorcraft_render::release_image_cache),
++    },
++    Table {
++        krate: "vectorcraft-render",
++        name: "placed_bitmaps",
++        grows_with: "placed documents drawn (a bitmap per file and zoom step)",
++        bytes: vectorcraft_render::placed_document::placed_bitmaps_bytes,
++        release: Some(vectorcraft_render::placed_document::release_placed_bitmaps),
++    },
++    Table {
++        krate: "vectorcraft-render",
++        name: "halftone_cache",
++        grows_with: "objects with a Vector Halftone effect drawn (the last few arts)",
++        bytes: vectorcraft_render::addons::halftone::halftone_cache_bytes,
++        release: Some(vectorcraft_render::addons::halftone::release_halftone_cache),
++    },
++    Table {
++        krate: "vectorcraft-doc",
++        name: "placed_files",
++        grows_with: "linked placed documents read again in full",
++        bytes: vectorcraft_doc::placed_document::placed_files_bytes,
++        release: Some(vectorcraft_doc::placed_document::release_placed_files),
++    },
++    Table {
++        krate: "vectorcraft-doc",
++        name: "placed_reads",
++        grows_with: "placed documents read for drawing (their art and setup)",
++        bytes: vectorcraft_doc::placed_document::placed_reads_bytes,
++        release: Some(vectorcraft_doc::placed_document::release_placed_reads),
++    },
++    Table {
++        krate: "vectorcraft-effects",
++        name: "texture_cache",
++        grows_with: "texture effects with a loaded texture drawn (the last few textures)",
++        bytes: vectorcraft_effects::pixel::texture_cache_bytes,
++        release: Some(vectorcraft_effects::pixel::release_texture_cache),
++    },
++    Table {
++        krate: "vectorcraft-color",
++        name: "user_profiles",
++        grows_with: "color profiles loaded",
++        bytes: vectorcraft_color::cms::user_profiles_bytes,
++        release: None,
++    },
++    Table {
++        krate: "vectorcraft-text",
++        name: "font_faces",
++        grows_with: "fonts added as bytes or read from installed font files",
++        bytes: font_faces_bytes,
++        release: None,
++    },
++];
++
++/// The tables, in a fixed order.
++pub fn tables() -> &'static [Table] {
++    &TABLES
++}
++
++/// Roughly how many bytes the tables hold together.
++pub fn bytes() -> usize {
++    TABLES.iter().map(|t| (t.bytes)()).sum()
++}
++
++/// Empty every table that can be emptied.
++pub fn release_all() {
++    for t in &TABLES {
++        if let Some(release) = t.release {
++            release();
++        }
++    }
++}
+diff --git a/crates/render/src/addons/halftone.rs b/crates/render/src/addons/halftone.rs
+--- a/crates/render/src/addons/halftone.rs
++++ b/crates/render/src/addons/halftone.rs
+@@ -24,6 +24,20 @@ type Kept = (Node, Found, Option<Node>);
+ 
+ static CACHE: Mutex<Vec<Kept>> = Mutex::new(Vec::new());
+ 
++/// Roughly how many bytes of heap the halftone arts kept hold (the objects and the arts; what
++/// they read from the document is left out).
++///
++/// Patch di Fub (`0008-nessuna-radice-e-tabelle`), like [`release_halftone_cache`].
++pub fn halftone_cache_bytes() -> usize {
++    let kept = CACHE.lock().unwrap_or_else(PoisonError::into_inner);
++    kept.iter().map(|(n, _, art)| n.heap_bytes() + art.as_ref().map_or(0, Node::heap_bytes)).sum()
++}
++
++/// Drop the halftone arts kept: each is made again the next time its object is drawn.
++pub fn release_halftone_cache() {
++    *CACHE.lock().unwrap_or_else(PoisonError::into_inner) = Vec::new();
++}
++
+ #[cfg(test)]
+ thread_local! {
+     /// How many times this thread sampled art for the live effect.
+diff --git a/crates/render/src/images.rs b/crates/render/src/images.rs
+--- a/crates/render/src/images.rs
++++ b/crates/render/src/images.rs
+@@ -258,6 +258,13 @@ impl ImageStore {
+         self.bytes
+     }
+ 
++    /// Drop every entry no one else holds (images being painted stay).
++    fn release(&mut self) {
++        self.entries.retain(|_, e| Arc::strong_count(&e.pm) > 1);
++        self.bytes = self.entries.values().map(|e| pixmap_bytes(&e.pm)).sum();
++        self.entries.shrink_to_fit();
++    }
++
+     fn known_id(&self, bytes: &Arc<Vec<u8>>) -> Option<BlobId> {
+         let (w, id) = self.ids.get(&(Arc::as_ptr(bytes) as usize))?;
+         std::ptr::eq(w.as_ptr(), Arc::as_ptr(bytes)).then(|| id.clone())
+@@ -298,6 +305,14 @@ pub fn image_cache_bytes() -> usize {
+     store().bytes()
+ }
+ 
++/// Drop the decoded images the renderers share, but those being painted: they are decoded again
++/// when drawn. Images known to be undecodable stay known.
++///
++/// Patch di Fub (`0008-nessuna-radice-e-tabelle`).
++pub fn release_image_cache() {
++    store().release();
++}
++
+ /// Keep `img`, the decoded pixels of `blob`, in the store as a renderer keeps the pixels it
+ /// decodes, so the first render that draws `blob` uses them instead of decoding it. Returns whether
+ /// `img` was kept or the store already held `blob`'s pixels. It returns false, without looking at
+diff --git a/crates/render/src/lib.rs b/crates/render/src/lib.rs
+--- a/crates/render/src/lib.rs
++++ b/crates/render/src/lib.rs
+@@ -41,7 +41,7 @@ use lru::FrameCache;
+ pub use brush_fx::instance_art;
+ pub use changed::{Changed, changed, placed_area, view_pixels};
+ pub use effects::stroke::width_outline;
+-pub use images::{IMAGE_CACHE_MAX, image_cache_bytes, installed_memory, newly_undecodable, set_image_cache_budget};
++pub use images::{IMAGE_CACHE_MAX, image_cache_bytes, installed_memory, newly_undecodable, release_image_cache, set_image_cache_budget};
+ pub use live::expand_live;
+ pub use pattern::render_pattern_swatch;
+ pub use vectorcraft_effects as effects;
+diff --git a/crates/render/src/placed_document.rs b/crates/render/src/placed_document.rs
+--- a/crates/render/src/placed_document.rs
++++ b/crates/render/src/placed_document.rs
+@@ -83,6 +83,26 @@ fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
+     m.lock().unwrap_or_else(PoisonError::into_inner)
+ }
+ 
++/// Bytes of pixels the bitmaps of placed documents keep (for a host's memory budget).
++///
++/// Patch di Fub (`0008-nessuna-radice-e-tabelle`), like [`release_placed_bitmaps`].
++pub fn placed_bitmaps_bytes() -> usize {
++    lock(&BITMAPS).bytes
++}
++
++/// Drop the bitmaps of placed documents kept, and forget those that could not be made or kept, so
++/// they are asked for again: the next frame that shows a placed document draws it exactly and
++/// schedules its bitmap anew. Bitmaps being made still arrive.
++pub fn release_placed_bitmaps() {
++    {
++        let mut b = lock(&BITMAPS);
++        b.map = HashMap::new();
++        b.bytes = 0;
++    }
++    *lock(&FAILED) = HashSet::new();
++    *lock(&UNKEPT) = HashSet::new();
++}
++
+ /// Changes whenever a bitmap made in the background is ready: a screen showing placed documents
+ /// draws again when it does, where [`made_between`] says.
+ pub fn generation() -> u64 {
+diff --git a/crates/text/src/fontdb.rs b/crates/text/src/fontdb.rs
+--- a/crates/text/src/fontdb.rs
++++ b/crates/text/src/fontdb.rs
+@@ -38,8 +38,8 @@ pub(crate) use dirs::fonts_outside;
+ #[cfg(test)]
+ pub(crate) use dirs::sfnt_of;
+ pub use dirs::{
+-    PlatformFontFiles, app_font_dir, set_app_font_dir, set_platform_font_files, set_user_font_dirs, set_user_font_dirs_confined, system_font_dirs,
+-    user_font_dirs,
++    PlatformFontFiles, app_font_dir, set_app_font_dir, set_platform_font_files, set_system_fonts, set_user_font_dirs, set_user_font_dirs_confined,
++    system_font_dirs, system_fonts, user_font_dirs,
+ };
+ use face::Instances;
+ #[cfg(test)]
+diff --git a/crates/text/src/fontdb/db.rs b/crates/text/src/fontdb/db.rs
+--- a/crates/text/src/fontdb/db.rs
++++ b/crates/text/src/fontdb/db.rs
+@@ -95,6 +95,24 @@ impl FontDb {
+         self.faces.read().unwrap_or_else(|e| e.into_inner())
+     }
+ 
++    /// Bytes of the font files the faces hold in memory: those added as bytes
++    /// ([`FontDb::add_font`]) and those read from installed font files (a file with several faces
++    /// counts once). The bundled fonts, built into the program, count nothing. Faces can't be
++    /// released: documents and text already laid out name them.
++    ///
++    /// Patch di Fub (`0008-nessuna-radice-e-tabelle`).
++    pub fn faces_bytes(&self) -> usize {
++        let faces = self.read_faces();
++        let mut seen = std::collections::HashSet::new();
++        faces
++            .iter()
++            .filter_map(|f| match &f.bytes {
++                FontBytes::Owned(b) => seen.insert(Arc::as_ptr(b) as usize).then(|| b.capacity()),
++                FontBytes::Static(_) => None,
++            })
++            .sum()
++    }
++
+     pub(super) fn read_catalog(&self) -> std::sync::RwLockReadGuard<'_, Catalog> {
+         self.ensure_catalog();
+         self.catalog.read().unwrap_or_else(|e| e.into_inner())
+diff --git a/crates/text/src/fontdb/dirs.rs b/crates/text/src/fontdb/dirs.rs
+--- a/crates/text/src/fontdb/dirs.rs
++++ b/crates/text/src/fontdb/dirs.rs
+@@ -81,7 +81,7 @@ static USER_FONT_DIRS_CONFINED: std::sync::atomic::AtomicBool = std::sync::atomi
+ /// ([`set_user_font_dirs_confined`]).
+ #[cfg(not(target_arch = "wasm32"))]
+ pub(super) fn confined_font_dirs() -> Vec<PathBuf> {
+-    if !USER_FONT_DIRS_CONFINED.load(std::sync::atomic::Ordering::Relaxed) {
++    if !USER_FONT_DIRS_CONFINED.load(std::sync::atomic::Ordering::Relaxed) || !system_fonts() {
+         return vec![];
+     }
+     user_font_dirs().iter().filter_map(|d| std::fs::canonicalize(d).ok()).collect()
+@@ -119,13 +119,38 @@ pub fn app_font_dir() -> Option<&'static Path> {
+     None
+ }
+ 
++/// Whether font scans read the disk at all ([`set_system_fonts`]).
++#[cfg(not(target_arch = "wasm32"))]
++static SYSTEM_FONTS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
++
++/// Let font scans read the disk (`true`, the default) or not: with `false`, [`system_font_dirs`]
++/// is empty whatever was set, so the scans and the fallback for missing characters only see the
++/// fonts added as bytes ([`FontDb::add_font`](super::FontDb::add_font)). For a host that gives the
++/// engine every font itself and keeps it off the disk. Ignored on wasm, which has no font folders.
++///
++/// Patch di Fub (`0008-nessuna-radice-e-tabelle`).
++pub fn set_system_fonts(on: bool) {
++    #[cfg(not(target_arch = "wasm32"))]
++    SYSTEM_FONTS.store(on, std::sync::atomic::Ordering::Relaxed);
++    #[cfg(target_arch = "wasm32")]
++    let _ = on;
++}
++
++/// Whether font scans read the disk ([`set_system_fonts`]); `false` on wasm.
++pub fn system_fonts() -> bool {
++    #[cfg(not(target_arch = "wasm32"))]
++    return SYSTEM_FONTS.load(std::sync::atomic::Ordering::Relaxed);
++    #[cfg(target_arch = "wasm32")]
++    false
++}
++
+ /// The platform's font folders (the system's and the user's), VectorCraft's own Fonts folder
+ /// ([`set_app_font_dir`]), the font files known to the platform outside them (on Windows those
+ /// registered with it, and those [`set_platform_font_files`] lists) and the folders the user added
+ /// ([`set_user_font_dirs`]), scanned by [`FontDb::global`].
+ pub fn system_font_dirs() -> Vec<PathBuf> {
+     let mut dirs: Vec<PathBuf> = Vec::new();
+-    if cfg!(target_arch = "wasm32") {
++    if cfg!(target_arch = "wasm32") || !system_fonts() {
+         return dirs;
+     }
+     let home = std::env::var_os("HOME").map(PathBuf::from);
+diff --git a/crates/text/src/lib.rs b/crates/text/src/lib.rs
+--- a/crates/text/src/lib.rs
++++ b/crates/text/src/lib.rs
+@@ -36,8 +36,8 @@ pub use craft_fonts::{CRAFT_FONTS, CraftFont, WEB_FONTS, WebFont};
+ pub use features::{EXTRA_FEATURES, LIGATURE_TRACKING_LIMITS, MAX_STYLE_FEATURES, OtFeatures, explicit_ligatures, ligatures_suppressed_by};
+ pub use fontdb::{
+     FALLBACK_FAMILY, FontClass, FontDb, FontFace, FontMatch, FontTraits, IcfMargins, PlatformFontFiles, WantedFont, WantedFonts, app_font_dir,
+-    is_font_file, is_suitcase, set_app_font_dir, set_platform_font_files, set_user_font_dirs, set_user_font_dirs_confined, style_weight,
+-    system_font_dirs, user_font_dirs,
++    is_font_file, is_suitcase, set_app_font_dir, set_platform_font_files, set_system_fonts, set_user_font_dirs, set_user_font_dirs_confined,
++    style_weight, system_font_dirs, system_fonts, user_font_dirs,
+ };
+ pub use hyphen::{hyphenation_exceptions, set_hyphenation_exceptions};
+ use std::sync::Arc;

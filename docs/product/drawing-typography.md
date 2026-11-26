@@ -16,7 +16,10 @@ uguali, e il pannello delle proprietà ne cambia ancora l'aspetto. Un disegno
 può portare anche testi che vanno a capo da sé in un riquadro, [in
 area](#il-testo-in-area), o che scorrono lungo una linea, [su
 tracciato](#il-testo-su-tracciato). Come il file li scrive è in [formato
-della scena, testo](../reference/scene-format-text.md).
+della scena, testo](../reference/scene-format-text.md). Col Disegno completo
+acceso un testo nuovo si scrive col suo strumento Testo, e il carattere e il
+paragrafo si cambiano dalla scheda Design ([nel Disegno
+completo](#nel-disegno-completo)).
 
 ## Il pannello
 
@@ -55,6 +58,101 @@ Sottolineato e barrato scritti su tutto il testo hanno il colore del testo,
 anche sotto un pezzo di un altro colore: SVG dipinge la linea col
 riempimento di chi la scrive. Scritti su un pezzo hanno il colore del pezzo.
 
+## Nel Disegno completo
+
+Col Disegno completo acceso la casella del testo della colonna ha anche
+**Testo (Completo)**, il Testo di punto del motore.
+
+- **Un clic** sul foglio apre la casella dove si scrive, col cursore che
+  lampeggia: si scrive con la tastiera e con i metodi d'immissione (l'IME
+  delle lingue con la composizione, le lettere accentate composte, le emoji),
+  Invio va a capo, Backspace cancella. Le scorciatoie a un tasto, mentre si
+  scrive, sono lettere del testo.
+- **Esc** conferma il testo e torna alla Selezione, col testo nuovo scelto;
+  anche un clic altrove o un altro strumento lo confermano. Una casella vuota
+  non scrive niente.
+- **Annulla** dopo una parola chiude la casella e toglie il testo intero, un
+  passo solo.
+- Il testo nuovo nasce col carattere e il corpo del Testo del Semplice
+  (Inter, 32, scritto `font-family="Inter, sans-serif"`), non con quelli di
+  serie del motore: si cambiano dopo, da Carattere. Un testo che c'era resta
+  nel suo carattere. Le righe vanno a capo con un a capo
+  semplice anche se si incolla un testo con gli a capo di Windows.
+
+Nella scheda Design, con un testo scelto, ci sono due sezioni:
+
+- **Carattere**: la **Famiglia**, col selettore dei caratteri (cerca, i
+  recenti, quelli del documento, quelli di Fub); lo **Stile**, cioè il peso
+  con o senza corsivo («Grassetto corsivo»), «Misto» se i testi scelti ne
+  hanno più d'uno; il **Corpo**, nell'unità del documento; la **Spaziatura**
+  delle lettere, in percentuale del corpo.
+- **Paragrafo**: l'**Allineamento**, a sinistra, al centro o a destra.
+
+Ogni cambio manda un comando solo e vale per tutti i testi scelti; i valori
+sono quelli che il pannello ha già. Le stesse righe escono dal pannello
+(Carattere, Dimensione, Peso, Spaziatura, Allineamento); l'Enfasi resta, per
+sottolineato e barrato, e restano lo Stile di Fub e l'Interlinea. Spento il
+Completo, il pannello è quello di sempre. Le sezioni non hanno ancora un
+campo per l'interlinea: il comando del motore la scrive (le righe del testo
+riscritte col loro `dy`), ma la riga resta quella del pannello. La crenatura
+e i rientri del motore non ci sono ancora: il motore non li sa scrivere in un
+SVG.
+
+Col Completo il testo si fa e si cambia anche così:
+
+- **Trascinare** col Testo (Completo) disegna un riquadro: il testo che vi si
+  scrive è **in area** e va a capo nella sua larghezza. Un clic senza
+  trascinare fa un testo da punto.
+- **Testo in area**, nella stessa casella, come in VectorCraft: trascinato fa
+  lo stesso riquadro. Un clic sul contorno di un rettangolo dritto, entro 4
+  pixel, lo prende come cornice: il rettangolo se ne va e il testo va a capo
+  nella sua larghezza, in un passo solo di Annulla. Un altro tracciato chiuso
+  (un triangolo, un'ellisse, un rettangolo girato) è rifiutato, perché il
+  file scrive di un testo in area solo la larghezza. Un clic lontano dai
+  contorni fa un testo da punto.
+- **Testo su tracciato**, nella stessa casella: un clic su un tracciato ci
+  scrive sopra (vedi «Il testo su tracciato»).
+- **Testo verticale**, nella stessa casella, come in VectorCraft: un clic
+  fa un testo da punto che si legge dall'alto in basso, a colonne da destra
+  a sinistra; Invio comincia la colonna dopo. Gli ideogrammi e i kana
+  stanno dritti, le lettere latine e le cifre coricate. **Testo ›
+  Orientamento › Verticale** e **Orizzontale** girano i testi da punto
+  scelti, con lo stesso `id`; il punto d'aggancio resta dov'era. Un testo
+  verticale in area o su tracciato il file non lo scrive ancora: Fub lo
+  rifiuta invece di perderlo. Nel file è `writing-mode="vertical-rl"`
+  ([formato del testo](../reference/scene-format-text.md), §10).
+- **Testo › Converti in testo in area** mette un testo da punto in un
+  riquadro largo quanto la sua riga più lunga; **Converti in testo per
+  punti** lo toglie, e le righe restano quelle che si vedevano. Lo stesso
+  `id` resta al testo.
+- **Il doppio clic** su un testo scelto, con la Selezione, porta nel campo
+  «Testo» dell'ispettore: le parole confermate sono un passo solo di
+  Annulla, e nessun tasto va al motore mentre si scrive. Il comando
+  **Modifica testo** (`text.editRange`) riceve il testo intero e cambia solo
+  il pezzo diverso, così lo stile delle altre parole resta.
+- **Il campo «Testo» di un testo in area** mostra i paragrafi come si
+  leggono, con le righe del riquadro riunite, e le parole confermate passano
+  da **Modifica testo**, che rifà gli a capo nel riquadro. Gli spazi, anche
+  due di fila, e le righe vuote restano come sono scritti: salvato e
+  riaperto, il testo si rilegge uguale carattere per carattere. Senza il
+  motore del Completo il campo non c'è per un testo in area.
+- **Testo › Maiuscole/minuscole** e **Testo › Crea contorni**: il secondo
+  trasforma le lettere in tracciati pieni, che non si scrivono più (serve il
+  carattere sul computer).
+- **Modifica › Trova e sostituisci…** cerca in tutti i testi del disegno
+  (maiuscole uguali, parole intere a scelta); **Trova successivo** sceglie il
+  testo che segue quello scelto. Una parola a cavallo di due stili non si
+  trova.
+
+Un testo in area cambiato dal Completo è riscritto intero, con gli a capo
+nuovi, lo stesso `id` e gli altri attributi del file al loro posto. Senza i
+caratteri sul computer il testo in area non si fa: il motore non sa dove
+andare a capo, e lo dice.
+
+Le sezioni sono in `apps/client/src/editors/spatial/completo/testo-sezioni.ts`,
+la casella in `apps/client/src/editors/spatial/motore/scrittura.ts`, i comandi
+nel motore (`crates/fub-disegno/src/famiglie/testo.rs`).
+
 ## Il testo in area
 
 Un testo **da punto** va a capo soltanto dove lo dicono le sue righe. Un
@@ -84,8 +182,14 @@ Un testo su tracciato scorre lungo una linea, una curva o il bordo di una
 forma, su una riga sola, e non va a capo. Il tracciato non si vede: dice
 soltanto dove passa il testo, che sta dalla parte sinistra del suo verso,
 sopra una linea tracciata da sinistra a destra. Fub lo disegna e lo
-riscrive quando un disegno lo porta; non mette più un testo su un
-tracciato, e non lo toglie.
+riscrive quando un disegno lo porta. Il Disegno completo ne fa uno nuovo
+con **Testo su tracciato**, come VectorCraft: un clic su un tracciato o sul
+contorno di una forma ci mette il testo, che comincia nel punto toccato; il
+tracciato diventa del testo soltanto (non si vede più da solo), in un passo
+solo di Annulla. Un clic lontano dai contorni fa un testo da punto, e Alt
+tenuto passa a Testo in area. Mentre si scrive il testo scorre già sul
+tracciato, che resta segnato da una linea sottile come guida. Fub non toglie
+un testo da un tracciato.
 
 **Dove comincia il testo.** Una forma si segue come la disegna SVG: un
 tracciato, una linea o una spezzata dal primo punto, un rettangolo

@@ -125,6 +125,7 @@
 - Come si ritagliano foto e forme con ritagli e maschere? → [product/drawing-masks.md](../product/drawing-masks.md)
 - Come si mettono fotografie, schermate e figure in un disegno? → [product/drawing-images.md](../product/drawing-images.md)
 - Come si riusa lo stesso disegno piccolo come simbolo? → [product/drawing-symbols.md](../product/drawing-symbols.md)
+- Come si disegna un grafico da una tabella di numeri? → [product/drawing-graphs.md](../product/drawing-graphs.md)
 - Come si applicano stili a titoli, note e riquadri? → [product/drawing-styles.md](../product/drawing-styles.md)
 - Come si usano i caratteri del vault nei testi del disegno? → [product/drawing-fonts.md](../product/drawing-fonts.md)
 - Come si compongono titoli, didascalie ed etichette (tipografia)? → [product/drawing-typography.md](../product/drawing-typography.md)
@@ -142,6 +143,8 @@
 - Come si adatta lo spazio di lavoro e la barra al proprio modo di disegnare? → [product/drawing-custom.md](../product/drawing-custom.md)
 - Come si vedono e si modificano coi numeri le proprietà di un oggetto? → [product/drawing-properties.md](../product/drawing-properties.md)
 - Come si naviga il disegno (vista, gesti, menu radiale)? → [product/drawing-view.md](../product/drawing-view.md)
+- Quale tasto fa partire un comando del motore nel Completo, e quando non parte? → [product/drawing-keys.md](../product/drawing-keys.md)
+- Dove si cambiano le preferenze del motore del disegno, e quando valgono? → [product/drawing-engine-preferences.md](../product/drawing-engine-preferences.md)
 - Come si apre un disegno di decine di migliaia di elementi? → [product/drawing-large.md](../product/drawing-large.md)
 
 ## Riferimenti (`reference/`)

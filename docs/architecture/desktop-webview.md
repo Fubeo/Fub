@@ -213,10 +213,13 @@ logica sta in `vblank.rs` ([ADR 0246](../decisions/0246-vblank-emulato-per-webki
   sono;
 - la frequenza è quella della modalità del CRTC (`drmModeGetResources`,
   `drmModeGetCrtc`, cercate nel processo con `dlsym`), arrotondata come la dà
-  GTK e riletta ogni secondo. Le scadenze sono assolute su `CLOCK_MONOTONIC`
-  (`clock_nanosleep` con `TIMER_ABSTIME`), quindi il ritmo non deriva; la
-  risposta ha il contatore a 32 bit e il tempo del vblank, come quella del
-  kernel;
+  GTK e riletta ogni secondo, con l'ioctl fuori dal lock dello stato (costa
+  0,3 µs, ma può aspettare il driver durante un cambio di modalità). Le
+  scadenze sono assolute su `CLOCK_MONOTONIC` (`clock_nanosleep` con
+  `TIMER_ABSTIME`), quindi il ritmo non deriva; il thread che dorme ha il
+  margine dei timer a 1 ns (`PR_SET_TIMERSLACK`: il ritardo mediano al
+  risveglio scende da 65 a 14 µs a 180 Hz). La risposta ha il contatore a 32
+  bit e il tempo del vblank, come quella del kernel;
 - fuori da 24–500 Hz, con il CRTC spento o con un'attesa oltre 3 s risponde
   come il driver (`-1`, `EOPNOTSUPP`): WebKit resta sul timer, come prima;
 - `FUB_VBLANK_EMULATO=0` la spegne, e fuori dall'intervallo di WebKitGTK
@@ -274,7 +277,9 @@ non chiede più il suo frame callback: l'intervallo resta 0 e GTK ripiega su
 anche su uno schermo a 180 Hz, con il rAF del vblank emulato a 180: i due
 `wl_callback.done` per commit delle misure del 17 novembre sono il frame
 callback di EGL e la sua `wl_display.sync`, letti insieme al commit
-successivo.
+successivo. Non frenano: GTK3 mette lo swap interval a 0 e egl-wayland2
+allora non li aspetta
+([La doppia attesa di EGL](../misure/2026-11-20-linux-egl-doppia-attesa.md)).
 
 `src/orologio.rs` scrive quell'intervallo al posto del frame callback: su
 ogni finestra, dopo ogni disegno (`after-paint`), se il campo è ancora 0 ci
@@ -334,6 +339,47 @@ barre restano sempre visibili, prendono la loro larghezza alla colonna che
 scorre, e con una nota aperta e ferma la finestra passa da 35–37 a 1,6
 ridisegni al secondo (solo il cursore). È una scelta del maintainer del
 20-11-2026; Windows e macOS non leggono la variabile.
+
+## Gli scorrevoli
+
+WebKitGTK 2.54 non sempre compone lo scorrimento di un contenitore con
+`overflow: auto`: per alcuni, che non sono un contesto di impilamento, a ogni
+passo ridipinge la parte visibile, e lo scorrimento perde la frequenza dello
+schermo appena la pagina pesa. Non dipende dal solo numero di discendenti
+posizionati: l'indice della finestra di comando ne ha più di 500 e scorre
+senza ridisegni, le impostazioni ne hanno meno e ridisegnavano tutto. Per
+questo la correzione si dà contenitore per contenitore, misurata.
+
+La correzione è `isolation: isolate` sullo scorrevole: lo fa diventare un
+piano a sé senza cambiare l'aspetto. Non crea un blocco contenitore per i
+discendenti `position: fixed` (lo farebbero `transform`, `contain: paint` o
+`will-change: transform`, che li taglierebbero), e i livelli `z-index` di
+dentro restano gli stessi fra loro. `will-change: scroll-position` e uno
+sfondo opaco non bastano.
+
+| Scorrevole | Dove | Ridisegni in 5 s, prima → dopo |
+|---|---|---|
+| Impostazioni (`.settings-scroll`) | pelle, `settings.css` | 16 544 → 1 037 |
+| Albero dei file (`#sidebar`) | struttura | 1 465 → 34 |
+| Risultati della ricerca (`#sidebar`) | struttura | 563 → 52 |
+
+Gli altri scorrevoli misurati non hanno il difetto e restano come sono:
+l'editor (`.cm-scroller`, già un piano per CodeMirror), la lettura
+(`.pane-preview`), la Struttura e gli altri pannelli dell'ispettore,
+l'indice delle impostazioni, il PDF e le sue miniature, la finestra di
+comando (già isolata). Il foglio e la lavagna ridipingono per un'altra
+ragione, che `isolation` non tocca: il foglio riscrive righe e stili a ogni
+passo verticale, la lavagna sposta centinaia di schede con `transform`.
+
+La misura: l'app vera, con vault, configurazione e cartelle XDG temporanei,
+l'ispettore remoto di WebKit (`WEBKIT_INSPECTOR_HTTP_SERVER`) e la
+`Timeline` per contare gli eventi `Paint`, mentre un `requestAnimationFrame`
+sposta `scrollTop` per 5 s; la proprietà si prova sullo stesso elemento con
+`style.setProperty`, prima e dopo nella stessa finestra. Chromium compone
+ogni scorrevole e non vede il difetto: il banco visivo controlla l'aspetto,
+non i ridisegni. Uno scorrevole nuovo e grande (un pannello, un elenco lungo)
+si misura così prima di dargli la proprietà; il presidio
+`src/theme/scrittoio/scorrevoli.test.ts` tiene quelli già corretti.
 
 ## Gli appunti senza proprietario
 

@@ -71,6 +71,8 @@ export const FRAME: PartAnatomy = {
         "status-item--button",
         "status-mode",
         "status-mode-arrow",
+        "status-workspace",
+        "status-workspace-arrow",
         "status-focus-exit",
         "status-standing",
         "status-standing-mark",

@@ -29,6 +29,7 @@ import { offerNote } from "../ui/drag-types";
 import { offerOutside } from "../ui/vault-transfer";
 import { openVaultRoot } from "../state/store";
 import { skeleton, SKELETON_DELAY_MS } from "../ui/skeleton";
+import { composingKey } from "../kit/ime";
 
 const searchInputEl = $<HTMLInputElement>("#search-input");
 const searchSummaryEl = $("#search-summary");
@@ -78,6 +79,7 @@ export function mountSearch(lifetime: Lifetime): void {
     // La casella ha i suoi tasti, e sono questi: Invio apre il primo risultato,
     // Escape pulisce l'input e resta nel campo. La navigazione completa della
     // lista (Frecce/Enter/Esc) vive sulla lista, che è una listbox.
+    if (composingKey(e)) return;
     if (e.key === "Enter") {
       e.preventDefault();
       // Una battuta ancora in attesa del debounce: prima si cerca il testo che

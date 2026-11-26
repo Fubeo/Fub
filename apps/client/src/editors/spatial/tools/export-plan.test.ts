@@ -105,10 +105,23 @@ describe("initialState", () => {
   it("asking chiede che cosa esportare, e tiene le altre scelte ricordate", () => {
     const page = print({ paper: "a4", bleed: 3, crop: true });
     const remembered = memory({ what: "boards", off: ["b2"], format: "pdf", size: { pixels: 1200 }, background: "none", print: page });
-    expect(asking(remembered, "selection")).toEqual({ ...remembered, what: "selection" });
-    expect(initialState(SELECTED, asking(null, "selection"))).toEqual({ what: "selection", off: new Set(), format: "png", size: { scale: 2 }, background: "paper", print: PLAIN_PRINT });
+    expect(asking(remembered, { what: "selection" })).toEqual({ ...remembered, what: "selection" });
+    expect(initialState(SELECTED, asking(null, { what: "selection" }))).toEqual({ what: "selection", off: new Set(), format: "png", size: { scale: 2 }, background: "paper", print: PLAIN_PRINT });
     // Senza una selezione da esportare, vale ciò che si fa di solito.
-    expect(initialState(BOARDS, asking(null, "selection")).what).toBe("boards");
+    expect(initialState(BOARDS, asking(null, { what: "selection" })).what).toBe("boards");
+  });
+
+  it("asking con un formato (File › Esporta come PNG…) lo sceglie, e la selezione ricordata lascia il posto al documento", () => {
+    const remembered = memory({ what: "drawing", format: "svg", size: { pixels: 900 } });
+    expect(asking(remembered, { format: "pdf" })).toEqual({ ...remembered, format: "pdf" });
+    // La selezione ha la sua voce: «Esporta come» sono le tavole, o il disegno senza tavole.
+    const fromSelection = asking(memory({ what: "selection" }), { format: "png" });
+    expect(initialState(BOARDS, fromSelection).what).toBe("boards");
+    expect(initialState({ selection: null, boards: [] }, fromSelection).what).toBe("drawing");
+    expect(initialState(SELECTED, fromSelection).what).toBe("drawing");
+    // Senza scelte ricordate, il formato chiesto e il resto di partenza.
+    expect(initialState(BOARDS, asking(null, { format: "svg" }))).toEqual({ what: "boards", off: new Set(), format: "svg", size: { scale: 2 }, background: "paper", print: PLAIN_PRINT });
+    expect(initialState(SELECTED, asking(null, { format: "svg" })).what).toBe("drawing");
   });
 
   it("dimentica le tavole che non ci sono più, e se le tolte erano tutte ripartono tutte", () => {

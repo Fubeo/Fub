@@ -66,6 +66,8 @@
 | `developer.mode` (la modalità sviluppatore) | `crates/fub-host/src/settings.rs`; la applicano `Host::check_theme_folder` e `Host::install_theme_from_folder`, i bottoni stanno in `apps/client/src/panels/theme-folder.ts` («Installa da cartella…», «Collega una cartella…») e in `apps/client/src/panels/settings.ts` («Tutti i componenti») |
 | Il tema collegato (`developer.theme-folder`) | `crates/fub-host/src/theme/linked.rs` (lettura con le porte), `crates/fub-host/src/theme_watch.rs` (l'osservatore), `Host::link_theme_folder`; il rimontaggio in `apps/client/src/theme/theme.ts`, il blocco «Cartella collegata» in `apps/client/src/panels/theme-folder.ts` |
 | `draw.workspace` (Semplice o Completo) | le impostazioni della feature `draw`, `crates/fub-features/src/draw.rs` |
+| `draw.keys` (i tasti del Disegno completo cambiati dall'utente) | la chiave in `crates/fub-features/src/draw.rs`; il valore e i file d'insieme in `apps/client/src/editors/spatial/completo/tasti-utente.ts`, il disegno aperto lo segue con `completo/segui-tasti.ts`, la sezione «Disegno completo» di Impostazioni › Scorciatoie è `apps/client/src/panels/settings-disegno.ts` |
+| `draw.motore` (le preferenze del motore del Disegno completo) | la chiave e la versione in `crates/fub-features/src/draw.rs`; la lettura, la scrittura dopo ogni comando e i rifiuti in `crates/fub-host/src/drawing.rs`; le preferenze senza le cartelle in `crates/fub-disegno/src/preferenze.rs`; il riquadro «Motore del disegno» di Impostazioni › Disegni è `apps/client/src/panels/settings-motore.ts` (pigro: `settings-motore-corpo.ts`), le sue parole `settings-motore.generated.json` (`UPDATE_MIRROR=1 cargo test -p fub-host --test ts_preferenze_motore`) |
 | le quattordici impostazioni della lavagna, `canvas.*` (`ink_mouse_remember`, `finger_moves_card`, `finger_writes`, `pen_button`, `wheel`, `drag_empty`, `workspace`, `toolbar`, `grid`, `snap`, `snap_step`, `parts_picker`, `drop_folder`, `drop_folder_path`) | le impostazioni della feature `lavagna`, `crates/fub-features/src/lavagna.rs`; le chiavi, i valori di serie e la lettura in `apps/client/src/rules/canvas-settings.ts`, le legge e le segue `apps/client/src/editors/canvas/preferences.ts` |
 | dove vanno i file trascinati dal computer sulla lavagna (`canvas.drop_folder`) | `apps/client/src/state/canvas-intake.ts` (`dropFolderFor`, `depositCanvasFiles`); la cartella delle note è `files.attachment-folder`, letta in `apps/client/src/state/document-controller.ts` |
 | la regola del documento scritto per nome in un campo «Documento» | `document_named` e `Args::named_document` in `crates/fub-abi/src/command.rs`; per le feature `crates/fub-features/src/formats.rs`, per l'host `crates/fub-host/src/doc_names.rs`; `docs/reference/document-by-name.md` |
@@ -75,6 +77,9 @@
 | le stringhe della shell | `apps/client/src/i18n/catalog.ts` |
 | le stringhe dell'editor dei disegni | `apps/client/src/editors/spatial/strings.ts`, con le voci per area (italiano e inglese insieme) in `strings/` |
 | il disegno sul motore (chi possiede che cosa) | [Il disegno sul motore](../architecture/disegno.md) |
+| il disegno completo (la parità, la mappa, le famiglie pigre, l'indice) | [Il disegno completo](../architecture/disegno-completo.md) |
+| gli strumenti del motore nel Completo (il ponte, le opzioni, i tracciati, il Contagocce) | [Gli strumenti del motore](../architecture/disegno-strumenti.md) |
+| i livelli del motore nel Completo (la differenza, i comandi sui livelli, il livello corrente) | [I livelli del motore](../architecture/disegno-livelli.md) |
 | la tavolozza dell'inchiostro | `apps/client/src/ink/palette.ts` (Okabe–Ito) |
 | i colori della lavagna (i sei di JSON Canvas, i nove delle note, «Altro…») | `apps/client/src/editors/canvas/colors.ts` |
 | le schede vive della lavagna (`liveCardIds`, `LIVE_ZOOM_MIN`, `MAX_LIVE_CARDS`, che vale anche per le schede della nota) e il contratto dei renderer | `apps/client/src/editors/core/cards/contract.ts`; i renderer in `apps/client/src/editors/core/cards/kinds/` e `apps/client/src/editors/grid/card.ts` |
@@ -100,6 +105,7 @@
 | `apps/client/src/rules/syntax.generated.ts` | `UPDATE_MIRROR=1 cargo test -p fub-abi --test rules_mirror` |
 | `apps/client/src/editors/rich/paper.generated.ts` | `UPDATE_MIRROR=1 cargo test -p fub-format-rich --test ts_projection` |
 | le fixture dei mirror (in `src/__fixtures__/`) | lo stesso giro di `UPDATE_MIRROR=1` del test che le cita |
+| `apps/client/src/__fixtures__/live-decorations.json` (l'impronta delle decorazioni della Live) | `UPDATE_MIRROR=1 npx vitest run src/editors/text/profiles/markdown/livepreview-identica.test.ts` da `apps/client/`, soltanto per un cambio voluto di ciò che la Live disegna |
 | la pelle del tema di serie | `npm run theme:generate` da `apps/client/` |
 | `apps/client/src/editors/text/profiles/markdown/html-entities.generated.ts` | `npm run entities:generate` da `apps/client/` (verifica: `npm run entities:verify`, e `npm test`) |
 | il catalogo dei comandi serviti dei fogli | `UPDATE_MIRROR=1 cargo test -p fub-format-xlsx --lib catalogo_servito` |

@@ -454,6 +454,38 @@ describe("il focus resta sulla riga (A03)", () => {
     expect(document.activeElement).toBe(control(FIRST));
   });
 
+  it("l'ultima casella di una sezione lunga, dopo lo scorrimento: Spazio la commuta, fuoco e scorrimento restano", async () => {
+    // Sul banco (#237 A03) la casella dei numeri di riga, ultima della
+    // sezione Editor e a 1900 px di scorrimento: dopo Spazio e Invio il fuoco
+    // era sul controllo nuovo della stessa riga. Qui la stessa prova senza
+    // geometria: happy-dom non scorre, lo scorrimento si finge.
+    fake.setSetting.mockImplementation(async (key: string, value: boolean) => {
+      stored(key).value = value;
+      stored(key).source = "vault";
+    });
+    const keys = Array.from({ length: 12 }, (_, i) => `c.toggle-${String(i).padStart(2, "0")}`);
+    await openPanel(keys.map((key) => toggleEntry(key, false)));
+    const body = document.getElementById("settings-body")!;
+    let top = 0;
+    Object.defineProperty(body, "scrollTop", { configurable: true, get: () => top, set: (v: number) => { top = v; } });
+    const last = keys[keys.length - 1]!;
+    const box = control(last);
+    top = 900;
+    box.focus();
+    box.click();
+    await vi.waitFor(() => expect(fake.setSetting).toHaveBeenCalledWith(last, true));
+    await vi.waitFor(() => expect(settled(last)).toBe(true));
+    expect(control(last).checked).toBe(true);
+    expect(document.activeElement).toBe(control(last));
+    expect(top).toBe(900);
+    // E se il corpo si ridisegna intero (un evento senza chiave), lo stesso.
+    const before = control(last);
+    settingChanged("");
+    await vi.waitFor(() => expect(control(last)).not.toBe(before));
+    expect(document.activeElement).toBe(control(last));
+    expect(top).toBe(900);
+  });
+
   it("il fuoco fuori dal corpo non si sposta al ridisegno", async () => {
     await openToggles();
     const close = document.querySelector<HTMLButtonElement>("#settings-close")!;

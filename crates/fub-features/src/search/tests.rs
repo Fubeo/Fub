@@ -120,6 +120,7 @@ fn tagged(id: &str, body: &str, tags: &[&str]) -> DocumentModel {
     m
 }
 
+mod exact;
 mod freshness;
 mod ranking;
 mod window;

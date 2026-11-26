@@ -26,7 +26,7 @@ import { t, type FogliKey } from "./strings";
 /// Un parametro di un comando, come lo scrive il catalogo.
 export interface CatalogField {
   readonly nome: string;
-  readonly tipo: "testo" | "segreto" | "numero" | "sino" | "cella" | "intervallo" | "foglio" | "scelta" | "json";
+  readonly tipo: "testo" | "segreto" | "numero" | "sino" | "cella" | "intervallo" | "foglio" | "scelta" | "json" | "colore";
   readonly facoltativo: boolean;
   readonly valori?: readonly string[];
   readonly aperta?: boolean;
@@ -150,6 +150,9 @@ function specOf(field: CatalogField, sheets: readonly string[]): FieldSpec {
     }
     case "json":
       return freeField(field, label, true);
+    case "colore":
+      // Un colore `#rrggbb`: per ora un testo, col modello del valore come segnaposto.
+      return { kind: "text", key, label, placeholder: "#rrggbb" };
     case "testo":
     default:
       return { kind: "text", key, label };

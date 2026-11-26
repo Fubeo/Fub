@@ -1,0 +1,11 @@
+{
+  "$nota": "Le risposte della famiglia trasforma del banco: `object.rotate` (l'anteprima della finestra «Ruota…» e la rotazione della sezione Trasforma) non riscrive il disegno, un passo senza operazioni.",
+  "risposte": [
+    {
+      "comando": "disegno.object.rotate",
+      "esito": {
+        "ops": "[]"
+      }
+    }
+  ]
+}

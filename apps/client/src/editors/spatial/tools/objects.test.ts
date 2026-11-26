@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { checkAccessibility, formatIssues } from "../../../ui/a11y-check";
 import { openLifetime, type Lifetime } from "../../../ui/lifetime";
 import { createObjectTree, ROW_PX, VIRTUAL_AFTER, type ObjectTree, type ObjectTreeOptions, type TreeDrop, type TreeEntry, type TreeToggle } from "./objects";
+import { WEBKIT_COMPOSING } from "../../../kit/testing";
 
 function object(key: string, selectable = true, more: Partial<TreeEntry> = {}): TreeEntry {
   return {
@@ -40,7 +41,9 @@ function layer(key: string, children: readonly TreeEntry[], state = ""): TreeEnt
     moves: true,
     kind: "layer",
     children,
-    label: () => `Livello ${key}${state}`,
+    label: () => `Livello «${key}»${state}`,
+    shown: () => key,
+    current: key === "l2",
   };
 }
 
@@ -114,11 +117,11 @@ describe("le righe", () => {
     // Dal davanti: in cima ciò che il documento ha per ultimo.
     expect(rows().map((row) => [row.textContent, row.getAttribute("aria-level"), row.getAttribute("aria-posinset"), row.getAttribute("aria-setsize")])).toEqual([
       ["✓Oggetto e", "1", "1", "3"],
-      ["▾Livello l2", "1", "2", "3"],
+      ["▾l2", "1", "2", "3"],
       ["✓Oggetto d", "2", "1", "3"],
       ["✓Oggetto c", "2", "2", "3"],
       ["✓Oggetto b", "2", "3", "3"],
-      ["▾Livello l1, bloccato", "1", "3", "3"],
+      ["▾l1", "1", "3", "3"],
       ["✓Oggetto a", "2", "1", "1"],
     ]);
     // I segni sono nascosti agli screen reader: per loro c'è `aria-selected`,
@@ -130,6 +133,13 @@ describe("le righe", () => {
     expect(locked.getAttribute("aria-expanded")).toBe("true");
     expect(locked.hasAttribute("aria-selected")).toBe(false);
     expect(rows()[6]!.getAttribute("aria-disabled")).toBe("true");
+    // Un livello mostra il solo nome; il nome accessibile dice che è un livello,
+    // e che è bloccato, mentre un oggetto non ha un nome diverso da quello che mostra.
+    expect(locked.getAttribute("aria-label")).toBe("Livello «l1», bloccato");
+    expect(rows()[1]!.getAttribute("aria-label")).toBe("Livello «l2»");
+    expect(rows()[2]!.hasAttribute("aria-label")).toBe(false);
+    // Il livello corrente ha il puntino; gli altri no, e l'oggetto no.
+    expect(rows().map((row) => row.hasAttribute("data-current"))).toEqual([false, true, false, false, false, false, false]);
     expect(rows().map((row) => row.getAttribute("aria-selected"))).toEqual(["false", null, "false", "true", "false", null, "false"]);
     // Il fuoco non è nell'albero: la riga attiva va al primo oggetto scelto.
     expect(active()?.dataset.key).toBe("c");
@@ -256,6 +266,20 @@ describe("il puntatore", () => {
   });
 });
 
+describe("il livello corrente (Imposta livello corrente di VectorCraft)", () => {
+  it("con onCurrent un clic sul livello lo rende corrente e non lo chiude; il triangolo lo chiude", () => {
+    mount(ENTRIES, [], { onCurrent: (key) => calls.push(`current ${key}`) });
+    const prima = rows().map((row) => row.dataset.key);
+    host.querySelector('[data-key="l2"] .draw-object-label')!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    expect(calls).toEqual(["current l2"]);
+    expect(rows().map((row) => row.dataset.key)).toEqual(prima);
+    expect(chosen).toEqual([]);
+    host.querySelector('[data-key="l2"] .draw-object-twisty')!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    expect(calls).toEqual(["current l2"]);
+    expect(rows().length).toBeLessThan(prima.length);
+  });
+});
+
 describe("dentro i gruppi", () => {
   const NESTED: readonly TreeEntry[] = [
     layer("l1", [
@@ -302,6 +326,18 @@ describe("dentro i gruppi", () => {
     expect(rows().map((row) => row.dataset.key)).toEqual(["l1", "h", "g"]);
   });
 
+  it("Individua oggetto riapre i gruppi chiusi sulla riga, anche con la stessa selezione", () => {
+    mount(NESTED);
+    tree.update(NESTED, ["b"], 2);
+    host.querySelector('[data-key="g"] .draw-object-twisty')!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    expect(rows().map((row) => row.dataset.key)).toEqual(["l1", "h", "g"]);
+    expect(tree.locate("b")).toBe(true);
+    expect(rows().map((row) => row.dataset.key)).toEqual(["l1", "h", "g", "c", "i", "b", "a"]);
+    expect(active()?.dataset.key).toBe("b");
+    expect(chosen).toEqual([]);
+    expect(tree.locate("nessuno")).toBe(false);
+  });
+
   it("blocca e nasconde la riga attiva coi tasti e coi segni, dove si può", () => {
     mount(NESTED, ["c"]);
     tree.focus();
@@ -329,6 +365,10 @@ describe("dentro i gruppi", () => {
   });
 });
 
+/// Il tetto di una costruzione misurata dell'albero, anche su una macchina carica: sopra, chi
+/// scorre o clicca sente il ritardo.
+const MISURA_MS = 1_000;
+
 describe("tante righe", () => {
   it(`oltre ${VIRTUAL_AFTER} ne disegna una finestra, con posizioni e totale veri`, () => {
     const many = Array.from({ length: 2000 }, (_, index) => object(`o${index}`));
@@ -351,6 +391,24 @@ describe("tante righe", () => {
     expect(rows().some((row) => row.dataset.key === "o1000")).toBe(true);
   });
 
+  // La scheda Livelli del Completo è questo stesso albero (K6 T15, giro 4): con 5 000 livelli,
+  // ciascuno con un oggetto, la costruzione ne disegna una finestra, e così l'aggiornamento.
+  it("5 000 livelli: la costruzione disegna una finestra, in un tempo che non si sente", () => {
+    const layers = Array.from({ length: 5_000 }, (_, index) => layer(`l${index}`, [object(`o${index}`)]));
+    const inizio = performance.now();
+    mount(layers);
+    const durata = performance.now() - inizio;
+    expect(treeEl().hasAttribute("data-virtual")).toBe(true);
+    expect(rows().length).toBeLessThan(100);
+    // Un aggiornamento con lo stesso albero (l'occhio di un livello) disegna ancora una finestra.
+    const prima = performance.now();
+    tree.update(layers, [], 6);
+    const aggiorna = performance.now() - prima;
+    expect(rows().length).toBeLessThan(100);
+    expect(durata).toBeLessThan(MISURA_MS);
+    expect(aggiorna).toBeLessThan(MISURA_MS);
+  });
+
   it(`fino a ${VIRTUAL_AFTER} le disegna tutte`, () => {
     mount([layer("l1", Array.from({ length: VIRTUAL_AFTER - 1 }, (_, index) => object(`o${index}`)))]);
     expect(rows()).toHaveLength(VIRTUAL_AFTER);
@@ -365,8 +423,17 @@ describe("il nome", () => {
     const input = field()!;
     input.value = text;
     input.dispatchEvent(new Event("input", { bubbles: true }));
-    if (finish === "blur") input.blur();
-    else input.dispatchEvent(new KeyboardEvent("keydown", { key: finish, bubbles: true, cancelable: true }));
+    if (finish === "blur") {
+      input.blur();
+      return;
+    }
+    // A metà di una composizione lo stesso tasto è del metodo d'immissione:
+    // il campo resta aperto, e niente si scrive.
+    const composing = new KeyboardEvent("keydown", { key: finish, bubbles: true, cancelable: true, ...WEBKIT_COMPOSING });
+    input.dispatchEvent(composing);
+    expect(composing.defaultPrevented).toBe(false);
+    expect(field()).toBe(input);
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: finish, bubbles: true, cancelable: true }));
   }
 
   it("F2 apre sulla riga il campo col nome di adesso; Invio scrive quello nuovo, ripulito, e il fuoco torna all'albero", () => {
@@ -819,12 +886,22 @@ describe("spostare", () => {
     pointer("pointermove", treeEl(), 3 * ROW_PX + 30);
     expect(rowEl("b").dataset.drop).toBe("after");
     expect(depthOf("b")).toBe("0");
-    expect(host.querySelector<HTMLElement>(".draw-objects-ghost")!.textContent).toBe("Livello l1");
-    pointer("pointermove", treeEl(), 30);
+    expect(host.querySelector<HTMLElement>(".draw-objects-ghost")!.textContent).toBe("l1");
+    // Sul bordo alto della riga di l2: sopra.
+    pointer("pointermove", treeEl(), 5);
     expect(rowEl("l2").dataset.drop).toBe("before");
-    pointer("pointerup", treeEl(), 30, { buttons: 0 });
+    pointer("pointerup", treeEl(), 5, { buttons: 0 });
     expect(moves).toEqual([[["l1"], { key: "l2", place: "before" }]]);
     expect(chosen).toEqual([]);
+  });
+
+  it("nel mezzo della riga di un livello, un livello ci entra e diventa un sottolivello", () => {
+    layout();
+    mountMoving(["d"]);
+    pointer("pointerdown", labelOf("l1"), 4 * ROW_PX + 10);
+    pointer("pointermove", treeEl(), ROW_PX / 2);
+    pointer("pointerup", treeEl(), ROW_PX / 2, { buttons: 0 });
+    expect(moves).toEqual([[["l1"], { key: "l2", place: "top" }]]);
   });
 
   it("una riga scelta porta con sé le altre scelte, in ordine di documento", () => {

@@ -1,0 +1,33 @@
+{
+  "casi": [
+    {
+      "$nota": "Ritaglia immagine la fa l'app, con il suo strumento sul foglio e un ritaglio che non riscrive i pixel: il motore la rifiuta.",
+      "id": "object.cropImage",
+      "disegno": "base.svg",
+      "selezione": [
+        "oi1i1i1i1"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "rifiuto": "unsupported"
+      }
+    },
+    {
+      "id": "ui.cropImage",
+      "fonte": "interfaccia",
+      "prova": "apps/client/src/editors/spatial/tools/editor/ritaglio-immagine.test.ts"
+    },
+    {
+      "$nota": "Incorpora immagine la fa l'app, che legge i file del vault: il motore, che non li vede, la rifiuta.",
+      "id": "links.embed",
+      "disegno": "base.svg",
+      "selezione": [
+        "oi2i2i2i2"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "rifiuto": "unsupported"
+      }
+    }
+  ]
+}

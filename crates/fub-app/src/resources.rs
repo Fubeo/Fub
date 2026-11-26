@@ -288,13 +288,13 @@ fn percent_decode_strict(raw: &str) -> Result<String, PluginError> {
             if index + 2 >= bytes.len() {
                 return Err(bad_meta("percent sequence is truncated"));
             }
-            let pair = &raw[index + 1..index + 3];
-            if !pair.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+            // Bytes, not `&str`: a slice of the text would split a
+            // multibyte letter after the `%` (`%aé`) and panic.
+            let hex = |byte: u8| (byte as char).to_digit(16);
+            let (Some(high), Some(low)) = (hex(bytes[index + 1]), hex(bytes[index + 2])) else {
                 return Err(bad_meta("percent sequence is not hexadecimal"));
-            }
-            let byte = u8::from_str_radix(pair, 16)
-                .map_err(|_| bad_meta("percent sequence does not decode"))?;
-            out.push(byte);
+            };
+            out.push((high * 16 + low) as u8);
             index += 3;
         } else {
             out.push(bytes[index]);
@@ -877,6 +877,17 @@ mod tests {
     use super::*;
     use fub_abi::model::DocId;
     use fub_host::resources::ResourceTable;
+
+    /// A `%` followed by a multibyte letter is a malformed sequence, not a
+    /// panic on a `&str` cut inside the letter (A4).
+    #[test]
+    fn percent_decode_refuses_a_letter_after_the_percent_without_panicking() {
+        for raw in ["%a\u{e9}", "%\u{e9}", "x%\u{1f600}", "%g1", "%1", "%"] {
+            assert!(percent_decode_strict(raw).is_err(), "{raw:?}");
+        }
+        assert_eq!(percent_decode_strict("a%20%C3%A9b").unwrap(), "a \u{e9}b");
+        assert_eq!(percent_decode_strict("caff\u{e8}").unwrap(), "caff\u{e8}");
+    }
 
     const LOCAL: &str = "tauri://localhost/";
     const LOCAL_HTTP: &str = "http://tauri.localhost/";

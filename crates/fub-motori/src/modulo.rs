@@ -31,18 +31,24 @@
 //!   accetta altri parametri, descritti a parole ([`Modulo::aperto`]).
 //! - Il valore dà il tipo. Le parole del tipo (`bool`, `number`, `n`,
 //!   `index`, `pages`, `percent`, `text`, `string`, `name`, `id`, `hex`,
-//!   `field`, `cell`, `range`), `true`/`false`, i numeri e gli intervalli di
-//!   numeri (`11`, `1-7`, `10..400`, `1–32767`), le stringhe fra virgolette
-//!   (una cella o un intervallo come `"B2"` e `"A1:D10"` danno il loro tipo,
-//!   le altre sono esempi di testo), `[…]` e `{…}` (un valore JSON), gli
-//!   elenchi di parole `a|b|c` (una scelta, aperta se finisce con `…`), le
-//!   alternative con `|` e con ` or `, una frase (il tipo della sua ultima
-//!   parola, se è una parola del tipo, se no testo), `null` (si ignora).
+//!   `#rrggbb`, `field`, `cell`, `range`), `true`/`false`, i numeri e gli
+//!   intervalli di numeri (`11`, `1-7`, `10..400`, `1–32767`), le stringhe
+//!   fra virgolette (una cella o un intervallo come `"B2"` e `"A1:D10"` danno
+//!   il loro tipo, le altre sono esempi di testo), `[…]` e `{…}` (un valore
+//!   JSON), gli elenchi di parole `a|b|c` (una scelta, aperta se finisce con
+//!   `…`), le alternative con `|` e con ` or `, una frase (il tipo della sua
+//!   ultima parola, se è una parola del tipo, se no testo; `array …` e
+//!   `list of …` sono un valore JSON), `null` (si ignora).
+//!   Un'unità di misura (`pt`, `px`, `mm`, `%`, `deg`, `degrees`, e `int`,
+//!   `integer`, `amount`, `levels`) è un numero, come una frase che ne ha una
+//!   o un intervallo dentro (`pt 0.1..100`, `per inch 0..100`), e una nota
+//!   sola con un numero (`(10)`, il valore di serie) anche.
 //!   ` = …` e le note fra parentesi dopo un valore sono descrizioni; una nota
 //!   tutta maiuscola (`B4 (ISO)`) fa parte del valore.
 //! - Un campo senza valore prende il tipo dal lessico del motore (i nomi
 //!   ricorrenti: `range`, `sheet`, `password`); un nome che il lessico non
-//!   conosce è un errore. Il lessico affina anche un valore vago: `sheet?:
+//!   conosce è un errore. Il lessico dà i valori di un campo che lo schema
+//!   descrive a parole (`mode: blend mode`). Il lessico affina anche un valore vago: `sheet?:
 //!   name` è un foglio, `range?: "A1"` un intervallo.
 
 use std::collections::BTreeSet;
@@ -64,6 +70,10 @@ pub enum Tipo {
     Intervallo,
     /// Un foglio della cartella, per nome o per posizione.
     Foglio,
+    /// Un colore `#rrggbb` (lo schema scrive `hex` o `"#rrggbb"`): la shell
+    /// lo sceglie col selettore di colore. Chi non lo conosce lo legge come un
+    /// testo, e il valore resta lo stesso.
+    Colore,
     /// Uno dei valori dati dallo schema; `aperta` se lo schema dice che ce
     /// ne sono altri (`thin|medium|…`).
     Scelta {
@@ -88,6 +98,7 @@ impl Tipo {
             Tipo::Cella => "cella",
             Tipo::Intervallo => "intervallo",
             Tipo::Foglio => "foglio",
+            Tipo::Colore => "colore",
             Tipo::Scelta { .. } => "scelta",
             Tipo::Json => "json",
         }
@@ -534,7 +545,8 @@ fn parola_del_tipo(parola: &str) -> Option<(Tipo, bool)> {
     Some(match parola {
         "bool" => (Tipo::SiNo, false),
         "number" | "n" | "index" | "pages" | "percent" => (Tipo::Numero, false),
-        "text" | "string" | "hex" => (Tipo::Testo, false),
+        "text" | "string" => (Tipo::Testo, false),
+        "hex" | "#rrggbb" => (Tipo::Colore, false),
         "name" | "id" | "field" => (Tipo::Testo, true),
         "cell" => (Tipo::Cella, false),
         "range" => (Tipo::Intervallo, false),
@@ -605,8 +617,8 @@ fn riferimento(parte: &str) -> Option<bool> {
     }
 }
 
-/// Il tipo di una stringa fra virgolette: un riferimento, un esempio, o un
-/// letterale (un valore possibile di una scelta).
+/// Il tipo di una stringa fra virgolette: un riferimento, un colore
+/// (`"#rrggbb"`), un esempio, o un letterale (un valore possibile di una scelta).
 fn virgolettato(contenuto: &str) -> Pezzo {
     let parti: Vec<&str> = contenuto.split(',').map(str::trim).collect();
     let rif: Vec<Option<bool>> = parti.iter().map(|p| riferimento(p)).collect();
@@ -616,6 +628,9 @@ fn virgolettato(contenuto: &str) -> Pezzo {
         } else {
             Pezzo::Certo(Tipo::Intervallo)
         };
+    }
+    if contenuto.eq_ignore_ascii_case("#rrggbb") {
+        return Pezzo::Certo(Tipo::Colore);
     }
     if contenuto.is_empty()
         || contenuto.contains('…')
@@ -654,6 +669,15 @@ fn pezzo(alternativa: &str, aperta: &mut bool, valori: &mut Vec<String>) -> Esit
         testo = prima.trim_end().to_owned();
     }
     let Some(prima) = testo.chars().next() else {
+        // `(10)`: il valore è solo la nota col valore di serie, un numero.
+        let nota = alternativa.trim();
+        let dentro = nota
+            .strip_prefix('(')
+            .and_then(|n| n.strip_suffix(')'))
+            .map(|n| n.split([';', ',']).next().unwrap_or("").trim());
+        if dentro.is_some_and(numerico) {
+            return Ok(Some(Pezzo::Certo(Tipo::Numero)));
+        }
         return Err(errore(alternativa, "un valore vuoto"));
     };
     let pezzo = match prima {
@@ -685,12 +709,29 @@ fn pezzo(alternativa: &str, aperta: &mut bool, valori: &mut Vec<String>) -> Esit
                     if t.contains(['{', '[', '"', '|']) {
                         return Err(errore(alternativa, "una frase con dentro una struttura"));
                     }
+                    // `array of 1..10 objects`: un elenco, un valore JSON.
+                    if t.starts_with("array ") || t.starts_with("list of ") {
+                        return Ok(Some(Pezzo::Certo(Tipo::Json)));
+                    }
                     let ultima = t.rsplit(' ').next().unwrap_or(t);
-                    let tipo = parola_del_tipo(ultima).map_or(Tipo::Testo, |(tipo, _)| tipo);
+                    // Una frase con un'unità o un intervallo dentro (`pt
+                    // 0.1..100`, `per inch 0..100`, `% distortion`) è un
+                    // numero.
+                    let di_numero = || t.split(' ').any(|p| numerico(p) || UNITA.contains(&p));
+                    let tipo = parola_del_tipo(ultima).map_or_else(
+                        || {
+                            if di_numero() {
+                                Tipo::Numero
+                            } else {
+                                Tipo::Testo
+                            }
+                        },
+                        |(tipo, _)| tipo,
+                    );
                     Pezzo::Frase(t.to_owned(), tipo)
-                } else if t
-                    .chars()
-                    .all(|c| c.is_alphanumeric() || matches!(c, '_' | '.' | '#' | '-' | '/'))
+                } else if UNITA.contains(&t)
+                    || t.chars()
+                        .all(|c| c.is_alphanumeric() || matches!(c, '_' | '.' | '#' | '-' | '/'))
                 {
                     Pezzo::Valore(t.to_owned())
                 } else {
@@ -744,6 +785,13 @@ fn tipo_del_campo(grezzo: &Grezzo, lessico: &[(&str, Tipo)]) -> Esito<Tipo> {
     Ok(affina(tipo, dal_lessico))
 }
 
+/// Le unità di misura e le parole che, da sole, dicono un numero (gli
+/// effetti di VectorCraft: `radius: pt (10)`, `seed: int (0)`, `h: amount
+/// (10)`).
+const UNITA: &[&str] = &[
+    "pt", "px", "mm", "%", "deg", "degrees", "°", "int", "integer", "amount", "levels",
+];
+
 /// Il tipo di un valore dalle sue alternative.
 enum Combinato {
     Tipo(Tipo),
@@ -756,6 +804,14 @@ fn combina(nome: &str, pezzi: Vec<Pezzo>, espansi: Vec<String>, aperta: bool) ->
     let pezzi: Vec<Pezzo> = pezzi.into_iter().filter(|p| *p != Pezzo::Nullo).collect();
     if pezzi.is_empty() && espansi.is_empty() {
         return Err(errore(nome, "il valore non dice niente"));
+    }
+    // Un'unità di misura da sola è un numero in quell'unità (`radius: pt
+    // (10)`, `amount: % (0)`, `angle: deg`); fra altre parole
+    // (`pt|mm|in`) resta un valore di una scelta.
+    if let [Pezzo::Valore(unita)] = pezzi.as_slice() {
+        if UNITA.contains(&unita.as_str()) && espansi.is_empty() {
+            return Ok(Combinato::Tipo(Tipo::Numero));
+        }
     }
     // Una scelta: tutte parole (almeno una che non è del tipo) e frasi, o
     // tutte stringhe fra virgolette (almeno due, o aperta).
@@ -849,6 +905,9 @@ fn affina(tipo: Combinato, lessico: Option<Tipo>) -> Tipo {
         (Combinato::Vago(_), Some(dal_lessico)) if dal_lessico.riferimento() => dal_lessico,
         (Combinato::Tipo(Tipo::Cella), Some(Tipo::Intervallo)) => Tipo::Intervallo,
         (Combinato::Tipo(Tipo::Testo), Some(Tipo::Segreto)) => Tipo::Segreto,
+        // Una frase che descrive il valore (`mode: blend mode ("multiply")`):
+        // il lessico del comando può dirne i valori.
+        (Combinato::Tipo(Tipo::Testo), Some(scelta @ Tipo::Scelta { .. })) => scelta,
         (Combinato::Tipo(tipo) | Combinato::Vago(tipo), _) => tipo,
     }
 }

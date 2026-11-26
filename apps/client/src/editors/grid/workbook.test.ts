@@ -83,13 +83,19 @@ describe("una cartella di Excel sulla versione 2", () => {
     expect(fresh.workbook.sheets[0].rows[3].height).toBeUndefined();
   });
 
-  it("segna le formule non aggiornate e le celle in conflitto", () => {
+  it("mostra le formule ricalcolate dal provider, segna quelle che non sa calcolare e le celle in conflitto", () => {
     const edited = fixture.edit.window as GridBytesWindow;
     validateBytesWindow(edited, { ...session, revision: fixture.edit.commit.revision });
     const view = workbookView(session, [edited], null);
     const cell = (row: number, column: number) => view.sheets[0].cells.get(cellKey({ row, column }))?.bytes;
     expect(cell(1, 1)?.input).toBe("900");
-    expect(cell(3, 1)).toMatchObject({ input: "=SUM(B2:B3)", display: "680", stale: true });
+    // Le formule che leggono B2, anche a catena, hanno il valore nuovo.
+    expect(cell(3, 1)).toMatchObject({ input: "=SUM(B2:B3)", display: "780", stale: false });
+    expect(cell(2, 2)).toMatchObject({ input: "=B3/B4", display: "-15.38%", stale: false });
+    // La funzione di una macro resta vuota e segnata.
+    const note = workbookView(session, windows, null).sheets[1].cells;
+    expect(note.get(cellKey({ row: 0, column: 1 }))?.bytes).toMatchObject({ display: "Una nota!", stale: false });
+    expect(note.get(cellKey({ row: 0, column: 2 }))?.bytes).toMatchObject({ display: "", stale: true });
 
     const conflict = fixture.conflict.session as GridBytesSession;
     validateBytesSession(conflict);

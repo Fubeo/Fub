@@ -8,7 +8,8 @@ import { applyOperation } from "../../core/text-operation";
 import type { Applied, Outcome } from "../scene/engine";
 import type { Op } from "../scene/ops";
 import { doc } from "../scene/test-support";
-import { History, HISTORY_LIMIT, MERGE_MS } from "./history";
+import { t } from "../strings";
+import { History, HISTORY_LIMIT, MERGE_MS, stepName } from "./history";
 import { LAYER, open } from "./test-support";
 
 const SOURCE = doc(`${LAYER}<rect id="o1a2b3c4d" width="10" height="10"/></g>`);
@@ -138,6 +139,27 @@ describe("la fusione dei passi", () => {
 
     history.undo(engine);
     expect(engine.text).toBe(one);
+  });
+
+  it("due comandi del motore diversi, a meno dell'intervallo, restano due passi col loro nome", () => {
+    const { engine } = open(SOURCE);
+    const time = clock();
+    const history = new History(HISTORY_LIMIT, time.now);
+    history.record({ name: "Arrotonda angoli" }, applied(engine.apply(move("o1a2b3c4d", 1))));
+    const one = engine.text;
+    time.tick(MERGE_MS / 5);
+    history.record({ name: "Semplifica" }, applied(engine.apply(move("o1a2b3c4d", 2))));
+    expect(history.steps().map((step) => stepName(step.label))).toEqual(["Arrotonda angoli", "Semplifica"]);
+
+    expect(stepName(history.undo(engine)!.step.label)).toBe("Semplifica");
+    expect(engine.text).toBe(one);
+    // Lo stesso comando ripetuto di fila si fonde, come ogni ritocco.
+    const again = new History(HISTORY_LIMIT, time.now);
+    again.record({ name: "Arrotonda angoli" }, applied(engine.apply(move("o1a2b3c4d", 4))));
+    time.tick(MERGE_MS / 5);
+    again.record({ name: "Arrotonda angoli" }, applied(engine.apply(move("o1a2b3c4d", 5))));
+    expect(again.steps()).toHaveLength(1);
+    expect(stepName("draw.action.move")).toBe(t("draw.action.move"));
   });
 
   it("non fonde gesti diversi, né chiavi o oggetti diversi", () => {

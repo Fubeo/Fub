@@ -80,3 +80,5 @@ Nuove decisioni usano il [template](template.md).
 | [0247 — La prova del motore del PDF: la vista compone, Fub scrive](0247-la-prova-del-motore-del-pdf.md) | accettata | contratto | — |
 | [0248 — Il disegno incorporato in una nota si modifica sul posto](0248-il-disegno-nella-nota-si-modifica-sul-posto.md) | accolta | frontend | — |
 | [0249 — Fub porta l'orologio di GTK3 alla frequenza dello schermo nel modo GL](0249-orologio-gtk-allo-schermo.md) | accolta | host | — |
+| [0250 — Il disegno completo apre tutto il motore, a famiglie pigre, con l'interfaccia di Fub](0250-il-disegno-completo-sul-motore.md) | proposta | host | — |
+| [0251 — I sottolivelli sono livelli annidati in un livello](0251-sottolivelli-nel-formato-della-scena.md) | accolta | contratto | — |

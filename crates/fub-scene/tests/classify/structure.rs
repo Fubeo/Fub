@@ -68,10 +68,10 @@ fn the_root_is_not_classified() {
 }
 
 #[test]
-fn layers_are_groups_with_fub_layer_under_the_root() {
+fn layers_are_groups_with_fub_layer_under_the_root_or_a_layer() {
     let source = doc(concat!(
         r#"<g id="l1" fub:layer="Primo piano" fub:locked="true" display="none">"#,
-        r#"<g fub:layer="Annidato"></g>"#,
+        r#"<g fub:layer="Annidato"><g fub:layer="Più giù"/><g><g fub:layer="Nel gruppo"/></g></g>"#,
         "</g>",
         r#"<g fub:layer="" fub:locked="false"/>"#,
         "<g></g>",
@@ -82,7 +82,14 @@ fn layers_are_groups_with_fub_layer_under_the_root() {
     let info = layer.layer.as_ref().unwrap();
     assert_eq!(info.name, "Primo piano");
     assert!(info.locked && info.hidden);
-    assert_eq!(role(&scene, &[0, 0]), Some(Role::Group));
+    // Un livello dentro un livello è un sottolivello, a ogni profondità; in
+    // un gruppo `fub:layer` non conta.
+    let sub = at(&scene, &[0, 0]).unwrap();
+    assert_eq!(sub.role, Role::Layer);
+    assert_eq!(sub.layer.as_ref().unwrap().name, "Annidato");
+    assert_eq!(role(&scene, &[0, 0, 0]), Some(Role::Layer));
+    assert_eq!(role(&scene, &[0, 0, 1]), Some(Role::Group));
+    assert_eq!(role(&scene, &[0, 0, 1, 0]), Some(Role::Group));
     let empty = at(&scene, &[1]).unwrap();
     assert_eq!(empty.role, Role::Layer);
     assert!(!empty.layer.as_ref().unwrap().locked);

@@ -167,8 +167,8 @@ l'IPC.
   propria cronologia `prosemirror-history`; ciò che arriva da un altro riquadro
   o dal disco sostituisce i blocchi diversi fuori dalla cronologia.
   Come nell'editor di testo il Tab si ferma sul foglio che scorre
-  (`.rich-page`, `role="document"`), non dentro il documento: Invio porta a
-  scrivere, dove Tab scrive una tabulazione, sposta il livello di un
+  (`.rich-page`, `role="document"`), non dentro: Invio, o un carattere, porta
+  a scrivere. Dentro, Tab scrive una tabulazione, sposta il livello di un
   elenco o, in una tabella, va di cella in cella (`cell-selection.ts`, che
   sceglie anche più celle), e dopo un Esc, per due secondi, Tab esce.
 - `editors/rich/ribbon.ts` è la barra multifunzione del documento, caricata

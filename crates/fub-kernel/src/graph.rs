@@ -14,6 +14,16 @@
 //! scritta. Un
 //! [`LinkTarget::Url`](fub_abi::model::LinkTarget::Url) non è un arco e non lo diventa.
 //!
+//! # I link delle proprietà, a parte
+//!
+//! Un `[[…]]` scritto da solo in una proprietà (`progetto: "[[Scorte]]"`,
+//! la regola è [`fub_abi::rules::properties::links`]) si risolve come un
+//! wikilink, con la stessa macchina incrementale (`watchers`, `refs_by_key`),
+//! ma i suoi archi stanno in mappe **sue**: non sono backlink né uscenti, che
+//! restano i link del corpo con il loro contesto. Servono alla via inversa
+//! ([`LinkGraph::property_linked`]): chi nomina una nota nel frontmatter,
+//! con un costo che cresce coi link di quella nota e non col vault.
+//!
 //! Da qui in giù i due sono indistinguibili: stessa chiave di risoluzione,
 //! stessi `watchers`, stessi backlink. Un link markdown a una nota del vault ha
 //! il backlink, entra nel grafo e viene riscritto al rename esattamente come un
@@ -53,7 +63,7 @@ use std::cmp::Ordering;
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::sync::Arc;
 
-use fub_abi::model::{DocId, DocumentModel, Link};
+use fub_abi::model::{DocId, DocumentModel, Frontmatter, Link, LinkTarget};
 use fub_abi::traits::BacklinkRef;
 
 use fub_abi::rules::media::mime_of;
@@ -88,6 +98,17 @@ pub trait GraphSource {
     fn graph_id(&self) -> &DocId;
     fn graph_aliases(&self) -> Vec<String>;
     fn graph_links(&self) -> &[Link];
+    /// I link scritti nelle proprietà, con la loro chiave
+    /// ([`fub_abi::rules::properties::links`]).
+    fn graph_property_links(&self) -> Vec<(String, LinkTarget)>;
+}
+
+/// I link delle proprietà di un frontmatter, nella forma che il grafo tiene.
+pub(crate) fn property_links_of(frontmatter: &Frontmatter) -> Vec<(String, LinkTarget)> {
+    fub_abi::rules::properties::links(frontmatter)
+        .into_iter()
+        .map(|(key, target)| (key.to_string(), target))
+        .collect()
 }
 
 impl GraphSource for DocumentModel {
@@ -101,6 +122,10 @@ impl GraphSource for DocumentModel {
 
     fn graph_links(&self) -> &[Link] {
         &self.links
+    }
+
+    fn graph_property_links(&self) -> Vec<(String, LinkTarget)> {
+        property_links_of(&self.frontmatter)
     }
 }
 
@@ -121,6 +146,7 @@ struct GraphDoc {
     id: DocId,
     aliases: Vec<String>,
     links: Vec<Link>,
+    property_links: Vec<(String, LinkTarget)>,
 }
 
 impl GraphSource for GraphDoc {
@@ -134,6 +160,10 @@ impl GraphSource for GraphDoc {
 
     fn graph_links(&self) -> &[Link] {
         &self.links
+    }
+
+    fn graph_property_links(&self) -> Vec<(String, LinkTarget)> {
+        self.property_links.clone()
     }
 }
 
@@ -158,6 +188,7 @@ impl GraphSources {
                     id: d.graph_id().clone(),
                     aliases: d.graph_aliases(),
                     links: d.graph_links().to_vec(),
+                    property_links: d.graph_property_links(),
                 })
                 .collect(),
             epoch,
@@ -200,6 +231,13 @@ enum RefKind {
     /// documento sorgente. Un `[t](Mario)` non deve pescare l'alias "Mario":
     /// l'utente ha scritto un path, e nel path non ci sono alias.
     Path,
+}
+
+/// Un link di proprietà entrante: chi lo scrive e in quale chiave.
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct PropertyRef {
+    source: DocId,
+    key: String,
 }
 
 /// Le chiavi con cui un documento è raggiungibile dalla risoluzione.
@@ -261,10 +299,17 @@ pub struct LinkGraph {
     backlinks: HashMap<DocId, Vec<BacklinkRef>>,
     /// documento → target risolti uscenti (nell'ordine dei link nel sorgente).
     outgoing: HashMap<DocId, Vec<DocId>>,
+    /// documento bersaglio → chi lo nomina in una proprietà, con la chiave.
+    property_backlinks: HashMap<DocId, Vec<PropertyRef>>,
+    /// documento → bersagli risolti dei link delle sue proprietà (per
+    /// staccarli quando si ri-collega).
+    property_outgoing: HashMap<DocId, Vec<DocId>>,
 
     // --- stato per l'aggiornamento incrementale --------------------------
     /// documento → i suoi wikilink, in ordine.
     links: HashMap<DocId, Vec<LinkRef>>,
+    /// documento → i link delle sue proprietà, con la chiave, in ordine.
+    property_links: HashMap<DocId, Vec<(String, LinkRef)>>,
     /// documento → chiavi che contribuisce agli indici (per staccarlo).
     keys: HashMap<DocId, DocKeys>,
     /// chiave d'indice → chiavi di link la cui risoluzione ne dipende.

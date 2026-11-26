@@ -1,13 +1,13 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { markdown } from "@codemirror/lang-markdown";
-import { ensureSyntaxTree } from "@codemirror/language";
 import { EditorState, Prec } from "@codemirror/state";
 import { EditorView, runScopeHandlers } from "@codemirror/view";
 import { markdownGrammar } from "./grammar";
 import { livePreview } from "./livepreview";
 import { liveReveal, type RevealPolicy } from "../../live-reveal";
 import { codeBodyText, codeFenceAt, languageName, removeEmptyBlock, setLanguage } from "./code-block";
+import { parsed, parsedView } from "./test-support";
 
 const clipboard = vi.hoisted(() => ({ text: [] as string[] }));
 vi.mock("mermaid", () => ({
@@ -40,8 +40,7 @@ function mount(doc: string, anchor: number, policy: RevealPolicy = "mai"): Edito
       extensions: [markdown({ base: markdownGrammar }), livePreview({ openWikilink() {}, searchTag() {} }), Prec.highest(liveReveal.of(policy))],
     }),
   });
-  ensureSyntaxTree(view.state, view.state.doc.length, 1000);
-  view.dispatch({});
+  parsedView(view);
   views.push(view);
   return view;
 }
@@ -59,13 +58,11 @@ describe("le regole del blocco", () => {
   });
 
   it("cambiare lingua riscrive soltanto l'info string", () => {
-    const state = EditorState.create({ doc: SOURCE, extensions: markdown({ base: markdownGrammar }) });
-    ensureSyntaxTree(state, state.doc.length, 1000);
+    const state = parsed(EditorState.create({ doc: SOURCE, extensions: markdown({ base: markdownGrammar }) }));
     const fence = codeFenceAt(state, SOURCE.indexOf("fn"))!;
     expect(codeBodyText(state, fence)).toBe("fn main() {}\nlet x = 1;");
     expect(state.update(setLanguage(fence, "python")).state.doc.toString()).toBe(SOURCE.replace("rust", "python"));
-    const bare = EditorState.create({ doc: "```\nx\n```", extensions: markdown({ base: markdownGrammar }) });
-    ensureSyntaxTree(bare, bare.doc.length, 1000);
+    const bare = parsed(EditorState.create({ doc: "```\nx\n```", extensions: markdown({ base: markdownGrammar }) }));
     expect(bare.update(setLanguage(codeFenceAt(bare, 4)!, "sql")).state.doc.toString()).toBe("```sql\nx\n```");
   });
 });

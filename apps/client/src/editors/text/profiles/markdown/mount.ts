@@ -530,7 +530,7 @@ async function hydrateEmbeds(
   life: Lifetime,
   hold: HoldRender | null,
 ): Promise<void> {
-  await Promise.all(Array.from(container.querySelectorAll<HTMLElement>(".embed[data-embed-page]")).map(async (slot) => {
+  await expected(Promise.all(Array.from(container.querySelectorAll<HTMLElement>(".embed[data-embed-page]")).map(async (slot) => {
     const page = slot.dataset.embedPage || options.documentId;
     if (!page) return;
     // Il valore di una cella (T53) non si trasclude: lo tiene `cellValue`.
@@ -574,7 +574,7 @@ async function hydrateEmbeds(
     // `![[disegno.svg]]` che non passa nemmeno di qui.
     const drawing = mediaKindOfId(content.doc_id) === "image" ? scenePlaceholder(content.html) : null;
     if (drawing?.doc === content.doc_id) {
-      await showEmbeddedDrawing(container, slot, drawing, life);
+      await expected(showEmbeddedDrawing(container, slot, drawing, expected, life));
       return;
     }
     // Un file Craft (`![[logo.vectorcraft]]`) torna come il segnaposto del
@@ -583,7 +583,7 @@ async function hydrateEmbeds(
     const craft = craftPlaceholder(content.html);
     if (craft && craft.doc === content.doc_id) {
       const open = opener(options, life);
-      await showEmbeddedCraft(container, slot, craft, life, open ? { open } : {});
+      await expected(showEmbeddedCraft(container, slot, craft, life, open ? { open } : {}));
       return;
     }
     // Embedded offsets never mutate the containing note.
@@ -614,11 +614,11 @@ async function hydrateEmbeds(
       }
     }
     container.dispatchEvent(new Event("markdown-resize", { bubbles: true }));
-    await Promise.all([
+    await expected(Promise.all([
       hydrateEmbeds(slot, new Set([...chain, identity]), memo, expected, embeddedOptions, life, null),
       hydrateVaultMedia(slot, content.doc_id, expected, life, undefined, opener(embeddedOptions, life)),
-    ]);
-  }));
+    ]));
+  })));
 }
 
 /// Apre la scheda di un documento dal clic su una figura (un file Craft, un

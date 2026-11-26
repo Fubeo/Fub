@@ -54,7 +54,7 @@ function seamForBench(): Plugin {
     enforce: "pre",
     async resolveId(source, importer, options) {
       // Chi sostituisce non si sostituisce da sé: senza questa riga, il
-      // `../src/host/finto` di `ipc-finto.ts` — che di `ipc` importa solo un
+      // `../src/host/fake` di `fake-ipc.ts` — che di `ipc` importa solo un
       // tipo — non darebbe fastidio, ma un domani un import vero sì, e sarebbe
       // un ciclo scoperto guardando una pagina bianca.
       if (importer && Object.values(REPLACEMENTS).includes(importer)) return null;

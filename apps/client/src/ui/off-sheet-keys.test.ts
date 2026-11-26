@@ -120,6 +120,17 @@ describe("una lettera col fuoco fuori dal foglio (IMP-106)", () => {
   });
 });
 
+describe("un tasto della composizione (IME)", () => {
+  it("resta del metodo d'immissione, anche col codice 229 di WebKit", () => {
+    const { el, steps } = shell();
+    expect(press(el("tags"), { key: "q", isComposing: true }).defaultPrevented).toBe(false);
+    expect(press(el("tags"), { key: "q", keyCode: 229 }).defaultPrevented).toBe(false);
+    expect(press(el("accept"), { key: "z", ctrlKey: true, keyCode: 229 }).defaultPrevented).toBe(false);
+    expect(steps).toEqual([]);
+    expect(press(el("tags"), { key: "q" }).defaultPrevented).toBe(true);
+  });
+});
+
 describe("Ctrl+Z col fuoco su un pulsante di un pannello del documento", () => {
   it("dopo Sostituisci tutto, dalla barra annulla e ripete nel documento attivo (IMP-119)", () => {
     const { steps, el } = shell();

@@ -5,7 +5,9 @@
 //! sembrava doverlo snellire. Contato in allocazioni e in byte allocati.
 //!
 //! Il dry-run di `note.rename` chiede `IndexQuery::Backlinks` per sapere quali
-//! note nominano il documento, e di ogni riferimento riceve anche il `context`
+//! note nominano il documento nel corpo (e, dall'IMP-2805, la foglia
+//! `fub:property-link` per sapere quali lo nominano in un link del
+//! frontmatter: vedi sotto), e di ogni riferimento riceve anche il `context`
 //! — la finestra di testo attorno al link (§25.4, `fub_abi::rules::snippet`)
 //! — che poi butta via, perché ciò che costruisce è un elenco di path. Da
 //! fuori è una riga di prestazioni ovvia: `QueryPredicate::Linked` è la stessa
@@ -25,10 +27,16 @@
 //! | domanda | allocazioni | byte |
 //! |---|---|---|
 //! | `Backlinks` su 500 backlink, contesti compresi | 1 003 | 167 012 |
-//! | **il dry-run intero** sugli stessi 500 | 1 058 | **217 453** |
+//! | **il dry-run intero** sugli stessi 500, prima dell'IMP-2805 | 1 058 | **217 453** |
+//! | `Documents` con tutte le proprietà, 501 note (la seconda domanda) | — | 385 580 |
+//! | **il dry-run intero** sugli stessi 500, con le proprietà | 2 143 | **604 537** |
+//! | la foglia `fub:property-link` al posto delle proprietà, stessi 500 (#503) | — | 669 |
+//! | **il dry-run intero** sugli stessi 500, con la foglia | 1 105 | **219 632** |
 //! | `Documents` con la foglia `Linked`, stessi 500 | 1 728 | **686 078** |
 //! | `Backlinks` su 2000 backlink | 4 003 | 668 012 |
-//! | il dry-run intero sugli stessi 2000 | 4 062 | 865 909 |
+//! | il dry-run intero sugli stessi 2000, prima dell'IMP-2805 | 4 062 | 865 909 |
+//! | `Documents` con tutte le proprietà, 2001 note | — | 1 532 988 |
+//! | il dry-run intero sugli stessi 2000, con le proprietà | 8 284 | 2 400 401 |
 //! | `Documents` con `Linked`, stessi 2000 | 6 871 | 2 750 970 |
 //!
 //! **La foglia costa più di tre volte l'intero dry-run che avrebbe dovuto
@@ -59,8 +67,17 @@
 //! dimagrisce — cioè il giorno in cui lo scambio va fatto.
 //!
 //! `the_dry_run_spends_on_the_question_does_not_around` dice che il piano non costa
-//! molto più della domanda che pone: sta entro una volta e mezza, e oggi ci sta
-//! con 217 453 byte contro 167 012, cioè 1,30. *Provato in rosso* applicando lo
+//! molto più delle domande che pone: sta entro una volta e mezza della loro
+//! somma. Fino all'IMP-2805 la domanda era una, e il piano ci stava con
+//! 217 453 byte contro 167 012, cioè 1,30. Da quando la rinomina riscrive anche
+//! i link nelle proprietà, il piano pone una seconda domanda — le proprietà di
+//! tutto il vault, perché quei link non sono archi del grafo e l'indice non ne
+//! ha una più stretta — e il confronto si fa con la somma delle due: 604 537
+//! contro 167 012 + 385 580, cioè 1,09. Dalla #503 la seconda domanda è la
+//! foglia `fub:property-link`, che legge gli archi delle proprietà tenuti dal
+//! grafo e su questo vault risponde vuota: 219 632 byte contro 167 012 + 669,
+//! cioè 1,31, quasi la domanda sola di prima. Lo scambio qui sotto, applicato
+//! oggi, porterebbe il piano ben oltre il tetto. *Provato in rosso* applicando lo
 //! scambio per davvero dentro `note_rename`: il dry-run è passato a **672 535**
 //! byte, cioè 3,59 volte la domanda che aveva sostituito, e il banco si è
 //! acceso. (Il primo confronto scritto — «il piano intero costa meno della sola
@@ -76,7 +93,7 @@ use fub_abi::command::{CommandEffect, InvokeMode};
 use fub_abi::edit::WriteBase;
 use fub_abi::event::Actor;
 use fub_abi::model::DocId;
-use fub_abi::query::{QueryExpr, QueryPredicate};
+use fub_abi::query::{PropertyLinkPredicate, QueryExpr, QueryPredicate};
 use fub_abi::traits::{Excerpts, IndexQuery, IndexResult, LinkDirection, PropertySelect};
 use fub_features::{CoreCommands, COMMANDS_ID, NOTES_RENAME};
 use fub_format_markdown::MarkdownProvider;
@@ -226,6 +243,33 @@ fn for_the_backlink(ws: &Workspace) -> usize {
     }
 }
 
+/// La seconda domanda del dry-run, isolata: chi nomina la nota in un link del
+/// frontmatter (IMP-2805), con la foglia `fub:property-link` che legge gli
+/// archi delle proprietà tenuti dal grafo (#503). È la stessa che pone
+/// `commands::relink`, e su questo vault, dove nessuna proprietà nomina il
+/// bersaglio, risponde vuota.
+fn for_the_properties(ws: &Workspace) -> usize {
+    match ws
+        .query_index(IndexQuery::Documents {
+            matching: QueryExpr::of(
+                PropertyLinkPredicate {
+                    targets: vec![DocId::new(TARGET)],
+                    key: None,
+                }
+                .into_predicate(),
+            ),
+            sort: None,
+            select: PropertySelect::All,
+            page: None,
+            excerpts: Excerpts::Omit,
+        })
+        .expect("le proprietà")
+    {
+        IndexResult::Documents(rows) => rows.items.len(),
+        other => panic!("attesi documenti, trovato {other:?}"),
+    }
+}
+
 /// **La premessa della riga, scritta al rovescio.** `QueryPredicate::Linked` è
 /// `Backlinks` *senza* i contesti — 519 KB in meno da consegnare, misurati —
 /// e costa di più.
@@ -268,16 +312,20 @@ fn the_dry_run_spends_on_the_question_does_not_around() {
     let mut ws = vault_that_links(&v);
     let _ = plan(&mut ws);
     let _ = for_the_backlink(&ws);
+    let _ = for_the_properties(&ws);
 
     let (_, byte_backlink) = costo_of(|| for_the_backlink(&ws));
+    let (_, byte_properties) = costo_of(|| for_the_properties(&ws));
     let (alloc_plan, byte_plan) = costo_of(|| plan(&mut ws));
 
-    let ceiling = byte_backlink + byte_backlink / 2;
+    let questions = byte_backlink + byte_properties;
+    let ceiling = questions + questions / 2;
     assert!(
         byte_plan < ceiling,
-        "il dry-run costa {byte_plan} byte in {alloc_plan} allocazioni, la domanda che pone \
-         {byte_backlink}: oltre il tetto di {ceiling}, cioè il piano ha smesso di spendere sulla \
-         domanda e ha cominciato a spendere intorno — vedi il § in testa"
+        "il dry-run costa {byte_plan} byte in {alloc_plan} allocazioni, le domande che pone \
+         {questions} ({byte_backlink} i backlink, {byte_properties} le proprietà): oltre il tetto \
+         di {ceiling}, cioè il piano ha smesso di spendere sulle domande e ha cominciato a \
+         spendere intorno — vedi il § in testa"
     );
 }
 

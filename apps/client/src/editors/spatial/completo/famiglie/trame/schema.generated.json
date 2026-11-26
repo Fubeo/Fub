@@ -1,0 +1,98 @@
+{
+  "$generato": "File generato da crates/fub-disegno/tests/ts_indice.rs, non modificare a mano; rigenera con UPDATE_MIRROR=1 cargo test -p fub-disegno --test ts_indice",
+  "famiglia": "trame",
+  "finestre": [
+    {
+      "fonte": "motore",
+      "id": "livePaint.gapOptions",
+      "campi": [
+        {
+          "nome": "detect",
+          "tipo": "sino",
+          "facoltativo": false,
+          "predefinito": false
+        },
+        {
+          "nome": "size",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "small",
+            "medium",
+            "large",
+            "custom"
+          ],
+          "aperta": false,
+          "predefinito": "small"
+        },
+        {
+          "nome": "points",
+          "tipo": "numero",
+          "facoltativo": false,
+          "minimo": 0.01,
+          "massimo": 72.0,
+          "predefinito": 3.0
+        },
+        {
+          "nome": "color",
+          "tipo": "colore",
+          "facoltativo": false,
+          "predefinito": "#ff4f4f"
+        },
+        {
+          "nome": "closeGaps",
+          "tipo": "sino",
+          "facoltativo": false,
+          "predefinito": false
+        }
+      ]
+    },
+    {
+      "fonte": "motore",
+      "id": "object.mesh.create",
+      "campi": [
+        {
+          "nome": "rows",
+          "tipo": "numero",
+          "facoltativo": false,
+          "minimo": 1.0,
+          "massimo": 50.0,
+          "predefinito": 4.0
+        },
+        {
+          "nome": "cols",
+          "tipo": "numero",
+          "facoltativo": false,
+          "minimo": 1.0,
+          "massimo": 50.0,
+          "predefinito": 4.0
+        },
+        {
+          "nome": "appearance",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "flat",
+            "center",
+            "edge"
+          ],
+          "aperta": false,
+          "predefinito": "flat"
+        },
+        {
+          "nome": "highlight",
+          "tipo": "numero",
+          "facoltativo": false,
+          "minimo": 0.0,
+          "massimo": 100.0,
+          "predefinito": 100.0
+        }
+      ]
+    },
+    {
+      "fonte": "interfaccia",
+      "id": "ui.livePaintGapOptions",
+      "campi": []
+    }
+  ]
+}

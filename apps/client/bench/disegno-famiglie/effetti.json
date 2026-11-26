@@ -1,0 +1,12 @@
+{
+  "$nota": "Le risposte della famiglia effetti del banco. La pila degli effetti degli oggetti scelti: un oggetto senza effetti, né suoi né dei riempimenti e tratti. La sezione Aspetto la legge appena qualcosa è scelto, e un comando senza risposta renderebbe `unserved`, che ferma la sessione come motore spento.",
+  "risposte": [
+    {
+      "comando": "disegno.effect.list",
+      "argomenti": {},
+      "esito": {
+        "reading": { "applied": [{ "effects": [], "items": [] }] }
+      }
+    }
+  ]
+}

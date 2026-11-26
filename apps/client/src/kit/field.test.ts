@@ -100,6 +100,8 @@ describe("il campo", () => {
   it("Invio che conferma una composizione non consegna", () => {
     const made = field({ value: "にほん" });
     expect(press(made.input, "Enter", { isComposing: true }).defaultPrevented).toBe(false);
+    // WebKit chiude la composizione prima del keydown, che arriva col codice 229.
+    expect(press(made.input, "Enter", { keyCode: 229 }).defaultPrevented).toBe(false);
     expect(submits).toEqual([]);
   });
 

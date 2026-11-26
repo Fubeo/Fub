@@ -1,0 +1,75 @@
+{
+  "$nota": "I casi che provano il banco delle righe (tests/famiglie.rs, apps/client/src/editors/spatial/completo/casi.test.ts): girano con tutte le righe accese, anche quelle da fare. Gli esiti sono quelli del motore di oggi.",
+  "casi": [
+    {
+      "id": "edit.colors.invert",
+      "disegno": "base.svg",
+      "selezione": ["oa1a1a1a1"],
+      "atteso": { "ops": [{ "op": "set", "id": "oa1a1a1a1", "attrs": { "fill": "#ffffff" } }] },
+      "dopo": "invertito.svg"
+    },
+    {
+      "id": "edit.duplicate",
+      "disegno": "base.svg",
+      "selezione": ["oa1a1a1a1"],
+      "atteso": {
+        "ops": [
+          {
+            "op": "add",
+            "parent": "l1a2b3c4d",
+            "pos": { "after": "oa1a1a1a1" },
+            "elem": {
+              "tag": "path",
+              "attrs": { "d": "M100 100 L200 100 L200 150 L100 150 Z", "fill": "#000000", "id": "oc3c3c3c3" }
+            }
+          }
+        ]
+      },
+      "dopo": "duplicato.svg"
+    },
+    {
+      "id": "select.reselect",
+      "disegno": "base.svg",
+      "atteso": { "rifiuto": "empty" }
+    },
+    {
+      "id": "rectangle",
+      "fonte": "strumento",
+      "disegno": "base.svg",
+      "gesto": [
+        {
+          "phase": "commit",
+          "events": [
+            { "kind": "down", "x": 40, "y": 200, "pressure": 0.5, "shift": false, "alt": false, "cmd": false },
+            { "kind": "drag", "x": 90, "y": 240, "pressure": 0.5, "shift": false, "alt": false, "cmd": false },
+            { "kind": "up", "x": 90, "y": 240, "pressure": 0.5, "shift": false, "alt": false, "cmd": false }
+          ]
+        }
+      ],
+      "atteso": { "ops": [{ "op": "add", "parent": "l1a2b3c4d", "pos": { "last": true }, "elem": { "tag": "rect", "attrs": { "x": "40", "y": "200", "width": "50", "height": "40", "fill": "none", "stroke": "#000000", "stroke-width": "2", "stroke-miterlimit": "10", "id": "oc3c3c3c3" } } }] },
+      "dopo": "rettangolo.svg"
+    },
+    {
+      "id": "stylize.roundCorners",
+      "fonte": "effetto",
+      "disegno": "base.svg",
+      "selezione": ["oa1a1a1a1", "ob2b2b2b2"],
+      "argomenti": { "radius": 15 },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {"op": "remove", "target": "ob2b2b2b2"},
+              {"op": "remove", "target": "oa1a1a1a1"},
+              {"op": "add", "parent": "l1a2b3c4d", "pos": {"first": true}, "raw": "<path id=\"oa1a1a1a1\" d=\"M100 115 C100 106.716 106.716 100 115 100 L185 100 C193.284 100 200 106.716 200 115 L200 135 C200 143.284 193.284 150 185 150 L115 150 C106.716 150 100 143.284 100 135 Z\" fill=\"#000000\"/>"},
+              {"op": "add", "parent": "l1a2b3c4d", "pos": {"last": true}, "raw": "<path id=\"ob2b2b2b2\" d=\"M220 115 C220 106.716 226.716 100 235 100 L265 100 C273.284 100 280 106.716 280 115 L280 135 C280 143.284 273.284 150 265 150 L235 150 C226.716 150 220 143.284 220 135 Z\" fill=\"#ff0000\"/>"},
+              {"op": "add", "parent": "#root", "pos": {"first": true}, "raw": "<metadata><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"oa1a1a1a1\" hash=\"2e24b89e1d40e96f\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjoyLCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MC4wLCJnIjowLjAsImIiOjAuMH19fV0sImVmZmVjdHMiOlt7ImlkIjoic3R5bGl6ZS5yb3VuZENvcm5lcnMiLCJwYXJhbXMiOnsicmFkaXVzIjoxNX0sInZpc2libGUiOnRydWV9XX0sImtpbmQiOnsidHlwZSI6InBhdGgiLCJwYXRoIjp7InN1YnBhdGhzIjpbeyJhbmNob3JzIjpbeyJwIjpbMTAwLjAsMTAwLjBdfSx7InAiOlsyMDAuMCwxMDAuMF19LHsicCI6WzIwMC4wLDE1MC4wXX0seyJwIjpbMTAwLjAsMTUwLjBdfV0sImNsb3NlZCI6dHJ1ZX1dfX19fQ==</vectorcraft:recipe><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"ob2b2b2b2\" hash=\"29c6ff18fb138d25\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjozLCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MS4wLCJnIjowLjAsImIiOjAuMH19fV0sImVmZmVjdHMiOlt7ImlkIjoic3R5bGl6ZS5yb3VuZENvcm5lcnMiLCJwYXJhbXMiOnsicmFkaXVzIjoxNX0sInZpc2libGUiOnRydWV9XX0sImtpbmQiOnsidHlwZSI6InBhdGgiLCJwYXRoIjp7InN1YnBhdGhzIjpbeyJhbmNob3JzIjpbeyJwIjpbMjIwLjAsMTAwLjBdfSx7InAiOlsyODAuMCwxMDAuMF19LHsicCI6WzI4MC4wLDE1MC4wXX0seyJwIjpbMjIwLjAsMTUwLjBdfV0sImNsb3NlZCI6dHJ1ZX1dfX19fQ==</vectorcraft:recipe></metadata>"}
+            ]
+          }
+        ]
+      },
+      "dopo": "angoli-tondi.svg"
+    }
+  ]
+}

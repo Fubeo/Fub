@@ -288,7 +288,9 @@ export interface DrawingFake {
   /// Ciò che `openDrawing` risponde; senza, un'istanza nuova alla revisione
   /// 0 senza parti che restano come sono.
   open?: (doc: string, text: string) => DrawingOpen;
-  /// L'esito di un gesto. Senza, un gesto lancia: il finto non sa disegnare.
+  /// L'esito di un gesto. Senza, un gesto con uno strumento del motore
+  /// risponde con lo strumento finto (`strumentoFinto`) e uno con gli
+  /// strumenti di K5 lancia: il finto non sa disegnare.
   gesto?: (gesture: DrawingGesture, copia: DrawingFakeCopy) => DrawingOutcome;
   /// I comandi della selezione; senza, nessuno.
   comandi?: (selection: string[], copia: DrawingFakeCopy) => DrawingCommandInfo[];
@@ -384,6 +386,10 @@ export interface Options {
   draw?: boolean;
   /** Explicit OS save simulation. Unconfigured fake cannot create files. */
   saveArtifact?: (suggestedName: string, mediaType: string, bytes: readonly number[]) => Promise<SaveArtifactOutcome>;
+  /// Chi serve le tessere della vista Mappa da un sito che la riga
+  /// `map.tile-hosts` ammette. Il finto rifiuta da solo, come l'host, i siti
+  /// che la riga non ha; senza questa porta un sito ammesso risponde `io`.
+  mapTile?: (url: string, kind: "raster" | "vector") => Promise<ArrayBuffer>;
   printArtifact?: (suggestedName: string, mediaType: string, bytes: readonly number[]) => Promise<PrintArtifactOutcome>;
   /// Il sistema che riceve una voce del vault. Senza, la porta non è servita.
   revealInSystem?: (path: string, open: boolean) => Promise<RevealOutcome>;
@@ -493,6 +499,9 @@ export interface FakeHost {
   /// terminale, l'altra applicazione, il sync. Il file si muove e l'evento
   /// arriva, che è l'ordine in cui le due cose succedono davvero.
   renameFromOutside(from: string, to: string): void;
+  /// Cancella una nota **senza che la shell l'abbia chiesto** (`rm` da
+  /// terminale, il sync): il file sparisce e l'evento arriva.
+  removeFromOutside(id: string): void;
   /// Riscrive un file **senza che la shell l'abbia chiesto**: l'altra
   /// applicazione, il sync, un merge. I byte cambiano e l'evento arriva dal
   /// watcher, come succede davvero.
@@ -538,6 +547,9 @@ export interface FakeHost {
 
   /// Simula la chiusura nativa di una finestra documento ancora aperta.
   requestDocumentWindowClose(label: string): void;
+  /// Simula una finestra documento che muore da sola (un crash, il sistema
+  /// che la chiude): sparisce senza passare da `closeDocumentWindow`.
+  destroyDocumentWindow(label: string): void;
   /// Manda un evento del kernel a chi si è iscritto, come farebbe il ponte.
   ///
   /// Restituisce `false` se **nessuno** era iscritto: è il caso che interessa
@@ -1864,6 +1876,9 @@ export function createFakeHost(options: Options = {}): FakeHost {
         const to = String(args?.to);
         const before = docs.get(from);
         if (!before) throw new Error(`host fake: «${from}» non esiste`);
+        // Come il kernel, una destinazione occupata è un rifiuto e mai una
+        // sovrascrittura: la nota che c'era resta, e quella spostata pure.
+        if (to !== from && docs.has(to)) throw { kind: "already_exists", message: `«${to}» c'è già` } satisfies PluginError;
         // Come il kernel, la rinomina si porta dietro i wikilink che la
         // nominavano (anche quelli della nota stessa): le note toccate
         // cambiano revisione e lo dicono con `document_changed`.
@@ -2236,6 +2251,18 @@ export function createFakeHost(options: Options = {}): FakeHost {
         gate("viewerOpen", [url, title, policy], Promise.reject(new Error("host fake: isolated viewer is unavailable"))),
       viewerSave: (url, title, allowlist, attachmentFolder, vault) =>
         gate("viewerSave", [url, title, allowlist, attachmentFolder, vault], Promise.reject(new Error("host fake: viewer download is unavailable"))),
+      mapTile: (url, kind) => gate("mapTile", [url, kind], Promise.resolve().then(() => {
+        // La regola dell'host (`Host::map_tile`): soltanto un sito della riga.
+        const row = settings.find((entry) => entry.spec.key === "map.tile-hosts");
+        const hosts = Array.isArray(row?.value) ? row.value : [];
+        let site = "";
+        try { site = new URL(url).hostname.toLowerCase(); } catch { /* non è un indirizzo */ }
+        if (!url.startsWith("https://") || !hosts.some((host) => host.trim().toLowerCase() === site)) {
+          throw { kind: "permission_denied", message: `Le tessere di ${site || url} non sono ammesse su questo computer.` } satisfies PluginError;
+        }
+        if (!options.mapTile) throw { kind: "io", message: "host fake: nessuno serve le tessere" } satisfies PluginError;
+        return options.mapTile(url, kind);
+      })),
       viewerControl: (action) =>
         gate("viewerControl", [action], Promise.reject(new Error("host fake: isolated viewer is unavailable"))),
       // Il finto non ha una finestra del visore: niente da raccontare.
@@ -2362,8 +2389,9 @@ export function createFakeHost(options: Options = {}): FakeHost {
       })),
       drawingGesture: (instance, gesture, vault) => gate("drawingGesture", named([instance, gesture], vault), Promise.resolve().then(() => {
         const copy = drawingCopyOf(instance);
-        if (!drawing?.gesto) throw new Error("host fake: il motore finto non ha risposte per i gesti");
-        return drawing.gesto(gesture, copy);
+        if (drawing?.gesto) return drawing.gesto(gesture, copy);
+        if (typeof gesture.tool === "object") return strumentoFinto(gesture, copy);
+        throw new Error("host fake: il motore finto non ha risposte per i gesti");
       })),
       drawingCommands: (instance, selection, vault) => gate("drawingCommands", named([instance, selection], vault), Promise.resolve().then(() => {
         const copy = drawingCopyOf(instance);
@@ -2910,6 +2938,10 @@ export function createFakeHost(options: Options = {}): FakeHost {
       const kind = entryKind(from);
       emit(kind === "document" ? { type: "document_renamed", from, to } : { type: "entry_renamed", from, to, kind });
     },
+    removeFromOutside: (id) => {
+      if (!docs.delete(id)) throw new Error(`host fake: «${id}» non esiste`);
+      emit({ type: "document_removed", id });
+    },
     writeFromOutside: (id, text) => {
       write(id, text);
       const kind = entryKind(id);
@@ -2928,6 +2960,10 @@ export function createFakeHost(options: Options = {}): FakeHost {
       if (!request) throw new Error(`host fake: finestra «${label}» non aperta`);
       for (const handler of windowCloseRequested) handler({ label, surface: "document" });
     },
+    destroyDocumentWindow: (label) => {
+      if (!documentWindows.delete(label)) throw new Error(`host fake: finestra «${label}» non aperta`);
+      for (const handler of windowClosed) handler({ label, surface: "document" });
+    },
     files: () => Object.fromEntries([...docs].map(([id, d]) => [id, d.text])),
     trash: () => [...trash].map(([id, d]) => ({ id, original: d.original })),
     calls,
@@ -2936,7 +2972,11 @@ export function createFakeHost(options: Options = {}): FakeHost {
       if (!onClose) throw new Error("host finto: nessuno ascolta la chiusura della finestra");
       try {
         if (await onClose()) {
-          await gate("finishMainClose", [], Promise.resolve());
+          // Come `finish_main_close` dell'host vero: con una finestra
+          // documento ancora registrata la finestra principale non si chiude.
+          await gate("finishMainClose", [], documentWindows.size
+            ? Promise.reject(new Error("document windows or a vault close have not finished"))
+            : Promise.resolve());
           if (!mainClosed) {
             mainClosed = true;
             window.dispatchEvent(new Event("pagehide"));
@@ -2994,6 +3034,51 @@ const DRAWING_TEMPLATES: Record<string, string> = Object.fromEntries(
     import.meta.glob<string>("../../../../crates/fub-features/templates/*.it.svg", { query: "?raw", import: "default", eager: true }),
   ).map(([path, text]) => [path.split("/").pop()!.replace(/\.it\.svg$/, ""), text]),
 );
+
+/// Lo strumento del motore finto: in anteprima rende un `marquee` dal primo
+/// all'ultimo puntatore della richiesta e un `anchor` sull'ultimo, con lo
+/// strumento occupato; alla fine non cambia niente (`empty`). Serve ai banchi
+/// che guardano i segni e lo stato senza il motore vero.
+export function strumentoFinto(gesture: DrawingGesture, copia: DrawingFakeCopy): DrawingOutcome {
+  const vuoto: DrawingOutcome = {
+    revision: copia.revision,
+    preview: null,
+    ops: null,
+    selection: gesture.selection,
+    losses: [],
+    refused: null,
+    frame: null,
+    state: null,
+    reading: null,
+  };
+  const state = (busy: boolean) => ({
+    busy,
+    transforming: false,
+    wants_text: false,
+    composing: false,
+    cursor: busy ? "crosshair" : "arrow",
+    options: null,
+  });
+  if (gesture.phase !== "preview") return { ...vuoto, refused: gesture.phase === "commit" ? "empty" : null, state: state(false) };
+  const primo = gesture.events[0];
+  const ultimo = gesture.events[gesture.events.length - 1];
+  if (primo === undefined || ultimo === undefined) return { ...vuoto, preview: { shape: null, matrix: null, marquee: null, overlays: [] }, state: state(true) };
+  const [x0, x1] = primo.x <= ultimo.x ? [primo.x, ultimo.x] : [ultimo.x, primo.x];
+  const [y0, y1] = primo.y <= ultimo.y ? [primo.y, ultimo.y] : [ultimo.y, primo.y];
+  return {
+    ...vuoto,
+    preview: {
+      shape: null,
+      matrix: null,
+      marquee: null,
+      overlays: [
+        { kind: "marquee", rect: [x0, y0, x1 - x0, y1 - y0] },
+        { kind: "anchor", at: [ultimo.x, ultimo.y], role: "selection", filled: true, size: 7 },
+      ],
+    },
+    state: state(true),
+  };
+}
 
 /// La spec di `drawing.create` come la dichiara la feature `draw`, in
 /// italiano: le prove della galleria e delle sue porte la danno all'host.

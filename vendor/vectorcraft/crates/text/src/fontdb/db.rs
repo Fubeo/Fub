@@ -95,6 +95,24 @@ impl FontDb {
         self.faces.read().unwrap_or_else(|e| e.into_inner())
     }
 
+    /// Bytes of the font files the faces hold in memory: those added as bytes
+    /// ([`FontDb::add_font`]) and those read from installed font files (a file with several faces
+    /// counts once). The bundled fonts, built into the program, count nothing. Faces can't be
+    /// released: documents and text already laid out name them.
+    ///
+    /// Patch di Fub (`0008-nessuna-radice-e-tabelle`).
+    pub fn faces_bytes(&self) -> usize {
+        let faces = self.read_faces();
+        let mut seen = std::collections::HashSet::new();
+        faces
+            .iter()
+            .filter_map(|f| match &f.bytes {
+                FontBytes::Owned(b) => seen.insert(Arc::as_ptr(b) as usize).then(|| b.capacity()),
+                FontBytes::Static(_) => None,
+            })
+            .sum()
+    }
+
     pub(super) fn read_catalog(&self) -> std::sync::RwLockReadGuard<'_, Catalog> {
         self.ensure_catalog();
         self.catalog.read().unwrap_or_else(|e| e.into_inner())

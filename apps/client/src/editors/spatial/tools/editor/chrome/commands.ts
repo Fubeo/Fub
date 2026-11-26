@@ -5,11 +5,14 @@
 // ricerca dei comandi (Ctrl+/) e il menu radiale. Un comando nuovo entra da
 // uno di quei posti, e la ricerca lo trova senza altro lavoro.
 
+import { CAMBIA_UNITA, cambiaUnita } from "./unita";
 import { displayBinding } from "../../../../../ui/commands";
 import type { MenuItem } from "../../../../../ui/menu";
 import { t } from "../../../strings";
 import { toolsOf, toolSpec, type ToolId } from "../../registry";
 import type { EditorContext } from "../context";
+import type { AzioniVociCompleto } from "./command-search";
+import { isComandoBanda, VOCI_ESPORTA, VOCI_IMMAGINI } from "./status";
 
 /// Quando un comando vale: sempre, con uno strumento, con una selezione.
 export type CommandContext = "always" | "tool" | "selection";
@@ -85,6 +88,34 @@ function shown(ctx: EditorContext, control: HTMLElement): boolean {
     if (at.hidden) return false;
   }
   return true;
+}
+
+/// Ciò che il Disegno completo chiede all'editor per le sue voci: lo strumento
+/// del motore (che l'editor sceglie) e «Riprova». I comandi del motore non
+/// passano più di qui: partono da `eseguiVoce` (`completo/esegui.ts`).
+export function azioniVoci(ctx: EditorContext, riprova: () => void): AzioniVociCompleto {
+  return {
+    // Uno strumento del motore: Mano e Zoom sono anche di Fub, e li fa Fub;
+    // gli altri li sceglie il motore, con la loro famiglia (K6 T11).
+    strumento: (id) => {
+      if (toolsOf(ctx.features).some((spec) => spec.id === id)) ctx.pickTool(id as ToolId);
+      else ctx.sceltaMotore(id);
+    },
+    // Una voce del client: la banda e ≡ › Visualizza del Completo (`status.ts`). Le
+    // altre non sono collegate, e lo stato le dice spente (`statoVoce`), quindi non
+    // arrivano qui.
+    client: (id) => eseguiVoceClient(ctx, id),
+    riprova,
+  };
+}
+
+/// Una voce del client che l'editor fa (la banda, ≡ › Visualizza, Cambia unità): dalla ricerca,
+/// dal menu o dal suo tasto (`OpzioniTastiCompleto.client`). Le altre non le conosce.
+export function eseguiVoceClient(ctx: EditorContext, id: string): void {
+  if (id === CAMBIA_UNITA) cambiaUnita(ctx);
+  else if (VOCI_IMMAGINI[id] !== undefined) VOCI_IMMAGINI[id]!(ctx);
+  else if (VOCI_ESPORTA[id] !== undefined) VOCI_ESPORTA[id]!(ctx);
+  else if (isComandoBanda(id)) ctx.comandoVista(id);
 }
 
 export function installCommands(ctx: EditorContext): void {

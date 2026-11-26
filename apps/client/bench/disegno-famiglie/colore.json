@@ -1,0 +1,156 @@
+{
+  "$nota": "Le risposte della famiglia colore del banco (K6 T14 e T15): l'anteprima di Satura, i campioni e i colori dati alla selezione, e la sfumatura (giro 5). Il banco non riscrive il disegno: un passo senza operazioni, la scena si guarda. `paint.toggleActive` (giro 6, prima di salvare una preimpostata) non cambia niente. `paint.proxies` (la Guida colori senza scelta) legge i colori di un disegno nuovo: riempimento bianco, traccia nera. `color.harmony` dà la guida di quel bianco, per ogni regola: due righe dal grigio al bianco. `colorTheme.list`: nessun tema salvato.",
+  "risposte": [
+    {
+      "comando": "disegno.edit.colors.saturate",
+      "esito": {
+        "preview": {
+          "shape": null,
+          "matrix": null,
+          "marquee": null,
+          "overlays": [
+            {
+              "kind": "path",
+              "d": "M292.99 170.14A73.3 36.07 0 1 0 146.39 170.14A73.3 36.07 0 1 0 292.99 170.14Z",
+              "role": "preview",
+              "width": 1,
+              "dashed": false
+            }
+          ]
+        }
+      }
+    },
+    {
+      "comando": "disegno.swatch.new",
+      "esito": {
+        "ops": "[]"
+      }
+    },
+    {
+      "comando": "disegno.swatch.edit",
+      "esito": {
+        "ops": "[]"
+      }
+    },
+    {
+      "comando": "disegno.swatch.delete",
+      "esito": {
+        "ops": "[]"
+      }
+    },
+    {
+      "comando": "disegno.swatch.addUsedColors",
+      "esito": {
+        "ops": "[]"
+      }
+    },
+    {
+      "comando": "disegno.paint.setFill",
+      "esito": {
+        "ops": "[]"
+      }
+    },
+    {
+      "comando": "disegno.paint.setStroke",
+      "esito": {
+        "ops": "[]"
+      }
+    },
+    {
+      "comando": "disegno.paint.editGradient",
+      "esito": {
+        "ops": "[]"
+      }
+    },
+    {
+      "comando": "disegno.paint.setGradientGeom",
+      "esito": {
+        "ops": "[]"
+      }
+    },
+    {
+      "comando": "disegno.paint.lastGradient",
+      "esito": {
+        "ops": "[]"
+      }
+    },
+    {
+      "comando": "disegno.paint.toggleActive",
+      "esito": {
+        "ops": "[]"
+      }
+    },
+    {
+      "comando": "disegno.paint.proxies",
+      "esito": {
+        "reading": {
+          "fill": {
+            "type": "solid",
+            "color": {
+              "model": "rgb",
+              "r": 1,
+              "g": 1,
+              "b": 1
+            }
+          },
+          "stroke": {
+            "type": "solid",
+            "color": {
+              "model": "rgb",
+              "r": 0,
+              "g": 0,
+              "b": 0
+            }
+          },
+          "fillActive": true,
+          "fillMixed": false,
+          "strokeMixed": false
+        }
+      }
+    },
+    {
+      "comando": "disegno.color.harmony",
+      "esito": {
+        "reading": {
+          "rule": "complementary",
+          "colors": [
+            "#ffffff",
+            "#ffffff"
+          ],
+          "grid": [
+            [
+              "#808080",
+              "#9f9f9f",
+              "#bfbfbf",
+              "#dfdfdf",
+              "#ffffff",
+              "#ffffff",
+              "#ffffff",
+              "#ffffff",
+              "#ffffff"
+            ],
+            [
+              "#808080",
+              "#9f9f9f",
+              "#bfbfbf",
+              "#dfdfdf",
+              "#ffffff",
+              "#ffffff",
+              "#ffffff",
+              "#ffffff",
+              "#ffffff"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "comando": "disegno.colorTheme.list",
+      "esito": {
+        "reading": {
+          "themes": []
+        }
+      }
+    }
+  ]
+}

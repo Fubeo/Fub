@@ -1,0 +1,186 @@
+{
+  "$generato": "File generato da crates/fub-disegno/tests/ts_indice.rs, non modificare a mano; rigenera con UPDATE_MIRROR=1 cargo test -p fub-disegno --test ts_indice",
+  "famiglia": "trasforma",
+  "finestre": [
+    {
+      "fonte": "motore",
+      "id": "addon.arrange.randomizeOpacity",
+      "campi": [
+        {
+          "nome": "min",
+          "tipo": "numero",
+          "facoltativo": false,
+          "minimo": 0.0,
+          "massimo": 100.0,
+          "predefinito": 30.0
+        },
+        {
+          "nome": "max",
+          "tipo": "numero",
+          "facoltativo": false,
+          "minimo": 0.0,
+          "massimo": 100.0,
+          "predefinito": 100.0
+        },
+        {
+          "nome": "seed",
+          "tipo": "numero",
+          "facoltativo": false,
+          "predefinito": 0.0
+        }
+      ]
+    },
+    {
+      "fonte": "motore",
+      "id": "addon.arrange.size",
+      "campi": [
+        {
+          "nome": "width",
+          "tipo": "numero",
+          "facoltativo": false,
+          "minimo": 0.001,
+          "massimo": 1000000.0,
+          "predefinito": 100.0
+        },
+        {
+          "nome": "height",
+          "tipo": "numero",
+          "facoltativo": false,
+          "minimo": 0.001,
+          "massimo": 1000000.0,
+          "predefinito": 50.0
+        },
+        {
+          "nome": "proportional",
+          "tipo": "sino",
+          "facoltativo": false,
+          "predefinito": false
+        }
+      ]
+    },
+    {
+      "fonte": "motore",
+      "id": "object.move",
+      "campi": [
+        {
+          "nome": "dx",
+          "tipo": "numero",
+          "facoltativo": false,
+          "predefinito": 0.0
+        },
+        {
+          "nome": "dy",
+          "tipo": "numero",
+          "facoltativo": false,
+          "predefinito": 0.0
+        }
+      ]
+    },
+    {
+      "fonte": "motore",
+      "id": "object.reflect",
+      "campi": [
+        {
+          "nome": "axis",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "vertical",
+            "horizontal"
+          ],
+          "aperta": false,
+          "predefinito": "vertical"
+        }
+      ]
+    },
+    {
+      "fonte": "motore",
+      "id": "object.rotate",
+      "campi": [
+        {
+          "nome": "angle",
+          "tipo": "numero",
+          "facoltativo": false,
+          "predefinito": 0.0
+        }
+      ]
+    },
+    {
+      "fonte": "motore",
+      "id": "object.scale",
+      "campi": [
+        {
+          "nome": "sx",
+          "tipo": "numero",
+          "facoltativo": false,
+          "minimo": 0.01,
+          "massimo": 10000.0,
+          "predefinito": 100.0
+        }
+      ]
+    },
+    {
+      "fonte": "motore",
+      "id": "object.shear",
+      "campi": [
+        {
+          "nome": "angle",
+          "tipo": "numero",
+          "facoltativo": false,
+          "predefinito": 0.0
+        },
+        {
+          "nome": "axis",
+          "tipo": "scelta",
+          "facoltativo": true,
+          "valori": [
+            "horizontal",
+            "vertical"
+          ],
+          "aperta": false,
+          "predefinito": "horizontal"
+        }
+      ]
+    },
+    {
+      "fonte": "motore",
+      "id": "object.transformEach",
+      "campi": [
+        {
+          "nome": "scaleH",
+          "tipo": "numero",
+          "facoltativo": false,
+          "minimo": 0.01,
+          "massimo": 10000.0,
+          "predefinito": 100.0
+        },
+        {
+          "nome": "scaleV",
+          "tipo": "numero",
+          "facoltativo": false,
+          "minimo": 0.01,
+          "massimo": 10000.0,
+          "predefinito": 100.0
+        },
+        {
+          "nome": "moveH",
+          "tipo": "numero",
+          "facoltativo": false,
+          "predefinito": 0.0
+        },
+        {
+          "nome": "moveV",
+          "tipo": "numero",
+          "facoltativo": false,
+          "predefinito": 0.0
+        },
+        {
+          "nome": "rotate",
+          "tipo": "numero",
+          "facoltativo": false,
+          "predefinito": 0.0
+        }
+      ]
+    }
+  ]
+}

@@ -78,10 +78,22 @@ Radice di un documento nuovo:
 
 - **Livello:** un `<g>` figlio della radice con `fub:layer="Nome"` (al massimo
   80 caratteri) e id che inizia con `l`; un documento nuovo ha «Livello 1».
+- **Sottolivello:** un `<g>` con `fub:layer` figlio di un livello, a qualunque
+  profondità di livelli; sta fra gli oggetti del livello, nel loro ordine, e
+  ne eredita blocco, visibilità, trasformazione e ritaglio. Un `<g>` con
+  `fub:layer` dentro un gruppo resta un gruppo
+  ([ADR 0251](../decisions/0251-sottolivelli-nel-formato-della-scena.md)).
 - **Gruppo:** un `<g>` senza `fub:layer`, dentro un livello o un altro gruppo.
 - **Blocco e visibilità:** livelli, gruppi, collegamenti e forme si bloccano
   con `fub:locked="true"`, che li toglie dalla scelta sul foglio e ferma ciò
   che contengono; `display="none"` li nasconde, anche negli altri programmi.
+- **Tracciato-guida:** un `path`, `rect`, `ellipse`, `circle`, `line`,
+  `polyline` o `polygon` con `fub:guide="true"` è una
+  guida a forma libera (Crea guide del Completo). Porta sempre anche
+  `display="none"`, così gli altri programmi e l'esportazione non lo
+  disegnano; l'editor lo mostra come le guide del documento
+  ([formato della scena, unità e guide](scene-format-rulers.md)). Un altro
+  valore, o l'attributo su un altro elemento, non conta e resta nel file.
 - **Elementi fuori da ogni livello**, come negli SVG estranei adottati:
   appartengono a un livello implicito alla radice e non si spostano da soli.
 
@@ -108,8 +120,9 @@ Radice di un documento nuovo:
 
 **Attributi di presentazione ammessi:**
 
-- riempimento e contorno: `fill`, `fill-opacity`, `stroke`, `stroke-width`,
-  `stroke-opacity`, `stroke-linecap`, `stroke-linejoin`, `stroke-dasharray`;
+- riempimento e contorno: `fill`, `fill-opacity`, `fill-rule`, `stroke`, `stroke-width`,
+  `stroke-opacity`, `stroke-linecap`, `stroke-linejoin`, `stroke-dasharray`,
+  `stroke-dashoffset`, `stroke-miterlimit`;
 - visibilità, [fusione](scene-format-effects.md) e trasformazione: `opacity`, `style`, `display`, `transform`;
 - testo: `font-family`, `font-size`, `font-weight`, `font-style`, `letter-spacing`,
   `text-decoration`, `text-anchor`, e `dy` sui `tspan` ([testo](scene-format-text.md));
@@ -120,7 +133,8 @@ Radice di un documento nuovo:
 **Valori:**
 
 - **Lunghezze e coordinate** (`x y dy cx cy r width height rx ry x1 y1 x2 y2`,
-  `stroke-width`, `font-size`, le voci di `stroke-dasharray`): un numero SVG,
+  `stroke-width`, `font-size`, le voci di `stroke-dasharray`,
+  `stroke-dashoffset`): un numero SVG,
   cioè segno facoltativo, cifre con o senza decimali ed esponente facoltativo
   (`-1.5`, `.5`, `1e3`). Il numero può avere un'unità assoluta (`px`, `in`,
   `cm`, `mm`, `Q`, `pt`, `pc`), che si converte in unità utente con i rapporti
@@ -139,12 +153,32 @@ Radice di un documento nuovo:
 - **`points`:** coppie di numeri SVG separate da spazi o virgole; un numero
   dispari di valori rende l'elemento estraneo.
 - **`stroke-dasharray`:** `none` oppure una lista di lunghezze non negative.
+- **`stroke-dashoffset`:** una lunghezza, anche negativa: dove comincia il
+  tratteggio lungo il contorno.
+- **`stroke-miterlimit`:** un numero SVG non minore di 1 (senza unità): oltre
+  quel rapporto fra la punta e lo spessore, una giunzione ad angolo diventa
+  smussata. Senza l'attributo vale 4, come in SVG; il Disegno completo lo
+  scrive solo con la giunzione ad angolo e un valore diverso da 4 (il suo
+  predefinito è 10). Un valore minore di 1 rende l'elemento estraneo.
+- **Il tratto che un attributo non dice:** il tratto dentro o fuori dalla
+  forma, il tratteggio adattato agli angoli e le frecce del Disegno completo
+  si scrivono come li esporta VectorCraft: l'oggetto diventa un `<g>` con il
+  suo id, che porta la grafica semplice (il tratto dentro è il tratto a
+  spessore doppio con un `clip-path` sulla forma, quello fuori lo stesso con
+  una `mask` che toglie la forma; il tratteggio adattato e le punte sono
+  tracciati pieni), più la [ricetta](scene-format-recipe.md) dell'oggetto.
+  Ogni programma disegna lo stesso; il Disegno completo ritrova il tratto
+  dalla ricetta, e un Fub che non la conosce tiene il gruppo com'è.
 - **Colori:** si scrivono `#rrggbb` minuscolo oppure `none`. In lettura si
   accettano anche `#rgb` e i nomi CSS, normalizzati solo se l'elemento viene
   modificato. Ogni altra forma (`rgb()`, `hsl()`, `currentColor`,
   `transparent`, `inherit`) rende l'elemento estraneo.
 - **Opacità:** un numero SVG da 0 a 1, senza percentuale.
-- **Parole chiave:** `display` ammette `none` e `inline`; `stroke-linecap`
+- **Parole chiave:** `display` ammette `none` e `inline`; `fill-rule`
+  `nonzero` ed `evenodd` (con `evenodd` un buco si fa anche coi
+  sottotracciati nello stesso verso; senza l'attributo vale `nonzero`, come
+  in SVG; il Disegno completo la scrive solo dove cambia quella ereditata,
+  quindi `nonzero` soltanto dentro un genitore `evenodd`); `stroke-linecap`
   `butt`, `round` e `square`; `stroke-linejoin` `miter`, `round` e `bevel`;
   `font-weight` `normal`, `bold` e le centinaia da `100` a `900`; `font-style`
   `normal`, `italic` e `oblique`; `text-anchor` `start`, `middle` e `end`; `preserveAspectRatio` la grammatica
@@ -270,10 +304,10 @@ non converte `d`. Solo i valori nuovi seguono le regole sui numeri.
 2. **Ordine degli attributi:**
    1. `id`;
    2. `fub:layer`, `fub:role`, `fub:name`, `fub:source`, `fub:repeat`, `fub:style`, `fub:marker`, `fub:board`, `fub:tool`, `fub:shape`, `fub:geom`,
-      `fub:from`, `fub:to`, `fub:along`, `fub:inside`, `fub:wrap`, `fub:join`, `fub:leading`, `fub:locked`, `fub:at`, `fub:brush`;
+      `fub:from`, `fub:to`, `fub:along`, `fub:inside`, `fub:wrap`, `fub:join`, `fub:leading`, `fub:locked`, `fub:guide`, `fub:at`, `fub:brush`;
    3. geometria: `x y dy cx cy r width height rx ry x1 y1 x2 y2 points d startOffset`;
-   4. presentazione: `fill fill-opacity stroke stroke-width stroke-opacity stroke-linecap
-      stroke-linejoin stroke-dasharray opacity style display font-family font-size font-weight
+   4. presentazione: `fill fill-opacity fill-rule stroke stroke-width stroke-opacity stroke-linecap
+      stroke-linejoin stroke-dasharray stroke-dashoffset stroke-miterlimit opacity style display font-family font-size font-weight
       font-style letter-spacing text-decoration text-anchor preserveAspectRatio`;
    5. `transform`, poi `href`;
    6. gli attributi `fub:*` sconosciuti e quelli di altri namespace,

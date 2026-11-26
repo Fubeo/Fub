@@ -34,6 +34,13 @@
 //! single vault; a state mixing vaults stops sync until the operator
 //! recovers it (see [`vault_dir`]).
 //!
+//! `state.json` is written as compact JSON (same schema; indented files from
+//! older versions load the same). Between requests the folded state, the
+//! queue counts and the pull cursors stay in memory, checked against the
+//! file on every request: the disk stays the only authority (module
+//! `cache`). A pull page is still addressed by its offset in the snapshot;
+//! the cursor only finds it without counting from the start.
+//!
 //! A replica is NOT a backup: versions/tombstones/conflicts expire by
 //! `retention_days`; restore is a new write, never a resurrection of an old
 //! vector.
@@ -64,6 +71,7 @@ use versions::{
 };
 
 mod auth;
+mod cache;
 mod dispatch;
 mod fold;
 mod history;
@@ -74,6 +82,8 @@ mod sharing;
 mod vault_state;
 
 use auth::{account_of, authorize, check_op_aad, check_role, check_wire_protocol, step_up_mfa};
+use cache::VaultState;
+use cache::{PullCursor, PullCursorKey};
 pub use dispatch::{admit, handle, vault_dir, vault_of_request, Admission, VaultWork};
 use dispatch::{
     decode_query_value, query_get, scope_of, sync_dir_of, valid_replica_id, vault_dir_of, VaultJob,
@@ -82,15 +92,16 @@ use dispatch::{
 use fold::{fold_op, FoldOutcome};
 use history::{admit_restore, admit_trash, admit_versions, run_restore, run_trash, run_versions};
 use pull::{admit_ack, admit_pull, admit_status, run_ack, run_pull, run_status};
-use push::{admit_push, op_from_version, run_push};
+use push::{admit_push, op_from_parsed_version, op_from_version, run_push};
 use shares::{load_shares, merge_grants, save_shares};
 pub use shares::{vault_resource, StoredInvite, SyncShares};
+pub use sharing::INITIAL_KEY_EPOCH;
 use sharing::{
     handle_invite, handle_invite_accept, handle_revoke, handle_vault_key_get,
     handle_vault_key_store,
 };
 pub use vault_state::LEGACY_STATE_ASIDE;
-use vault_state::{adopt_legacy, already_folded, cap_seen, load_folded};
+use vault_state::{adopt_legacy, already_folded, cap_seen, open_vault};
 
 /// Wire op envelope. Field names are the contract: changing one breaks the
 /// host client (`crates/fub-host/src/remote/sync.rs`), which mirrors them.
@@ -380,15 +391,15 @@ pub fn is_syncable_doc(doc_id: &str) -> bool {
     true
 }
 
+/// The extension of the file name, lowercased: what follows its last dot.
+/// A name without a dot (`Makefile`) or with only a leading one
+/// (`.gitignore`) has none, as for `std::path::Path::extension`.
 fn ext_of(doc_id: &str) -> String {
-    doc_id
-        .rsplit('/')
-        .next()
-        .unwrap_or(doc_id)
-        .rsplit('.')
-        .next()
-        .unwrap_or("")
-        .to_ascii_lowercase()
+    let name = doc_id.rsplit('/').next().unwrap_or(doc_id);
+    match name.rsplit_once('.') {
+        Some((stem, ext)) if !stem.is_empty() => ext.to_ascii_lowercase(),
+        _ => String::new(),
+    }
 }
 
 /// Apply [`SyncSelection`] on top of [`is_syncable_doc`].
@@ -440,6 +451,9 @@ pub fn is_selected(sel: &SyncSelection, doc_id: &str) -> bool {
 
 #[cfg(test)]
 mod authenticated_version_tests;
+
+#[cfg(test)]
+mod cache_tests;
 
 #[cfg(test)]
 mod vault_scope_tests {

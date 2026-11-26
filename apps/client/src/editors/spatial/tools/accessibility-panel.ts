@@ -39,6 +39,7 @@ import { plural, t, type DrawKey } from "../strings";
 import type { Problem, ReadingRow } from "./audit";
 import { cleanName, NAME_MAX } from "./naming";
 import { ROW_PX } from "./objects";
+import { composingKey } from "../../../kit/ime";
 
 /// I problemi che si mostrano alla volta.
 const PAGE = 100;
@@ -349,7 +350,7 @@ export function createAccessPanel(life: Lifetime, options: AccessPanelOptions): 
     field.setAttribute("aria-label", t("draw.access.describe.label", { name: nameOf(key) }));
     describing = { key, field };
     life.listen(field, "keydown", (event) => {
-      if (event.key !== "Enter" && event.key !== "Escape") return;
+      if ((event.key !== "Enter" && event.key !== "Escape") || composingKey(event)) return;
       event.preventDefault();
       event.stopPropagation();
       finishDescribing(event.key === "Enter");

@@ -124,11 +124,13 @@ export function routeHref(href: string): HrefRoute {
   if (href.startsWith("#")) return { kind: "fragment", id: href.slice(1) };
   if (/^https?:/i.test(href)) return { kind: "web" };
   if (hasScheme(href) || external(href)) return { kind: "system" };
-  return { kind: "path", path: safeDecode(href) };
+  return { kind: "path", path: decodeHref(href) };
 }
 
 /// Un `href` relativo arriva codificato (`Nota%20uno.md`), un path del vault no.
-function safeDecode(href: string): string {
+/// Un `%` che non codifica niente (`report_50%.md`) lascia il testo com'è
+/// scritto: `decodeURI` lancerebbe `URIError`.
+export function decodeHref(href: string): string {
   try {
     return decodeURI(href);
   } catch {

@@ -18,7 +18,7 @@
 //
 // # Perché `.mjs` e non `.ts`
 //
-// Perché lo leggono in due, e uno dei due è Node: il fotografo (`foto.mjs`) gira
+// Perché lo leggono anche programmi di Node: il fotografo (`photos.mjs`) gira
 // fuori dal browser e fuori da Vite. È la stessa riga di confine del
 // `tsconfig.json` di questa cartella — **`.ts` è del browser, `.mjs` è di
 // Node** — e tenerla vuol dire che il fotografo non ha bisogno di un
@@ -917,6 +917,46 @@ export const SCENE = touchLast(onPage("shell", [
       await page.waitForFunction(() => document.activeElement?.matches('.base-cal-day[data-day="2026-08-13"]'));
     },
   },
+  // **La vista Mappa**, su `?base=mappa`: otto musei del mondo e un
+  // fornitore di tessere di prova. Con `tessere=0` la riga di macchina è
+  // vuota e la mappa dice «tessere non ammesse» col rimando alle
+  // Impostazioni; con `tessere=1` il sito è ammesso, «Attiva» è il consenso e
+  // le tessere arrivano dall'host finto.
+  {
+    id: "base-mappa-non-ammesse",
+    title: "Base: la Mappa offline, con le tessere non ammesse e il rimando alle Impostazioni",
+    query: "base=mappa&tessere=0",
+    prepare: openMap,
+  },
+  {
+    id: "base-mappa-consenso",
+    title: "Base: la Mappa offline con il sito ammesso, prima del consenso",
+    query: "base=mappa&tessere=1",
+    prepare: openMap,
+  },
+  {
+    id: "base-mappa-tessere",
+    title: "Base: la Mappa con le tessere arrivate dopo «Attiva»",
+    query: "base=mappa&tessere=1",
+    prepare: openMapTiles,
+  },
+  {
+    id: "base-mappa-tessere-stretta",
+    title: "Base: la Mappa con le tessere nella finestra minima, 800 px",
+    query: "base=mappa&tessere=1",
+    viewport: NOTE_NARROW,
+    prepare: openMapTiles,
+  },
+  {
+    id: "settings-tessere",
+    title: "Le preferenze: Privacy, i siti delle tessere delle mappe vuoti e OpenStreetMap con un clic",
+    query: "tessere=0",
+    prepare: async (page) => {
+      await page.click("#open-settings");
+      await page.waitForSelector('#settings-body .setting-row[data-setting-key="map.tile-hosts"] .setting-list-add');
+      await page.$eval('.setting-row[data-setting-key="map.tile-hosts"]', (row) => row.scrollIntoView({ block: "start" }));
+    },
+  },
   // **La linea del tempo** (T34), su `?base=tempo`: otto settimane dal 10
   // agosto 2026 (oggi il 19), le opere dalla richiesta alla consegna: una
   // tagliata a sinistra, una rovesciata, un punto, una con l'ora, una oltre i
@@ -1399,6 +1439,281 @@ export const SCENE = touchLast(onPage("shell", [
     viewport: { width, height: 800 },
     prepare: openDrawing,
   })),
+  // **La scheda Risorse** (K6 T10): il Disegno completo, con la scheda Risorse
+  // aperta. `campioni` dice quanti campioni del documento ha il disegno
+  // (`?campioni=N`, vedi `fake-ipc.ts`): 24 come il prototipo, 500 per lo stato
+  // con molte voci, 0 per il vuoto.
+  ...[
+    ["disegno-risorse", 24, "La scheda Risorse con 24 campioni del documento"],
+    ["disegno-risorse-molti", 500, "La scheda Risorse con 500 campioni: scorre dentro la scheda, senza spostare il resto"],
+    ["disegno-risorse-vuoto", 0, "La scheda Risorse senza campioni: lo stato vuoto"],
+  ].map(([id, campioni, title]) => ({
+    id,
+    title,
+    query: `connectors=6&drawing=acceso&campioni=${campioni}`,
+    prepare: openRisorse,
+  })),
+  // **Design** (K6 T10): con un punto scelto (Posizione e misure), e senza
+  // nulla scelto (il documento, con le sezioni del registro), a 1280 px. Sotto
+  // gli 800 px del desktop la shell è quella del telefono, senza ispettore: il
+  // Design a 700 px non ha una scena desktop.
+  {
+    id: "disegno-design",
+    title: "Design con un punto scelto: Posizione e misure, a 1280 px",
+    query: "connectors=6&drawing=acceso",
+    prepare: openDesignoScelto,
+  },
+  {
+    id: "disegno-design-vuoto",
+    title: "Design senza nulla scelto: il documento, a 1280 px",
+    query: "connectors=6&drawing=acceso",
+    prepare: openDesignoVuoto,
+  },
+  // **La finestra del comando** (K6 T6, «Sposta tracciato» del prototipo
+  // `PLAN-ui/disegno-completo.html`): la famiglia pronta, con l'anteprima accesa
+  // a destra del foglio; la famiglia che si carica, e quella che non si carica
+  // (la memoria dei motori piena, con «Riprova»). Ognuna a 1280 e a 700 px, in
+  // giorno e notte. Le risposte sono quelle finte del motore del banco
+  // (`fake-ipc.ts`, `window.bench.finestra`).
+  ...[
+    ["disegno-finestra", "finestra", "La finestra «Sposta tracciato» sul disegno, con l'anteprima accesa: lascia vedere il foglio"],
+    ["disegno-finestra-caricamento", "caricamento", "La finestra mentre la famiglia si carica: il caricamento, e OK spento"],
+    ["disegno-finestra-errore", "errore", "La finestra quando la famiglia non si carica: la memoria dei motori è piena, e «Riprova»"],
+  ].flatMap(([id, stato, title]) => [
+    {
+      id,
+      title,
+      query: "connectors=6&drawing=acceso",
+      prepare: (page) => openDrawingWindow(page, stato),
+    },
+    {
+      id: `${id}-800`,
+      title: `${title}, nella finestra minima del desktop (800 px)`,
+      query: "connectors=6&drawing=acceso",
+      viewport: { width: 800, height: 800 },
+      prepare: (page) => openDrawingWindow(page, stato),
+    },
+  ]),
+  // **Lo spazio di lavoro nella banda** (K6 T7): il bottone accanto alla
+  // modalità, il suo menu aperto (Semplice, Completo, gli otto spazi del
+  // Completo, le azioni), il Completo spento, il Completo che non si carica, e
+  // il fuoco da tastiera. A 1280 e a 700 px, in giorno e in notte.
+  ...[
+    ["disegno-banda", 1280, "Lo spazio di lavoro nella banda, accanto alla modalità", null, openDrawing],
+    ["disegno-banda-800", 800, "Lo spazio di lavoro nella banda in un foglio stretto, 800 px, la finestra minima del desktop", null, openDrawing],
+    ["disegno-banda-aperta", 1280, "Lo spazio di lavoro aperto: Semplice, Completo, gli spazi del Completo, Ripristina, Salva e Gestisci", null, openWorkspaceMenu],
+    ["disegno-banda-aperta-800", 800, "Lo spazio di lavoro aperto in un foglio stretto, 800 px, la finestra minima del desktop", null, openWorkspaceMenu],
+    ["disegno-spento", 1280, "Il disegno completo spento: gli spazi del Completo grigi, con il perché, e «Apri Componenti…»", "componenti=motore-spento", openWorkspaceMenu],
+    ["disegno-banda-errore", 1280, "Il disegno completo non si carica: il menu lo dice, e «Riprova»", null, openWorkspaceErrorMenu],
+    ["disegno-banda-fuoco", 1280, "Il bottone dello spazio di lavoro col fuoco da tastiera", null, focusWorkspaceButton],
+  ].map(([id, width, title, extra, prepare]) => ({
+    id,
+    title,
+    query: extra === null ? "connectors=6" : `connectors=6&${extra}`,
+    viewport: { width, height: 800 },
+    prepare,
+  })),
+  // **La colonna del Completo** (K6 T8): la colonna a sei gruppi, la tendina di
+  // una casella, il cassetto «Tutti gli strumenti» (con la ricerca), e la colonna
+  // del Completo spento. A 1280 e a 700 px, in giorno e in notte.
+  ...[
+    ["disegno-completo", 1280, "La colonna del Completo: sei gruppi, le caselle che stanno, «Tutti gli strumenti» in fondo", null, openDrawing],
+    ["disegno-completo-800", 800, "La colonna del Completo nella finestra minima del desktop, 800 px", null, openDrawing],
+    ["disegno-gruppo", 1280, "La tendina della casella a più strumenti, aperta da tastiera con la freccia di lato", null, openColumnGroup],
+    ["disegno-gruppo-800", 800, "La tendina della casella nella finestra minima del desktop, 800 px", null, openColumnGroup],
+    ["disegno-cassetto", 1280, "Tutti gli strumenti: il cassetto con i gruppi per famiglia", null, openDrawerScene],
+    ["disegno-cassetto-800", 800, "Il cassetto nella finestra minima del desktop, 800 px", null, openDrawerScene],
+    ["disegno-cassetto-cerca", 1280, "Il cassetto con la ricerca scritta: restano i nomi che la contengono", null, (page) => openDrawerScene(page, "pe")],
+    ["disegno-spento-colonna", 1280, "La colonna del Completo spento: la colonna nativa, 44 px di larghezza", "componenti=motore-spento", openDrawing],
+  ].map(([id, width, title, extra, prepare]) => ({
+    id,
+    title,
+    query: extra === null ? "connectors=6" : `connectors=6&${extra}`,
+    viewport: { width, height: 800 },
+    prepare,
+  })),
+  // **La famiglia «nucleo»** (K6 T11): gli strumenti del motore per scegliere
+  // e per la vista nella colonna del Completo, col motore del banco acceso; la
+  // tendina della casella «Scegli» aperta, e la Selezione diretta scelta (la
+  // sua famiglia pronta, la fila delle opzioni in testata senza un gesto).
+  ...[
+    ["disegno-fam-nucleo", 1280, "Il nucleo nella colonna: Selezione, Selezione diretta, Lazo e la vista del motore, coi nomi e le icone", openDrawing],
+    ["disegno-fam-nucleo-800", 800, "Il nucleo nella colonna nella finestra minima del desktop, 800 px", openDrawing],
+    ["disegno-fam-nucleo-tendina", 1280, "La tendina della casella «Scegli»: Selezione di Fub e Selezione del motore", openColumnGroup],
+    ["disegno-fam-nucleo-diretta", 1280, "La Selezione diretta del motore scelta: la casella accesa, e la famiglia pronta senza un gesto", scegliSelezioneDiretta],
+    ["disegno-fam-nucleo-diretta-800", 800, "La Selezione diretta del motore scelta nella finestra minima del desktop, 800 px", scegliSelezioneDiretta],
+    // La famiglia «vista» (K6 T11): il menu dello zoom della banda, aperto dalla
+    // sua voce come lo apre chi preme.
+    ["disegno-fam-vista", 1280, "Il menu dello zoom della banda: ingrandisci, riduci, 100 %, adatta tutto e il campo della percentuale", openZoomMenu],
+    ["disegno-fam-vista-800", 800, "Il menu dello zoom della banda nella finestra minima del desktop, 800 px", openZoomMenu],
+    // ≡ › Visualizza del Completo (K6 T11, giro E) e il navigatore della banda.
+    ["disegno-visualizza", 1280, "≡ › Visualizza del Completo: le voci che il client fa, con la spunta vera, e il sottomenu aperto", openVisualizza],
+    ["disegno-visualizza-800", 800, "≡ › Visualizza del Completo nella finestra minima del desktop, 800 px", openVisualizza],
+    ["disegno-navigatore", 1280, "Il navigatore della banda acceso: la panoramica del foglio in basso a destra, con il riquadro della vista", openNavigatore],
+    ["disegno-navigatore-800", 800, "Il navigatore della banda nella finestra minima del desktop, 800 px", openNavigatore],
+    ["disegno-righelli", 1280, "I righelli del bordo del foglio, accesi da ≡ › Visualizza: tacche e numeri nell'unità del documento", openRighelli],
+    ["disegno-righelli-800", 800, "I righelli del bordo nella finestra minima del desktop, 800 px", openRighelli],
+  ].map(([id, width, title, prepare]) => ({
+    id,
+    title,
+    query: "connectors=6&drawing=acceso",
+    viewport: { width, height: 800 },
+    prepare,
+  })),
+  // **La famiglia «tracciati»** (K6 T12): la tendina della casella «Penna»
+  // aperta, coi nove strumenti del motore; la Selezione diretta con un punto
+  // scelto (`?punti=1`), con la fila dei punti in testata. A 1280 e a 800 px.
+  ...[
+    ["disegno-fam-tracciati-penna", 1280, "La tendina della casella «Penna»: la Penna di Bézier e gli strumenti dei punti", "", (page) => openRailFlyout(page, "motore:pen")],
+    ["disegno-fam-tracciati-penna-800", 800, "La tendina della casella «Penna» nella finestra minima del desktop, 800 px", "", (page) => openRailFlyout(page, "motore:pen")],
+    ["disegno-fam-tracciati-punto", 1280, "La Selezione diretta con un punto scelto: Converti, Punto e la posizione del punto", "&punti=1", scegliSelezioneDirettaCoiPunti],
+    ["disegno-fam-tracciati-punto-800", 800, "La Selezione diretta con un punto scelto nella finestra minima del desktop, 800 px", "&punti=1", scegliSelezioneDirettaCoiPunti],
+    // La sezione «Punto di ancoraggio» del Design coi punti scelti (giro 4), e
+    // Sposta tracciato con l'anteprima del banco (`disegno-famiglie/tracciati.json`).
+    ["disegno-fam-tracciati-sezione", 1280, "La sezione «Punto di ancoraggio» del Design con un punto scelto: Converti in angolo o morbido", "&punti=1&comandi=risposti", openSezionePunto],
+    ["disegno-fam-tracciati-sezione-800", 800, "La sezione «Punto di ancoraggio» nella finestra minima del desktop, 800 px", "&punti=1&comandi=risposti", openSezionePunto],
+    ["disegno-fam-tracciati-sposta", 1280, "Sposta tracciato da Ctrl+/ con l'anteprima del motore sul foglio", "&comandi=risposti", openSpostaTracciato],
+    ["disegno-fam-tracciati-sposta-800", 800, "Sposta tracciato con l'anteprima nella finestra minima del desktop, 800 px", "&comandi=risposti", openSpostaTracciato],
+  ].map(([id, width, title, extra, prepare]) => ({
+    id,
+    title,
+    query: `connectors=6&drawing=acceso${extra}`,
+    viewport: { width, height: 800 },
+    prepare,
+  })),
+  // **Elaborazione tracciati** (K6 T12, giro 5): le due forme sovrapposte di `?elabora=1`
+  // scelte col clic, con la sezione «Elaborazione tracciati» del Design in vista; poi
+  // Unione e Meno davanti premuti, col tracciato del banco (`disegno-famiglie/tracciati.json`)
+  // al posto delle due forme. A 1280 e a 800 px.
+  ...[
+    ["disegno-fam-elaborazione", 1280, "Due forme sovrapposte scelte e la sezione Elaborazione tracciati del Design: i metodi forma e le operazioni", (page) => openElaborazione(page)],
+    ["disegno-fam-elaborazione-800", 800, "La sezione Elaborazione tracciati nel cassetto dell'ispettore, 800 px, con le due forme scelte", (page) => openElaborazione(page)],
+    ["disegno-fam-elaborazione-prima-800", 800, "Le due forme sovrapposte scelte, a cassetto chiuso, prima dell'elaborazione, 800 px", (page) => openElaborazione(page, null, { foglio: true })],
+    ["disegno-fam-elaborazione-unione", 1280, "Dopo Unione: un tracciato solo, con lo stile della forma davanti", (page) => openElaborazione(page, "object.pathfinder.unite")],
+    ["disegno-fam-elaborazione-unione-800", 800, "Dopo Unione nella finestra minima del desktop, 800 px", (page) => openElaborazione(page, "object.pathfinder.unite")],
+    ["disegno-fam-elaborazione-meno", 1280, "Dopo Meno davanti: il rettangolo dietro senza la parte coperta dal cerchio", (page) => openElaborazione(page, "object.pathfinder.minusFront")],
+    ["disegno-fam-elaborazione-meno-800", 800, "Dopo Meno davanti nella finestra minima del desktop, 800 px", (page) => openElaborazione(page, "object.pathfinder.minusFront")],
+  ].map(([id, width, title, prepare]) => ({
+    id,
+    title,
+    query: "connectors=6&drawing=acceso&elabora=1",
+    viewport: { width, height: 800 },
+    prepare,
+  })),
+  // **La famiglia «forme»** (K6 T13, giro 2): la tendina della casella delle forme,
+  // la finestra «Rettangolo» da Ctrl+/ con l'anteprima sul foglio, e la sezione
+  // Allinea nel Design con il disegno scelto. A 1280 e a 800 px.
+  ...[
+    ["disegno-fam-forme", 1280, "La tendina della casella delle forme: Rettangolo, Ellisse, Poligono, coi nomi del Completo", "", openFormeTendina],
+    ["disegno-fam-forme-800", 800, "La tendina della casella delle forme nella finestra minima del desktop, 800 px", "", openFormeTendina],
+    ["disegno-fam-allinea", 1280, "La sezione Allinea nel Design con il disegno scelto: i pulsanti e «Allinea a»", "", openAllinea],
+    ["disegno-fam-allinea-800", 800, "La sezione Allinea nella finestra minima del desktop, 800 px", "", openAllinea],
+    ["disegno-fam-trasforma", 1280, "La finestra «Ruota…» di Oggetto › Trasforma, con l'anteprima sul foglio", "", openRuotaFinestra],
+    ["disegno-fam-trasforma-800", 800, "La finestra «Ruota…» nella finestra minima del desktop, 800 px", "", openRuotaFinestra],
+    ["disegno-fam-trasforma-sezione", 1280, "La sezione Trasforma nel Design: posizione, misura, rotazione, inclinazione e il riquadro", "", openTrasformaSezione],
+    ["disegno-scelte-trasforma", 1280, "La sezione Trasforma con un oggetto scelto: X, Y, larghezza, altezza e rotazione dal pannello", "", (page) => openSezioneConUno(page, ".draw-transform-grid")],
+    ["disegno-scelte-trasforma-800", 800, "La sezione Trasforma con un oggetto scelto, nel cassetto dell'ispettore, 800 px", "", (page) => openSezioneConUno(page, ".draw-transform-grid")],
+    // Il colore (K6 T14, giro 1): la sezione Colore del Design con un oggetto scelto, e la finestra «Satura…»
+    // di Modifica › Modifica colori con l'anteprima che il banco risponde (`disegno-famiglie/colore.json`).
+    ["disegno-fam-colore", 1280, "La sezione Colore del Design con un oggetto scelto: riempimento attivo, contorno, Scambia, Nessuno e Di serie", "", (page) => openSezioneConUno(page, ".draw-color")],
+    ["disegno-fam-colore-800", 800, "La sezione Colore con un oggetto scelto, nel cassetto dell'ispettore, 800 px", "", (page) => openSezioneConUno(page, ".draw-color")],
+    // Il contorno e la sfumatura (K6 T15, giro 5): la prima forma con un contorno spesso e tratteggiato, o con
+    // una sfumatura lineare a tre punti (`?aspetto=`, `fake-ipc.ts`), e la sua sezione del Design in vista.
+    ["disegno-fam-contorno", 1280, "La sezione Contorno del Design con una forma dal contorno spesso e tratteggiato: spessore, estremi, angoli, trattino e spazio", "&aspetto=contorno", (page) => openSezioneConUno(page, '#surface-panel-draw-design [data-section="contorno"]')],
+    ["disegno-fam-contorno-800", 800, "La sezione Contorno con il contorno tratteggiato, nel cassetto dell'ispettore, 800 px", "&aspetto=contorno", (page) => openSezioneConUno(page, '#surface-panel-draw-design [data-section="contorno"]')],
+    ["disegno-fam-sfumatura", 1280, "La sezione Sfumatura del Design con una forma dalla sfumatura lineare a tre punti: tipo, angolo, la striscia e i punti", "&aspetto=sfumatura", (page) => openSezioneConUno(page, '#surface-panel-draw-design [data-section="sfumatura"]')],
+    ["disegno-fam-sfumatura-800", 800, "La sezione Sfumatura con la sfumatura a tre punti, nel cassetto dell'ispettore, 800 px", "&aspetto=sfumatura", (page) => openSezioneConUno(page, '#surface-panel-draw-design [data-section="sfumatura"]')],
+    // I campioni (K6 T14, giro 2): Risorse › Campioni con 24 campioni e uno scelto, la finestra «Nuovo
+    // campione», e la sezione Colore con un testo scelto: il contorno che un testo non ha è «Nessuno», spento.
+    ["disegno-fam-campioni", 1280, "Risorse › Campioni: la griglia dei campioni del documento, uno scelto, e le azioni", "&campioni=24", openCampioni],
+    ["disegno-fam-campioni-800", 800, "Risorse › Campioni nel cassetto dell'ispettore, 800 px", "&campioni=24", openCampioni],
+    ["disegno-fam-campioni-nuovo", 1280, "La finestra «Nuovo campione» di Risorse › Campioni: il nome, il colore e la nota del campione globale", "&campioni=24", openNuovoCampione],
+    ["disegno-fam-campioni-nuovo-800", 800, "La finestra «Nuovo campione» nella finestra minima del desktop, 800 px", "&campioni=24", openNuovoCampione],
+    ["disegno-fam-colore-testo", 1280, "La sezione Colore con un testo scelto: il riempimento, e il contorno «Nessuno» spento col perché", "", openColoreTesto],
+    ["disegno-fam-colore-testo-800", 800, "La sezione Colore con un testo scelto, nel cassetto dell'ispettore, 800 px", "", openColoreTesto],
+    // Il testo (K6 T16, giro 1): Carattere e Paragrafo del Design con un'etichetta scelta, e il Testo del
+    // motore che scrive nella casella aperta da un clic (il banco risponde l'anteprima, `fake-ipc.ts`).
+    ["disegno-fam-testo", 1280, "Carattere e Paragrafo del Design con un testo scelto: famiglia, stile, corpo, spaziatura e allineamento", "", openSezioniTesto],
+    ["disegno-fam-testo-800", 800, "Carattere e Paragrafo con un testo scelto, nel cassetto dell'ispettore, 800 px", "", openSezioniTesto],
+    ["disegno-fam-testo-scrive", 1280, "Il Testo del Completo: un clic apre la casella, e le parole scritte si vedono col cursore", "", scriviColTesto],
+    ["disegno-fam-testo-scrive-800", 800, "Il Testo del Completo che scrive nella finestra minima del desktop, 800 px", "", scriviColTesto],
+    ["disegno-fam-colore-satura", 1280, "La finestra «Satura…» di Modifica colori, con l'intensità in % e l'anteprima sul foglio", "&comandi=risposti", openSaturaFinestra],
+    ["disegno-fam-colore-satura-800", 800, "La finestra «Satura…» nella finestra minima del desktop, 800 px", "&comandi=risposti", openSaturaFinestra],
+    ["disegno-scelte-pannello", 1280, "Il pannello Design del Completo con un oggetto scelto: senza Posizione e misure né Distribuisci", "", (page) => openSezioneConUno(page, ".draw-properties")],
+    ["disegno-scelte-pannello-800", 800, "Il pannello Design del Completo nel cassetto dell'ispettore, 800 px: senza i doppioni", "", (page) => openSezioneConUno(page, ".draw-properties")],
+    ["disegno-fam-trasforma-sezione-800", 800, "La sezione Trasforma nel cassetto dell'ispettore, 800 px", "", openTrasformaSezione],
+    ["disegno-selezione-uguale", 1280, "≡ › Selezione › Uguale con l'ellisse scelta: le voci accese, e il perché di quelle spente", "", openMenuUguale],
+    ["disegno-selezione-uguale-800", 800, "Lo stesso menu nella finestra minima del desktop, 800 px", "", openMenuUguale],
+    ["disegno-selezione-tratto", 1280, "Uguale › Colore tratto: l'ellisse e le due linee con lo stesso tratto scelte insieme sul foglio", "", openUgualeTratto],
+    ["disegno-selezione-tratto-800", 800, "Lo stesso risultato nella finestra minima del desktop, 800 px", "", openUgualeTratto],
+    ["disegno-clic-ellisse", 1280, "Un clic del mouse sull'ellisse del disegno: la barra di stato dice che è scelta", "", clicSullEllisse],
+    ["disegno-clic-ellisse-semplice", 1280, "Lo spazio Semplice: un clic del mouse sull'ellisse la sceglie, come nel Completo", "", clicSullEllisseSemplice],
+    ["disegno-trasparenza", 1280, "Design › Trasparenza con l'ellisse scelta col clic: l'opacità e il metodo di fusione coi valori", "", (page) => openSezioneConUno(page, "#surface-panel-draw-design .draw-transparency-blend", sceltaConIlClic)],
+    ["disegno-trasparenza-800", 800, "La sezione Trasparenza nel cassetto dell'ispettore, 800 px: l'ellisse scelta col clic", "", (page) => openSezioneConUno(page, "#surface-panel-draw-design .draw-transparency-blend", sceltaConIlClic)],
+    // La scheda Livelli del Completo (K6 T15, giro 4): l'albero nativo, coi comandi che passano dal motore del
+    // banco (`fake-ipc.ts`, `benchLivelliOutcome`). Due livelli, uno con gli oggetti; poi uno rinominato e
+    // bloccato e uno nascosto; poi il filtro.
+    ["disegno-fam-livelli", 1280, "La scheda Livelli del Completo: due livelli, Livello 1 aperto con i suoi oggetti, il nuovo in cima", "", openLivelli],
+    ["disegno-fam-livelli-stati", 1280, "La scheda Livelli: «Sfondo» rinominato e bloccato, Livello 1 nascosto, coi segni sulla riga", "", livelliCambiati],
+    ["disegno-fam-livelli-stati-800", 800, "La scheda Livelli nel cassetto dell'ispettore, 800 px: un livello rinominato e bloccato, uno nascosto", "", livelliCambiati],
+    ["disegno-fam-livelli-filtro", 1280, "La scheda Livelli col filtro «Ellisse»: l'ellisse e i connettori che ne partono, dentro il loro livello", "", livelliFiltrati],
+    ["disegno-fam-forme-finestra", 1280, "La finestra delle misure del Rettangolo (Completo), aperta col clic sul foglio dopo la scelta nella tendina", "", openFormeFinestra],
+    ["disegno-fam-forme-finestra-800", 800, "La finestra delle misure del Rettangolo nella finestra minima del desktop, 800 px", "", openFormeFinestra],
+  ].map(([id, width, title, extra, prepare]) => ({
+    id,
+    title,
+    query: `connectors=6&drawing=acceso${extra}`,
+    viewport: { width, height: 800 },
+    prepare,
+  })),
+  // **Il menu ≡ e Ctrl+/ del Completo** (K6 T9a): le voci dell'indice di prova
+  // (`?indice=prova`, vedi `fake-ipc.ts`). Il menu ≡ con Oggetto aperto, e la
+  // tavolozza con la ricerca «sposta», a 1280 e a 800 px (la finestra minima).
+  ...[
+    ["disegno-menu", 1280, "Il menu ≡ del Completo con Oggetto aperto: le voci dell'indice, e quelle spente col perché", openMenuOggetto],
+    ["disegno-menu-800", 800, "Il menu ≡ del Completo nella finestra minima del desktop, 800 px", openMenuOggetto],
+    ["disegno-tavolozza", 1280, "Ctrl+/ con la ricerca «sposta»: le voci col posto e il tasto, e il perché di quella spenta", openTavolozza],
+    ["disegno-tavolozza-800", 800, "Ctrl+/ con la ricerca «sposta» nella finestra minima del desktop, 800 px", openTavolozza],
+  ].map(([id, width, title, prepare]) => ({
+    id,
+    title,
+    query: "connectors=6&drawing=acceso&indice=prova",
+    viewport: { width, height: 800 },
+    prepare,
+  })),
+  // **I tasti del Disegno completo in Impostazioni › Scorciatoie** (K6 T9c):
+  // la sezione col riquadro aperto, sui comandi dell'indice di prova, con un
+  // tasto di Fub che copre (Ctrl+G), un conflitto vinto dall'ultimo assegnato
+  // e un comando lasciato senza tasto (`?tasti=conflitto`, vedi `fake-ipc.ts`);
+  // poi l'errore di un file d'insieme rotto, che non cambia niente.
+  ...[
+    ["scorciatoie-disegno", 1280, "Scorciatoie › Disegno completo: i comandi coi tasti, un tasto di Fub che copre e un conflitto", openDrawingKeys],
+    ["scorciatoie-disegno-800", 800, "Scorciatoie › Disegno completo nella finestra minima del desktop, 800 px", openDrawingKeys],
+    ["scorciatoie-disegno-errore", 1280, "Scorciatoie › Disegno completo: un file d'insieme rotto lo dice e non cambia niente", importBrokenKeySet],
+  ].map(([id, width, title, prepare]) => ({
+    id,
+    title,
+    query: "indice=prova&tasti=conflitto",
+    viewport: { width, height: 800 },
+    prepare,
+  })),
+  // **Le preferenze del motore in Impostazioni › Disegni** (K6 T11): il
+  // riquadro «Motore del disegno» aperto con la categoria «Guide e griglia»
+  // (colori, scelte, numeri con l'unità), largo e nella finestra minima; poi
+  // un `draw.motore` scritto da un Fub più nuovo, in sola lettura col perché
+  // (`?motore=`, vedi `fake-ipc.ts`).
+  ...[
+    ["impostazioni-motore", 1280, "prova", "Impostazioni › Disegni › Motore del disegno: le categorie del motore, «Guide e griglia» aperta"],
+    ["impostazioni-motore-800", 800, "prova", "Impostazioni › Disegni › Motore del disegno nella finestra minima del desktop, 800 px"],
+    ["impostazioni-motore-nuovo", 1280, "nuovo", "Impostazioni › Disegni › Motore del disegno: preferenze di un Fub più nuovo, in sola lettura col perché"],
+    ["impostazioni-motore-nuovo-800", 800, "nuovo", "Impostazioni › Disegni › Motore del disegno in sola lettura, 800 px"],
+  ].map(([id, width, motore, title]) => ({
+    id,
+    title,
+    query: `drawing=acceso&motore=${motore}`,
+    viewport: { width, height: 800 },
+    prepare: openEnginePrefs,
+  })),
   // **La lavagna** (T61): vuota, con le schede e con una scheda attiva, le
   // lavagne di `?lavagna=1` (vedi `fake-ipc.ts`). Le schede si raggiungono
   // col Tab, come le raggiunge chi usa la tastiera, e ognuna ha il suo nome.
@@ -1594,6 +1909,11 @@ export const SCENE = touchLast(onPage("shell", [
       await selectWords(page, "Questa è la nota");
       await page.waitForSelector(".selection-bubble:not([hidden]) .mini-bar [data-command='markdown.bold']");
       if (colors) {
+        // La bolla ferma prima del clic (#511): con un suo menu aperto la bolla
+        // non si riposa più (`selection-bubble.ts`, `holding`), e un clic che
+        // arrivava mentre un riposizionamento era ancora in coda la lasciava,
+        // col pannello dei colori, 2 px più in là in una corsa su tante.
+        await settleBar(page);
         await page.click(".selection-bubble .mini-bar [data-command='mini-bar.color']");
         await page.waitForSelector(".mini-bar-colors .mini-bar-swatch");
       }
@@ -1676,6 +1996,30 @@ export const SCENE = touchLast(onPage("shell", [
     ...(viewport ? { viewport } : {}),
     prepare: (page) => openLive(page, keys, live === "panoramica-fondo" ? "bottom" : "top"),
   })),
+  // **Il doppio clic con la barra di formato** (#411 A-05, #399): una parola
+  // scelta col doppio clic si dipinge come la parola, non fino a fine riga.
+  // A 1100 px, con la barra, la prima riga della panoramica va a capo dopo
+  // apici, pedici e marche nascoste: con CodeMirror fino alla 6.43.7 la
+  // selezione di «il», «bus» e «treno» si dipingeva come il resto della riga
+  // più la riga sotto (col caso seminato del banco, ogni volta). La scena
+  // sceglie due volte ogni parola della riga (non i link, che il clic segue)
+  // e lancia se un disegno non è la parola: col caso seminato quale parola
+  // cadeva cambiava con la luce, e con tutte almeno una cadeva sempre. La
+  // foto resta su «treno», la parola del collaudo.
+  {
+    id: "live-30-doppio-clic-barra",
+    title: "La Live con la barra di formato: «treno» scelto col doppio clic si dipinge come la parola",
+    query: "live=panoramica&formatbar=1",
+    viewport: { width: 1100, height: 800 },
+    prepare: async (page) => {
+      await openLive(page, [], "top");
+      await page.waitForSelector(".pane.focus .format-bar.kit-bar .kit-bar-button");
+      for (let round = 0; round < 2; round++) {
+        for (const word of LINE_WORDS) await expectWordPainted(page, word);
+      }
+      await settleBar(page);
+    },
+  },
   // La scelta del promemoria (T36): il clic sulla pastiglia la apre sotto di
   // lei, coi giorni vicini, il mese col giorno scelto e l'ora; il piede
   // toglie il promemoria. Ciò che non è un giorno resta scritto e lo dice.
@@ -1973,9 +2317,10 @@ export const SCENE = touchLast(onPage("shell", [
     ...(viewport ? { viewport } : {}),
     prepare: async (page) => {
       await openLive(page, [], "top");
-      // Il grafico ha il suo disegno e la scheda persa il suo avviso.
-      await page.waitForSelector('.pane.focus .pane-editor .live-card[data-card-kind="sheet"] .canvas-card-sheet-chart img');
-      await page.waitForSelector('.pane.focus .pane-editor .live-card[data-card-kind="sheet"] .canvas-card-lost');
+      // Il grafico ha il suo disegno e la scheda persa il suo avviso. Se uno
+      // dei due non arriva, l'errore dice quale e com'erano le schede (#505).
+      await waitForCardPart(page, '.pane.focus .pane-editor .live-card[data-card-kind="sheet"] .canvas-card-sheet-chart img', "il disegno del grafico «Vendite»");
+      await waitForCardPart(page, '.pane.focus .pane-editor .live-card[data-card-kind="sheet"] .canvas-card-lost', "l'avviso della scheda persa");
       if (scroll === "table") {
         // La torta si disegna quando entra in vista.
         await page.evaluate(() => document.querySelector(".pane.focus .pane-editor .tb-frame")?.scrollIntoView({ block: "start" }));
@@ -1988,13 +2333,6 @@ export const SCENE = touchLast(onPage("shell", [
       if (scroll === "lost") {
         await page.evaluate(() => document.querySelector(".pane.focus .pane-editor .canvas-card-lost")?.closest(".live-card")?.scrollIntoView({ block: "end" }));
       }
-      // Le violazioni di Mermaid fuori vista: come nelle scene dei diagrammi.
-      await page.evaluate(() => {
-        const found = globalThis.__fubCsp;
-        for (let i = found.length - 1; i >= 0; i--) {
-          if (found[i].directive === "style-src-attr" && found[i].blocked === "inline") found.splice(i, 1);
-        }
-      });
       await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
       if (menu) {
         await page.click('.pane.focus .pane-editor .tb-grid [data-row="1"][data-col="0"]', { button: "right" });
@@ -2370,6 +2708,10 @@ export const SCENE = touchLast(onPage("shell", [
     ["diagramma-04-menu-stretta", "diagramma", "Il menu del tasto destro nella finestra minima", "menu", { width: 800, height: 800 }],
     ["diagramma-05-stili", "diagramma-stili", "I cinque stili, uno per diagramma: Armonia sulla pagina, gli altri sulla loro carta"],
     ["diagramma-06-casi", "diagramma-casi", "Uno stile che non esiste (vale quello generale) e un diagramma con un errore"],
+    // Gli stili scritti nel diagramma (#528): Mermaid li scrive come
+    // attributo sui nodi dell'SVG dove misura, e la CSP li rifiuterebbe. Un
+    // `font-size` perso nelle misure fa uscire l'etichetta dal riquadro.
+    ["diagramma-09-nodi-con-stile", "diagramma-nodi", "Nodi e collegamenti con uno stile scritto nel diagramma: riempimento, bordo, linea rossa, classe, un'etichetta grande che sta nel suo riquadro"],
   ].map(([id, live, title, gesture, viewport]) => ({
     id,
     title,
@@ -2380,17 +2722,6 @@ export const SCENE = touchLast(onPage("shell", [
       await page.waitForFunction(() => {
         const all = [...document.querySelectorAll(".pane.focus .pane-editor .mermaid-diagram")];
         return all.length > 0 && all.every((figure) => figure.dataset.state !== "loading");
-      });
-      // Mermaid scrive `style="font-family: …"` sul `<div>` dove misura
-      // (`appendDivSvgG`), e la CSP lo rifiuta: succede a ogni disegno, da
-      // prima di queste scene, dentro il contenitore fuori vista che
-      // `ui/mermaid.ts` toglie subito. Quelle violazioni si tolgono dal conto;
-      // ogni altra resta.
-      await page.evaluate(() => {
-        const found = globalThis.__fubCsp;
-        for (let i = found.length - 1; i >= 0; i--) {
-          if (found[i].directive === "style-src-attr" && found[i].blocked === "inline") found.splice(i, 1);
-        }
       });
       await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
       // Il sorgente di un diagramma disegnato è nascosto, col suo «Copia»:
@@ -2436,14 +2767,6 @@ export const SCENE = touchLast(onPage("shell", [
         const all = [...document.querySelectorAll(".pane.focus .pane-editor .mermaid-diagram")];
         return all.length > 0 && all.every((figure) => figure.dataset.state === "ready");
       });
-      // Lo stile in linea del contenitore dove Mermaid misura (#473), come
-      // nelle scene qui sopra.
-      await page.evaluate(() => {
-        const found = globalThis.__fubCsp;
-        for (let i = found.length - 1; i >= 0; i--) {
-          if (found[i].directive === "style-src-attr" && found[i].blocked === "inline") found.splice(i, 1);
-        }
-      });
       await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     },
   })),
@@ -2469,13 +2792,6 @@ export const SCENE = touchLast(onPage("shell", [
         return all.length > 0 && all.every((figure) => figure.dataset.state !== "loading");
       });
       await ready();
-      // Lo stesso stile in linea di Mermaid delle scene qui sopra (#473).
-      const forgetMermaidStyle = () => page.evaluate(() => {
-        const found = globalThis.__fubCsp;
-        for (let i = found.length - 1; i >= 0; i--) {
-          if (found[i].directive === "style-src-attr" && found[i].blocked === "inline") found.splice(i, 1);
-        }
-      });
       if (gesture === "ingrandisci") {
         // Dal menu del tasto destro: in Scrittura il clic porta il cursore nel recinto.
         const box = await page.locator(".pane.focus .pane-editor .mermaid-diagram img").first().boundingBox();
@@ -2485,7 +2801,6 @@ export const SCENE = touchLast(onPage("shell", [
         await page.click(".diagram-menu [data-action='enlarge']");
         await page.waitForSelector(".lightbox.lightbox-diagram");
         await page.waitForFunction(() => document.getAnimations().length === 0);
-        await forgetMermaidStyle();
         return;
       }
       await page.waitForSelector(".pane.focus .pane-editor .cm-fub-diagram-live .mermaid-diagram[data-state='ready']");
@@ -2507,7 +2822,6 @@ export const SCENE = touchLast(onPage("shell", [
       });
       await page.waitForFunction(() => document.getAnimations().length === 0);
       await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-      await forgetMermaidStyle();
     },
   })),
   // I commenti (T22): il segno nel margine con le iniziali e il numero dei
@@ -2564,6 +2878,55 @@ export const SCENE = touchLast(onPage("shell", [
       await page.waitForSelector(".slash-panel");
       // Poi due fotogrammi, perché il pannello si posi.
       await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    },
+  })),
+  // Il «/» sull'ultima riga di una nota scorsa fino in fondo: il menu si apre
+  // sopra la riga e la vista non si muove. Nella WebView di Linux la vista
+  // scendeva di una riga: mentre CodeMirror ridisegna la riga, il testo è per
+  // un attimo più corto, e a fondo nota lo scorrimento si accorciava con lui.
+  // La scena fa accorciare il testo per un attimo anche qui, poi scrive il «/».
+  ...[
+    ["slash-10-fondo", "Il menu «/» sull'ultima riga di una nota scorsa fino in fondo: sopra la riga, la vista ferma", null],
+    ["slash-11-fondo-stretta", "Il menu «/» a fondo nota nella finestra minima: sopra la riga, la vista ferma", NOTE_NARROW],
+  ].map(([id, title, viewport]) => ({
+    id,
+    title,
+    query: "live=fondo-nota&slash=1",
+    ...(viewport ? { viewport } : {}),
+    prepare: async (page) => {
+      await openLive(page, [], "bottom");
+      await page.waitForFunction(() => document.getAnimations().length === 0);
+      // Di nuovo in fondo: la prima misura di CodeMirror allunga la nota di
+      // qualche pixel dopo lo scorrimento di `openLive`.
+      await page.evaluate(async () => {
+        const { findTextEditorOrThrow } = await import("/src/editors/text/test-support.ts");
+        const view = findTextEditorOrThrow(document.querySelector(".pane.focus .pane-editor .cm-editor").parentElement);
+        view.scrollDOM.scrollTop = view.scrollDOM.scrollHeight;
+        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      });
+      const before = await caretLinePlace(page);
+      if (before.scrollTop < before.maxScroll - 1) throw new Error(`la nota non è scorsa fino in fondo: ${before.scrollTop} di ${before.maxScroll}`);
+      const shrunk = await page.evaluate(async () => {
+        const { findTextEditorOrThrow } = await import("/src/editors/text/test-support.ts");
+        const view = findTextEditorOrThrow(document.querySelector(".pane.focus .pane-editor .cm-editor").parentElement);
+        // Come CodeMirror quando ridisegna una riga: per un attimo l'ultima
+        // riga non c'è, e la disposizione si calcola così.
+        const last = view.contentDOM.lastElementChild;
+        last.style.display = "none";
+        void view.scrollDOM.scrollHeight;
+        last.style.display = "";
+        return view.scrollDOM.scrollTop;
+      });
+      if (shrunk !== before.scrollTop) throw new Error(`il testo accorciato per un attimo sposta la vista: da ${before.scrollTop} a ${shrunk} px`);
+      await page.keyboard.type("/");
+      await page.waitForSelector(".slash-panel");
+      await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      const after = await caretLinePlace(page);
+      if (after.scrollTop !== before.scrollTop || Math.abs(after.lineTop - before.lineTop) > 0.5) {
+        throw new Error(`il «/» a fondo nota sposta la vista: scorrimento da ${before.scrollTop} a ${after.scrollTop} px, riga da ${before.lineTop} a ${after.lineTop}`);
+      }
+      const above = await page.$eval(".slash-panel", (panel) => panel.classList.contains("cm-tooltip-above"));
+      if (!above) throw new Error("a fondo nota il menu «/» non si apre sopra la riga");
     },
   })),
   // La Base nella nota (T18, E12, E19): incorporata, si allarga oltre la
@@ -3669,14 +4032,6 @@ async function openExportBlockMenu(page, text) {
     return drawn.length > 0 && drawn.every((figure) => figure.dataset.state !== "loading")
       && document.querySelector(".export-space .export-fascia .mermaid-diagram img") !== null;
   }, null, { timeout: 15_000 });
-  // Mermaid scrive `style` sul `<div>` dove misura, e la CSP lo rifiuta
-  // (vedi le scene `diagramma-*`): quelle violazioni si tolgono dal conto.
-  await page.evaluate(() => {
-    const found = globalThis.__fubCsp;
-    for (let i = found.length - 1; i >= 0; i--) {
-      if (found[i].directive === "style-src-attr" && found[i].blocked === "inline") found.splice(i, 1);
-    }
-  });
   const band = text === null
     ? page.locator(".export-space .export-fascia:has(.mermaid-diagram)").first()
     : page.locator(".export-space .export-fascia", { hasText: text }).first();
@@ -3704,14 +4059,6 @@ async function openExportDiagrams(page) {
     return /^\d/.test(pages) && drawn.length > 0 && drawn.every((figure) => figure.dataset.state !== "loading")
       && document.querySelector(".export-space .export-slot .export-fascia") !== null;
   }, null, { timeout: 15_000 });
-  // Mermaid scrive `style` sul `<div>` dove misura, e la CSP lo rifiuta
-  // (vedi le scene `diagramma-*`): quelle violazioni si tolgono dal conto.
-  await page.evaluate(() => {
-    const found = globalThis.__fubCsp;
-    for (let i = found.length - 1; i >= 0; i--) {
-      if (found[i].directive === "style-src-attr" && found[i].blocked === "inline") found.splice(i, 1);
-    }
-  });
   await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
 }
 
@@ -4066,6 +4413,26 @@ async function expectVeilOnCard(page, card) {
   if (wrong) throw new Error(`il velo non sta sulla scheda: ${wrong}`);
 }
 
+/// Aspetta un pezzo di una scheda della Live. Se non arriva, l'errore nomina
+/// il pezzo e il selettore, e dice com'era ogni scheda del riquadro: la specie,
+/// lo stato e il modo della scheda, lo stato della sua vista e il suo testo.
+/// Il rapporto del fotografo tiene la prima riga dell'errore, quindi tutto sta
+/// su una riga.
+async function waitForCardPart(page, selector, what) {
+  try {
+    await page.waitForSelector(selector);
+  } catch (error) {
+    const cards = await page.evaluate(() =>
+      [...document.querySelectorAll(".pane.focus .pane-editor .live-card")].map((card) => {
+        const view = card.querySelector("[data-card-state]:not(.live-card)");
+        const text = (card.textContent ?? "").replace(/\s+/g, " ").trim().slice(0, 60);
+        return `${card.dataset.cardKind ?? "?"} ${card.dataset.cardState ?? "?"}/${card.dataset.cardMode ?? "-"} vista ${view?.dataset.cardState ?? "-"} «${text}»`;
+      })).catch(() => ["la pagina non risponde"]);
+    const first = String(error?.message ?? error).split("\n")[0];
+    throw new Error(`${what} non è arrivato (${selector}): ${first}; schede: ${cards.length === 0 ? "nessuna" : cards.join(" · ")}`);
+  }
+}
+
 async function openLive(page, keys, scroll, mode = "live_preview") {
   const doc = await page.evaluate(() => globalThis.__fubLiveBench?.doc ?? null);
   if (doc === null) throw new Error("la pagina non ha la nota della Live");
@@ -4103,6 +4470,20 @@ async function openLive(page, keys, scroll, mode = "live_preview") {
     else await page.keyboard.type(key);
   }
   await settleLive(page, scroll === "bottom");
+}
+
+/// Dove sta la riga del cursore nella nota a fuoco: lo scorrimento, quanto può
+/// scorrere al più e il bordo alto della riga nella finestra.
+function caretLinePlace(page) {
+  return page.evaluate(async () => {
+    const { findTextEditorOrThrow } = await import("/src/editors/text/test-support.ts");
+    const view = findTextEditorOrThrow(document.querySelector(".pane.focus .pane-editor .cm-editor").parentElement);
+    const { node } = view.domAtPos(view.state.selection.main.head);
+    const line = (node instanceof Element ? node : node.parentElement)?.closest(".cm-line");
+    if (!line) throw new Error("il cursore non sta in una riga");
+    const scroller = view.scrollDOM;
+    return { scrollTop: scroller.scrollTop, maxScroll: scroller.scrollHeight - scroller.clientHeight, lineTop: line.getBoundingClientRect().top };
+  });
 }
 
 /// La formula toccata (T60). `inline`: → davanti alla formula in riga, poi
@@ -4735,6 +5116,54 @@ async function touchBlocks(page, gesture) {
   await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
 }
 
+/// Le parole della riga di «treno» che il doppio clic sceglie (i link no: il
+/// clic li segue), nell'ordine della riga; l'ultima è quella della foto.
+const LINE_WORDS = ["Il", "parte", "alle", "otto", "il", "bus", "no", "Energia", "acqua", "da", "ricordare", "codice", "treno"];
+
+/// Doppio clic su `word` nella riga di «treno» della panoramica: la selezione
+/// dev'essere la parola e il suo disegno un rettangolo solo, largo quanto la
+/// parola (#411 A-05). Se no lancia, con le larghezze viste.
+async function expectWordPainted(page, word) {
+  // La bolla della parola di prima può coprire questa: la selezione si
+  // chiude e la bolla se ne va prima di misurare.
+  await page.keyboard.press("ArrowLeft");
+  await page.waitForSelector(".selection-bubble:not([hidden])", { state: "detached" });
+  // Il posto della parola si chiede alla vista per offset, non ai nodi di
+  // testo: le parole uguali a quella scelta si evidenziano e spezzano i nodi.
+  const target = await page.evaluate(async (wanted) => {
+    const { findTextEditorOrThrow } = await import("/src/editors/text/test-support.ts");
+    const view = findTextEditorOrThrow(document.querySelector(".pane.focus .pane-editor .cm-editor").parentElement);
+    const doc = view.state.doc;
+    for (let n = 1; n <= doc.lines; n++) {
+      const line = doc.line(n);
+      if (!line.text.includes("treno")) continue;
+      const match = new RegExp(`(?<!\\p{L})${wanted}(?!\\p{L})`, "u").exec(line.text);
+      if (!match) return null;
+      const start = view.coordsAtPos(line.from + match.index, 1);
+      const end = view.coordsAtPos(line.from + match.index + wanted.length, -1);
+      if (!start || !end) return null;
+      return { x: (start.left + end.right) / 2, y: (start.top + start.bottom) / 2, width: end.right - start.left };
+    }
+    return null;
+  }, word);
+  if (!target) throw new Error(`la parola «${word}» non è nella riga di «treno»`);
+  await page.mouse.dblclick(target.x, target.y);
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  const seen = await page.evaluate(async () => {
+    const { findTextEditorOrThrow } = await import("/src/editors/text/test-support.ts");
+    const view = findTextEditorOrThrow(document.querySelector(".pane.focus .pane-editor .cm-editor").parentElement);
+    const { from, to } = view.state.selection.main;
+    const painted = [...document.querySelectorAll(".pane.focus .cm-selectionBackground")].map((b) => b.getBoundingClientRect().width);
+    return { chosen: view.state.sliceDoc(from, to), painted };
+  });
+  if (seen.chosen !== word) throw new Error(`il doppio clic su «${word}» ha scelto «${seen.chosen}»`);
+  // Un rettangolo solo, largo quanto la parola: il margine copre le marche
+  // nascoste attorno alla parola (`==…==`), che la vista conta nei bordi.
+  if (seen.painted.length !== 1 || Math.abs(seen.painted[0] - target.width) > 12) {
+    throw new Error(`«${word}» (${Math.round(target.width)} px) si dipinge come ${seen.painted.map(Math.round).join(" + ") || "niente"} px`);
+  }
+}
+
 async function settleLive(page, bottom) {
   await page.waitForFunction(() => !["non_salvato", "in_corso"].includes(document.querySelector("#save-state")?.dataset.state ?? ""));
   await page.waitForFunction(() => !document.querySelector('.pane.focus .pane-editor .cm-content [data-state="loading"]'));
@@ -4880,6 +5309,784 @@ async function openDrawing(page) {
 /// Apre il disegno dei connettori e preme il chip del disegno, che arriva
 /// quando il motore ha risposto; con `ask` apre anche «Che cosa manca?». Il
 /// fuoco resta nel riquadro, sull'ultimo pulsante premuto.
+/// Il bottone «Spazio di lavoro» della banda (K6 T7), col suo menu aperto.
+/// Il primo oggetto scelto da tastiera (`Home`), come lo sceglie chi usa la tastiera.
+async function scegliPrimo(page) {
+  // `Home` sceglie il primo oggetto coi tasti di Fub. Col motore pronto i tasti
+  // sono quelli di VectorCraft, che non hanno `Home`, e il motore può essere
+  // pronto prima o dopo il tasto. Allora si sceglie l'ellisse, il primo
+  // oggetto: col clic della Selezione del motore se la colonna ce l'ha, se no
+  // (l'indice di prova non ha strumenti) dalla scheda Livelli. La barra di
+  // stato dice «1 di N scelti» quando la scelta c'è; una scena senza la barra
+  // resta com'era: un tasto e 300 ms.
+  await page.focus(".draw-editor .draw-surface");
+  await page.keyboard.press("Home");
+  await page.waitForTimeout(300);
+  if (!(await page.$('[data-surface-item="objects"]'))) return;
+  const scelta = () => page
+    .waitForFunction(() => /\bscelt|selected/.test(document.querySelector('[data-surface-item="objects"]')?.textContent ?? ""), null, { timeout: 1500 })
+    .then(() => true, () => false);
+  if (await scelta()) return;
+  const conStrumentiDelMotore = await page.evaluate(() => [...document.querySelectorAll(".draw-rail button")]
+    .some((b) => `${b.dataset.tool ?? ""} ${b.dataset.tools ?? ""}`.includes("motore:")));
+  if (conStrumentiDelMotore) {
+    await sceltaConIlClic(page).catch(() => undefined);
+    return;
+  }
+  // Coi tasti di Fub ancora validi un Home arrivato troppo presto si perde.
+  await page.focus(".draw-editor .draw-surface");
+  await page.keyboard.press("Home");
+  if (await scelta()) return;
+  await sceltaDaiLivelli(page);
+}
+
+/// L'ellisse scelta dalla sua riga nella scheda Livelli, che vale con
+/// qualunque strumento; poi torna la scheda di prima (e il cassetto
+/// dell'ispettore chiuso, sotto i 960 px) e il mouse esce dal foglio.
+async function sceltaDaiLivelli(page) {
+  const id = await page.evaluate(() => document.querySelector(".draw-editor .draw-surface ellipse[data-scene-id]")?.dataset.sceneId ?? null);
+  if (id === null) throw new Error("l'ellisse del disegno non c'è");
+  const primaScheda = await page.evaluate(() => document.querySelector('.inspector-tab[aria-selected="true"]')?.dataset.viewId ?? null);
+  const cassettoChiuso = await page.evaluate(() => window.innerWidth < 960 && document.querySelector('#toggle-inspector[aria-pressed="true"]') === null);
+  await schedaLivelli(page);
+  await page.click(`.draw-objects-tree .draw-object[data-key="${id}"] .draw-object-label`);
+  await page.waitForFunction(() => /\b1 di \d+ scelt/.test(document.body.innerText), null, { timeout: 4000 }).catch(() => {
+    throw new Error("la riga dell'ellisse nei Livelli non la sceglie");
+  });
+  if (primaScheda !== null && primaScheda !== "draw.layers") await page.click(`.inspector-tab[data-view-id="${primaScheda}"]`);
+  if (cassettoChiuso) {
+    await page.click("#toggle-inspector");
+    await page.waitForSelector('#toggle-inspector[aria-pressed="false"]');
+  }
+  await mouseFuori(page);
+  // Il fuoco torna sul foglio, dove l'avrebbe lasciato `Home`, e l'ultimo
+  // gesto è un tasto, come con `Home`: i menu aperti dopo mostrano l'anello
+  // del fuoco allo stesso modo. Il tasto non cambia la scelta: coi tasti di
+  // Fub sceglie di nuovo l'ellisse, col motore pronto non vale.
+  await page.focus(".draw-editor .draw-surface");
+  await page.keyboard.press("Home");
+}
+
+/// Il menu ≡ del Completo con Oggetto aperto (K6 T9a): le voci dell'indice di
+/// prova. Si apre col pulsante, poi si va su Oggetto col mouse, come chi usa il
+/// mouse: il sottomenu si apre di lato.
+async function openMenuOggetto(page) {
+  await openDrawing(page);
+  // Un oggetto scelto, come nello stato «un punto scelto» del prototipo. Con
+  // la tastiera: il menu che si apre dopo mostra l'anello del fuoco di chi usa
+  // la tastiera (WCAG 2.4.7). Col mouse, senza tastiera, non c'è (misurato).
+  await scegliPrimo(page);
+  // Il menu si costruisce quando si apre. Prima che il motore sia pronto «Cerca un
+  // comando…» porta ancora «Ctrl /», che col motore è un altro comando
+  // (`toolbar.ts`): la voce più larga cambia e il menu con lei (conformità,
+  // «menu.voce.aperta»). Il menu aperto troppo presto si chiude e si riapre.
+  for (let prova = 0; ; prova += 1) {
+    await page.click(".draw-header button[aria-label=\"Disegno\"]");
+    await page.waitForSelector("#context-menu [role='menuitem']:has-text('Oggetto')");
+    const conTasto = await page.locator("#context-menu [role='menuitem']:has-text('Cerca un comando') .kit-row-keys").count();
+    if (conTasto === 0) break;
+    if (prova === 10) throw new Error("il motore del Completo non è pronto: «Cerca un comando…» porta ancora il tasto");
+    await page.keyboard.press("Escape");
+    await page.waitForSelector("#context-menu", { state: "hidden", timeout: 2000 }).catch(() => undefined);
+    await page.waitForTimeout(500);
+  }
+  await page.hover("#context-menu [role='menuitem']:has-text('Oggetto')");
+  // Il terzo livello (K6 T9c): Oggetto › Tracciato, aperto come nel prototipo.
+  await page.waitForSelector(".context-submenu [role='menuitem']:has-text('Tracciato')");
+  await page.hover(".context-submenu [role='menuitem']:has-text('Tracciato')");
+  await page.waitForSelector(".context-submenu [role='menuitem']:has-text('Sposta tracciato')");
+  await page.evaluate(() => document.fonts.ready);
+}
+
+/// La ricerca dei comandi dal menu ≡: col motore Ctrl+/ è «Aggiungi nuovo riempimento»,
+/// come in VectorCraft, e la ricerca si apre solo dal menu.
+async function apriRicercaComandi(page) {
+  await page.click('.draw-header button[aria-label="Disegno"]');
+  await page.locator("#context-menu [role='menuitem']", { hasText: "Cerca un comando" }).first().click();
+  await page.waitForSelector(".draw-commands-dialog .draw-commands-row");
+}
+
+/// La tavolozza del menu ≡ con la ricerca «sposta» (K6 T9a): le voci che
+/// cominciano così, col loro posto, il tasto e il perché di quella spenta.
+async function openTavolozza(page) {
+  await openDrawing(page);
+  // Un oggetto scelto, come nello stato «un punto scelto» del prototipo.
+  await scegliPrimo(page);
+  await apriRicercaComandi(page);
+  await page.fill(".draw-commands-dialog .draw-commands-field input", "sposta");
+  await page.waitForFunction(() => document.querySelectorAll(".draw-commands-dialog .draw-commands-row").length >= 5);
+  await page.evaluate(() => document.fonts.ready);
+}
+
+/// Impostazioni › Scorciatoie con la sezione «Disegno completo» aperta e
+/// portata in cima.
+async function openDrawingKeys(page) {
+  await page.click("#open-settings");
+  await page.click('#settings-tabs button[data-tab="shortcuts"]');
+  await page.waitForSelector("#settings-body details.drawing-keys > summary");
+  await page.click("#settings-body details.drawing-keys > summary");
+  await page.waitForSelector('#settings-body .setting-row[data-setting-key="draw.keys:draw.path.reverse"]');
+  await page.$eval("#settings-body details.drawing-keys", (details) => details.closest("section")?.scrollIntoView({ block: "start" }));
+  await page.evaluate(() => document.fonts.ready);
+}
+
+/// Impostazioni con il riquadro «Motore del disegno» aperto, la categoria
+/// «Guide e griglia» aperta e il riquadro portato in cima.
+async function openEnginePrefs(page) {
+  await page.click("#open-settings");
+  const riquadro = '#settings-body details[data-details-key="drawing-engine"]';
+  await page.waitForSelector(`${riquadro} > summary`);
+  await page.click(`${riquadro} > summary`);
+  const griglia = `${riquadro} details[data-details-key="drawing-engine:Guides & Grid"]`;
+  await page.waitForSelector(`${griglia} > summary`);
+  await page.click(`${griglia} > summary`);
+  await page.waitForSelector(`${griglia}[open] .kit-form`);
+  await page.$eval(riquadro, (details) => details.scrollIntoView({ block: "start" }));
+  await page.evaluate(() => document.fonts.ready);
+}
+
+/// La stessa sezione dopo «Importa un insieme…» con un file che non è JSON.
+async function importBrokenKeySet(page) {
+  await openDrawingKeys(page);
+  const chooser = page.waitForEvent("filechooser");
+  await page.click("#settings-body .drawing-keys-set button:first-of-type");
+  await (await chooser).setFiles({ name: "tasti.json", mimeType: "application/json", buffer: Buffer.from("{non è json") });
+  await page.waitForSelector('#settings-body .drawing-keys [role="alert"]');
+  await page.$eval("#settings-body details.drawing-keys", (details) => details.closest("section")?.scrollIntoView({ block: "start" }));
+}
+
+async function openWorkspaceMenu(page) {
+  await openDrawing(page);
+  await page.waitForSelector("#status-workspace:not([hidden])");
+  await page.click("#status-workspace");
+  await page.waitForSelector("#context-menu [role='menuitemradio']");
+}
+
+/// Il Completo che non si carica (K6 T7): il modulo del suo ingresso non
+/// arriva, e il menu dello spazio dice che non si è caricato, con «Riprova».
+async function openWorkspaceErrorMenu(page) {
+  await page.route("**/completo/index.ts*", (route) => route.abort());
+  await openWorkspaceMenu(page);
+  await page.waitForSelector("#context-menu [role='menuitem']:has-text('Riprova')");
+}
+
+/// La tendina della casella a più strumenti (K6 T8): la matita, con la freccia
+/// di lato da tastiera, come la apre chi usa la tastiera.
+async function openColumnGroup(page) {
+  await openDrawing(page);
+  // La prima casella con il triangolino: quella che ha più strumenti.
+  await apriTendina(page, ".draw-rail .kit-rail-slot:has(.kit-rail-corner)");
+}
+
+/// La tendina della casella `casella` (un selettore) con la freccia di lato:
+/// destra in colonna, su in fila (il foglio stretto). La colonna si rifà
+/// quando il motore diventa pronto (o spento): un tasto arrivato sulla
+/// casella di prima si perde, o la tendina si chiude, e allora si ripreme, al
+/// più tre volte.
+async function apriTendina(page, casella) {
+  for (let prova = 0; prova < 3; prova += 1) {
+    await page.waitForSelector(casella);
+    await page.focus(casella);
+    await page.evaluate((selettore) => {
+      const el = document.querySelector(selettore);
+      const lato = el.closest(".kit-rail").dataset.orientation === "horizontal" ? "ArrowUp" : "ArrowRight";
+      el.dispatchEvent(new KeyboardEvent("keydown", { key: lato, bubbles: true, cancelable: true }));
+    }, casella);
+    const voce = ".kit-rail-flyout [role='menuitemradio']";
+    const aperta = await page.waitForSelector(voce, { timeout: 5000 }).then(() => true, () => false);
+    if (!aperta) continue;
+    // Una colonna che si rifà dopo chiude anche la tendina appena aperta.
+    await page.waitForTimeout(500);
+    if (await page.locator(voce).first().isVisible()) return;
+  }
+  throw new Error(`la tendina di ${casella} non si apre`);
+}
+
+/// La Selezione diretta del motore (K6 T11) scelta dalla sua casella: la
+/// casella si accende quando la famiglia è pronta.
+async function scegliSelezioneDiretta(page) {
+  await openDrawing(page);
+  const casella = '.draw-rail .kit-rail-slot[data-slot="motore:directSelection"]';
+  await page.waitForSelector(casella);
+  await page.click(casella);
+  await page.waitForSelector(`${casella}[aria-pressed="true"], ${casella} [aria-pressed="true"], ${casella}.is-active, ${casella}[data-active]`, { timeout: 5000 }).catch(() => {});
+  await page.evaluate(() => document.fonts.ready);
+}
+
+/// Il menu dello zoom della banda (K6 T11): la sua voce, aperta come la apre chi
+/// preme; il fuoco va alla prima voce.
+async function openZoomMenu(page) {
+  await openDrawing(page);
+  // Il menu c'è solo col Completo presente: si aspettano le sue caselle del motore.
+  await page.waitForSelector('.draw-rail .kit-rail-slot[data-slot="motore:directSelection"]');
+  await page.waitForSelector('[data-surface-item="zoom"]');
+  await page.click('[data-surface-item="zoom"]');
+  await page.waitForSelector(".draw-zoom-popover .draw-zoom-item");
+  await page.evaluate(() => document.fonts.ready);
+}
+
+/// La tendina della casella `slot` della colonna (K6 T12), aperta con la
+/// freccia di lato come fa chi usa la tastiera.
+async function openRailFlyout(page, slot) {
+  await openDrawing(page);
+  await apriTendina(page, `.draw-rail .kit-rail-slot[data-slot="${slot}"]`);
+}
+
+/// La casella delle forme della colonna (K6 T13): quella di Rettangolo. La sua
+/// prima voce è di Fub (`rect`) o del motore (`motore:rectangle`): si legge dal DOM.
+async function openFormeTendina(page) {
+  await openDrawing(page);
+  // Prima le caselle del motore: finché non arrivano la casella è quella di Fub, `rect`, che poi
+  // lascia il posto a `motore:rectangle`.
+  await page.waitForSelector('.draw-rail .kit-rail-slot[data-slot="motore:directSelection"]');
+  const selettore = '.draw-rail .kit-rail-slot[data-slot="motore:rectangle"], .draw-rail .kit-rail-slot[data-slot="rect"]';
+  await page.waitForSelector(selettore);
+  const slot = await page.evaluate((sel) => document.querySelector(sel).dataset.slot, selettore);
+  await openRailFlyout(page, slot);
+  await page.evaluate(() => document.fonts.ready);
+}
+
+/// La finestra delle misure del Rettangolo (K6 T13, giro 2): la voce «Rettangolo (Completo)»
+/// della tendina della casella `rect`, poi un clic sul foglio. È il clic sul foglio ad
+/// aprirla, come nel Completo: la sola scelta dalla tendina non apre niente.
+async function openFormeFinestra(page) {
+  await openFormeTendina(page);
+  await page.locator(".kit-rail-flyout [role='menuitemradio']", { hasText: "Rettangolo (Completo)" }).first().click();
+  const foglio = await page.locator(".draw-editor .draw-surface").first().boundingBox();
+  if (!foglio) throw new Error("il foglio del disegno non c'è");
+  await page.mouse.click(foglio.x + foglio.width / 2, foglio.y + foglio.height / 2);
+  await page.waitForSelector(".kit-dialog.draw-effect-dialog .kit-number-input");
+  await page.waitForSelector('.kit-dialog.draw-effect-dialog [data-action="ok"]:not([disabled])');
+  await page.evaluate(() => document.fonts.ready);
+}
+
+/// La sezione Allinea nel Design (K6 T13, giro 2) con il disegno scelto per intero:
+/// la scheda Design, poi Ctrl+A, come chi allinea una selezione. Sotto i 960 px
+/// l'ispettore è un cassetto che si apre dal suo pulsante: lì il disegno si sceglie
+/// a cassetto chiuso, poi si apre il cassetto e la scheda Design.
+async function openSezioneDesign(page, selettore) {
+  if (await page.evaluate(() => window.innerWidth >= 960)) {
+    await openDesignoScelto(page);
+  } else {
+    await openDrawing(page);
+    await page.click(SELEZIONE_DELLA_ROTAIA);
+    const foglio = await page.locator(".draw-editor .draw-surface").first().boundingBox();
+    if (!foglio) throw new Error("il foglio del disegno non c'è");
+    await page.mouse.click(foglio.x + 30, foglio.y + 30);
+    await page.keyboard.press("Control+a");
+    await page.click("#toggle-inspector");
+    await page.waitForSelector('#toggle-inspector[aria-pressed="true"]');
+    await page.click('.inspector-tab[data-view-id="draw.design"]');
+    await page.waitForSelector('#surface-panel-draw-design:not([hidden]) section.draw-properties');
+    await page.waitForFunction(() => {
+      const soggetto = document.querySelector("#surface-panel-draw-design .draw-properties-subject");
+      return soggetto !== null && soggetto.textContent.trim() !== "" && !soggetto.textContent.includes("Il disegno");
+    });
+  }
+  await page.waitForSelector(selettore);
+  await page.evaluate(() => document.fonts.ready);
+  await scorriInCima(page, selettore);
+}
+
+/// La sezione `selettore` in cima al pannello che la contiene.
+async function scorriInCima(page, selettore) {
+  // Scorre solo il primo contenitore scrollabile sopra la sezione (il pannello), non la pagina.
+  // Il pannello si rifà quando arriva il motore (sezioni nuove sopra): si riscorre finché la
+  // sezione resta in cima per due controlli di fila, al più dieci volte.
+  const scorri = () =>
+    page.evaluate((sel) => {
+      const el = document.querySelector(sel);
+      if (!el) return null;
+      for (let p = el.parentElement; p && p !== document.body; p = p.parentElement) {
+        if (p.scrollHeight > p.clientHeight + 1 && /(auto|scroll)/.test(getComputedStyle(p).overflowY)) {
+          const scarto = el.getBoundingClientRect().top - p.getBoundingClientRect().top - 8;
+          p.scrollTop += scarto;
+          return `${Math.round(scarto)}:${p.scrollHeight}`;
+        }
+      }
+      return "0:0";
+    }, selettore);
+  let prima = await scorri();
+  for (let prova = 0; prova < 10; prova += 1) {
+    await page.waitForTimeout(250);
+    const ora = await scorri();
+    if (ora !== null && ora === prima) return;
+    prima = ora;
+  }
+}
+
+/// La sezione Allinea nel Design (K6 T13, giro 2) con il disegno scelto per intero.
+async function openAllinea(page) {
+  await openSezioneDesign(page, ".draw-align-to");
+}
+
+/// La sezione Trasforma nel Design (K6 T13, giro 3) con il disegno scelto per intero.
+async function openTrasformaSezione(page) {
+  await openSezioneDesign(page, ".draw-transform-grid");
+}
+
+/// La scheda Livelli in vista, sotto i 960 px nel cassetto dell'ispettore come per le sezioni.
+async function schedaLivelli(page) {
+  if (await page.evaluate(() => window.innerWidth < 960)) {
+    await page.click("#toggle-inspector");
+    await page.waitForSelector('#toggle-inspector[aria-pressed="true"]');
+  }
+  await page.click('.inspector-tab[data-view-id="draw.layers"]');
+  await page.waitForSelector('.draw-objects-tree .draw-object[aria-level="1"]');
+}
+
+/// La riga del livello che si chiama `nome` nella scheda Livelli: la riga mostra il solo nome, e il nome
+/// accessibile dice «Livello «nome»» (`aria-label`, da `tree.ts`).
+const rigaDelLivello = (nome) => `.draw-objects-tree .draw-object[aria-level="1"][aria-label^="Livello «${nome}»"]`;
+
+/// La scheda Livelli del Completo (K6 T15, giro 4): il disegno aperto, la scheda Livelli in vista, e un livello
+/// nuovo dal menu dei livelli, che passa dal motore del banco e va in cima. Livello 1 resta aperto coi suoi oggetti.
+async function openLivelli(page) {
+  await openDrawing(page);
+  await schedaLivelli(page);
+  // Nel Completo «Nuovo livello» sta nel menu della scheda Livelli, come in VectorCraft.
+  await page.click(".draw-objects-menu:visible");
+  await page.click(`#context-menu [role^="menuitem"]:has-text("Nuovo livello")`);
+  await page.waitForSelector(rigaDelLivello("Livello 2"));
+  await page.evaluate(() => document.fonts.ready);
+}
+
+/// Due livelli, poi «Livello 2» rinominato «Sfondo» col doppio clic e bloccato col lucchetto della riga, e
+/// «Livello 1» nascosto con l'occhio: ogni comando passa dal motore del banco.
+async function livelliCambiati(page) {
+  await openLivelli(page);
+  await page.dblclick(`${rigaDelLivello("Livello 2")} .draw-object-label`);
+  await page.waitForSelector(".draw-object-rename");
+  await page.fill(".draw-object-rename", "Sfondo");
+  await page.keyboard.press("Enter");
+  await page.waitForSelector(rigaDelLivello("Sfondo"));
+  // I segni si vedono col puntatore sulla riga, come nel pannello degli oggetti.
+  await page.hover(rigaDelLivello("Sfondo"));
+  await page.click(`${rigaDelLivello("Sfondo")} [data-sign="lock"]`);
+  await page.waitForSelector(`${rigaDelLivello("Sfondo")} [data-sign="lock"][data-on]`);
+  await page.hover(rigaDelLivello("Livello 1"));
+  await page.click(`${rigaDelLivello("Livello 1")} [data-sign="hide"]`);
+  await page.waitForSelector(`${rigaDelLivello("Livello 1")} [data-sign="hide"][data-on]`);
+  await page.evaluate(() => document.fonts.ready);
+}
+
+/// Due livelli e il filtro «Ellisse»: restano l'ellisse e i connettori che ne partono, dentro il loro livello.
+async function livelliFiltrati(page) {
+  await openLivelli(page);
+  await page.fill(".draw-objects-search", "Ellisse");
+  await page.waitForFunction(() => document.querySelectorAll(".draw-objects-tree .draw-object").length < 8);
+  await page.evaluate(() => document.fonts.ready);
+}
+
+/// Il Design del Completo con un oggetto scelto (K6 T13, giro 4): la scheda Design, poi la sezione
+/// `selettore` portata in vista. Sotto i 960 px l'ispettore è un cassetto, come per le altre sezioni.
+async function openSezioneConUno(page, selettore, sceglie = scegliPrimo) {
+  await openDrawing(page);
+  await sceglie(page);
+  if (await page.evaluate(() => window.innerWidth >= 960)) {
+    await page.click('.inspector-tab[data-view-id="draw.design"]');
+  } else {
+    await page.click("#toggle-inspector");
+    await page.waitForSelector('#toggle-inspector[aria-pressed="true"]');
+    await page.click('.inspector-tab[data-view-id="draw.design"]');
+  }
+  await page.waitForSelector('#surface-panel-draw-design:not([hidden]) section.draw-properties');
+  await page.waitForFunction(() => {
+    const soggetto = document.querySelector("#surface-panel-draw-design .draw-properties-subject");
+    return soggetto !== null && soggetto.textContent.trim() !== "" && !soggetto.textContent.includes("Il disegno");
+  });
+  await page.waitForSelector(selettore);
+  await page.evaluate(() => document.fonts.ready);
+  await scorriInCima(page, selettore);
+}
+
+/// Le due forme sovrapposte di `?elabora=1` scelte col clic (il rettangolo, poi il cerchio con
+/// Maiusc), e la sezione «Elaborazione tracciati» del Design in vista (K6 T12, giro 5). Con
+/// `voce`, il pulsante della voce premuto: la scena aspetta che le due forme lascino il posto
+/// al tracciato del banco. Sotto i 960 px il cassetto copre il foglio: dopo il clic, o con
+/// `foglio`, si chiude, perché la foto mostri il disegno.
+async function openElaborazione(page, voce = null, { foglio = false } = {}) {
+  await sceltaElaborazione(page, voce);
+  const stretta = await page.evaluate(() => window.innerWidth < 960);
+  if (stretta && (foglio || voce !== null)) {
+    await page.click("#toggle-inspector");
+    await page.waitForSelector('#toggle-inspector[aria-pressed="false"]');
+  }
+  await page.evaluate(() => document.fonts.ready);
+}
+
+async function sceltaElaborazione(page, voce) {
+  const scegliDue = async (p) => {
+    await selezioneDelMotore(p);
+    for (const [id, maiusc] of [["o0000001a", false], ["o0000001b", true]]) {
+      const forma = await p.locator(`.draw-editor .draw-surface [data-scene-id="${id}"]`).first().boundingBox();
+      if (!forma) throw new Error(`la forma ${id} del disegno non c'è`);
+      // Il rettangolo si prende nell'angolo che il cerchio non copre.
+      const [x, y] = maiusc ? [forma.x + forma.width * 0.75, forma.y + forma.height * 0.75] : [forma.x + 12, forma.y + 12];
+      if (maiusc) await p.keyboard.down("Shift");
+      await p.mouse.click(x, y);
+      if (maiusc) await p.keyboard.up("Shift");
+      // Col motore la scelta torna dopo il gesto: il clic con Maiusc parte da quella del primo.
+      if (!maiusc) await p.waitForFunction(() => /\b1 di \d+ scelt/.test(document.body.innerText), null, { timeout: 4000 }).catch(() => {});
+    }
+    await mouseFuori(p);
+    await p.waitForFunction(() => /\b2 di \d+ scelt/.test(document.body.innerText), null, { timeout: 4000 }).catch(() => {
+      throw new Error("il clic con Maiusc non sceglie le due forme");
+    });
+  };
+  await openSezioneConUno(page, '#surface-panel-draw-design [data-section="pathfinder"]', scegliDue);
+  if (voce === null) return;
+  await page.click(`#surface-panel-draw-design button[data-id="${voce}"]`);
+  await page.waitForFunction(
+    () => document.querySelector('.draw-editor .draw-surface [data-scene-id="o0000001c"]') !== null
+      && document.querySelector('.draw-editor .draw-surface [data-scene-id="o0000001a"]') === null,
+    null,
+    { timeout: 6000 },
+  ).catch(() => {
+    throw new Error("il tracciato dell'elaborazione non arriva sul foglio");
+  });
+  await page.evaluate(() => document.fonts.ready);
+}
+
+/// Risorse › Campioni (K6 T14, giro 2): la scheda Risorse, nel cassetto sotto i 960 px, e il terzo
+/// campione scelto col clic (senza selezione non parte niente).
+async function openCampioni(page) {
+  await openDrawing(page);
+  if (await page.evaluate(() => window.innerWidth < 960)) {
+    await page.click("#toggle-inspector");
+    await page.waitForSelector('#toggle-inspector[aria-pressed="true"]');
+  }
+  await page.click('.inspector-tab[data-view-id="draw.resources"]');
+  await page.waitForSelector("#surface-panel-draw-resources:not([hidden]) .draw-resources-swatches .kit-color-swatch");
+  await page.locator("#surface-panel-draw-resources .draw-resources-swatches .kit-color-swatch").nth(2).click();
+  await page.waitForSelector('#surface-panel-draw-resources .kit-color-swatch[aria-pressed="true"]');
+  await page.evaluate(() => document.fonts.ready);
+}
+
+/// La finestra «Nuovo campione» (K6 T14, giro 2): «Nuovo…» di Risorse › Campioni, col nome scritto.
+async function openNuovoCampione(page) {
+  await openCampioni(page);
+  await page.click('#surface-panel-draw-resources .draw-resources-swatches-actions [data-action="nuovo"]');
+  await page.waitForSelector(".kit-dialog.draw-resources-swatches-dialog input");
+  await page.fill(".kit-dialog.draw-resources-swatches-dialog input", "Verde salvia");
+  await page.evaluate(() => document.fonts.ready);
+}
+
+/// La sezione Colore con un testo scelto (K6 T14, giro 2): il titolo del Testo del Completo, poi Colore
+/// in vista. Il testo non ha contorno: il pozzo dice «Nessuno», spento, non «Misto».
+async function openColoreTesto(page) {
+  await openSezioniTesto(page);
+  await page.waitForSelector("#surface-panel-draw-design .draw-color");
+  await page.locator("#surface-panel-draw-design .draw-color").scrollIntoViewIfNeeded();
+  await page.evaluate(() => document.fonts.ready);
+}
+
+/// Carattere e Paragrafo del Design (K6 T16, giro 1): un titolo scritto col Testo del Completo, che
+/// Esc conferma e lascia scelto, poi la scheda Design; sotto i 960 px l'ispettore è un cassetto.
+/// Carattere in vista.
+async function openSezioniTesto(page) {
+  await scriviColTesto(page);
+  await page.keyboard.press("Escape");
+  await page.waitForFunction(() => document.querySelector("textarea.draw-scrittura") === null);
+  if (await page.evaluate(() => window.innerWidth < 960)) {
+    await page.click("#toggle-inspector");
+    await page.waitForSelector('#toggle-inspector[aria-pressed="true"]');
+  }
+  await page.click('.inspector-tab[data-view-id="draw.design"]');
+  await page.waitForSelector("#surface-panel-draw-design:not([hidden]) .draw-type .kit-font-button");
+  await page.locator("#surface-panel-draw-design .draw-type").scrollIntoViewIfNeeded();
+  await page.evaluate(() => document.fonts.ready);
+}
+
+/// Il Testo del Completo (K6 T16, giro 1): la voce «Testo (Completo)» della casella del testo, un
+/// clic sul foglio vuoto e due righe scritte con la tastiera; la casella resta aperta.
+async function scriviColTesto(page) {
+  await openDrawing(page);
+  // La casella del testo ha la tendina solo quando le caselle del motore sono arrivate: prima è
+  // quella del Testo di Fub, da sola.
+  await page.waitForSelector('.draw-rail .kit-rail-slot[data-slot="motore:directSelection"]');
+  // La casella del testo mostra il Testo del Completo, `motore:type`.
+  await openRailFlyout(page, "motore:type");
+  await page.click(".kit-rail-flyout [role='menuitemradio'][data-item='motore:type'], .kit-rail-flyout [role='menuitemradio']:has-text('Testo (Completo)')");
+  const foglio = await page.locator(".draw-editor .draw-surface").boundingBox();
+  await page.mouse.click(foglio.x + foglio.width * 0.3, foglio.y + foglio.height * 0.7);
+  await page.waitForSelector("textarea.draw-scrittura");
+  await page.keyboard.type("Città già scritta");
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("seconda riga");
+  await page.waitForFunction(() => (document.querySelector(".draw-editor .draw-surface")?.textContent ?? "").includes("seconda riga"));
+  await page.evaluate(() => document.fonts.ready);
+}
+
+/// La finestra «Ruota…» di Oggetto › Trasforma (K6 T13, giro 3): il disegno scelto per intero, poi
+/// il comando dal menu ≡, come chi lo usa col mouse. La finestra ha l'angolo, l'anteprima e OK.
+async function openRuotaFinestra(page) {
+  // Il disegno aperto e un oggetto scelto, come il menu ≡ di Oggetto (openMenuOggetto).
+  await openDrawing(page);
+  await scegliPrimo(page);
+  await page.click('.draw-header button[aria-label="Disegno"]');
+  await page.waitForSelector("#context-menu [role='menuitem']:has-text('Oggetto')");
+  await page.hover("#context-menu [role='menuitem']:has-text('Oggetto')");
+  await page.waitForSelector(".context-submenu [role='menuitem']:has-text('Trasforma')");
+  await page.hover(".context-submenu [role='menuitem']:has-text('Trasforma')");
+  await page.waitForSelector(".context-submenu [role='menuitem']:has-text('Ruota')");
+  // Il clic sulla voce del sottomenu è quello dell'elemento: il menu si chiude a ogni movimento del puntatore.
+  await page.evaluate(() => [...document.querySelectorAll(".context-submenu [role='menuitem']")].find((el) => el.textContent.includes("Ruota")).click());
+  await page.waitForSelector(".kit-dialog.draw-effect-dialog .kit-number-input");
+  await page.waitForSelector('.kit-dialog.draw-effect-dialog [data-action="ok"]:not([disabled])');
+  await page.evaluate(() => document.fonts.ready);
+}
+
+/// Il menu ≡ del Completo con ≡ › Selezione › Uguale aperto, con l'ellisse scelta (K6 T15, giro 1).
+/// Uguale vuole un oggetto scelto: «Colore tratto» e le altre voci valgono, e «Istanza di simbolo»
+/// è spenta col perché del motore. Se l'ellisse non è scelta la scena si ferma: una foto con tutto
+/// spento direbbe una cosa falsa.
+async function openMenuUguale(page) {
+  await openDrawing(page);
+  // Il primo oggetto, l'ellisse, scelto da tastiera come in openMenuOggetto (K6 T15 giro 1: prima del
+  // giro 2 il clic del mouse sul banco non sceglieva, e il clic ora lo fa: `clicSullEllisse`).
+  // Lo strumento di selezione col tasto «v», come nella scena «draw-selection»: la penna resterebbe attiva.
+  await selezioneDelMotore(page);
+  await scegliPrimo(page);
+  await page.click('.draw-header button[aria-label="Disegno"]');
+  await page.waitForSelector("#context-menu [role='menuitem']:has-text('Selezione')");
+  await page.hover("#context-menu [role='menuitem']:has-text('Selezione')");
+  // La voce che si chiama «Uguale», non una che la nomina: il perché di «Riseleziona» spenta la cita,
+  // sta prima, e `:has-text` sceglieva lei.
+  const uguale = page.locator(".context-submenu [role='menuitem']").filter({ hasText: /^Uguale/ });
+  await uguale.waitFor();
+  await uguale.hover();
+  await page.waitForSelector(".context-submenu [role='menuitem']:has-text('Colore tratto')");
+  const scelta = await page.evaluate(() => {
+    const voce = [...document.querySelectorAll(".context-submenu [role='menuitem']")].find((el) => el.textContent.includes("Colore tratto"));
+    return voce !== undefined && !voce.textContent.includes("Scegli un oggetto.");
+  });
+  if (!scelta) throw new Error("l'ellisse non è scelta: le voci di Uguale restano spente");
+  await page.evaluate(() => document.fonts.ready);
+}
+
+/// «Uguale › Colore tratto» sul foglio: l'ellisse e le due linee con lo stesso tratto scelte insieme
+/// (K6 T15, giro 1). Il clic sulla voce è quello dell'elemento: il menu si chiude a ogni movimento del
+/// puntatore, come in Oggetto › Trasforma.
+async function openUgualeTratto(page) {
+  await openMenuUguale(page);
+  await page.evaluate(() => [...document.querySelectorAll(".context-submenu [role='menuitem']")].find((el) => el.textContent.includes("Colore tratto")).click());
+  await page.waitForTimeout(600);
+  await page.evaluate(() => document.fonts.ready);
+}
+
+/// La finestra «Satura…» di Modifica › Modifica colori (K6 T14, giro 1) da Ctrl+/ con la prima forma
+/// scelta: l'intensità in %, e l'anteprima che il banco risponde (`disegno-famiglie/colore.json`).
+async function openSaturaFinestra(page) {
+  await openDrawing(page);
+  await scegliPrimo(page);
+  await apriRicercaComandi(page);
+  await page.fill(".draw-commands-dialog .draw-commands-field input", "satura");
+  await page.locator(".draw-commands-dialog .draw-commands-row", { hasText: "Satura…" }).first().click();
+  await page.waitForSelector(".kit-dialog.draw-effect-dialog .kit-number-input");
+  await page.fill(".kit-dialog.draw-effect-dialog .kit-number-input", "40");
+  await page.keyboard.press("Tab");
+  await page.waitForSelector('.kit-dialog.draw-effect-dialog [data-action="ok"]:not([disabled])');
+  await page.waitForTimeout(400);
+  await page.evaluate(() => document.fonts.ready);
+}
+
+/// Un clic del mouse sul centro dell'ellisse del disegno, la prima forma (K6 T15, giro 2).
+async function sceltaEllisse(page) {
+  const forma = await page.locator(".draw-editor .draw-surface ellipse[data-scene-id]").first().boundingBox();
+  if (!forma) throw new Error("l'ellisse del disegno non c'è");
+  await page.mouse.click(forma.x + forma.width / 2, forma.y + forma.height / 2);
+  await mouseFuori(page);
+}
+
+/// Il tasto «v» sceglie la Selezione. Col motore pronto è quella del motore, e
+/// la colonna la accende (`motore:…`); se il motore non è ancora pronto il
+/// tasto sceglie quella di Fub, che disegna un'altra cornice: allora si
+/// riprova, al più tre volte. Una scena dove il motore non c'è resta con la
+/// Selezione di Fub, com'era. Vero se la Selezione del motore è accesa.
+async function selezioneDelMotore(page) {
+  for (let prova = 0; prova < 3; prova += 1) {
+    await page.focus(".draw-editor .draw-surface");
+    await page.keyboard.press("v");
+    const accesa = await page
+      .waitForFunction(
+        () => [...document.querySelectorAll('.draw-rail button[aria-pressed="true"]')]
+          .some((b) => `${b.dataset.tool ?? ""} ${b.dataset.tools ?? ""}`.includes("motore:")),
+        null,
+        { timeout: 2000 },
+      )
+      .then(() => true, () => false);
+    if (accesa) return true;
+  }
+  return false;
+}
+
+/// Il mouse esce dal foglio, appena sopra il suo bordo: fermo sull'oggetto, il
+/// motore ci disegna i segni del passaggio (la misura) solo se la risposta
+/// arriva prima dello scatto, e la foto cambierebbe da una corsa all'altra.
+async function mouseFuori(page) {
+  const foglio = await page.locator(".draw-editor .draw-surface").first().boundingBox();
+  if (!foglio) return;
+  await page.mouse.move(foglio.x + foglio.width / 2, Math.max(0, foglio.y - 4));
+  await page.waitForTimeout(150);
+}
+
+/// Il clic del mouse sull'ellisse la sceglie: la barra di stato dice «1 di 11 scelti». Se il clic non
+/// sceglie, la scena si ferma: così il banco prova che il clic funziona (K6 T15, giro 2).
+async function clicSullEllisse(page) {
+  await openDrawing(page);
+  await sceltaConIlClic(page);
+  await page.evaluate(() => document.fonts.ready);
+}
+
+/// Lo stesso clic nello spazio Semplice: la scelta passa dallo stesso motore, e la barra dice «1 di 11
+/// scelti» come nel Completo (K6 T15, giro 2).
+async function clicSullEllisseSemplice(page) {
+  await openDrawing(page);
+  await page.click("#status-workspace");
+  await page.waitForSelector("#context-menu [role='menuitemradio']:has-text('Semplice')");
+  await page.click("#context-menu [role='menuitemradio']:has-text('Semplice')");
+  await page.waitForTimeout(1500);
+  await page.waitForSelector(".draw-editor .draw-surface ellipse[data-scene-id]", { timeout: 15000 });
+  await sceltaConIlClic(page);
+  await page.evaluate(() => document.fonts.ready);
+}
+
+/// Lo strumento di selezione e il clic sull'ellisse, che la barra di stato deve dire scelta (K6 T15, giro 2).
+async function sceltaConIlClic(page) {
+  await selezioneDelMotore(page);
+  await sceltaEllisse(page);
+  await page.waitForFunction(() => /\b1 di \d+ scelt/.test(document.body.innerText), null, { timeout: 4000 }).catch(() => {
+    throw new Error("il clic sull'ellisse non la sceglie");
+  });
+}
+
+/// La Selezione diretta del motore con un punto scelto (K6 T12, `?punti=1`):
+/// la fila dei punti in testata, coi pulsanti accesi e la posizione.
+async function scegliSelezioneDirettaCoiPunti(page) {
+  await scegliSelezioneDiretta(page);
+  // La posizione può stare nel «…» della riga: basta che ci sia.
+  await page.waitForSelector(".draw-point-place .draw-point-coord input", { state: "attached" });
+  await page.waitForFunction(() => document.querySelector(".draw-point-coord input")?.value !== "");
+}
+
+/// La sezione «Punto di ancoraggio» del Design (K6 T12, giro 4): la Selezione
+/// diretta con un punto scelto, poi la scheda Design; sotto i 960 px l'ispettore
+/// è un cassetto, che si apre dal suo pulsante.
+async function openSezionePunto(page) {
+  await scegliSelezioneDirettaCoiPunti(page);
+  if (await page.evaluate(() => window.innerWidth < 960)) {
+    await page.click("#toggle-inspector");
+    await page.waitForSelector('#toggle-inspector[aria-pressed="true"]');
+  }
+  await page.click('.inspector-tab[data-view-id="draw.design"]');
+  const sezione = '#surface-panel-draw-design:not([hidden]) .draw-properties-section[data-section="anchor"]';
+  await page.waitForSelector(`${sezione} .draw-properties-segment:not([aria-disabled])`);
+  // La sezione sta sotto Proprietà e Documento: la si porta in vista, come chi scorre.
+  await page.locator(sezione).scrollIntoViewIfNeeded();
+  await page.evaluate(() => document.fonts.ready);
+}
+
+/// Sposta tracciato (K6 T12, giro 4) da Ctrl+/ con la prima forma scelta: la
+/// finestra con l'anteprima che il banco risponde (`disegno-famiglie/tracciati.json`).
+async function openSpostaTracciato(page) {
+  await openDrawing(page);
+  await page.waitForSelector('.draw-rail .kit-rail-slot[data-slot="motore:directSelection"]');
+  await scegliPrimo(page);
+  await apriRicercaComandi(page);
+  await page.fill(".draw-commands-dialog .draw-commands-field input", "sposta tracciato");
+  await page.locator(".draw-commands-dialog .draw-commands-row", { hasText: "Sposta tracciato" }).first().click();
+  await page.waitForSelector('.kit-dialog.draw-effect-dialog [data-action="ok"]:not([disabled])');
+  await page.waitForTimeout(400);
+  await page.evaluate(() => document.fonts.ready);
+}
+
+/// ≡ › Visualizza del Completo (K6 T11, giro E): il menu ≡ aperto dal suo bottone, e il
+/// sottomenu Visualizza aperto come lo apre chi usa il mouse.
+async function openVisualizza(page) {
+  await openDrawing(page);
+  await page.waitForSelector('.draw-rail .kit-rail-slot[data-slot="motore:directSelection"]');
+  await page.click('.draw-header button[aria-label="Disegno"]');
+  await page.waitForSelector("#context-menu [role='menuitem']:has-text('Visualizza')");
+  await page.hover("#context-menu [role='menuitem']:has-text('Visualizza')");
+  // Le voci con la spunta hanno il ruolo `menuitemcheckbox`: l'attesa li prende tutti.
+  await page.waitForSelector(".context-submenu [role^='menuitem']:has-text('Mostra griglia')");
+  await page.evaluate(() => document.fonts.ready);
+}
+
+/// I righelli del bordo (K6 T11, giro E): «Mostra righelli» da ≡ › Visualizza, scelta come
+/// la sceglie chi usa il mouse.
+async function openRighelli(page) {
+  await openVisualizza(page);
+  await page.click(".context-submenu [role^='menuitem']:has-text('Mostra righelli')");
+  await page.waitForSelector(".draw-ruler-x:not([hidden])");
+  await page.evaluate(() => document.fonts.ready);
+}
+
+/// Il navigatore della banda (K6 T11, giro E): la sua voce premuta come la preme chi
+/// usa il mouse; la panoramica compare in basso a destra del foglio.
+async function openNavigatore(page) {
+  await openDrawing(page);
+  await page.waitForSelector('.draw-rail .kit-rail-slot[data-slot="motore:directSelection"]');
+  await page.waitForSelector('[data-surface-item="navigator"]');
+  await page.click('[data-surface-item="navigator"]');
+  await page.waitForSelector(".draw-navigator:not([hidden])");
+  await page.evaluate(() => document.fonts.ready);
+}
+
+/// «Tutti gli strumenti» (K6 T8): il cassetto aperto dalla sua casella; con
+/// `cerca`, il campo della ricerca scritto.
+async function openDrawerScene(page, cerca = "") {
+  await openDrawing(page);
+  await page.click('.draw-rail .kit-rail-slot[data-slot="all"]');
+  await page.waitForSelector(".draw-drawer-popover .draw-drawer-tool");
+  if (cerca !== "") await page.fill(".draw-drawer-field input", cerca);
+}
+
+/// Il fuoco da tastiera sul bottone dello spazio (K6 T7): l'anello si vede.
+async function focusWorkspaceButton(page) {
+  await openDrawing(page);
+  await page.waitForSelector("#status-workspace:not([hidden])");
+  await page.evaluate(() => document.querySelector("#status-workspace")?.focus({ focusVisible: true }));
+}
+
+/// Apre il disegno e la scheda Risorse dell'ispettore (K6 T10): il pannello
+/// della scheda è quello che si vede, con i campioni del documento.
+async function openRisorse(page) {
+  await openDrawing(page);
+  await page.click('.inspector-tab[data-view-id="draw.resources"]');
+  await page.waitForSelector('#surface-panel-draw-resources:not([hidden]) .draw-resources');
+}
+
+/// Apre il disegno, sceglie lo strumento Selezione dalla colonna, clicca un
+/// punto vuoto del foglio e seleziona tutto: l'ispettore mostra il Design con la
+/// selezione (K6 T10). Il clic su una forma non la sceglie nel Completo di
+/// oggi, e il punto singolo del prototipo è di T12.
+/// La Selezione della colonna: quella di Fub, o quella del Completo col motore
+/// acceso (`strumento:selection` dei testi del nucleo, «(Completo)» la distingue).
+const SELEZIONE_DELLA_ROTAIA = '.draw-rail [aria-label="Selezione"], .draw-rail [aria-label="Selezione (Completo)"]';
+
+async function openDesignoScelto(page) {
+  await openDesignoVuoto(page);
+  await page.click(SELEZIONE_DELLA_ROTAIA);
+  const foglio = await page.locator(".draw-editor .draw-surface").first().boundingBox();
+  if (!foglio) throw new Error("il foglio del disegno non c'è");
+  await page.mouse.click(foglio.x + 30, foglio.y + 30);
+  await page.keyboard.press("Control+a");
+  // Il titolo del pannello dice la selezione, non «Il disegno».
+  await page.waitForFunction(() => {
+    const soggetto = document.querySelector("#surface-panel-draw-design .draw-properties-subject");
+    return soggetto !== null && soggetto.textContent.trim() !== "" && !soggetto.textContent.includes("Il disegno");
+  });
+}
+
+/// Apre il disegno e la scheda Design dell'ispettore, senza nulla scelto (K6 T10).
+async function openDesignoVuoto(page) {
+  await openDrawing(page);
+  await page.click('.inspector-tab[data-view-id="draw.design"]');
+  await page.waitForSelector('#surface-panel-draw-design:not([hidden]) section.draw-properties');
+}
+
 async function openDrawingStanding(page, ask) {
   await openDrawing(page);
   const chip = ".pane.focus .pane-toolbar .pane-standing:not([hidden]) .pane-standing-chip";
@@ -4890,6 +6097,24 @@ async function openDrawingStanding(page, ask) {
     await page.click(".pane-standing-panel .pane-standing-ask");
     await page.waitForSelector(".pane-standing-panel .pane-standing-places");
   }
+}
+
+/// Apre il disegno dei connettori e la finestra del comando nello stato `stato`
+/// (`finestra`, `caricamento` o `errore`), e aspetta che lo stato sia dipinto:
+/// col fuoco dove la finestra lo mette.
+async function openDrawingWindow(page, stato) {
+  await openDrawing(page);
+  await page.evaluate((each) => window.bench.finestra(each), stato);
+  const dialog = ".kit-dialog.draw-effect-dialog";
+  if (stato === "finestra") {
+    await page.waitForSelector(`${dialog} .kit-number-input`);
+    await page.waitForSelector(`${dialog} [data-action="ok"]:not([disabled])`);
+  } else if (stato === "caricamento") {
+    await page.waitForSelector(`${dialog} .kit-form-note[role="status"]`);
+  } else {
+    await page.waitForSelector(`${dialog} .kit-form-error`);
+  }
+  await page.evaluate(() => document.fonts.ready);
 }
 
 /// Apre la foto delle scene `photo-*` e aspetta che sia disegnata, e con
@@ -5075,6 +6300,29 @@ async function openCalendar(page) {
 }
 
 /// Apre la linea del tempo di `?base=tempo` e aspetta le sue barre.
+/// Apre la Mappa di `?base=mappa`: i segnaposto disegnati e la riga sotto la
+/// mappa scritta (dopo la lettura degli host ammessi).
+async function openMap(page) {
+  await page.evaluate(async () => {
+    const { openDocument } = await import("/src/state/document-controller.ts");
+    await openDocument("Opere.base");
+  });
+  await page.waitForFunction(() => {
+    const pane = document.querySelector(".pane.focus");
+    return (pane?.querySelectorAll(".base-map-marker").length ?? 0) > 0
+      && pane?.querySelector(".base-bar")?.getAttribute("aria-busy") !== "true"
+      && (pane?.querySelector(".base-map-enable") !== null || pane?.querySelector(".base-map-settings") !== null);
+  });
+}
+
+/// La Mappa con le tessere: «Attiva», poi le quattro tessere del livello 1.
+async function openMapTiles(page) {
+  await openMap(page);
+  await page.click(".pane.focus .base-map-enable");
+  await page.waitForFunction(() => document.querySelectorAll(".pane.focus .base-map-tiles image").length === 4);
+  await page.mouse.move(0, 0);
+}
+
 async function openTimeline(page) {
   await page.evaluate(async () => {
     const { openDocument } = await import("/src/state/document-controller.ts");

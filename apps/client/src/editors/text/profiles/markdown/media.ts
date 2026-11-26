@@ -382,7 +382,7 @@ function leaseNamed(
   expected: Expected,
 ): Promise<[string | null, string | null]> {
   return Promise.all([
-    lease(port, id, life).catch(() => null),
+    expected(lease(port, id, life).catch(() => null)),
     own === null ? drawingNameOf(port, id, expected) : null,
   ]);
 }
@@ -391,16 +391,20 @@ function leaseNamed(
 /// risolto e reso col segnaposto del suo formato (`scenePlaceholder`). Vale la
 /// specie del media: lo slot diventa l'immagine che `![[disegno.svg]]`
 /// darebbe, con un lease suo, e il segnaposto non entra nella nota.
+///
+/// Il lease passa dal cancello del giro: nato a resa smontata torna `null`, e
+/// senza il cancello il giro scaduto scriveva «non risolto» sullo slot.
 export async function showEmbeddedDrawing(
   container: HTMLElement,
   slot: HTMLElement,
   drawing: { doc: string; name: string },
+  expected: Expected,
   life: Lifetime,
   port: MediaPort = hostPort,
 ): Promise<void> {
   const own = embedOwnText(slot);
   slot.dataset.vaultMedia = "pending";
-  const url = await lease(port, drawing.doc, life).catch(() => null);
+  const url = await expected(lease(port, drawing.doc, life).catch(() => null));
   if (!url) {
     slot.dataset.vaultMedia = "unresolved";
     slot.classList.add("unresolved");
@@ -435,13 +439,13 @@ export async function hydrateVaultMedia(
       const kind = mediaKindOfId(path);
       return !slot.dataset.vaultMedia && isVaultPath(path) && (kind === "image" || kind === "audio" || kind === "video");
     });
-  await Promise.all([
+  await expected(Promise.all([
     ...images.map(async (img) => {
       const raw = img.getAttribute(VAULT_SRC_ATTRIBUTE)!;
       const own = img.getAttribute("alt")?.trim() || null;
       img.dataset.vaultMedia = "pending";
       const id = await expected(port.resolve({ kind: "path", value: raw }, documentId).catch(() => null));
-      const [url, name] = id ? await leaseNamed(port, id, own, life, expected) : [null, null];
+      const [url, name] = id ? await expected(leaseNamed(port, id, own, life, expected)) : [null, null];
       if (name) img.alt = name;
       if (!url || !id) {
         img.dataset.vaultMedia = "unresolved";
@@ -450,7 +454,7 @@ export async function hydrateVaultMedia(
         showMissingImage(img, raw);
         return;
       }
-      const drawing = await drawingPicture(port, id, life);
+      const drawing = await expected(drawingPicture(port, id, life));
       if (life.closed) return;
       img.dataset.vaultMedia = "loaded";
       img.dataset.vaultId = id;
@@ -490,23 +494,23 @@ export async function hydrateVaultMedia(
           port.resolve({ kind: "wiki", value: { page, heading: null, block: null } }, documentId).catch(() => null),
         );
         if (!id || life.closed) return;
-        await showEmbeddedCraft(container, slot, { doc: id, app: "pdf", name: page.split("/").pop() || page }, life, {
+        await expected(showEmbeddedCraft(container, slot, { doc: id, app: "pdf", name: page.split("/").pop() || page }, life, {
           withoutImage: link,
           ...(open ? { open: (doc: string) => open(doc) } : {}),
-        });
+        }));
         return;
       }
       const id = await expected(
         port.resolve({ kind: "wiki", value: { page, heading: null, block: null } }, documentId).catch(() => null),
       );
-      const [url, name] = id ? await leaseNamed(port, id, own, life, expected) : [null, null];
+      const [url, name] = id ? await expected(leaseNamed(port, id, own, life, expected)) : [null, null];
       if (!url || !id) {
         slot.dataset.vaultMedia = "unresolved";
         slot.classList.add("unresolved");
         return;
       }
       const heading = slot.dataset.embedHeading ?? null;
-      const drawing = await drawingPicture(port, id, life, heading);
+      const drawing = await expected(drawingPicture(port, id, life, heading));
       if (life.closed) return;
       if (drawing === false) {
         slot.dataset.vaultMedia = "unresolved";
@@ -521,15 +525,15 @@ export async function hydrateVaultMedia(
       const own = embedOwnText(slot);
       slot.dataset.vaultMedia = "pending";
       const id = await expected(port.resolve({ kind: "path", value: path }, documentId).catch(() => null));
-      const [url, name] = id ? await leaseNamed(port, id, own, life, expected) : [null, null];
+      const [url, name] = id ? await expected(leaseNamed(port, id, own, life, expected)) : [null, null];
       if (!url || !id) {
         slot.dataset.vaultMedia = "unresolved";
         slot.classList.add("unresolved");
         return;
       }
-      const drawing = await drawingPicture(port, id, life);
+      const drawing = await expected(drawingPicture(port, id, life));
       if (life.closed) return;
       showEmbeddedMedia(container, slot, id, drawing ?? url, own ?? name ?? path);
     }),
-  ]);
+  ]));
 }

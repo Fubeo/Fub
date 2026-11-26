@@ -792,7 +792,7 @@
         },
         {
           "nome": "color",
-          "tipo": "testo",
+          "tipo": "colore",
           "facoltativo": true
         }
       ]
@@ -1026,7 +1026,7 @@
         },
         {
           "nome": "color",
-          "tipo": "testo",
+          "tipo": "colore",
           "facoltativo": false
         }
       ]
@@ -1058,7 +1058,7 @@
         },
         {
           "nome": "color",
-          "tipo": "testo",
+          "tipo": "colore",
           "facoltativo": false
         }
       ]
@@ -2438,7 +2438,7 @@
         },
         {
           "nome": "color",
-          "tipo": "testo",
+          "tipo": "colore",
           "facoltativo": true
         },
         {
@@ -5289,7 +5289,7 @@
         },
         {
           "nome": "color",
-          "tipo": "testo",
+          "tipo": "colore",
           "facoltativo": true
         }
       ]

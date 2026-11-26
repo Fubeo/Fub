@@ -8,9 +8,9 @@ import type { Op } from "../../scene/ops";
 import { plural, t, type DrawKey } from "../../strings";
 import { gesture as asGesture, moveOps, roundDelta } from "../edit";
 import { elemOf, orderOps, type Order } from "../arrange";
-import { textLines, wordsOf } from "../text";
+import { areaWords, areaWordsOf, textLines, wordsOf } from "../text";
 import { orderChanges } from "../order-changes";
-import { lookOf as outlineLook, outlineOps, outlinesOf, widthLinesOf } from "../outline";
+import { detailsOf as outlineDetails, lookOf as outlineLook, outlineOps, outlinesOf, widthLinesOf } from "../outline";
 import { boundsAfter, numericOps } from "../transform";
 import {
   lookAction,
@@ -27,6 +27,10 @@ import { tipOps, tipsLookOf, type TipChange } from "../tips";
 import { angleOf, frameCenter, frameSize, movedFrame, normalized, resizeMatrix, rotationMatrix, scales, type Axis as FrameAxis, type Frame } from "../frame";
 import { fromUnit } from "../rulers";
 import type { Unit } from "../hit";
+import { gradientSummary, paintedParts, type GradientSummary, type PaintChannel } from "../gradients";
+import { lockedAbove } from "../follow";
+import type { DocumentModel } from "../../scene/model";
+import type { SelectionGradients } from "../fields";
 import { overlaps } from "../audit";
 import { cleanName, decorative } from "../naming";
 import type { Font } from "../measure";
@@ -34,6 +38,7 @@ import { BAR_FEATURES, ORDERS, RATIO_ROLES } from "./constants";
 import type { EditorContext } from "./context";
 import { translated, union } from "./helpers";
 import type { PanelReading } from "./types";
+import { composingKey } from "../../../../kit/ime";
 
 /// La larghezza dell'editor, in rem, da cui il pannello delle proprietà sta
 /// accanto al foglio e si apre da sé: sotto, i pannelli vanno sotto il
@@ -45,6 +50,23 @@ function tipAction(change: TipChange): DrawKey {
   if ("swap" in change) return "draw.action.tips_swap";
   if ("size" in change) return "draw.action.tip_size";
   return change.end === "start" ? "draw.action.tip_start" : "draw.action.tip_end";
+}
+
+/// Le sfumature del riempimento e del contorno di `units`, per la sezione Sfumatura del Completo
+/// (K6 T15, giro 5): un colore che nessuna parte mostra manca.
+export function selectionGradients(model: DocumentModel, units: readonly Unit[]): SelectionGradients {
+  const of = (channel: PaintChannel): GradientSummary | undefined => {
+    const parts = paintedParts(model, units, channel);
+    return parts.length === 0 ? undefined : gradientSummary(parts);
+  };
+  const fill = of("fill");
+  const stroke = of("stroke");
+  return {
+    ...(fill === undefined ? {} : { fill }),
+    ...(stroke === undefined ? {} : { stroke }),
+    locked: units.some((unit) => unit.node.details?.locked === true || lockedAbove(unit.node)),
+    onlyText: units.length > 0 && units.every((unit) => unit.role === "text"),
+  };
 }
 
 /// Ciò che il pannello delle proprietà, gli attributi e la descrizione delle immagini dà agli altri pezzi dell'editor.
@@ -73,6 +95,12 @@ export interface PanelContext {
   /// scelto, con le parole scelte: chi scrive le sostituisce. Falso se il
   /// campo non c'è.
   focusWords: () => boolean;
+  /// Chi riscrive le parole di un testo in area (`fub:wrap`) dal campo
+  /// «Testo»: il motore del Completo aperto e acceso (`text.editRange`), che
+  /// rifà gli a capo nel riquadro. `null`, o assente, senza motore: il campo
+  /// non c'è per un testo in area, perché l'operazione `text` scriverebbe
+  /// righe senza a capo.
+  areaWordsWriter?: () => ((element: string, words: string) => void) | null;
 }
 
 /// Monta il pannello delle proprietà, gli attributi e la descrizione delle immagini.
@@ -190,7 +218,7 @@ export function installPanel(ctx: EditorContext): void {
   });
   life.listen(describeSkip, "click", () => nextDescription(true));
   life.listen(describeInput, "keydown", (event) => {
-    if (event.key !== "Enter" || event.isComposing) return;
+    if (event.key !== "Enter" || composingKey(event)) return;
     event.preventDefault();
     writeAsked();
   });
@@ -354,6 +382,8 @@ export function installPanel(ctx: EditorContext): void {
       ratio: ratioOn(units),
       look: selectionLook(model, units),
       outline: outlines.length === 0 && widths.length === 0 ? null : outlineLook(outlines, widths),
+      outlineDetails: outlines.length === 0 ? null : outlineDetails(outlines),
+      gradients: selectionGradients(model, units),
       alignable: ctx.alignReference(units) !== null,
       drawn: ctx.drawn(units),
       orders: new Set(has("arrange") ? ORDERS.map(({ order }) => order).filter((order) => changes.has(order)) : []),
@@ -367,7 +397,9 @@ export function installPanel(ctx: EditorContext): void {
   const wordsOfUnit = (unit: Unit): string | null => {
     if (unit.role !== "text" || unit.id === null || unit.node.details?.textPath !== undefined) return null;
     const elem = elemOf(unit.node);
-    return elem === null ? null : wordsOf(elem);
+    if (elem === null) return null;
+    if (elem.attrs["fub:wrap"] !== undefined) return (ctx.areaWordsWriter?.() ?? null) === null ? null : areaWordsOf(elem);
+    return wordsOf(elem);
   };
 
   /// Le parole del testo scelto, dal campo «Testo»: le righe come le scrive
@@ -378,6 +410,18 @@ export function installPanel(ctx: EditorContext): void {
     const unit = units.length === 1 ? units[0]! : null;
     const before = unit === null ? null : wordsOfUnit(unit);
     if (unit === null || unit.id === null || before === null) return null;
+    const writer = ctx.areaWordsWriter?.() ?? null;
+    if (writer !== null && elemOf(unit.node)?.attrs["fub:wrap"] !== undefined) {
+      // Un testo in area: le parole come sono scritte, spazi e a capo
+      // compresi; gli a capo nel riquadro li rifà il motore, con un passo
+      // d'annulla solo. Svuotato, il testo se ne va come un testo di punto.
+      const words = areaWords(value);
+      if (words.trim() === "") return changeFromPanel("draw.action.delete", [{ op: "remove", target: unit.target }], []);
+      if (words === before) return null;
+      if (!editable()) return t("draw.rejected", { reason: t("draw.reason.read_only") });
+      writer(unit.id, words);
+      return null;
+    }
     const lines = textLines(value);
     if (lines.length === 0) return changeFromPanel("draw.action.delete", [{ op: "remove", target: unit.target }], []);
     if (lines.join("\n") === textLines(before).join("\n")) return null;

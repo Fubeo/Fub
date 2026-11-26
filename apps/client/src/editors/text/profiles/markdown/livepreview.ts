@@ -27,11 +27,13 @@ import type { SyntaxNode, Tree } from "@lezer/common";
 // La lettura binaria di una casella è una regola del contratto, non del
 // disegno: `[/]`, `[-]`, `[>]` sono stati che esistono e non sono "fatto".
 import { taskChecked } from "../../../../rules/mirrored";
+import { dispatchTaskToggles } from "./task-toggle";
 import { hidesPageBreak } from "../../../../rules/page-break";
 import { resolvedLanguage, t } from "../../../../i18n/strings";
 import { dueLook, liveProjection, liveTaskEnd, localDay, projectedDue } from "./task-due";
 import { alarmFigure, projectedReminder, reminderLabel, reminderLong, reminderNotificationsOn, reminderPassed, reminderTimeOf } from "./task-reminder";
 import { isAllowedLink } from "../../../../ui/sanitize";
+import { openLifetime } from "../../../../ui/lifetime";
 import { figureMask, PAGE_FIGURES, readPageMark } from "../../../../ui/page-mark";
 import type { SyntaxForm } from "../../../../host/contract";
 import {
@@ -104,13 +106,14 @@ import { detailsLive } from "./details-live";
 import { blockGesture } from "./block-gesture";
 import { calloutHead } from "./callout-head";
 import { hangingIndent } from "./hanging";
-import { blockTex, blockTexRange, MathBlockEditWidget, MathBlockLiveWidget, mathPopovers, mathTouchable, type LiveFormula } from "./math-live";
+import { blockTex, blockTexRange, MathBlockEditWidget, MathBlockLiveWidget, mathPopovers, mathTouchable, typingMathBlock, type LiveFormula } from "./math-live";
 import { imageGestures } from "./image-live";
 import { CodeHeaderWidget, codeBlocks, codeWrapChanged, codeWraps } from "./code-block";
 import { blockPrefixes } from "./block-prefix";
 import { linkDialogOpener } from "./link-dialog";
 import { liveStrings } from "./strings";
 import { topChanges } from "./top-changes";
+import { Coverage, grownSpan, RowSweep, SpanIndex } from "./live-spans";
 import {
   bareUrl,
   bareWikilink,
@@ -332,6 +335,10 @@ export interface Reveal {
   /// Un cursore tocca l'elemento: con `mai` è quando un collegamento mostra
   /// la sua pastiglia.
   near(from: number, to: number): boolean;
+  /// Un capo di una selezione sta dentro `from..to`, non su un suo bordo: in
+  /// ogni politica un widget non vi va, perché il browser non tiene un
+  /// cursore dentro un widget e lo rimetterebbe dopo, mentre si scrive.
+  inside(from: number, to: number): boolean;
 }
 
 /// La rivelazione di uno stato. `ranges` sono le selezioni che contano: quelle
@@ -346,15 +353,16 @@ export function revealOf(
   const rowOf = (at: number) => row(state.doc.lineAt(at).number);
   const touches = (from: number, to: number) => ranges.some((r) => r.from <= to && r.to >= from);
   const inPrefix = (from: number, to: number) => ranges.some((r) => r.from < to && (r.to > from || r.from === from));
+  const inside = (from: number, to: number) => ranges.some((r) => (r.from > from && r.from < to) || (r.to > from && r.to < to));
   if (policy === "riga") {
     return {
-      policy, row, marks: (_f, _t, at) => rowOf(at), prefix: (from) => rowOf(from), source: (_f, _t, at) => rowOf(at), near: touches,
+      policy, row, marks: (_f, _t, at) => rowOf(at), prefix: (from) => rowOf(from), source: (_f, _t, at) => rowOf(at), near: touches, inside,
     };
   }
   if (policy === "elemento") {
-    return { policy, row, marks: touches, prefix: inPrefix, source: touches, near: touches };
+    return { policy, row, marks: touches, prefix: inPrefix, source: touches, near: touches, inside };
   }
-  return { policy, row, marks: () => false, prefix: () => false, source: touches, near: touches };
+  return { policy, row, marks: () => false, prefix: () => false, source: touches, near: touches, inside };
 }
 
 /// La politica `riga` sulle righe date: la forma dei test, e di chi chiama
@@ -368,6 +376,9 @@ function lineReveal(state: EditorState, lines: ReadonlySet<number>): Reveal {
     prefix: (from) => rowOf(from),
     source: (_f, _t, at) => rowOf(at),
     near: (from) => rowOf(from),
+    // Senza le selezioni non c'è un capo da tenere fuori dai widget; con
+    // `riga` la sorgente della riga del cursore si vede comunque.
+    inside: () => false,
   };
 }
 
@@ -475,10 +486,12 @@ export function computeDecorations(
   // `==` da base64, un `#frammento` o un `#id` in un attributo non sono
   // sintassi Obsidian). I blocchi di codice escludono righe intere, quindi
   // viaggiano come numeri di riga.
+  // Il giro sull'albero le raccoglie in fila; il secondo strato le legge da un
+  // indice ordinato (`SpanIndex`), a cui aggiunge i wikilink che trova.
   const exclusions: { from: number; to: number }[] = [];
+  let excluded: SpanIndex | null = null;
   const codeRows = new Set<number>();
-  const isFree = (a: number, b: number) =>
-    exclusions.every((r) => b <= r.from || a >= r.to);
+  const isFree = (a: number, b: number) => !(excluded ??= new SpanIndex(exclusions)).overlaps(a, b);
   // Dedupe delle decorazioni di riga: blocchi annidati (citazione dentro
   // citazione) non devono impilare due volte la stessa classe.
   const quoteRows = new Set<number>();
@@ -500,10 +513,29 @@ export function computeDecorations(
   // Le formule del contenitore in cui sta l'iterazione: i contenitori non si
   // annidano, e ogni nodo in riga sta nell'ultimo aperto.
   let around: readonly DollarMath[] = [];
+  // Le formule di un contenitore vengono in fila e separate, come le legge
+  // `scanDollarMath`: allora quelle che toccano un nodo si trovano con una
+  // ricerca binaria. Se no, si guardano tutte.
+  let aroundOrdered = true;
+  const crossesFormula = (node: { from: number; to: number }): boolean => {
+    const crosses = (math: DollarMath) =>
+      math.from < node.to && node.from < math.to && (math.from < node.from || node.to < math.to);
+    if (!aroundOrdered) return around.some(crosses);
+    let low = 0;
+    let high = around.length;
+    while (low < high) {
+      const middle = (low + high) >> 1;
+      if (around[middle]!.to <= node.from) low = middle + 1;
+      else high = middle;
+    }
+    for (let at = low; at < around.length && around[at]!.from < node.to; at++) if (crosses(around[at]!)) return true;
+    return false;
+  };
   const collectFormulas = (container: SyntaxNode): string => {
     const text = doc.sliceString(container.from, container.to);
     const found = containerMath(text, container);
     around = found.formulas;
+    aroundOrdered = around.every((math, at) => math.from <= math.to && (at === 0 || around[at - 1]!.to <= math.from));
     if (found.formulas.length === 0) return text;
     const block = container.name === "Paragraph" && container.parent?.name === "Document"
       && paragraphMathBlock(found, text) !== null;
@@ -531,6 +563,17 @@ export function computeDecorations(
   // accesa: i loro messaggi, dove l'albero non si decora.
   const commentsOn = commentsDeclared(forms);
   const messages: { from: number; to: number }[] = [];
+  // I messaggi che possono ancora contenere un nodo: l'albero si visita per
+  // inizio crescente, e un messaggio finito prima del nodo non ne conterrà
+  // più nessuno.
+  let liveMessages: { from: number; to: number }[] = [];
+  let messagesSeen = 0;
+  const inMessage = (from: number, to: number): boolean => {
+    for (; messagesSeen < messages.length; messagesSeen++) liveMessages.push(messages[messagesSeen]!);
+    if (liveMessages.length === 0) return false;
+    liveMessages = liveMessages.filter((message) => message.to > from);
+    return liveMessages.some((message) => message.from <= from && to <= message.to);
+  };
   const sliceDoc = (from: number, to: number) => doc.sliceString(from, to);
   const liveLink = (link: SyntaxNode): NativeInline | null => writtenLink(sliceDoc, link);
 
@@ -615,8 +658,7 @@ export function computeDecorations(
     enter(node) {
       // Ciò che sta dentro un messaggio di un commento non è testo della nota:
       // né enfasi né link né codice, e sparisce col messaggio.
-      if (messages.length > 0 && node.from < node.to
-        && messages.some((message) => message.from <= node.from && node.to <= message.to)) return false;
+      if (messages.length > 0 && node.from < node.to && inMessage(node.from, node.to)) return false;
       if (isMathContainer(node.name)) {
         const text = collectFormulas(node.node);
         const found = nativeInlines(node.node, node.from, node.to, liveLink, around);
@@ -638,8 +680,7 @@ export function computeDecorations(
       // una senza contenerla il provider non lo legge: come in Lettura non si
       // decora, e se ne visitano i figli. Un marcatore segue il suo nodo.
       const owner = INLINE_MARKS.has(node.name) ? node.node.parent : node.node;
-      if (owner && INLINE_SYNTAX.has(owner.name) && around.some((math) =>
-        math.from < owner.to && owner.from < math.to && (math.from < owner.from || owner.to < math.to))) return;
+      if (owner && INLINE_SYNTAX.has(owner.name) && around.length > 0 && crossesFormula(owner)) return;
       const heading = /^(ATX|Setext)Heading([1-6])$/.exec(node.name);
       if (heading) {
         const marks = node.node.getChildren("HeaderMark");
@@ -770,7 +811,9 @@ export function computeDecorations(
           if (open.from >= from && open.from <= to) {
             const markFrom = open.from + head.mark.from;
             const markTo = open.from + head.mark.to;
-            if (reveal.prefix(open.from, open.from + head.title.from)) out.push({ from: markFrom, to: markTo, kind: "near" });
+            // Col cursore fra `[!` e `]` il tipo si sta scrivendo: resta
+            // sorgente finché la `]` non lo chiude (IMP-6108).
+            if (reveal.prefix(open.from, open.from + head.title.from) || reveal.inside(markFrom, open.from + head.title.from)) out.push({ from: markFrom, to: markTo, kind: "near" });
             else out.push({ from: markFrom, to: open.from + head.title.from, kind: "callout-type", data: `${head.type}${head.fold ?? ""}` });
             if (head.title.to > head.title.from) out.push({ from: open.from + head.title.from, to: open.from + head.title.to, kind: "callout-title" });
           }
@@ -914,6 +957,22 @@ export function computeDecorations(
   // sull'albero perché le esclusioni (codice, URL) devono già esserci tutte.
   const beforeRow = doc.lineAt(from).number;
   const lastLine = doc.lineAt(to).number;
+  // Gli inline nativi e i blocchi opachi di ogni riga, con un cursore che
+  // scende con le righe invece di filtrare tutta la vista a ogni riga.
+  const nativeRows = new RowSweep(natives);
+  const opaqueRows = new RowSweep(opaqueBlocks);
+  // I segni già posati, per il promemoria di un compito: un indice che si
+  // aggiorna con ciò che è arrivato dall'ultima volta.
+  let marked: SpanIndex | null = null;
+  let markedUpTo = 0;
+  const touchesMark = (a: number, b: number): boolean => {
+    if (!marked) {
+      marked = new SpanIndex(out.filter((d) => !LINE_KINDS.has(d.kind)));
+      markedUpTo = out.length;
+    }
+    for (; markedUpTo < out.length; markedUpTo++) if (!LINE_KINDS.has(out[markedUpTo]!.kind)) marked.add(out[markedUpTo]!);
+    return marked.overlaps(a, b);
+  };
   for (let n = beforeRow; n <= lastLine; n++) {
     if (codeRows.has(n)) continue;
     const row = doc.line(n);
@@ -950,10 +1009,9 @@ export function computeDecorations(
     // Ciò che della riga non è testo del modello, in offset della riga: gli
     // inline nativi, le formule che restano, i marcatori delle note in riga che
     // reggono, e poi wikilink e tag man mano che si trovano.
-    const rowNatives: NativeInline[] = natives.filter((native) => native.from < row.to && row.from < native.to);
+    const rowNatives: NativeInline[] = nativeRows.at(row.from, row.to);
     for (const { math } of rowFormulas) if (!lostFormulas.has(math)) rowNatives.push(math);
-    const rowCuts = [...nativeCuts(rowNatives), ...opaqueBlocks]
-      .filter((cut) => cut.from < row.to && row.from < cut.to)
+    const rowCuts = [...nativeCuts(rowNatives).filter((cut) => cut.from < row.to && row.from < cut.to), ...opaqueRows.at(row.from, row.to)]
       .map((cut) => ({ from: cut.from - row.from, to: cut.to - row.from }));
     for (const note of scanInlineFootnotes(text)) {
       if (!footnoteStands({ from: row.from + note.from, to: row.from + note.to }, rowNatives)) continue;
@@ -967,7 +1025,7 @@ export function computeDecorations(
       const rangeStart = row.from + w.from;
       const rangeEnd = row.from + w.to;
       if (!isFree(rangeStart, rangeEnd) || inFormula(rangeStart)) continue;
-      exclusions.push({ from: rangeStart, to: rangeEnd });
+      excluded!.add({ from: rangeStart, to: rangeEnd });
       rowCuts.push({ from: w.from, to: w.to });
       if (!namesSomething(w)) continue;
       const innerFrom = row.from + w.innerFrom;
@@ -1120,7 +1178,7 @@ export function computeDecorations(
         const [from, to] = reminder.source;
         const look = reminder.when === null ? "bad" : checked ? "done" : "open";
         const data = `${look} ${reminder.when ?? ""}`;
-        const touched = out.some((d) => !LINE_KINDS.has(d.kind) && d.from < to && from < d.to);
+        const touched = touchesMark(from, to);
         if (reminder.when !== null && reminder.whole && !touched && !reveal.marks(from, to, from)) {
           out.push({ from, to, kind: "task-reminder", data });
         } else if (!touched) {
@@ -1167,28 +1225,12 @@ export function wholePill(pill: LiveDeco, others: readonly LiveDeco[]): LiveDeco
   let { from, to } = pill;
   const marks = others.filter((d) => d !== pill && !LINE_KINDS.has(d.kind) && d.from < d.to);
   const hides = marks.filter((d) => d.kind === "hide");
-  const hidden = (a: number, b: number) => {
-    for (let at = a; at < b; at++) {
-      if (!hides.some((d) => d.from <= at && at < d.to)) return false;
-    }
-    return true;
-  };
-  const grow = () => {
-    for (let grown = true; grown; ) {
-      grown = false;
-      for (const other of marks) {
-        const inside = other.from <= from && to <= other.to;
-        const around = from <= other.from && other.to <= to;
-        if (other.to <= from || to <= other.from || inside || around) continue;
-        from = Math.min(from, other.from);
-        to = Math.max(to, other.to);
-        grown = true;
-      }
-    }
-  };
+  // I tratti nascosti uniti: un tratto è nascosto se uno solo lo copre.
+  const hidden = new Coverage(hides);
+  const grow = () => ({ from, to } = grownSpan(from, to, marks));
   grow();
   const covered = marks.some((other) => other.kind !== "hide" && other.from <= from && to <= other.to
-    && hidden(other.from, from) && hidden(to, other.to));
+    && hidden.covers(other.from, from) && hidden.covers(to, other.to));
   if (covered) {
     for (let moved = true; moved; ) {
       moved = false;
@@ -1237,6 +1279,11 @@ const TRAILING_PUNCTUATION = /^[,.;:!?)\]»”’]+/;
 /// del pezzo, il pezzo e la punteggiatura stanno sotto un `cm-fub-nobreak`.
 function keepPunctuation(doc: EditorState["doc"], out: LiveDeco[]): void {
   const glued: LiveDeco[] = [];
+  // Letti una volta: i pezzi sostituiti, e dove finisce uno stile. Una
+  // lettera `letter = d.from - 1` sta sotto uno stile che finisce entro
+  // `d.from` soltanto se lo stile finisce proprio lì e non è vuoto.
+  let replaced: SpanIndex | null = null;
+  let styleEnds: Set<number> | null = null;
   for (const d of out) {
     if (!REPLACED.has(d.kind)) continue;
     if (d.from === d.to) continue;
@@ -1248,9 +1295,11 @@ function keepPunctuation(doc: EditorState["doc"], out: LiveDeco[]): void {
     // stile finisce su di lei: uno stile tagliato in due mostra il suo fondo
     // e il suo margine due volte («ricordar e»).
     const letter = d.from - 1;
+    replaced ??= new SpanIndex(out.filter((o) => REPLACED.has(o.kind)));
+    styleEnds ??= new Set(out.filter((o) => !REPLACED.has(o.kind) && o.kind !== "nobreak" && o.from < o.to).map((o) => o.to));
     const free = letter >= line.from && !/\s/.test(doc.sliceString(letter, d.from))
-      && !out.some((o) => o !== d && REPLACED.has(o.kind) && o.from <= letter && letter < o.to)
-      && !out.some((o) => !REPLACED.has(o.kind) && o.kind !== "nobreak" && o.from <= letter && letter < o.to && o.to <= d.from);
+      && !replaced.covers(letter)
+      && !styleEnds.has(d.from);
     const before = free ? letter : d.from;
     glued.push({ from: before, to: d.to + after[0].length, kind: "nobreak" });
   }
@@ -1865,13 +1914,14 @@ function handleClick(e: MouseEvent, view: EditorView, cb: LivePreviewCallbacks):
     if (/^\[[^\]\n]\]$/.test(threeChars)) {
       const checked = !taskChecked(threeChars[1]);
       const line = view.state.doc.lineAt(pos);
-      view.dispatch({
-        changes: { from: pos + 1, to: pos + 2, insert: checked ? "x" : " " },
-        annotations: blockGesture.of({ kind: "check", lead: { from: line.from, to: line.to }, say: liveStrings.t(checked ? "blocks.checked" : "blocks.unchecked") }),
+      // La spunta passa dalla ricorrenza (`task-toggle.ts`): un compito `🔁`
+      // spuntato fa nascere il successivo nella stessa transazione.
+      dispatchTaskToggles(view, [{ symbol: pos + 1, insert: checked ? "x" : " " }], (mapPos) => ({
+        annotations: blockGesture.of({ kind: "check", lead: { from: mapPos(line.from), to: mapPos(line.to) }, say: liveStrings.t(checked ? "blocks.checked" : "blocks.unchecked") }),
         // Come ogni battuta di contenuto: senza, la modifica cade fuori dalla
         // history nativa dell'editor.
         userEvent: "input",
-      });
+      }));
       e.preventDefault();
       return true;
     }
@@ -1931,20 +1981,19 @@ function handleClick(e: MouseEvent, view: EditorView, cb: LivePreviewCallbacks):
 const theme = EditorView.baseTheme({
   ".cm-markdown-gap": { height: "0", lineHeight: "0", fontSize: "0", padding: "0" },
   // La stessa scala della Lettura (`preview.css`): relativa al corpo, e
-  // sempre in discesa, in misura e in peso.
-  ".cm-fub-h1": { fontSize: "max(1.75em, var(--text-3xl, 1.75em))", fontWeight: "700", letterSpacing: "-0.01em" },
-  ".cm-fub-h2": { fontSize: "max(1.45em, var(--text-2xl, 1.45em))", fontWeight: "700", letterSpacing: "-0.005em" },
+  // sempre in discesa, in misura e in peso. Le misure che leggono la scala
+  // del tema (`--text-3xl`, `--text-2xl`, `--tracking-caps`,
+  // `--leading-tight`) sono della pelle (`document.css`).
+  ".cm-fub-h1": { fontWeight: "700", letterSpacing: "-0.01em" },
+  ".cm-fub-h2": { fontWeight: "700", letterSpacing: "-0.005em" },
   ".cm-fub-h3": { fontSize: "1.22em", fontWeight: "650" },
   ".cm-fub-h4": { fontSize: "1.08em", fontWeight: "650" },
-  ".cm-fub-h5": { fontSize: "0.85em", fontWeight: "700", letterSpacing: "var(--tracking-caps, 0.06em)", textTransform: "uppercase" },
-  ".cm-fub-h6": { fontSize: "0.85em", fontWeight: "500", letterSpacing: "var(--tracking-caps, 0.06em)", textTransform: "uppercase" },
+  ".cm-fub-h5": { fontSize: "0.85em", fontWeight: "700", textTransform: "uppercase" },
+  ".cm-fub-h6": { fontSize: "0.85em", fontWeight: "500", textTransform: "uppercase" },
   ".cm-fub-heading-line": { paddingTop: "0.9em", paddingBottom: "0.2em" },
   ".cm-fub-h1-line": { paddingTop: "1.2em", paddingBottom: "0.3em", marginBottom: "0.4em" },
   ".cm-fub-h2-line": { paddingTop: "1.1em" },
   ".cm-line:first-child.cm-fub-heading-line": { paddingTop: "0" },
-  ".cm-fub-h1, .cm-fub-h2, .cm-fub-h3, .cm-fub-h4, .cm-fub-h5, .cm-fub-h6": {
-    lineHeight: "var(--leading-tight, 1.2)",
-  },
   ".cm-fub-h1 > span, .cm-fub-h2 > span, .cm-fub-h3 > span, .cm-fub-h4 > span, .cm-fub-h5 > span, .cm-fub-h6 > span": {
     color: "inherit",
   },
@@ -1968,8 +2017,8 @@ const theme = EditorView.baseTheme({
     transform: "translateX(-50%)",
   },
   ".cm-fub-bullet-task::before": { content: "none" },
+  // Il carattere del codice è della pelle (`document.css`).
   ".cm-fub-code": {
-    fontFamily: "var(--font-mono, monospace)",
     borderRadius: "3px",
     padding: "0 0.15em",
   },
@@ -2049,7 +2098,6 @@ const theme = EditorView.baseTheme({
     maxHeight: "16em",
     height: "auto",
     objectFit: "contain",
-    borderRadius: "var(--radius-sm, 4px)",
   },
   ".cm-fub-image .embed": { display: "inline-block", margin: "0", padding: "0", border: "0", background: "none" },
 });
@@ -2288,10 +2336,7 @@ class MarkdownWidget extends WidgetType {
         if (view.state.readOnly || position < 1 || position + 1 >= view.state.doc.length) return;
         const marker = view.state.doc.sliceString(position - 1, position + 2);
         if (!/^\[[^\]\r\n]\]$/.test(marker)) return;
-        view.dispatch({
-          changes: { from: position, to: position + 1, insert: taskChecked(marker[1]!) ? " " : "x" },
-          userEvent: "input",
-        });
+        dispatchTaskToggles(view, [{ symbol: position, insert: taskChecked(marker[1]!) ? " " : "x" }], { userEvent: "input" });
       },
       openSource: (position: number) => {
         const anchor = Math.max(0, Math.min(view.state.doc.length, position));
@@ -2841,7 +2886,8 @@ export function livePreview(
       return { decision: `k${card.kind}`, ranges };
     }
     const block = movedBlock(mark.block, from + mark.offset);
-    if (!grid && block.kind === "math" && touched(state, from, to) && mathTouchable(state) && blockTexRange(state, from)) {
+    if (!grid && block.kind === "math" && touched(state, from, to) && mathTouchable(state) && blockTexRange(state, from)
+      && !typingMathBlock(state, from)) {
       // Un blocco `$$` toccato si modifica sul posto, senza il suo LaTeX (T60).
       ranges.push(Decoration.replace({ block: true, widget: new MathBlockEditWidget(from, blockTex(block.source)) }).range(from, to));
       return { decision: "mx", ranges };
@@ -2974,10 +3020,19 @@ export function livePreview(
       });
     }
     if (!changed && cleared.length === 0) return value;
+    // Un tratto rifatto perde le sue decorazioni: quelle che cominciano dentro,
+    // e in fondo alla nota anche quelle posate proprio sulla fine. Il disegno
+    // accanto alla sorgente di un blocco toccato (la formula `$$`, il
+    // diagramma) sta alla fine del blocco, e in fondo alla nota la fine del
+    // blocco è la fine del tratto: senza, ogni battuta ne lasciava uno in più
+    // (IMP-6101, IMP-6102). Più avanti, la fine è l'inizio del tratto dopo, e
+    // ciò che vi comincia è suo.
+    const end = state.doc.length;
     for (const { from, to } of cleared) {
+      const own = (start: number) => start >= from && (start < to || to === end);
       candidates = candidates.update({ filterFrom: from, filterTo: to, filter: (_from, _to, mark) => !dropped.has(mark) });
-      decorations = decorations.update({ filterFrom: from, filterTo: to, filter: (start) => start < from || start >= to });
-      gaps = gaps.update({ filterFrom: from, filterTo: to, filter: (start) => start < from || start >= to });
+      decorations = decorations.update({ filterFrom: from, filterTo: to, filter: (start) => !own(start) });
+      gaps = gaps.update({ filterFrom: from, filterTo: to, filter: (start) => !own(start) });
     }
     candidates = candidates.update({ add: added, sort: true });
     decorations = decorations.update({ add: ranges, sort: true });
@@ -3240,14 +3295,15 @@ export function livePreview(
               : view.posAtCoords({ x: next.clientX, y: next.clientY });
             if (head !== null) view.dispatch({ selection: { anchor, head }, userEvent: "select.pointer" });
           };
+          // Una vita per trascinamento: la chiudono il rilascio e `destroy`.
+          const drag = openLifetime();
           const end = () => {
-            view.dom.ownerDocument.removeEventListener("mousemove", move);
-            view.dom.ownerDocument.removeEventListener("mouseup", end);
+            drag.close();
             owner.endDrag = undefined;
           };
           owner.endDrag = end;
-          view.dom.ownerDocument.addEventListener("mousemove", move);
-          view.dom.ownerDocument.addEventListener("mouseup", end, { once: true });
+          drag.listen(view.dom.ownerDocument, "mousemove", move);
+          drag.listen(view.dom.ownerDocument, "mouseup", end);
         }
         return true;
       },

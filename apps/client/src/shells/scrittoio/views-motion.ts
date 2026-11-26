@@ -140,6 +140,22 @@ function boxOf(el: Element): Box {
   return { left: rect.left, top: rect.top, width: rect.width, height: rect.height };
 }
 
+/// Il riquadro a riposo della sagoma di una voce scelta: il suo `::after`.
+/// Negli elenchi copre la voce (`inset: 0`) ed è il riquadro della voce; nella
+/// Struttura è una tacca di 2 px sul filo, spostata a ogni livello: misurarla
+/// sulla voce faceva partire e invertire la corsa da un posto che non è il suo,
+/// e fra titoli di livelli diversi la tacca saltava.
+function markBoxOf(row: Element): Box {
+  const box = boxOf(row);
+  const style = getComputedStyle(row, "::after");
+  const left = parseFloat(style.left);
+  const top = parseFloat(style.top);
+  const width = parseFloat(style.width);
+  const height = parseFloat(style.height);
+  if (style.position !== "absolute" || ![left, top, width, height].every(Number.isFinite)) return box;
+  return { left: box.left + row.clientLeft + left, top: box.top + row.clientTop + top, width, height };
+}
+
 const shown = (box: Box): boolean => box.width > 0 && box.height > 0;
 
 function touches(box: Box, clip: Box | null): boolean {
@@ -309,7 +325,7 @@ export function mountViewsMotion(lifetime: Lifetime): void {
         marks.set(scope, null);
         continue;
       }
-      const rest = boxOf(row);
+      const rest = markBoxOf(row);
       const by = drift(row);
       const live = liveState(row, "::after");
       const box = { ...rest, left: rest.left + by.x, top: rest.top + by.y };
@@ -427,7 +443,7 @@ export function mountViewsMotion(lifetime: Lifetime): void {
       const rows = [...mark.scope.querySelectorAll(SELECTED)].filter((row) => row.closest(SCOPES) === mark.scope);
       if (rows.length !== 1 || rows[0] === mark.row) continue;
       // La stessa voce, ricostruita, non ha un posto nuovo da misurare.
-      chosen.push({ mark, row: rows[0], now: origin(rows[0]) === mark.row ? null : boxOf(rows[0]) });
+      chosen.push({ mark, row: rows[0], now: origin(rows[0]) === mark.row ? null : markBoxOf(rows[0]) });
     }
 
     // Chi resta: dal posto in cui lo si vedeva a quello che ha. Un contenitore

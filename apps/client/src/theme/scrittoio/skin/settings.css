@@ -362,10 +362,14 @@
   white-space: nowrap;
 }
 
+/* Lo scorrevole è un piano a sé (`isolation`): senza, WebKitGTK ridipinge la
+ * parte visibile a ogni passo e lo scorrimento perde la frequenza dello
+ * schermo (docs/architecture/desktop-webview.md, «Gli scorrevoli»). */
 .settings-scroll {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  isolation: isolate;
   padding: var(--space-8) var(--space-9) var(--space-10);
   border-top: 1px solid var(--border);
   scrollbar-width: thin;
@@ -1332,6 +1336,19 @@
 .settings-details-body > .setting-row {
   padding: var(--space-4) 0 0;
   border-top: 1px solid var(--border);
+}
+
+/* Le preferenze del motore del disegno (`settings-motore-corpo.ts`): righe del
+ * modulo del kit col nome a sinistra e il controllo a destra, largo quanto i
+ * campi delle altre righe (`.setting-input`, 280px). */
+.drawing-engine-row,
+.drawing-engine-row > .drawing-engine-row {
+  /* La seconda è il campo numerico dentro la sua riga: una griglia sua. */
+  grid-template-columns: minmax(0, 1fr) min(280px, 60%);
+}
+.drawing-engine-well {
+  justify-self: start;
+  min-width: 0;
 }
 
 /* Un permesso è una frase, non un nome: peso normale. */

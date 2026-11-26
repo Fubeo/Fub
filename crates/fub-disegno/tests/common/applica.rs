@@ -1,0 +1,363 @@
+//! Un applicatore piccolo delle operazioni della scena sul testo, solo per
+//! le forme che la differenza scrive nelle prove (`batch`, `remove` per id o
+//! per percorso e tag, `add` di `raw` o `elem` coi figli, `move`, `set`
+//! anche con `tag`, `ident`): il motore delle operazioni vero è quello del client
+//! (`apps/client/src/editors/spatial/completo/casi.test.ts` lo prova sugli
+//! stessi casi, byte per byte).
+//!
+//! Serve alle prove della ricetta e al banco delle righe, che con lui
+//! disegna ciò che Fub scrive davvero sul disco.
+
+use fub_scene::Item;
+use serde_json::Value;
+
+/// Gli elementi del formato di `testo`.
+pub fn elementi(testo: &str) -> Result<Vec<fub_scene::ElementItem>, String> {
+    Ok(fub_scene::read(testo)
+        .map_err(|e| format!("il testo non si legge: {e:?}"))?
+        .items
+        .into_iter()
+        .filter_map(|i| match i {
+            Item::Element(e) => Some(*e),
+            _ => None,
+        })
+        .collect())
+}
+
+/// Il tratto dell'elemento con l'id `id`.
+pub fn span_dell_id(testo: &str, id: &str) -> Result<[usize; 2], String> {
+    elementi(testo)?
+        .into_iter()
+        .find(|e| e.id.as_deref() == Some(id))
+        .map(|e| e.span.bytes)
+        .ok_or_else(|| format!("l'id {id} non c'è"))
+}
+
+/// Dove finisce il tag che comincia in `da`.
+pub fn fine_del_tag(testo: &str, da: usize) -> Result<usize, String> {
+    testo[da..]
+        .find('>')
+        .map(|i| da + i + 1)
+        .ok_or_else(|| "un tag non chiuso".to_string())
+}
+
+/// Dove comincia e finisce il contenuto del genitore.
+fn dentro(testo: &str, genitore: &str) -> Result<(usize, usize), String> {
+    let [da, a] = if genitore == "#root" {
+        let da = testo.find("<svg").ok_or("la radice non c'è")?;
+        let a = testo.rfind("</svg>").ok_or("la radice non si chiude")? + "</svg>".len();
+        [da, a]
+    } else {
+        span_dell_id(testo, genitore)?
+    };
+    let chiude = testo[..a].rfind("</").ok_or("il genitore non si chiude")?;
+    let mut inizio = fine_del_tag(testo, da)?;
+    if genitore == "#root" {
+        // Come il client: il primo posto della radice è dopo il suo titolo, se il titolo è il
+        // primo figlio (non quello di un simbolo nelle `defs`).
+        if testo[inizio..].trim_start().starts_with("<title") {
+            if let Some(t) = testo[inizio..].find("</title>") {
+                inizio += t + "</title>".len();
+            }
+        }
+    }
+    Ok((inizio, chiude))
+}
+
+/// Dove finisce la testa della radice, come la conta la scena del client (`scene/engine/base.ts`,
+/// `destination`, ramo `first`): dopo il titolo, i metadati, le descrizioni, le `defs` e le carte o le
+/// tavole (`fub:role="paper"` o `"board"`) che stanno in testa. Un `first` sulla radice si mette dopo
+/// l'ultimo di questi, come nel client: il `metadata` della ricetta viene dopo la carta, non prima.
+fn dopo_la_testa(testo: &str, inizio: usize) -> Result<usize, String> {
+    let mut fine = inizio;
+    let mut i = inizio;
+    loop {
+        let da = i + (testo[i..].len() - testo[i..].trim_start().len());
+        let resto = &testo[da..];
+        if !resto.starts_with('<') || resto.starts_with("</") || resto.starts_with("<!--") {
+            break;
+        }
+        let nome: String = resto[1..]
+            .chars()
+            .take_while(|c| !c.is_whitespace() && *c != '/' && *c != '>')
+            .collect();
+        let fine_tag = fine_del_tag(testo, da)?;
+        let tag = &testo[da..fine_tag];
+        let in_testa = match nome.as_str() {
+            "title" | "desc" | "metadata" | "defs" => true,
+            "rect" => tag.contains("fub:role=\"paper\"") || tag.contains("fub:role=\"board\""),
+            _ => false,
+        };
+        if !in_testa {
+            break;
+        }
+        let fine_elemento = if tag.ends_with("/>") {
+            fine_tag
+        } else {
+            let chiusura = format!("</{nome}>");
+            testo[fine_tag..]
+                .find(&chiusura)
+                .map(|k| fine_tag + k + chiusura.len())
+                .ok_or_else(|| format!("«{nome}» non si chiude"))?
+        };
+        fine = fine_elemento;
+        i = fine_elemento;
+    }
+    Ok(fine)
+}
+
+fn testo_di<'a>(v: &'a Value, cosa: &str) -> Result<&'a str, String> {
+    v.as_str()
+        .ok_or_else(|| format!("{cosa} non è un testo: {v}"))
+}
+
+fn applica_op(testo: &mut String, op: &Value) -> Result<(), String> {
+    match testo_di(&op["op"], "op")? {
+        "batch" => {
+            for o in op["ops"].as_array().ok_or("un batch senza ops")? {
+                applica_op(testo, o)?;
+            }
+        }
+        "remove" => {
+            let t = &op["target"];
+            let [da, a] = match t.as_str() {
+                Some(id) => span_dell_id(testo, id)?,
+                None => {
+                    let percorso: Vec<usize> = serde_json::from_value(t["path"].clone())
+                        .map_err(|e| format!("un percorso che non si legge: {e}"))?;
+                    if t["tag"] == "metadata" {
+                        let m = vectorcraft_svg::recipes(testo)
+                            .into_iter()
+                            .find(|r| r.metadata_path == percorso)
+                            .ok_or("il blocco delle ricette non c'è")?;
+                        [m.metadata.start, m.metadata.end]
+                    } else {
+                        // Un elemento senza id, col suo percorso e il suo
+                        // tag: il titolo di un simbolo rinominato.
+                        elementi(testo)?
+                            .into_iter()
+                            .find(|e| e.path == percorso && t["tag"] == e.tag)
+                            .map(|e| e.span.bytes)
+                            .ok_or_else(|| format!("il bersaglio non c'è: {op}"))?
+                    }
+                }
+            };
+            testo.replace_range(da..a, "");
+        }
+        "add" => {
+            let corpo = match op.get("raw") {
+                Some(raw) => testo_di(raw, "raw")?.to_string(),
+                None => scrivi_elem(&op["elem"])?,
+            };
+            inserisci(testo, op, &corpo)?;
+        }
+        "move" => {
+            // L'elemento con i suoi byte, tolto e rimesso dove dice `pos`.
+            let id = testo_di(&op["target"], "target")?;
+            let [da, a] = span_dell_id(testo, id)?;
+            let corpo = testo[da..a].to_string();
+            testo.replace_range(da..a, "");
+            inserisci(testo, op, &corpo)?;
+        }
+        "set" => {
+            let id = testo_di(&op["id"], "id")?;
+            let parte: Vec<usize> = match op.get("part") {
+                Some(p) if !p.is_null() => serde_json::from_value(p.clone())
+                    .map_err(|e| format!("una parte che non si legge: {e}"))?,
+                _ => Vec::new(),
+            };
+            // Con `tag` l'elemento a metà (un rettangolo con il `d`) non si
+            // rilegge: il suo inizio si prende una volta, e le modifiche
+            // stanno tutte dopo.
+            let tag = op.get("tag").and_then(Value::as_str);
+            let [fermo, fine] = span_dell_id(testo, id)?;
+            let prima = testo.len();
+            for (k, v) in op["attrs"].as_object().ok_or("un set senza attrs")? {
+                let inizio = if tag.is_some() {
+                    fermo
+                } else {
+                    span_dell_id(testo, id)?[0]
+                };
+                let da = inizio_della_parte(testo, inizio, &parte)?;
+                if v.is_null() {
+                    // Come il client: `null` toglie l'attributo.
+                    togli(testo, da, k)?;
+                } else {
+                    imposta(testo, da, k, testo_di(v, k)?)?;
+                }
+            }
+            // Con `tag` la forma cambia tipo al suo posto: il nome
+            // nell'apertura e, se c'è, nella chiusura.
+            if let Some(tag) = tag {
+                let da = fermo;
+                let a = fine + testo.len() - prima;
+                let vecchio: String = testo[da + 1..]
+                    .chars()
+                    .take_while(|c| c.is_ascii_alphanumeric())
+                    .collect();
+                let chiusura = format!("</{vecchio}>");
+                if testo[da..a].ends_with(&chiusura) {
+                    testo.replace_range(a - chiusura.len()..a, &format!("</{tag}>"));
+                }
+                testo.replace_range(da + 1..da + 1 + vecchio.len(), tag);
+            }
+        }
+        "ident" => {
+            let percorso: Vec<usize> = serde_json::from_value(op["path"].clone())
+                .map_err(|e| format!("un percorso che non si legge: {e}"))?;
+            let e = elementi(testo)?
+                .into_iter()
+                .find(|e| e.path == percorso)
+                .ok_or_else(|| format!("nessun elemento in {percorso:?}"))?;
+            let at = e.span.bytes[0] + 1 + e.tag.len();
+            testo.insert_str(at, &format!(" id=\"{}\"", testo_di(&op["id"], "id")?));
+        }
+        altro => return Err(format!("l'applicatore non sa {altro}")),
+    }
+    Ok(())
+}
+
+/// Il testo di un `elem`, coi suoi figli.
+fn scrivi_elem(e: &Value) -> Result<String, String> {
+    let tag = testo_di(&e["tag"], "tag")?;
+    let mut s = format!("<{tag}");
+    for (k, v) in e["attrs"].as_object().ok_or("un elem senza attrs")? {
+        s.push_str(&format!(" {k}=\"{}\"", testo_di(v, k)?));
+    }
+    // Le parole di una riga (`text`, come lo strumento Testo le scrive).
+    let parole = e.get("text").and_then(Value::as_str).unwrap_or("");
+    match e.get("children").and_then(Value::as_array) {
+        Some(figli) if !figli.is_empty() => {
+            s.push('>');
+            s.push_str(&scappa(parole));
+            for f in figli {
+                s.push_str(&scrivi_elem(f)?);
+            }
+            s.push_str(&format!("</{tag}>"));
+        }
+        _ if !parole.is_empty() => s.push_str(&format!(">{}</{tag}>", scappa(parole))),
+        _ => s.push_str("/>"),
+    }
+    Ok(s)
+}
+
+/// Il testo di un nodo XML con `&`, `<` e `>` sciolti in entità.
+fn scappa(testo: &str) -> String {
+    testo
+        .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+}
+
+/// Mette `corpo` sotto `parent`, al posto `pos` dell'operazione `op`. Un
+/// genitore vuoto (`<g …/>`) si apre.
+fn inserisci(testo: &mut String, op: &Value, corpo: &str) -> Result<(), String> {
+    let genitore = testo_di(&op["parent"], "parent")?;
+    if genitore != "#root" {
+        let [da, _] = span_dell_id(testo, genitore)?;
+        let fine = fine_del_tag(testo, da)?;
+        if testo[..fine].ends_with("/>") {
+            let tag: String = testo[da + 1..]
+                .chars()
+                .take_while(|c| !c.is_whitespace() && *c != '/' && *c != '>')
+                .collect();
+            testo.replace_range(fine - 2..fine, &format!("></{tag}>"));
+        }
+    }
+    let (inizio, fine) = dentro(testo, genitore)?;
+    let pos = &op["pos"];
+    let dove = if pos.get("first").is_some() {
+        if genitore == "#root" {
+            dopo_la_testa(testo, inizio)?
+        } else {
+            inizio
+        }
+    } else if pos.get("last").is_some() {
+        fine
+    } else {
+        span_dell_id(testo, testo_di(&pos["after"], "after")?)?[1]
+    };
+    testo.insert_str(dove, corpo);
+    Ok(())
+}
+
+/// Dove comincia il tag della parte `parte` (gli indici dei figli elemento, uno per livello)
+/// dell'elemento che comincia in `da`; `da` stesso per una parte vuota.
+fn inizio_della_parte(testo: &str, mut da: usize, parte: &[usize]) -> Result<usize, String> {
+    for &indice in parte {
+        let apre = fine_del_tag(testo, da)?;
+        if testo[..apre].ends_with("/>") {
+            return Err("una parte di un elemento senza figli".into());
+        }
+        let (mut i, mut profondita, mut figlio) = (apre, 0usize, 0usize);
+        loop {
+            let dove = i + testo[i..].find('<').ok_or("una parte che non c'è")?;
+            let fine = fine_del_tag(testo, dove)?;
+            let tag = &testo[dove..fine];
+            if tag.starts_with("</") {
+                if profondita == 0 {
+                    return Err("una parte che non c'è".into());
+                }
+                profondita -= 1;
+            } else if !tag.starts_with("<!") && !tag.starts_with("<?") {
+                if profondita == 0 {
+                    if figlio == indice {
+                        da = dove;
+                        break;
+                    }
+                    figlio += 1;
+                }
+                if !tag.ends_with("/>") {
+                    profondita += 1;
+                }
+            }
+            i = fine;
+        }
+    }
+    Ok(da)
+}
+
+fn imposta(testo: &mut String, da: usize, k: &str, v: &str) -> Result<(), String> {
+    let fine = fine_del_tag(testo, da)?;
+    let tag = &testo[da..fine];
+    let chiave = format!(" {k}=\"");
+    if let Some(i) = tag.find(&chiave) {
+        let inizio = da + i + chiave.len();
+        let fine_v = inizio + testo[inizio..].find('"').ok_or("un valore non chiuso")?;
+        testo.replace_range(inizio..fine_v, v);
+    } else {
+        let at = da + tag.find([' ', '/', '>']).ok_or("un tag senza nome")?;
+        testo.insert_str(at, &format!(" {k}=\"{v}\""));
+    }
+    Ok(())
+}
+
+fn togli(testo: &mut String, da: usize, k: &str) -> Result<(), String> {
+    let fine = fine_del_tag(testo, da)?;
+    let chiave = format!(" {k}=\"");
+    if let Some(i) = testo[da..fine].find(&chiave) {
+        let inizio = da + i;
+        let valore = inizio + chiave.len();
+        let chiude = valore + testo[valore..].find('"').ok_or("un valore non chiuso")?;
+        testo.replace_range(inizio..=chiude, "");
+    }
+    Ok(())
+}
+
+/// `testo` con le operazioni `ops` (una lista) applicate in ordine.
+pub fn applica(testo: &str, ops: &Value) -> Result<String, String> {
+    let mut fuori = testo.to_string();
+    for op in ops.as_array().ok_or("le operazioni non sono una lista")? {
+        applica_op(&mut fuori, op)?;
+    }
+    Ok(fuori)
+}
+
+/// Le operazioni piatte: quelle del primo `batch`, o la lista com'è.
+pub fn piatte(ops: &Value) -> Vec<Value> {
+    let lista = ops.as_array().cloned().unwrap_or_default();
+    match lista.first() {
+        Some(b) if b["op"] == "batch" => b["ops"].as_array().cloned().unwrap_or_default(),
+        _ => lista,
+    }
+}

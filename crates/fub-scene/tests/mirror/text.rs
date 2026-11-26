@@ -110,7 +110,26 @@ pub(super) fn text() -> String {
                 // Estranei: un testo su tracciato con `x` e `y`, uno che
                 // segue il tracciato con la trasformazione.
                 .raw(r##"<text id="o00000005" x="40" y="500"><textPath href="#r00000001">Con x e y</textPath></text>"##)
-                .raw(r##"<text id="o00000006"><textPath href="#r00000003">Storto</textPath></text>"##),
+                .raw(r##"<text id="o00000006"><textPath href="#r00000003">Storto</textPath></text>"##)
+                // Un testo verticale, a colonne da destra a sinistra
+                // (formato della scena, testo §10), e uno estraneo, con le
+                // righe orizzontali.
+                .child(
+                    El::new("text")
+                        .a("id", "o00000007")
+                        .a("writing-mode", "vertical-rl")
+                        .a("x", 700)
+                        .a("y", 40)
+                        .a("font-size", 24)
+                        .child(El::new("tspan").a("y", 40).a("dx", 0).text("縦書き"))
+                        .child(
+                            El::new("tspan")
+                                .a("y", 40)
+                                .a("dx", "-28.8")
+                                .markup(r#"二<tspan font-weight="bold">列</tspan>"#),
+                        ),
+                )
+                .raw(r#"<text id="o00000008" writing-mode="vertical-rl"><tspan x="0" dy="0">Storto</tspan></text>"#),
         );
     document(&root, "\n")
 }

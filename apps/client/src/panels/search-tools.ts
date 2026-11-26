@@ -25,6 +25,7 @@ import { notify } from "../ui/notify";
 import { Race } from "../ui/race";
 import type { Lifetime } from "../ui/lifetime";
 import { setTooltip } from "../ui/tooltip";
+import { composingKey } from "../kit/ime";
 
 /// Che cosa la ricerca sa dire a chi sostituisce: la stringa da cercare e le
 /// note fra cui, oppure perché non si può.
@@ -273,6 +274,7 @@ export function mountSearchTools(lifetime: Lifetime, host: SearchToolsHost): Sea
   lifetime.listen(preview, "click", () => void ask());
   lifetime.listen(field, "input", invalidate);
   lifetime.listen(field, "keydown", (event) => {
+    if (composingKey(event)) return;
     if (event.key === "Enter") {
       event.preventDefault();
       void ask();

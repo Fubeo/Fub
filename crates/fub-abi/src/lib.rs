@@ -92,13 +92,18 @@ pub use custom::{
     SyntaxProduct, SyntaxRule, SyntaxRuleSpec, SyntaxTrigger,
 };
 pub use drawing::{
-    DrawingChange, DrawingCommandInfo, DrawingCommandRequest, DrawingEdit, DrawingFrame,
-    DrawingGesture, DrawingLoss, DrawingLossKind, DrawingOpen, DrawingOutcome, DrawingPhase,
-    DrawingPointer, DrawingPointerKind, DrawingPreview, DrawingRefusal, DrawingSnap, DrawingStyle,
-    DrawingSync, DrawingSynced, DrawingTool, DRAWING_COMMANDS, DRAWING_COMMAND_FILL_COLOR,
-    DRAWING_COMMAND_STROKE_COLOR, DRAWING_COMMAND_WIDTH, MAX_DRAWING_COLOR_BYTES,
-    MAX_DRAWING_LOSSES, MAX_DRAWING_OPS, MAX_DRAWING_OPS_BYTES, MAX_DRAWING_TEXT_BYTES,
-    MAX_GESTURE_EVENTS,
+    DrawingAnchor, DrawingChange, DrawingCommandInfo, DrawingCommandRequest, DrawingDisabledReason,
+    DrawingEdit, DrawingFrame, DrawingGesture, DrawingInput, DrawingKeyMods, DrawingLoss,
+    DrawingLossKind, DrawingOpen, DrawingOutcome, DrawingOverlay, DrawingOverlayRole, DrawingPhase,
+    DrawingPoint, DrawingPointer, DrawingPointerKind, DrawingPreview, DrawingRefusal, DrawingSnap,
+    DrawingStyle, DrawingSync, DrawingSynced, DrawingTool, DrawingToolState,
+    DRAWING_CLAIMABLE_KEYS, DRAWING_COMMANDS, DRAWING_COMMAND_FAMILY_PREPARE,
+    DRAWING_COMMAND_FILL_COLOR, DRAWING_COMMAND_STROKE_COLOR, DRAWING_COMMAND_TOOL_OPTION,
+    DRAWING_COMMAND_TOOL_STATE, DRAWING_COMMAND_WIDTH, DRAWING_FAMILIES, MAX_DRAWING_ANCHORS,
+    MAX_DRAWING_COLOR_BYTES, MAX_DRAWING_INPUTS, MAX_DRAWING_KEY_BYTES, MAX_DRAWING_LOSSES,
+    MAX_DRAWING_OPS, MAX_DRAWING_OPS_BYTES, MAX_DRAWING_OPTION_KEY_BYTES, MAX_DRAWING_OVERLAYS,
+    MAX_DRAWING_OVERLAY_PATH_BYTES, MAX_DRAWING_OVERLAY_TEXT_BYTES, MAX_DRAWING_TEXT_BYTES,
+    MAX_DRAWING_TOOL_ID_BYTES, MAX_GESTURE_EVENTS,
 };
 pub use edit::{
     AppliedEdit, EditReport, EditRequest, Fnv1a, Revision, RevisionHasher, TextEdit, WriteBase,
@@ -152,12 +157,12 @@ pub use model::{
     PropertyDate, PropertyOption, PropertyScalar, PropertyTime, PropertyType, PropertyTypes,
     PropertyValue, RelationTarget, Span, StatusGroup, TableCell, TableRow, Tag, TaskMarker,
 };
-pub use net::{HttpHeader, HttpMethod, HttpRequest, HttpResponse};
+pub use net::{HttpHeader, HttpMethod, HttpRequest, HttpResponse, LimitedFetchError};
 pub use options::{OptionMap, OptionStatus};
 pub use organization::Organization;
 pub use query::{
-    DueBound, Matches, QueryClause, QueryEvaluator, QueryExpr, QueryLiteral, QueryPredicate,
-    TaskStatus, TextField, TextMode, TextQuery, TextScope, TextTolerance,
+    DueBound, Matches, PropertyLinkPredicate, QueryClause, QueryEvaluator, QueryExpr, QueryLiteral,
+    QueryPredicate, TaskStatus, TextField, TextMode, TextQuery, TextScope, TextTolerance,
 };
 pub use render::{EmbedContent, RenderedDocument, RenderedPart};
 pub use schema::SchemaVersion;

@@ -28,6 +28,7 @@ import {
   toggleStrikethrough,
   toggleWikilink,
 } from "./commands";
+import { parsed } from "./test-support";
 
 // I comandi sono `StateCommand` puri: si testano creando un `EditorState` e
 // catturando la transazione dal dispatch, senza mai istanziare una view (i
@@ -39,18 +40,18 @@ function mk(spec: string): EditorState {
   if (open !== -1) {
     const stripped = spec.replace("‹", "");
     const close = stripped.indexOf("›");
-    return EditorState.create({
+    return parsed(EditorState.create({
       doc: stripped.replace("›", ""),
       selection: EditorSelection.single(open, close),
       extensions: [markdown({ base: markdownLanguage })],
-    });
+    }));
   }
   const bar = spec.indexOf("|");
-  return EditorState.create({
+  return parsed(EditorState.create({
     doc: spec.replace("|", ""),
     selection: EditorSelection.single(bar === -1 ? 0 : bar),
     extensions: [markdown({ base: markdownLanguage })],
-  });
+  }));
 }
 
 function show(state: EditorState): string {
@@ -422,8 +423,16 @@ describe("trasforma in lista (Mod-Shift-8/7)", () => {
     expect(run(toggleBulletList, "riga|").out).toBe("- riga|");
   });
 
-  it("solo righe vuote → default", () => {
-    expect(run(toggleBulletList, "|").handled).toBe(false);
+  it("la riga vuota del cursore diventa voce, col cursore dopo il segno (IMP-6104)", () => {
+    expect(run(toggleBulletList, "|").out).toBe("- |");
+    expect(run(toggleOrderedList, "a\n|").out).toBe("a\n1. |");
+    expect(run(toggleBulletList, "  |").out).toBe("  - |");
+    // Il cursore a inizio di una riga piena resta sul testo, dopo il segno.
+    expect(run(toggleBulletList, "|riga").out).toBe("- |riga");
+  });
+
+  it("solo righe vuote selezionate → default", () => {
+    expect(run(toggleBulletList, "‹\n\n›").handled).toBe(false);
   });
 });
 
@@ -513,6 +522,25 @@ describe("autoPairDecision", () => {
     expect(decide("costa 5$ e poi |$", "$")).toBeNull();
   });
 
+  it("la chiusura `$$` di un blocco scritto su una riga scavalca tutte e due le `$`", () => {
+    expect(decide("$$x^2|$$", "$")).toEqual({ action: "skip" });
+    expect(decide("$$x^2$|$", "$")).toEqual({ action: "skip" });
+    // Una `\$` scritta è un segno, non la chiusura.
+    expect(decide("$$5\\$|$", "$")).toBeNull();
+    // `$$` da solo non ha ancora una formula da chiudere.
+    expect(decide("$$|$", "$")).toBeNull();
+  });
+
+  it("la `]` battuta subito dopo una casella è quella della casella (`- [ ]]`)", () => {
+    expect(decide("- [ ]|", "]")).toEqual({ action: "absorb" });
+    expect(decide("1. [x]|", "]")).toEqual({ action: "absorb" });
+    expect(decide("> - [ ]|", "]")).toEqual({ action: "absorb" });
+    // Fuori da una voce la `]` è una lettera.
+    expect(decide("testo [ ]|", "]")).toBeNull();
+    // Dopo la casella, nel testo della voce, sì.
+    expect(decide("- [ ] a]|", "]")).toBeNull();
+  });
+
   it("niente auto-pair con selezione attiva o input multi-carattere", () => {
     expect(decide("‹sel›", "[")).toBeNull();
     const state = mk("|");
@@ -538,7 +566,7 @@ describe("operazioni tabella", () => {
       if (from < 0) throw new Error(`missing selection: ${text}`);
       return EditorSelection.cursor(from);
     });
-    let state = EditorState.create({
+    let state = parsed(EditorState.create({
       doc,
       selection: EditorSelection.create(locations),
       extensions: [
@@ -546,7 +574,7 @@ describe("operazioni tabella", () => {
         EditorState.allowMultipleSelections.of(true),
         history(),
       ],
-    });
+    }));
     let transactions = 0;
     const dispatch = (tr: Transaction) => {
       state = tr.state;

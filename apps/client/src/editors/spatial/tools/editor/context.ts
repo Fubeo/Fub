@@ -41,11 +41,14 @@ import type { StateContext } from "./state";
 import type { StylingContext } from "./styling";
 import type { SheetCursorContext } from "./sheet-cursor";
 import type { ToolbarContext } from "./toolbar";
+import type { FilaMotoreContext } from "./chrome/fila-motore";
 import type { ToolingContext } from "./tooling";
 import type { TreeContext } from "./tree";
 import type { VaultImagesContext } from "./vault-images";
+import type { CropImageContext } from "./ritaglio-immagine";
 import type { ViewContext } from "./view";
 import type { GestiMotoreContext } from "../../motore/gesti";
+import type { SpaziPitturaContext } from "./spazi-pittura";
 import type { Lifetime } from "../../../../ui/lifetime";
 import type { SceneEngine } from "../../scene/engine";
 
@@ -56,9 +59,9 @@ export interface EditorContext extends
     InkGesturesContext, InsertsContext,
     StrokeShapesContext, CurvatureToolContext, SheetCursorContext, InputContext,
     ArrangingContext, SelectionCommandsContext, InkShapeContext,
-    LayersGridContext, KeysContext, ClipboardCommandsContext, VaultImagesContext, LifeContext, RailContext, PenOptionsContext,
+    LayersGridContext, KeysContext, ClipboardCommandsContext, VaultImagesContext, CropImageContext, LifeContext, RailContext, PenOptionsContext,
     StatusContext, HandZoomContext, BareContext, OutlineContext, CommandSearchContext, NavigatorContext, CommandsContext,
-    WorkspaceContext, NibContext, ReplayContext, RulerContext, GestiMotoreContext {
+    WorkspaceContext, NibContext, ReplayContext, RulerContext, GestiMotoreContext, FilaMotoreContext, SpaziPitturaContext {
   readonly host: HTMLElement;
   readonly initial: SceneEngine;
   readonly owner: Lifetime;

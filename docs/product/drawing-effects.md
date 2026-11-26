@@ -67,6 +67,27 @@ I sedici modi, coi nomi e nei gruppi di Illustrator e di Photoshop:
 - **Un filtro scritto da un altro programma** si vede e si conserva come gli
   effetti di Fub.
 
+## Aggiungi riempimento e Aggiungi contorno
+
+Aggiungi riempimento mette in cima allo stack di ogni oggetto scelto una copia
+del suo riempimento più alto (con il colore predefinito, se non ne ha); Aggiungi
+contorno fa lo stesso col contorno, con spessore 1 se non ce n'è uno. Più
+oggetti scelti ricevono ciascuno il proprio, in un solo passo. Il file tiene
+più riempimenti come ricetta e si riapre con tutti. Su un testo, su una maschera
+di opacità, su un oggetto nascosto e su un tratto dell'Inchiostro il comando è
+spento, con la sua ragione (K6 T15 aggiungi aspetto).
+
+## Riduci ad aspetto di base
+
+Il comando Riduci ad aspetto di base (il pannello Aspetto con i suoi comandi
+arriva dopo) lascia un solo riempimento e un
+solo contorno visibili: con più riempimenti il file è una ricetta, e la
+riapertura conserva quei riempimenti finché Riduci non ne toglie uno. Con
+niente scelto, con un oggetto bloccato o con una maschera di opacità il
+comando non parte e dice perché. Svuota l'aspetto non c'è ancora: un oggetto
+svuotato si riapre come grafica semplice, e questo il file non lo tiene (K6
+T15 aspetto).
+
 ## L'opacità nella barra
 
 Nello spazio Completo la barra «Disponi», accanto alla selezione, ha il campo
@@ -111,6 +132,99 @@ PDF non ha, si dipingono in un'immagine a 300 punti per pollice, con
 l'oggetto che li porta, e il resto della pagina resta vettoriale. Un disegno
 con effetti molto grandi li dipinge a una risoluzione più bassa, e l'export
 si fa comunque ([Disegni, esportare](drawing-export.md)).
+
+## Il menu Effetto (spazio Completo)
+
+Nello spazio Completo il menu ≡ ha **Effetto**, con i sottomenu di VectorCraft
+(3D e materiali, Artistico, Sfocatura, Pennellate, Regolazioni colore, Effetti
+colore, Converti in forma, Distorci, Distorci e trasforma, Tracciato, Effetti
+tracciato, Elaborazione tracciati, Pixel, Nitidezza, Schizzo, Stilizza,
+Texture, Video, Deforma). Ogni voce aggiunge un **effetto dal vivo** agli
+oggetti scelti: la sua finestra (per esempio il Raggio di «Arrotonda angoli»)
+mostra l'anteprima sul disegno mentre si cambiano i valori, e OK lo aggiunge
+in un passo solo di Annulla. Le voci sono spente senza oggetti scelti, con un
+oggetto bloccato o su un disegno di sola lettura. Le voci:
+
+- **Stilizza ›** Arrotonda angoli, Ombra esterna, Bagliore interno, Bagliore
+  esterno, Sfuma bordi, Scarabocchio (il metodo di fusione dell'ombra e dei
+  bagliori si sceglie fra quelli del pannello Trasparenza);
+- **Sfocatura ›** Sfocatura gaussiana, Sfocatura radiale, Sfocatura migliore;
+- **Nitidezza ›** Maschera di contrasto;
+- **Artistico, Pennellate, Schizzo, Texture, Pixel, Video, Distorci ›** tutti
+  i filtri a pixel (Matita colorata, Neon, Acquerello, Sumi-e, Carboncino,
+  Cromatura, Mosaico, Vetro, Increspatura, Cristallizza, Deinterlaccia…), più
+  Bordi luminosi in Stilizza e **Rasterizza**: nel file l'oggetto diventa
+  un'immagine di come appare, e la ricetta tiene l'oggetto e l'effetto per
+  cambiarlo ancora;
+- **Distorci e trasforma ›** Contrai e gonfia, Torci, Zig-zag, Irruvidisci,
+  Ritocca, Trasforma (con le copie), Distorsione libera;
+- **Tracciato ›** Sposta tracciato, Contorna oggetto, Contorna traccia;
+- **Converti in forma ›** Rettangolo, Rettangolo arrotondato, Ellisse.
+- **Effetti tracciato ›** Tratti in geometria, Aggiungi punti di ancoraggio,
+  Estendi tracciato, Chiudi tracciato, Smussa e Semplifica punti di
+  ancoraggio, Ritira maniglie, Inverti direzione, Dividi ai punti di ancoraggio;
+- **Elaborazione tracciati ›** Aggiungi, Intersezione, Escludi, Sottrai, Meno
+  dietro, Dividi, Rifila, Fondi, Ritaglia, Contorno, Miscela intensa, Miscela
+  soffice, Trapping: lavorano sugli oggetti dentro un gruppo (o un livello),
+  come in VectorCraft, e il gruppo resta modificabile;
+- **Regolazioni colore ›** Luminosità/contrasto, Curve, Tonalità/saturazione,
+  Livelli tonali, Sposta verso colore, Temperatura/tinta;
+- **Effetti colore ›** Desatura, Bicromia, Esposizione, Inverti colori, Retino
+  vettoriale;
+- **Deforma ›** le quindici deformazioni (Arco, Arco inferiore e superiore,
+  Arcata, Rigonfiamento, Conchiglia inferiore e superiore, Bandiera, Onda,
+  Pesce, Ascesa, Occhio di pesce, Gonfia, Compressione, Torci), con piega,
+  distorsione orizzontale e verticale e direzione;
+- **3D e materiali ›** Estrusione e smusso, Rivoluzione, Gonfia, Ruota: il
+  file tiene le facce come poligoni ombreggiati (Gonfia ne fa migliaia).
+  **Predefinito illuminazione 3D…** cambia la luce di un effetto 3D già
+  applicato con uno di quattro rig (Standard, Diffusa, In alto a sinistra,
+  Destra) e lascia com'è il resto; vale sul primo effetto 3D della pila, e
+  con più oggetti scelti solo se lo hanno nello stesso posto;
+- **Segni di ritaglio**, in fondo al menu: linee sottili agli angoli
+  dell'oggetto, che resta com'è.
+
+Il file salva il risultato come grafica normale,
+leggibile da ogni programma, e la ricetta dell'effetto per poterlo cambiare
+([Formato della scena, ricette](../reference/scene-format-recipe.md)).
+
+## La sezione Aspetto (spazio Completo)
+
+Nella scheda Design del Completo la sezione **Aspetto** mostra la pila degli
+effetti degli oggetti scelti, nell'ordine in cui si applicano, come il
+pannello Aspetto di VectorCraft: prima gli effetti dell'oggetto, poi quelli di
+ogni riempimento o contorno che ne ha. Ogni riga ha:
+
+- l'**occhio**, che spegne o riaccende l'effetto senza toglierlo;
+- il **nome**, che riapre la finestra dell'effetto coi valori che ha: OK
+  cambia solo i valori toccati, e un valore che la finestra non mostra resta
+  com'è;
+- **Su** e **Giù**, che spostano l'effetto nella pila;
+- **Duplica** e **Togli**.
+
+Con più oggetti scelti e pile diverse la sezione mostra solo gli effetti che
+hanno in comune (nello stesso ordine), e un comando li cambia su tutti; lo
+spostamento è spento, come in VectorCraft. In fondo, **Espandi aspetto** (anche
+nel menu Oggetto) rende gli effetti grafica normale e toglie la ricetta.
+Ogni comando è un passo solo di Annulla.
+
+## Un effetto già applicato
+
+Se il primo oggetto scelto ha già nella sua pila l'effetto scelto dal menu,
+Fub chiede prima che cosa fare: **Modifica** apre la finestra di quell'effetto
+con i valori che ha, e OK li cambia al loro posto (con più oggetti scelti, in
+ognuno che ha l'effetto nello stesso posto); **Aggiungi nuovo** apre la finestra
+con i valori di serie e ne aggiunge un altro. Un effetto di un
+riempimento o di un contorno si cambia dalla sezione Aspetto.
+
+## Ultimo effetto
+
+Nel menu Effetto, **Applica ultimo effetto** rifà l'ultimo effetto applicato
+dal menu, con gli stessi valori, sugli oggetti scelti adesso; **Ultimo
+effetto…** lo rilancia aprendone la finestra coi valori ricordati. Le due voci
+sono spente, col perché, finché non se n'è applicato uno; un effetto rifiutato
+o cambiato dalla sezione Aspetto non conta. Il ricordo dura finché lo spazio
+Completo è aperto.
 
 ## Nel file
 

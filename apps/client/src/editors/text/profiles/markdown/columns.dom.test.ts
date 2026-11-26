@@ -3,11 +3,11 @@ import { afterEach, describe, expect, it } from "vitest";
 import { EditorSelection, EditorState, Prec } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { markdown } from "@codemirror/lang-markdown";
-import { ensureSyntaxTree } from "@codemirror/language";
 import { markdownGrammar } from "./grammar";
 import { livePreview } from "./livepreview";
 import { liveReveal } from "../../live-reveal";
 import { renderMarkdown } from "./render";
+import { parsedView } from "./test-support";
 
 // Le colonne (K3): `[!columns]` con da due a quattro `[!column]`.
 
@@ -52,8 +52,7 @@ describe("le colonne in Live", () => {
         extensions: [markdown({ base: markdownGrammar }), livePreview({ openWikilink() {}, searchTag() {} }), Prec.highest(liveReveal.of("mai"))],
       }),
     });
-    ensureSyntaxTree(view.state, view.state.doc.length, 1000);
-    view.dispatch({});
+    parsedView(view);
     views.push(view);
     return view;
   };

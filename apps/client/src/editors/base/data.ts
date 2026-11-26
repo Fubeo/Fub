@@ -13,21 +13,36 @@ import { declaredType, OPTION_GROUPS, optionsOf, type PropertyOption, type Prope
 import { BASE_QUERY_NS, BASE_RENDERER_NS } from "./ids";
 
 export { BASE_FAMILY, BASE_FORMAT, BASE_OWNER, BASE_PROFILE, BASE_QUERY_NS, BASE_RENDERER_NS } from "./ids";
-export const BASE_MAP_ATTRIBUTION_FALLBACK = "Offline coordinates";
 export const BASE_STATE_KEY = "base.active-view";
-/** YAML is not a network grant. Only an explicit gesture plus a host-owned
- * exact-host allowlist may turn a tile template into a browser resource URL. */
-export function allowedBaseTileUrl(template: string, kind: "raster" | "vector", allowedHosts: readonly string[], z: number, x: number, y: number): string | null {
-  if (!allowedHosts.length || !["{z}", "{x}", "{y}"].every((part) => template.includes(part))) return null;
+/// La chiave di macchina con gli host da cui la vista Mappa può scaricare
+/// tessere (`fub-host`, `map_tiles::MAP_TILE_HOSTS`). Vuota di serie.
+export const MAP_TILE_HOSTS_KEY = "map.tile-hosts";
+
+/// L'indirizzo di una tessera dal modello del `.base`, se ha la forma che
+/// l'host accetta (`https`, porta 443, niente credenziali, query o frammento;
+/// un fornitore vettoriale dà SVG). Non guarda gli host ammessi: per quello
+/// c'è `allowedBaseTileUrl`.
+export function baseTileUrl(template: string, kind: "raster" | "vector", z: number, x: number, y: number): URL | null {
+  if (!["{z}", "{x}", "{y}"].every((part) => template.includes(part))) return null;
   if (![z, x, y].every((n) => Number.isSafeInteger(n) && n >= 0) || z > 3 || x >= 2 ** z || y >= 2 ** z) return null;
   try {
     const url = new URL(template.replace(/\{z\}/g, String(z)).replace(/\{x\}/g, String(x)).replace(/\{y\}/g, String(y)));
-    if (url.protocol !== "https:" || url.username || url.password || (url.port && url.port !== "443") || /[{}]/.test(url.href)) return null;
-    if (!allowedHosts.some((host) => host.toLowerCase() === url.hostname.toLowerCase())) return null;
+    if (url.protocol !== "https:" || url.username || url.password || (url.port && url.port !== "443") || url.search || url.hash || /[{}]/.test(url.href)) return null;
     // Vector tiles here are SVG imagery, not executable HTML or PBF bytes.
     if (kind === "vector" && !url.pathname.toLowerCase().endsWith(".svg")) return null;
-    return url.href;
+    return url;
   } catch { return null; }
+}
+
+/** YAML is not a network grant. Only an explicit gesture plus a host-owned
+ * exact-host allowlist may turn a tile template into a tile request. The
+ * authority is the host (`Host::map_tile`): this check only avoids asking for
+ * what it would refuse. */
+export function allowedBaseTileUrl(template: string, kind: "raster" | "vector", allowedHosts: readonly string[], z: number, x: number, y: number): string | null {
+  if (!allowedHosts.length) return null;
+  const url = baseTileUrl(template, kind, z, x, y);
+  if (!url || !allowedHosts.some((host) => host.trim().toLowerCase() === url.hostname.toLowerCase())) return null;
+  return url.href;
 }
 
 export interface BaseSurfaceDeps {
@@ -434,14 +449,22 @@ export interface BaseFetchWindow { readonly offset: number; readonly limit: numb
 // continuation cursor. Refuse a vault larger than the safe in-memory budget
 // rather than silently returning its first N rows as the complete answer.
 const MAX_DERIVE_ROWS = 20_000;
+/// Tutte le note che `matching` trova, a partire da `window.offset`. La prima
+/// domanda chiede `window.limit` righe e dice quante sono in tutto; se ce ne
+/// sono altre, la seconda le chiede tutte insieme. Ogni domanda costa
+/// all'indice un giro di tutto il vault (filtro e ordine), quindi due domande
+/// e non una ogni 256 righe; e la prima resta piccola, perché un vault oltre il
+/// budget si rifiuta senza trasferirlo. Se intanto il vault cresce, si chiede
+/// ancora ciò che manca.
 export async function fetchAllDocuments(deps: BaseSurfaceDeps, matching: QueryExpr = EVERY_DOCUMENT, select: PropertySelect = { kind: "all" }, window: BaseFetchWindow = { offset: 0, limit: 256 }, signal?: AbortSignal): Promise<{ rows: BaseRowInput[]; total: number }> {
   if (!Number.isSafeInteger(window.offset) || window.offset < 0 || !Number.isSafeInteger(window.limit) || window.limit < 1) throw new RangeError("base: pagina non valida");
   const rows: BaseRowInput[] = [];
   let offset = window.offset;
   let total = 0;
+  let limit = window.limit;
   do {
     if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
-    const page = await matchingRows(deps, { matching, select, page: { offset, limit: window.limit }, excerpts: "omit" });
+    const page = await matchingRows(deps, { matching, select, page: { offset, limit }, excerpts: "omit" });
     if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
     total = page.total;
     if (total - window.offset > MAX_DERIVE_ROWS) throw new Error(`base: ${total} documenti superano il budget di ${MAX_DERIVE_ROWS}; nessun risultato parziale`);
@@ -452,6 +475,8 @@ export async function fetchAllDocuments(deps: BaseSurfaceDeps, matching: QueryEx
     }
     offset += page.items.length;
     if (offset > total) throw new Error("base: pagina oltre il totale");
+    // Il resto in una domanda sola (un host può darne meno: si richiede).
+    limit = Math.max(window.limit, total - offset);
   } while (offset < total);
   return { rows, total };
 }
@@ -474,8 +499,16 @@ function isCell(value: unknown): value is BaseCellValue {
     default: return false;
   }
 }
-export async function deriveBaseRows(deps: BaseSurfaceDeps, source: string, view: string | null, rows: BaseRowInput[], nowMs = Date.now(), container: string | null = null, linked: readonly BaseLinkedNote[] = []): Promise<BaseDerived> {
-  const raw = await baseQuery(deps, { version: 1, op: "derive", source, view, now_ms: nowMs, container, rows: rows.map((row) => ({ doc: row.doc, props: Object.fromEntries((row.properties ?? []).map((property) => [property.key, property.value])) })), ...(linked.length > 0 ? { linked } : {}) });
+/// `needed`: le proprietà che `derive` legge (`required_props` del piano), o
+/// `null` se le legge tutte (`all_properties`, la ricerca della vista). Le righe
+/// arrivano con tutte le proprietà delle note, perché la barra propone quelle
+/// che le note hanno; a `derive` vanno solo quelle che il piano chiede, così la
+/// domanda resta piccola come prima, entro `MAX_BASE_QUERY_BYTES` del core.
+/// Ogni riga derivata tiene comunque tutte le proprietà lette della sua nota.
+export async function deriveBaseRows(deps: BaseSurfaceDeps, source: string, view: string | null, rows: BaseRowInput[], nowMs = Date.now(), container: string | null = null, linked: readonly BaseLinkedNote[] = [], needed: readonly string[] | null = null): Promise<BaseDerived> {
+  const wanted = needed === null ? null : new Set(needed);
+  const props = (row: BaseRowInput) => Object.fromEntries((row.properties ?? []).filter((property) => wanted === null || wanted.has(property.key)).map((property) => [property.key, property.value]));
+  const raw = await baseQuery(deps, { version: 1, op: "derive", source, view, now_ms: nowMs, container, rows: rows.map((row) => ({ doc: row.doc, props: props(row) })), ...(linked.length > 0 ? { linked } : {}) });
   if (!Array.isArray(raw.rows)) throw new Error("base: righe malformate");
   const properties = new Map(rows.map((row) => [row.doc, Object.fromEntries((row.properties ?? []).map((entry) => [entry.key, entry.value]))]));
   const derived = raw.rows.map((item): BaseRow => {

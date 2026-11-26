@@ -15,6 +15,7 @@ import {
   withArrivingSymbols,
   withOriginals,
   type Place,
+  placeWithin,
   type Resolve,
 } from "../classify";
 import { DEFS_ID, isNewId, pageId, type IdKind } from "../ids";
@@ -311,7 +312,7 @@ export function reindent(
     for (const child of element.children) {
       const node = doc.nodes[child]!;
       if (node.kind === "text" && node.blank) ranges.push([node.start - base, node.end - base]);
-      else if (container && node.kind === "element") stack.push([child, found[1] === "defs" ? "defs" : "inside", level + 1, below]);
+      else if (container && node.kind === "element") stack.push([child, placeWithin(found[1]), level + 1, below]);
     }
   }
   ranges.sort((a, b) => a[0] - b[0]);

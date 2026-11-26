@@ -21,6 +21,7 @@ use std::fmt;
 
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine as _;
+use fub_abi::traits::VaultEntry;
 use fub_abi::{
     DocId, DocumentModel, HostApi, IndexLoss, IndexProvider, IndexQuery, IndexResult, PluginError,
     QueryKind, QueryRoute,
@@ -149,6 +150,19 @@ impl IndexProvider for DrawIndex {
 
     fn flush(&mut self, _: &mut dyn HostApi) -> Result<(), PluginError> {
         Ok(())
+    }
+
+    /// Il disegno risponde sui caratteri, non sulle note consegnate: non
+    /// tiene niente per documento.
+    fn up_to_date(&self, entries: &[VaultEntry]) -> Vec<DocId> {
+        // Niente può restare indietro in chi non tiene niente: ogni documento
+        // mostrato, e solo quelli (conformità di `up_to_date`). Un indice che
+        // tenesse stato per documento risponderebbe come `ReminderIndex`.
+        entries
+            .iter()
+            .filter(|entry| entry.kind == fub_abi::traits::EntryKind::Document)
+            .map(|entry| entry.id.clone())
+            .collect()
     }
 }
 

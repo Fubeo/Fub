@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { EditorState } from "@codemirror/state";
 import { markdown } from "@codemirror/lang-markdown";
 import { markdownGrammar } from "./grammar";
+import { parsed } from "./test-support";
 import { computeDecorations, type LiveDeco, type LiveDecoKind } from "./livepreview";
 import { renderMarkdown } from "./render";
 import { threadsIn } from "./comments/threads";
@@ -84,7 +85,7 @@ const DIVERGENCES: Record<string, string> = {
 const STYLES: ReadonlySet<LiveDecoKind> = new Set(["strong", "em", "strike", "sup", "sub", "code"]);
 
 function stateOf(doc: string): EditorState {
-  return EditorState.create({ doc, extensions: [markdown({ base: markdownGrammar })] });
+  return parsed(EditorState.create({ doc, extensions: [markdown({ base: markdownGrammar })] }));
 }
 
 /// La passata della shell con **tutte** le righe attive: la sorgente resta

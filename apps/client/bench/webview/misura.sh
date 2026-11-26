@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
-# N0, R1, T1 e I1 su una macchina Linux vera, con un comando solo:
+# Tutti gli scenari del banco WebView su una macchina Linux vera, con un
+# comando solo:
 #
 #   apps/client/bench/webview/misura.sh [--only=S1,S2,...] [--budgets=ci|targets]
 #
 # Costruisce il client e l'app di release, installa `tauri-driver` dentro
-# `target/` (non nel sistema), poi lancia `run.mjs` su tutti gli scenari.
+# `target/` (non nel sistema), poi lancia `run.mjs` su tutti gli scenari:
+# l'elenco è quello di serie di `run.mjs`, e `--only` lo restringe.
 # Senza un display (né X11 né Wayland) usa `xvfb-run`. Le fixture nascono in
 # una cartella temporanea: il vault di chi misura non si tocca. Il referto va
 # in `apps/client/bench/.output/webview/referto.json`.
@@ -50,7 +52,7 @@ echo "== le misure"
 cd "$client"
 status=0
 "${wrap[@]}" node bench/webview/run.mjs \
-  --only=F1,F2,F3,S1,S2,S3,S4,S5,S6,S7,R1,T1,I1 --budgets=targets \
+  --budgets=targets \
   --driver="$driver_root/bin/tauri-driver" --native-driver="$native_driver" \
   "$@" || status=$?
 

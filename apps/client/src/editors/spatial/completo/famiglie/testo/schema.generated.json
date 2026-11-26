@@ -1,0 +1,256 @@
+{
+  "$generato": "File generato da crates/fub-disegno/tests/ts_indice.rs, non modificare a mano; rigenera con UPDATE_MIRROR=1 cargo test -p fub-disegno --test ts_indice",
+  "famiglia": "testo",
+  "finestre": [
+    {
+      "fonte": "motore",
+      "id": "edit.findReplace",
+      "campi": [
+        {
+          "nome": "find",
+          "tipo": "testo",
+          "facoltativo": false
+        },
+        {
+          "nome": "replace",
+          "tipo": "testo",
+          "facoltativo": false,
+          "predefinito": ""
+        },
+        {
+          "nome": "matchCase",
+          "tipo": "sino",
+          "facoltativo": false,
+          "predefinito": false
+        },
+        {
+          "nome": "wholeWord",
+          "tipo": "sino",
+          "facoltativo": false,
+          "predefinito": false
+        }
+      ]
+    },
+    {
+      "fonte": "motore",
+      "id": "text.areaOptions",
+      "campi": [
+        {
+          "nome": "ids",
+          "tipo": "json",
+          "facoltativo": true,
+          "unoFra": 0
+        },
+        {
+          "nome": "id",
+          "tipo": "testo",
+          "facoltativo": true,
+          "unoFra": 0
+        },
+        {
+          "nome": "width",
+          "tipo": "numero",
+          "facoltativo": true
+        },
+        {
+          "nome": "height",
+          "tipo": "numero",
+          "facoltativo": true
+        },
+        {
+          "nome": "rows",
+          "tipo": "numero",
+          "facoltativo": true
+        },
+        {
+          "nome": "columns",
+          "tipo": "numero",
+          "facoltativo": true
+        },
+        {
+          "nome": "gutter",
+          "tipo": "numero",
+          "facoltativo": true
+        },
+        {
+          "nome": "rowGutter",
+          "tipo": "numero",
+          "facoltativo": true
+        },
+        {
+          "nome": "inset",
+          "tipo": "numero",
+          "facoltativo": true
+        },
+        {
+          "nome": "firstBaseline",
+          "tipo": "scelta",
+          "facoltativo": true,
+          "valori": [
+            "ascent",
+            "capHeight",
+            "xHeight",
+            "leading",
+            "fixed"
+          ],
+          "aperta": false
+        },
+        {
+          "nome": "firstBaselineMin",
+          "tipo": "numero",
+          "facoltativo": true
+        },
+        {
+          "nome": "verticalAlign",
+          "tipo": "scelta",
+          "facoltativo": true,
+          "valori": [
+            "top",
+            "center",
+            "bottom",
+            "justify"
+          ],
+          "aperta": false
+        },
+        {
+          "nome": "flow",
+          "tipo": "scelta",
+          "facoltativo": true,
+          "valori": [
+            "columns",
+            "rows"
+          ],
+          "aperta": false
+        },
+        {
+          "nome": "fit",
+          "tipo": "scelta",
+          "facoltativo": true,
+          "valori": [
+            "none",
+            "autoHeight",
+            "shrinkText"
+          ],
+          "aperta": false
+        },
+        {
+          "nome": "fitMinPercent",
+          "tipo": "numero",
+          "facoltativo": true
+        }
+      ],
+      "aperto": true
+    },
+    {
+      "fonte": "motore",
+      "id": "type.insert",
+      "campi": [
+        {
+          "nome": "char",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "bullet",
+            "copyright",
+            "ellipsis",
+            "paragraph",
+            "registered",
+            "section",
+            "trademark",
+            "emDash",
+            "enDash",
+            "discretionaryHyphen",
+            "nonBreakingHyphen",
+            "doubleLeftQuote",
+            "doubleRightQuote",
+            "singleLeftQuote",
+            "singleRightQuote",
+            "emSpace",
+            "enSpace",
+            "hairSpace",
+            "sixthSpace",
+            "thinSpace",
+            "nonBreakingSpace",
+            "figureSpace",
+            "punctuationSpace",
+            "thirdSpace",
+            "quarterSpace",
+            "tab",
+            "forcedLineBreak",
+            "paragraphReturn"
+          ],
+          "aperta": false,
+          "predefinito": "bullet"
+        }
+      ]
+    },
+    {
+      "fonte": "motore",
+      "id": "type.pathOptions",
+      "campi": [
+        {
+          "nome": "ids",
+          "tipo": "json",
+          "facoltativo": true,
+          "unoFra": 0
+        },
+        {
+          "nome": "id",
+          "tipo": "testo",
+          "facoltativo": true,
+          "unoFra": 0
+        },
+        {
+          "nome": "start",
+          "tipo": "numero",
+          "facoltativo": true
+        },
+        {
+          "nome": "end",
+          "tipo": "numero",
+          "facoltativo": true
+        },
+        {
+          "nome": "flip",
+          "tipo": "sino",
+          "facoltativo": true
+        },
+        {
+          "nome": "effect",
+          "tipo": "scelta",
+          "facoltativo": true,
+          "valori": [
+            "rainbow",
+            "skew",
+            "3dRibbon",
+            "stairStep",
+            "gravity"
+          ],
+          "aperta": false
+        },
+        {
+          "nome": "alignToPath",
+          "tipo": "scelta",
+          "facoltativo": true,
+          "valori": [
+            "ascender",
+            "descender",
+            "center",
+            "baseline"
+          ],
+          "aperta": false
+        },
+        {
+          "nome": "spacing",
+          "tipo": "numero",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "fonte": "interfaccia",
+      "id": "type.findFont",
+      "campi": []
+    }
+  ]
+}

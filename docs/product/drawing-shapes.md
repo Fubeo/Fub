@@ -31,3 +31,161 @@ poligoni e stelle](../reference/scene-format-shapes.md).
 La geometria e il `d` stanno in
 `apps/client/src/editors/spatial/scene/parametric.ts`, che la scena usa per
 leggere il file. Non c'è niente da montare.
+
+## Nel disegno completo
+
+Con il componente «Disegno completo» acceso, la colonna ha nel gruppo delle
+forme gli strumenti del motore (la famiglia `forme` del piano K6, T13): Rettangolo
+arrotondato, Poligono, Stella, Segmento linea, Arco e Spirale. Rettangolo
+ed Ellisse esistono anche nel Semplice, e nella stessa tendina portano
+«(Completo)», come Selezione, Mano e Zoom.
+
+Le griglie rettangolare e polare (T13 giro 7) stanno nello stesso gruppo: un
+trascinamento crea un gruppo di tracciati e di linee, con i divisori come linee
+normali; la finestra chiede i divisori orizzontali e verticali (o circolari e
+radiali), le inclinazioni in per cento e la cornice esterna.
+
+Le forme restano vive, come in VectorCraft: angoli e lati si cambiano anche
+dopo, dalla sezione Trasforma (`object.setLiveShape`). Un rettangolo ha il
+raggio degli angoli, uno per tutti col collegamento acceso (la preferenza
+`singleCornerRadius`, di serie accesa) o uno per angolo; un poligono ha i lati,
+l'angolo, il tipo e il raggio degli angoli, il raggio, la lunghezza del lato e
+«Rendi i lati uguali» (acceso quando una scala diversa in larghezza e altezza li
+ha resi diversi); un'ellisse ha l'inizio e la fine dello spicchio e «Inverti
+spicchio». Un tracciato con angoli, per esempio un rettangolo di un altro
+programma, mostra il tipo (arrotondato, arrotondato inverso, smussato) e il
+raggio degli angoli; la voce Angoli… della ricerca dei comandi (`ui.corners`) apre la stessa scelta
+in una finestra. I parametri vanno nella ricetta del disegno, accanto al
+tracciato, e tornano alla riapertura; le misure sono quelle della scena anche
+quando la radice del file è scalata. La Selezione diretta dei singoli angoli di
+VectorCraft non c'è: si cambiano tutti, o uno per volta nel rettangolo.
+
+La Forma parametrica (`parametricShape`, un'aggiunta di VectorCraft) sta nello
+stesso gruppo ed è una forma viva: un trascinamento dal centro la disegna,
+grande e girata quanto il trascinamento, e ↑↓ e ←→ ne cambiano i numeri (i lati,
+le punte, i raggi) mentre si trascina. I numeri restano nella ricetta del disegno, accanto al
+tracciato: riaperto il file, un clic sul suo contorno con lo strumento la
+riprende con le sue maniglie, che la ridimensionano, la girano e ne cambiano i
+numeri. Un doppio clic sul vuoto ne mette una con gli ultimi numeri usati. Un
+altro programma la legge come un tracciato qualunque.
+
+Il Sagomatore (`shaper`) sta nello stesso gruppo, dopo la Forma parametrica,
+e funziona come in VectorCraft. Un tratto a mano che somiglia a una forma
+diventa quella forma pulita: rettangolo, ellisse, poligono o linea. Uno
+scarabocchio sopra le forme le cambia:
+- su una forma sola la toglie;
+- su più forme le unisce, col colore di quella dove parte;
+- su un gruppo del Sagomatore ne toglie o ne unisce le facce.
+
+Le forme toccate finiscono in un gruppo del Sagomatore. Il file lo tiene come un
+solo elemento, con la ricetta del disegno; dentro ci sono le forme di partenza,
+trasparenti, e i pezzi che si vedono. Riaperto il file, il gruppo si scarabocchia
+ancora. Un altro programma vede i pezzi come forme normali. Un clic sceglie una
+faccia del gruppo; il doppio clic sceglie la forma di partenza sotto il
+puntatore e passa alla Selezione. Mancano ancora i comandi del menu Oggetto ›
+Shaper: rilascia, espandi e togli dal gruppo.
+
+Il doppio clic funziona come in VectorCraft con ogni strumento del motore: con
+la Selezione su un testo passa allo strumento Testo.
+
+Il Generatore forme (`shapeBuilder`, T13 giro 7) unisce le forme scelte: il
+trascinamento sulle regioni che toccano le unisce in un solo tracciato, e con
+Alt toglie le regioni toccate. Servono due o più oggetti, tracciati, forme
+composte o gruppi di tracciati: un'immagine o un testo non entrano, e un oggetto
+bloccato spegne il gesto. Le regioni che il motore calcola si mostrano come aree
+evidenziate mentre si trascina.
+
+La Pittura dinamica funziona come in VectorCraft. Nella stessa casella del
+Generatore forme ci sono due strumenti:
+- il Secchiello pittura dinamica (`livePaintBucket`) colora col riempimento
+  di Fub la faccia sotto il clic; sui tracciati scelti li fa prima diventare
+  un gruppo vivo. Alt prende il colore della faccia; i bordi si colorano con
+  l'opzione dello strumento per i contorni (`paintStrokes`);
+- la Selezione pittura dinamica (`livePaintSelection`) sceglie una faccia con
+  un clic (Maiusc la aggiunge) e quelle toccate con un trascinamento. Una
+  faccia scelta si colora dal pannello del colore. I bordi non si scelgono
+  ancora come oggetti del file.
+
+Il menu Oggetto offre «Crea», «Unisci», «Rilascia», «Espandi» e «Opzioni
+spazi vuoti». La finestra delle opzioni parte da quelle del gruppo scelto:
+rileva gli spazi, fin dove il colore si ferma (spazi piccoli 3 pt, medi 6,
+grandi 12, o i punti scritti fino a 72), il colore che li mostra e «Chiudi gli
+spazi con tracciati», che aggiunge una linea senza colore su ogni spazio. Il
+gruppo vivo va nel file con la ricetta, opzioni comprese: riaperto, si dipinge
+ancora; un altro programma vede le facce e i bordi come forme normali.
+Visualizza › «Mostra spazi vuoti pittura dinamica», spenta all'inizio, disegna
+sul foglio gli spazi dei gruppi scelti nel colore d'anteprima di ciascun
+gruppo, finché i bordi sono visibili; la scelta resta fra una sessione e
+l'altra e non va nel file.
+
+La Trama sfumatura funziona come in VectorCraft. Lo strumento (`mesh`) sta
+nella casella della Sfumatura:
+- un clic su un oggetto ne fa una trama 4 × 4 col suo colore;
+- un clic su una trama aggiunge una linea che passa per quel punto;
+- un trascinamento sposta un punto o una maniglia;
+- un clic su un punto lo sceglie; Maiusc lo aggiunge agli altri, o lo toglie
+  se era già scelto. I punti scelti si trascinano insieme.
+Il colore del pannello e la trasparenza vanno solo sui punti scelti. Se non ce
+n'è nessuno, il colore va a tutto l'oggetto e i punti tengono il loro. Uno
+strumento diverso dimentica i punti scelti.
+
+Il menu Oggetto offre «Crea trama sfumatura…» ed «Espandi trama sfumatura».
+La finestra chiede righe e colonne (da 1 a 50), l'aspetto (piatto, al centro,
+al bordo) e l'evidenziazione (da 0 a 100 %). Espandi è spento se fra gli
+oggetti scelti non c'è una trama, e la trasforma in un gruppo di pezzi a tinta
+piatta. La trama va nel file con la ricetta: riaperta, si modifica ancora. Un
+altro programma vede pezzi a tinta piatta, e dove i colori dei punti cambiano
+la sfumatura si approssima con tanti piccoli pezzi.
+
+La Fusione funziona come in VectorCraft. Lo strumento (`blend`) sta nella
+casella del Generatore forme:
+- un clic su un oggetto lo sceglie come primo; un clic su un altro fa la
+  fusione fra i due;
+- con una fusione scelta, un clic su un altro oggetto lo aggiunge in fondo
+  alla stessa fusione;
+- Alt-clic o doppio clic aprono le Opzioni fusione.
+
+Il menu Oggetto › Fusione offre Crea (almeno due oggetti scelti), Rilascia,
+Espandi, Sostituisci dorsale (una fusione e un tracciato), Inverti dorsale,
+Inverti davanti/dietro e i comandi sui punti della dorsale. Sono spenti, con
+la frase che dice perché, se fra gli oggetti scelti non c'è una fusione. La
+finestra «Opzioni fusione…» chiede la spaziatura (colore uniforme, passi da 1
+a 1000, distanza in punti), l'orientamento (alla pagina o al tracciato),
+l'andamento, la rampa (da 0 a 100 %) e lo spostamento del colore (da −100 a
+100). Parte dalle opzioni della fusione scelta; senza una fusione scelta
+cambia come nascono le fusioni nuove, e allora l'andamento e il colore restano
+fuori. La fusione va nel file con la ricetta: riaperta, si modifica ancora. Un
+altro programma vede gli oggetti chiave e i passi come forme normali.
+
+La sezione «Fusione», nella scheda Design dell'ispettore, è il pannello Fusione
+di VectorCraft e c'è quando un oggetto è scelto. Crea vuole due oggetti scelti
+o più. Spaziatura (con i passi o la distanza) e orientamento sono quelli della
+fusione scelta, letti dal motore; senza una fusione ma con due oggetti scelti
+sono quelli delle fusioni nuove, e la sezione lo dice. Andamento e rampa
+vogliono una fusione con una dorsale sua (sostituita) o allineata al tracciato;
+lo spostamento del colore vuole una fusione scelta. Ogni cambio è un passo
+della cronologia e manda solo il valore cambiato. Inverti davanti/dietro,
+Inverti dorsale, Sostituisci dorsale, Espandi e Rilascia sono accesi quando lo
+è il loro comando del menu.
+
+Gli Oggetti sul tracciato funzionano come in VectorCraft. Lo strumento
+(`objectsOnPath`) sta nella casella del Generatore forme, dopo la Fusione:
+- un clic su un tracciato vi attacca gli oggetti scelti: il tracciato va sotto,
+  gli oggetti si spargono lungo il tracciato e lo seguono;
+- la fila delle opzioni dello strumento ha il Perno (nove quadratini, il punto
+  di ogni oggetto che tocca il tracciato) e la Rotazione (da −360° a 360°):
+  valgono per gli oggetti attaccati dopo.
+
+Il menu Oggetto › Oggetti sul tracciato offre Attacca (senza un tracciato
+sceglie lo strumento), Opzioni ed Espandi; Opzioni ed Espandi vogliono un
+gruppo fra gli oggetti scelti o attorno a uno. Il gruppo va nel file con la
+ricetta: modificando il tracciato gli oggetti lo seguono, anche dopo la
+riapertura. La sezione «Oggetti sul tracciato», nella scheda Design, c'è solo
+quando ogni oggetto scelto è un gruppo: Perno e Rotazione sono quelli dei
+gruppi, vuoti dove differiscono, e ogni cambio vale per tutti i gruppi scelti
+in un solo passo della cronologia.
+
+La sezione «Allinea», nella scheda Design dell'ispettore, offre gli allineamenti
+e le distribuzioni del motore. Alla selezione servono due oggetti; con «alla
+tavola» ne basta uno per allineare. Un pulsante spento dice perché. La famiglia
+`trasforma` si carica al primo clic di un pulsante, non prima.

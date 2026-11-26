@@ -169,9 +169,13 @@ export const ENGLISH: Readonly<Record<string, string>> = {
   "Reindicizzazione del vault": "Reindexing the vault",
   "Snapshot delle versioni": "Version snapshot",
   // Alberi delle view (`fub-features`: backlinks, properties, versioning,
-  // stats, tags, trash, graph).
+  // stats, tags, trash, graph, outline).
+  "Nessuna nota aperta.": "No note open.",
+  "Nessun heading.": "No headings.",
   "In entrata · 2": "Incoming · 2",
   "In entrata · 3": "Incoming · 3",
+  "Dalle proprietà · 1": "From properties · 1",
+  "Proprietà: guida, vedi": "Properties: guida, vedi",
   "In uscita · 2": "Outgoing · 2",
   "Menzioni non collegate · 1": "Unlinked mentions · 1",
   Collega: "Link",

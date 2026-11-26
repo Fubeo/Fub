@@ -14,10 +14,11 @@ import { opacityOf } from "../look";
 import { FRAME_PX } from "../frame";
 import { screenBox } from "../../view";
 import type { LayerInfo } from "../hit";
-import { inLayer } from "../layers";
+import { inLayer, rootLayers } from "../layers";
 import { ARRANGE_SHOWN, BAR_FEATURES } from "./constants";
 import type { EditorContext } from "./context";
 import { layerState, layerTitle, union } from "./helpers";
+import { composingKey } from "../../../../kit/ime";
 
 /// I caratteri di un nome XML dopo il primo: dove uno di loro segue `#id`,
 /// il testo cita un altro id.
@@ -47,6 +48,9 @@ export interface ControlsContext {
   rootText: (role: "title" | "desc") => string;
   currentTitle: () => string;
   syncControls: () => void;
+  /// Mostra il pulsante delle immagini del vault nella colonna: non col motore del
+  /// Completo, dove come in VectorCraft l'immagine si mette da File › Inserisci.
+  syncInsert: () => void;
   refresh: () => void;
 }
 
@@ -155,25 +159,23 @@ export function installControls(ctx: EditorContext): void {
   // --- Il livello corrente ---------------------------------------------------
 
   /// Il livello scelto, se c'è ancora: per chiave; o allo stesso posto, se ha
-  /// perso l'id con annulla o se non l'aveva e l'ha ricevuto; o, se se n'è
-  /// andato, quello che gli stava sotto, o il più basso.
+  /// perso l'id con annulla o se non l'aveva e l'ha ricevuto. Se se n'è
+  /// andato (cancellato da un altro riquadro, dal testo, da un altro
+  /// programma), `null`: si disegna nel livello in cima (`currentLayer`).
   const chosenIn = (layers: readonly LayerInfo[]): LayerInfo | null => {
     if (ctx.chosen === null) return null;
     const { key, at } = ctx.chosen;
-    const same = layers.find((layer) => keyOf(layer) === key)
-      ?? layers.find((layer) => layer.path[0] === at && (layer.id === null || key.startsWith("@")));
-    if (same !== undefined) return same;
-    let below: LayerInfo | null = null;
-    for (const layer of layers) if (layer.path[0]! < at) below = layer;
-    return below ?? layers[0] ?? null;
+    return layers.find((layer) => keyOf(layer) === key)
+      ?? layers.find((layer) => layer.path[0] === at && (layer.id === null || key.startsWith("@")))
+      ?? null;
   };
 
   /// Il livello in cui si disegna, quando l'interfaccia offre i livelli:
-  /// quello scelto; se
-  /// nessuno l'ha scelto, il più alto che si vede e non è bloccato, o il più
-  /// alto. `null` se il disegno non ha livelli.
+  /// quello scelto; se nessuno l'ha scelto, o se non c'è più, il più alto che
+  /// si vede e non è bloccato, o il più alto. `null` se il disegno non ha
+  /// livelli.
   function currentLayer(): LayerInfo | null {
-    const layers = currentIndex().layers;
+    const layers = rootLayers(currentIndex().layers);
     const found = chosenIn(layers);
     if (found !== null) return found;
     for (let i = layers.length - 1; i >= 0; i--) if (!layers[i]!.locked && !layers[i]!.hidden) return layers[i]!;
@@ -181,8 +183,10 @@ export function installControls(ctx: EditorContext): void {
   }
   ctx.currentLayer = currentLayer;
 
-  /// `layer` diventa il livello corrente.
-  const choose = (layer: LayerInfo): void => {
+  /// `layer` diventa il livello corrente; per un sottolivello, il livello
+  /// della radice che lo contiene.
+  const choose = (chosen: LayerInfo): void => {
+    const layer = chosen.path.length === 1 ? chosen : (rootLayers(currentIndex().layers).find((each) => each.path[0] === chosen.path[0]) ?? chosen);
     ctx.chosen = { key: keyOf(layer), at: layer.path[0]! };
     syncLayers();
   };
@@ -195,7 +199,7 @@ export function installControls(ctx: EditorContext): void {
     const units = selectedUnits();
     const at = units[0]?.path[0];
     if (at === undefined || units.some((unit) => unit.path.length < 2 || unit.path[0] !== at)) return;
-    const layer = currentIndex().layers.find((other) => other.path[0] === at);
+    const layer = rootLayers(currentIndex().layers).find((other) => other.path[0] === at);
     if (layer !== undefined) choose(layer);
   }
   ctx.followSelection = followSelection;
@@ -216,6 +220,8 @@ export function installControls(ctx: EditorContext): void {
   function syncLayers(): void {
     layerGroup.hidden = !has("layers");
     layersButton.disabled = !editable();
+    ctx.layersMenuButton.hidden = !has("layers") || (ctx.livelliMotore?.() ?? null) === null;
+    ctx.layersMenuButton.disabled = !editable();
     if (!layerGroup.hidden) {
       const layer = currentLayer();
       const name = layer === null ? t("draw.layers.none.short") : layerTitle(layer);
@@ -232,6 +238,11 @@ export function installControls(ctx: EditorContext): void {
     syncTree();
   }
   ctx.syncLayers = syncLayers;
+  // Un altro editor sullo stesso disegno sceglie un altro livello: il
+  // pulsante e l'albero lo mostrano anche qui.
+  ctx.life.add(ctx.livello.ascolta(() => {
+    if (!ctx.disposed) syncLayers();
+  }));
 
   // --- Stato dei controlli --------------------------------------------------
 
@@ -333,7 +344,7 @@ export function installControls(ctx: EditorContext): void {
 
   const OPACITY_STEPS: ReadonlyMap<string, number> = new Map([["ArrowUp", 1], ["ArrowDown", -1], ["PageUp", 10], ["PageDown", -10]]);
   life.listen(opacityInput, "keydown", (event) => {
-    if (event.ctrlKey || event.metaKey || event.altKey || event.isComposing || ctx.opacityShown === null) return;
+    if (event.ctrlKey || event.metaKey || event.altKey || composingKey(event) || ctx.opacityShown === null) return;
     const step = OPACITY_STEPS.get(event.key);
     if (event.key === "Enter") {
       commitOpacity();
@@ -381,7 +392,7 @@ export function installControls(ctx: EditorContext): void {
     nameArrange(openLinkButton, openLinkText(), "Alt-Enter");
     unlinkButton.hidden = !has("links") || !units.some(isLink);
     // Con un livello solo, che ha già tutto, non c'è dove spostare.
-    const layers = currentIndex().layers;
+    const layers = rootLayers(currentIndex().layers);
     intoButton.hidden = !has("layers") || layers.length === 0 || (layers.length === 1 && units.every((unit) => inLayer(unit, layers[0]!)));
     shapeButton.hidden = !has("recognize") || !units.some(ctx.holdsPenStroke);
     // L'opacità si scrive agli oggetti che la possono avere, e si legge
@@ -410,6 +421,9 @@ export function installControls(ctx: EditorContext): void {
     else surface.focus({ preventScroll: true });
   };
 
+  ctx.syncInsert = () => {
+    insertGroup.hidden = !ctx.insertsImages(ctx.features) || ctx.completoMotore?.()?.conMotore?.() === true;
+  };
   const syncControls = (): void => readFirst(syncEverything);
   ctx.syncControls = syncControls;
 
@@ -461,7 +475,7 @@ export function installControls(ctx: EditorContext): void {
       if (!panel.element.hidden) showPanel(false, false, false);
     }
     pageButton.hidden = !has("grid") && !has("recognize") && !has("gestures");
-    insertGroup.hidden = !ctx.insertsImages(ctx.features);
+    ctx.syncInsert();
     imageButton.disabled = !canEdit;
     historyButton.hidden = !has("history");
     if (historyButton.hidden && !historyPanel.element.hidden) showHistory(false);
@@ -516,14 +530,17 @@ export function installControls(ctx: EditorContext): void {
     ctx.index = null;
     ctx.marks = null;
     ctx.selection = inOrder(ctx.selection);
-    // Il livello scelto si ritrova anche se ha cambiato posto o chiave.
+    // Il livello scelto si ritrova anche se ha cambiato posto o chiave; se
+    // non c'è più la scelta resta, e torna se il livello torna (annulla).
     if (ctx.chosen !== null) {
-      const layer = chosenIn(currentIndex().layers);
-      ctx.chosen = layer === null ? null : { key: keyOf(layer), at: layer.path[0]! };
+      const layer = chosenIn(rootLayers(currentIndex().layers));
+      if (layer !== null) ctx.chosen = { key: keyOf(layer), at: layer.path[0]! };
     }
     syncControls();
     if (ctx.hotGuide !== null && (ctx.scene.root.guides?.[ctx.hotGuide] === undefined || ctx.scene.root.guides[ctx.hotGuide]!.locked)) ctx.hotGuide = null;
     showHandles();
+    // Le guide del righello stanno nella radice: si ridisegnano con la scena.
+    ctx.showGuides();
     syncTree();
     syncProperties();
   };

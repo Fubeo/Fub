@@ -13,11 +13,57 @@ le sta sopra però è suo: è ciò che mostra una nota che incorpora soltanto le
 Un disegno senza tavole è una pagina sola. Come il file le scrive sta in
 [formato della scena, tavole](../reference/scene-format-boards.md).
 
-L'editor non crea più tavole e non le cambia: lo strumento Tavola, l'elenco
-delle tavole, la sezione «Tavola» delle proprietà, i loro tasti e la
-presentazione se ne sono andati col livello Standard (decisione 0231). Le
-tavole che un file ha già restano dove sono, si vedono e si visitano, e un
-disegno aperto e salvato senza modifiche resta uguale byte per byte.
+Il Disegno completo ha di nuovo lo **strumento Tavola**, quello di
+VectorCraft, nella colonna degli strumenti:
+
+- trascinato fuori dalle tavole ne **crea una nuova**, col nome «Tavola N» e
+  una carta del colore di quella della pagina, messa dopo le altre;
+- trascinato dentro una tavola la **sposta coi disegni** che le stanno sopra;
+- sulle maniglie della tavola attiva la **ridimensiona**.
+
+In un disegno senza tavole la pagina conta come la prima tavola: quando lo
+strumento la cambia o ne crea un'altra, la pagina diventa «Tavola 1» e la sua
+carta diventa la carta di quella tavola. La pagina si allarga da sola, a passi
+di 256 unità, quando una tavola ne esce. Il disegno nel motore e il file
+restano legati dal ponte (`crates/fub-disegno/src/tavole.rs`); un file le cui
+carte non vanno con le loro tavole (la regola S015) non cambia le tavole.
+
+Il **menu ≡ › Oggetto › Tavole da disegno** ha i comandi di VectorCraft:
+
+- **Converti in tavole** fa una tavola per ogni oggetto scelto, grande quanto
+  lui;
+- **Ridisponi tutte le tavole…** le mette in fila (griglia per righe o per
+  colonne, una riga, una colonna), da sinistra o da destra, con la distanza
+  scelta e, se la casella lo dice, col disegno che va con loro; una tavola
+  bloccata resta dov'è;
+- **Adatta ai limiti del disegno** e **Adatta agli oggetti scelti** stringono
+  una tavola intorno al disegno: quella su cui sta il centro degli oggetti
+  scelti, o la prima.
+
+La **sezione «Tavole»** del Design si vede quando non è scelto niente, come il
+pannello Tavole di VectorCraft:
+
+- l'**elenco** delle tavole nel loro ordine, con l'attuale (quella dove sta la
+  vista) segnata; un clic porta la vista su una tavola e la sceglie;
+- il **nome**, **X**, **Y**, la **larghezza** e l'**altezza** della tavola
+  scelta; X e Y la spostano col disegno che le sta sopra se la casella «Il
+  disegno va con la tavola» è spuntata;
+- i pulsanti **Nuova tavola**, **Duplica tavola** (col disegno secondo la
+  casella; la copia si chiama «… copia»), **Elimina tavola**, **Elimina le
+  tavole vuote**, **Sposta su** e **Sposta giù** (l'ordine delle tavole nel
+  file), **Copia tavola** e **Taglia tavola**, che poi Modifica › Incolla
+  aggiunge a destra dell'ultima. Una tavola resta sempre: con una sola,
+  Elimina e Taglia sono spenti. **Alt+clic su Nuova tavola** apre «Opzioni
+  nuova tavola», come in VectorCraft: nome, X, Y, larghezza e altezza già
+  scritti come la farebbe il clic semplice (le misure dell'ultima tavola, 20
+  alla sua destra; senza tavole 612 × 792 nell'origine). OK la aggiunge e la
+  fa attuale, Annulla non aggiunge niente.
+
+Il colore di fondo di una tavola, il blocco e i segni (centro, mirino, aree
+video) il file non li tiene ancora: la sezione non li mostra, e un comando che
+li chiede diversi da quelli di serie è rifiutato invece di perdersi al
+salvataggio. La presentazione non c'è ancora. Un disegno aperto e salvato
+senza modifiche resta uguale byte per byte.
 
 ## Sul foglio
 

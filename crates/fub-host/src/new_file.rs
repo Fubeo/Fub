@@ -84,8 +84,11 @@ pub(crate) struct Words {
 /// crea.
 pub(crate) type Say<'a> = &'a dyn Fn(&str) -> String;
 
-/// I byte di un file vuoto, o il perché no detto dal codec.
-pub(crate) type Blank = fn(doc: &DocId, say: Say<'_>) -> Result<Vec<u8>, String>;
+/// I byte di un file vuoto, o il perché no detto dal codec. `language` è la
+/// lingua di chi crea (il tag BCP 47 di [`HostApi::user_locale`], o quella di
+/// ripiego se non l'ha detta): un formato che dichiara la lingua del testo la
+/// prende da lì.
+pub(crate) type Blank = fn(doc: &DocId, say: Say<'_>, language: &str) -> Result<Vec<u8>, String>;
 
 /// Un formato che nasce vuoto da un comando.
 pub(crate) struct NewFile {
@@ -271,7 +274,14 @@ impl NewFile {
             let locale = host.user_locale();
             let strings = Strings::new(&catalogs, FALLBACK_LANGUAGE, &locale);
             let say = |suffix: &str| strings.render(&Text::key(self.key(suffix)));
-            (self.blank)(&doc, &say).map_err(|error| self.unwritable(&doc, error))?
+            // Chi non ha detto la sua lingua crea nella lingua di ripiego,
+            // la stessa delle frasi del comando.
+            let language = if locale.has_language() {
+                locale.language.as_str()
+            } else {
+                FALLBACK_LANGUAGE
+            };
+            (self.blank)(&doc, &say, language).map_err(|error| self.unwritable(&doc, error))?
         };
         // Nessuna revisione attesa: il file nasce soltanto se il path è
         // ancora libero, anche se qualcuno lo ha preso dopo il controllo.
@@ -488,7 +498,7 @@ mod tests {
                 extra: &[("first", "Page1")],
             },
         ],
-        blank: |_doc, say| Ok(say("first").into_bytes()),
+        blank: |_doc, say, _language| Ok(say("first").into_bytes()),
     };
 
     fn host() -> MemoryHost {

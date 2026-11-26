@@ -124,7 +124,7 @@ import type { SectionId } from "./properties";
 import type { Grid } from "./grid";
 import { SceneIndex } from "./hit";
 import type { Suggested } from "./suggestions";
-import { exportBox, type ExportScene } from "./export-plan";
+import { exportBox, type ExportAsk, type ExportScene } from "./export-plan";
 import type { ImageCodec } from "./images";
 import { RECENT_COLORS } from "./palette";
 import type { Feature, ToolId, ToolProfile, Workspace } from "./registry";
@@ -132,6 +132,7 @@ import { checkedGrid } from "./editor/helpers";
 import type { EditorContext } from "./editor/context";
 import type { DrawChrome } from "./editor/chrome/hosts";
 import { installState } from "./editor/state";
+import type { CellaLivello } from "../livello-corrente";
 import { installBare } from "./editor/chrome/bare";
 import { installOutline } from "./editor/chrome/outline";
 import { installCommandSearch } from "./editor/chrome/command-search";
@@ -140,7 +141,9 @@ import { installToolbar } from "./editor/toolbar";
 import { installBars } from "./editor/bars";
 import { installStage } from "./editor/stage";
 import { installView } from "./editor/view";
+import { installPreciseCursors } from "./editor/precise-cursors";
 import { installMarks } from "./editor/marks";
+import { installSpaziPittura } from "./editor/spazi-pittura";
 import { installTree } from "./editor/tree";
 import { installPanel } from "./editor/panel";
 import { installStyling } from "./editor/styling";
@@ -173,6 +176,12 @@ import { installClipboardCommands } from "./editor/clipboard-commands";
 import { installVaultImages } from "./editor/vault-images";
 import { installLife } from "./editor/life";
 import { installGestiMotore, type MotoreDelDisegno } from "../motore/gesti";
+import { installFilaMotore } from "./editor/chrome/fila-motore";
+import type { DrawingToolState } from "../../../host/contract";
+import type { SpazioSalvato } from "./saved-workspaces";
+
+/// Il layout di uno spazio salvato: quello che lo spazio porta all'editor.
+export type SpazioSalvatoLayout = Omit<SpazioSalvato, "id" | "nome">;
 export { DRAW_SCALE_LIMITS } from "./editor/constants";
 
 /// Una modifica del testo fatta da questa superficie, nella forma di
@@ -248,7 +257,8 @@ export interface DrawPlace {
 /// Il foglio di un profilo che annota una pagina alla volta su un fondo che
 /// non è del documento: la pagina di un PDF.
 export interface DrawSheet {
-  /// La pagina di adesso, nelle coordinate della scena.
+  /// La pagina di adesso, nelle coordinate della scena: un segno nasce solo
+  /// lì, e un gesto che ne esce si ferma al bordo (`page-bounds.ts`).
   page(): Page;
   /// I gruppi della pagina di adesso: si disegnano e si toccano solo loro.
   scope(model: DocumentModel): readonly ContainerNode[];
@@ -273,13 +283,24 @@ export interface DrawSheet {
 }
 
 export interface DrawEditorOptions {
+  /// Il livello corrente del disegno, condiviso dagli editor sullo stesso
+  /// documento (`livello-corrente.ts`); senza, l'editor ne ha uno suo.
+  readonly livello?: CellaLivello;
   /// Lo spazio di lavoro, che sceglie le parti (default `full`); cambia con
-  /// `setWorkspace`.
+  /// `setSpace`.
   readonly workspace?: Workspace;
+  /// Lo spazio in uso (T7): `full`, `simple`, un preset o uno salvato. Di serie
+  /// è la base, `workspace`.
+  readonly space?: string;
   /// Gli strumenti della colonna, in ordine (default vuoto: quelli di serie).
   readonly toolbar?: readonly ToolId[];
-  /// Chi disegna ha scelto un altro spazio dal menu ≡.
-  readonly onWorkspace?: (workspace: Workspace) => void;
+  /// Chi disegna ha scelto un altro spazio dal menu ≡ o dalla banda.
+  readonly onWorkspace?: (space: string) => void;
+  /// Il Completo è arrivato o non è arrivato: la banda rilegge il menu.
+  readonly onWorkspaceChange?: () => void;
+  /// Il layout di uno spazio salvato (colonna, scheda), o `null` se lo spazio
+  /// non è salvato.
+  readonly spazioSalvato?: (space: string) => SpazioSalvatoLayout | null;
   /// Chi disegna ha salvato la colonna da «Personalizza la barra…»: vuota è
   /// quella di serie.
   readonly onToolbar?: (toolbar: readonly ToolId[]) => void;
@@ -303,6 +324,11 @@ export interface DrawEditorOptions {
   readonly grid?: Grid;
   /// Chi disegna ha cambiato la griglia, dal menu o coi tasti.
   readonly onGridChange?: (grid: Grid) => void;
+  /// «Usa cursori di precisione» di chi apre il disegno (la scelta ricordata, di serie spenta).
+  readonly preciseCursors?: boolean;
+  /// Chi disegna ha cambiato «Usa cursori di precisione»: `true` se la scelta è stata scritta; altrimenti resta
+  /// com'era.
+  readonly onPreciseCursorsChange?: (on: boolean) => Promise<boolean>;
   /// I colori scelti di recente, `#rrggbb`, dal più recente (default
   /// nessuno).
   readonly colors?: readonly string[];
@@ -327,15 +353,20 @@ export interface DrawEditorOptions {
   /// Un suggerimento è stato mostrato, o non serve più: quelli di adesso.
   readonly onSuggestedChange?: (seen: readonly string[]) => void;
   /// «Esporta» nella barra in alto e nel menu del disegno: chi monta
-  /// l'editor apre la sua finestra, già sulla selezione se `what` lo
-  /// chiede («Esporta la selezione» dell'ispettore). Senza, il pulsante non
-  /// c'è.
-  readonly onExport?: (what?: "selection") => void;
+  /// l'editor apre la sua finestra, già su ciò che `ask` chiede: la
+  /// selezione («Esporta la selezione» dell'ispettore, File › Esporta
+  /// selezione… del Completo) o un formato (File › Esporta come PNG…).
+  /// Senza, il pulsante non c'è.
+  readonly onExport?: (ask?: ExportAsk) => void;
+  /// Mostra o nasconde l'ispettore di chi ospita l'editor (Tab del Completo).
+  readonly onToggleInspector?: () => void;
   /// Il motore del disegno (K5): con lui Selezione, Rettangolo, Ellisse,
   /// Linea e Freccia chiedono a lui che cosa fare (`motore/gesti.ts`).
   /// Senza, o finché non c'è, gli strumenti fanno da sé, come sempre. Il
   /// foglio delle annotazioni non lo usa.
   readonly motore?: MotoreDelDisegno;
+  /// La famiglia di uno strumento del motore (K6 T8) si prepara con questo: risolve `true` se è pronta. Di serie è pronta da sé.
+  readonly preparaMotore?: (id: string) => Promise<boolean>;
   /// Dove stanno barra, colonna, foglio e pannelli (default
   /// `inlineChrome()`: tutto dentro l'editor).
   readonly chrome?: DrawChrome;
@@ -398,8 +429,23 @@ export interface DrawEditor {
   /// la barra e i tasti cambiano, il documento e la cronologia restano. Uno
   /// strumento che lo spazio non ha più torna alla penna, o al primo che
   /// c'è, e un colore personalizzato al nero.
-  setWorkspace(workspace: Workspace, toolbar?: readonly ToolId[]): void;
+  /// Lo spazio in uso (T7): `full`, `simple`, un preset o uno salvato; con
+  /// `toolbar`, anche la colonna.
+  setSpace(space: string, toolbar?: readonly ToolId[]): void;
+  /// Ripristina i dati dello spazio in uso (scheda, sezione), senza cambiarlo.
+  resetSpace(): void;
+  /// Il Completo non si è caricato: riprova ad aprirlo.
+  retryCompleto(): void;
+  completoFailed(): boolean;
+  /// La colonna, la scheda e la sezione adesso, per salvare lo spazio.
+  spaceSnapshot(): { colonna: string[]; scheda: "design" | "layers"; sezione: string | null; righelli: boolean };
   setTool(id: ToolId): void;
+  /// Lo strumento del motore scelto (K6 T8), o `null` per tornare a quelli di oggi.
+  setEngineTool(id: string | null): void;
+  /// Manda l'opzione `chiave` dello strumento del motore `id` (K6 T8); il gesto dopo la vede.
+  setEngineOption(id: string, chiave: string, valore: unknown): void;
+  /// Lo stato dello strumento del motore `id` dall'ultimo esito che l'ha portato (K6 T8).
+  statoStrumento(id: string): DrawingToolState | null;
   /// Il colore dello strumento di adesso: uno della tavolozza o, dal livello
   /// Standard, uno a piacere, come lo legge `customColor`.
   setColor(color: string): void;
@@ -411,6 +457,9 @@ export interface DrawEditor {
   /// Un'altra griglia, da chi monta l'editor: non si annuncia e non torna a
   /// `onGridChange`. Un passo fuori dai limiti lascia quello di prima.
   setGrid(grid: Grid): void;
+  /// Un'altra scelta dei cursori di precisione, da chi monta l'editor: non si scrive e non torna a
+  /// `onPreciseCursorsChange`.
+  setPreciseCursors(on: boolean): void;
   /// Altri colori recenti, da chi monta l'editor: non tornano a
   /// `onColorsChange`.
   setRecentColors(colors: readonly string[]): void;
@@ -461,7 +510,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   installBars(ctx);
   installStage(ctx);
   installView(ctx);
+  installPreciseCursors(ctx, options.onPreciseCursorsChange);
   installMarks(ctx);
+  installSpaziPittura(ctx);
   installTree(ctx);
   installPanel(ctx);
   installStyling(ctx);
@@ -478,6 +529,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   installInserts(ctx);
   installStrokeShapes(ctx);
   installGestiMotore(ctx);
+  // La fila delle opzioni dello strumento del motore: dopo i gesti (stato e cambio
+  // di strumento) e dopo la testata (la sua riga).
+  installFilaMotore(ctx);
   installCurvatureTool(ctx);
   installSheetCursor(ctx);
   installInput(ctx);
@@ -495,7 +549,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   const {
     has, following, style, history, root, surface, labelSurface, suggestions, panel, cursorMark, boardsNow, editable, newIds, showGrid,
     fit, selectedUnits, showHandles, closeDescriptions, showPanel, syncProperties, refresh, commit, undo, redo, deleteSelection, select,
-    reveal, adopt, setReadOnly, setTool, setColor, setWidth, cancelGesture, undoable, redoable,
+    reveal, adopt, setReadOnly, setTool, sceltaMotore, setColor, setWidth, cancelGesture, undoable, redoable,
     visibleBoundsOf, dispose
   } = ctx;
   const stage: DrawStage = {
@@ -550,6 +604,11 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       return redoable();
     },
     stage,
+    setPreciseCursors(next) {
+      if (ctx.disposed) return;
+      ctx.preciseCursors = next;
+      ctx.applyToolCursor();
+    },
     get grid() {
       return ctx.grid;
     },
@@ -598,7 +657,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       closeDescriptions();
       history.clear();
       ctx.selection = [];
-      ctx.chosen = null;
+      // Il livello corrente resta (è del disegno, non dell'editor): il testo
+      // riletto lo ritrova, o disegna in cima finché non c'è.
       ctx.boardChosen = null;
       ctx.isolation = null;
       ctx.cursor = null;
@@ -610,8 +670,15 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     setReadOnly,
     reveal,
     adopt,
-    setWorkspace: (workspace, toolbar) => ctx.setWorkspace(workspace, toolbar),
+    setSpace: (space, toolbar) => ctx.setSpace(space, toolbar),
+    resetSpace: () => ctx.resetSpace(),
+    retryCompleto: () => ctx.retryCompleto(),
+    completoFailed: () => ctx.completoFailed(),
+    spaceSnapshot: () => ctx.spaceSnapshot(),
     setTool,
+    setEngineTool: (id) => sceltaMotore(id),
+    setEngineOption: (id, chiave, valore) => ctx.opzioneMotore(id, chiave, valore),
+    statoStrumento: (id) => ctx.statoStrumento(id),
     setColor: (color) => setColor(color),
     setWidth,
     replay: (speed) => ctx.replay(speed),
