@@ -19,7 +19,7 @@
 1678 apps/client/src/editors/grid/card.test.ts
 1668 apps/client/src/editors/grid/card.ts
 1654 apps/client/src/editors/grid/engine.test.ts
-6384 apps/client/src/editors/grid/engine.ts
+6067 apps/client/src/editors/grid/engine.ts
 1741 apps/client/src/editors/spatial/motore/gesti.test.ts
 1732 apps/client/src/editors/spatial/motore/gesti.ts
 1740 apps/client/src/editors/spatial/painter/paint.ts
