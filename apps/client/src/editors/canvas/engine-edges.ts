@@ -1,4 +1,6 @@
-// Il motore della lavagna: i fili (disegno, ispettore, verso). Metodi della\n// classe `CanvasEngine`, montati sul suo prototipo da `engine.ts`\n// (`editors/core/mix-methods.ts`).
+// Il motore della lavagna: i fili (disegno, ispettore, verso). Metodi della
+// classe `CanvasEngine`, montati sul suo prototipo da `engine.ts`
+// (`editors/core/mix-methods.ts`).
 
 import { t } from "../../i18n/strings";
 import { edgeEnd, type CanvasEdge, type CanvasNode } from "./model";

@@ -1,4 +1,6 @@
-// Il motore della lavagna: la griglia e le guide, trascinare e ridimensionare.\n// Metodi della\n// classe `CanvasEngine`, montati sul suo prototipo da `engine.ts`\n// (`editors/core/mix-methods.ts`).
+// Il motore della lavagna: la griglia e le guide, trascinare e ridimensionare.
+// Metodi della classe `CanvasEngine`, montati sul suo prototipo da
+// `engine.ts` (`editors/core/mix-methods.ts`).
 
 import { mediaKindOfId } from "../media/media-types";
 import { type CanvasNode } from "./model";

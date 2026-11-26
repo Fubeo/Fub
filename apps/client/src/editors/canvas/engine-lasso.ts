@@ -1,4 +1,6 @@
-// Il motore della lavagna: il Lazo e i tratti scelti. Metodi della\n// classe `CanvasEngine`, montati sul suo prototipo da `engine.ts`\n// (`editors/core/mix-methods.ts`).
+// Il motore della lavagna: il Lazo e i tratti scelti. Metodi della classe
+// `CanvasEngine`, montati sul suo prototipo da `engine.ts`
+// (`editors/core/mix-methods.ts`).
 
 import { t } from "../../i18n/strings";
 import { anchorAt } from "./anchor";

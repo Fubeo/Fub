@@ -1,4 +1,8 @@
-// Il motore della griglia: il disegno (righe, celle, intestazioni, zone\n// bloccate). Il percorso caldo dello scorrimento. Metodi della\n// classe `GridEngine`, montati sul suo prototipo da `engine.ts`\n// (`editors/core/mix-methods.ts`).
+// Il motore della griglia: il disegno (righe, celle, intestazioni, zone
+// bloccate), il percorso caldo dello scorrimento. Metodi della classe
+// `GridEngine`, montati sul suo prototipo da `engine.ts`
+// (`editors/core/mix-methods.ts`).
+
 import type { GridMerge } from "../../host/contract";
 import { columnLabel, type GridPosition } from "./model";
 import { cellA1, mergeAt, mergesIn, type GridRange } from "./merges";

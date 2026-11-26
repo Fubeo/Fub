@@ -1,4 +1,6 @@
-// Il motore della griglia: la selezione, la vista che la segue, la barra\n// della formula. Metodi della\n// classe `GridEngine`, montati sul suo prototipo da `engine.ts`\n// (`editors/core/mix-methods.ts`).
+// Il motore della griglia: la selezione, la vista che la segue, la barra
+// della formula. Metodi della classe `GridEngine`, montati sul suo prototipo
+// da `engine.ts` (`editors/core/mix-methods.ts`).
 
 import { dataEdge } from "../../tabella/navigation";
 import { touches } from "../../tabella/selection";

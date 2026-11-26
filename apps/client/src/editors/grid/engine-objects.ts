@@ -1,4 +1,7 @@
-// Il motore della griglia: gli oggetti di un foglio (grafici, immagini,\n// forme). Metodi della\n// classe `GridEngine`, montati sul suo prototipo da `engine.ts`\n// (`editors/core/mix-methods.ts`).
+// Il motore della griglia: gli oggetti di un foglio (grafici, immagini,
+// forme). Metodi della classe `GridEngine`, montati sul suo prototipo da
+// `engine.ts` (`editors/core/mix-methods.ts`).
+
 import type { GridObject } from "../../host/contract";
 import { t } from "../../i18n/strings";
 import { composingKey } from "../../kit";

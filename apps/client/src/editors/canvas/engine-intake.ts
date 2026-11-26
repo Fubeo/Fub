@@ -1,4 +1,6 @@
-// Il motore della lavagna: ciò che entra (file trascinati o incollati,\n// depositi). Metodi della\n// classe `CanvasEngine`, montati sul suo prototipo da `engine.ts`\n// (`editors/core/mix-methods.ts`).
+// Il motore della lavagna: ciò che entra (file trascinati o incollati,
+// depositi). Metodi della classe `CanvasEngine`, montati sul suo prototipo
+// da `engine.ts` (`editors/core/mix-methods.ts`).
 
 import { errorText } from "../../host/errors";
 import { t } from "../../i18n/strings";

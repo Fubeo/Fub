@@ -1,4 +1,6 @@
-// Il motore della lavagna: i tasti, le etichette lette e il fuoco delle\n// schede. Metodi della\n// classe `CanvasEngine`, montati sul suo prototipo da `engine.ts`\n// (`editors/core/mix-methods.ts`).
+// Il motore della lavagna: i tasti, le etichette lette e il fuoco delle
+// schede. Metodi della classe `CanvasEngine`, montati sul suo prototipo da
+// `engine.ts` (`editors/core/mix-methods.ts`).
 
 import { t } from "../../i18n/strings";
 import { focusableElements } from "../../ui/a11y";

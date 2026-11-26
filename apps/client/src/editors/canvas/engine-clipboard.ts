@@ -1,4 +1,6 @@
-// Il motore della lavagna: copia, taglia e incolla. Metodi della\n// classe `CanvasEngine`, montati sul suo prototipo da `engine.ts`\n// (`editors/core/mix-methods.ts`).
+// Il motore della lavagna: copia, taglia e incolla. Metodi della classe
+// `CanvasEngine`, montati sul suo prototipo da `engine.ts`
+// (`editors/core/mix-methods.ts`).
 
 import { t, plural, type Key } from "../../i18n/strings";
 import { type SurfaceClipboardOp } from "../core/editor-menu";

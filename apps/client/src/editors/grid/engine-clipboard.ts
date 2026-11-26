@@ -1,4 +1,7 @@
-// Il motore della griglia: copia, taglia e incolla. Metodi della\n// classe `GridEngine`, montati sul suo prototipo da `engine.ts`\n// (`editors/core/mix-methods.ts`).
+// Il motore della griglia: copia, taglia e incolla. Metodi della classe
+// `GridEngine`, montati sul suo prototipo da `engine.ts`
+// (`editors/core/mix-methods.ts`).
+
 import type { GridBytesCell } from "../../host/contract";
 import { t } from "../../i18n/strings";
 import { clipboardData, clipboardRows, cutDestination, pasteTargets, type ClipboardCell } from "../../tabella/clipboard";

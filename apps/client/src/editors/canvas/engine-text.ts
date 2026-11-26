@@ -1,4 +1,6 @@
-// Il motore della lavagna: il testo di una scheda, la scrittura e il testo\n// dal vivo. Metodi della\n// classe `CanvasEngine`, montati sul suo prototipo da `engine.ts`\n// (`editors/core/mix-methods.ts`).
+// Il motore della lavagna: il testo di una scheda, la scrittura e il testo
+// dal vivo. Metodi della classe `CanvasEngine`, montati sul suo prototipo da
+// `engine.ts` (`editors/core/mix-methods.ts`).
 
 import { t } from "../../i18n/strings";
 import { openLifetime } from "../../ui/lifetime";
