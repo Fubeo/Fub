@@ -70,7 +70,7 @@ I menu sul testo scelto (la mini-barra) e il «/» sono in
   `apps/client/src/editors/core/registry.ts`: la porta `blockGroup`;
   `apps/client/src/editors/text/profiles/markdown/block-groups.ts`: i gruppi della nota;
   `apps/client/src/desktop-shell.ts`: `data-toolbar` e `shell.toolbar.toggle`;
-  `crates/fub-host/src/settings.rs`: `editor.toolbar`;
+  `crates/fub-host/src/settings/editor_specs.rs`: `editor.toolbar`;
   `apps/client/src/theme/scrittoio/skin/menus.css`: la sua veste;
 - `apps/client/bench/scene.mjs`: le scene `barra-blocco-*` e
   `mobile-keyboard`.

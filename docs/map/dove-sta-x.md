@@ -51,7 +51,7 @@
 | `TextEngine` (il padrone di CodeMirror) | `apps/client/src/editors/text/engine.ts` |
 | il registro delle superfici | `apps/client/src/editors/core/registry.ts` |
 | la porta dei suggerimenti (`openHintSource`) e la riga della banda | `apps/client/src/editors/core/hints.ts`; la riga in `apps/client/src/shells/scrittoio/frame/hints-row.ts` |
-| le preferenze dell'editor delle note (`editor.blocks`, `editor.toolbar`, `editor.hints`, `editor.link-click`, `editor.typewriter`, `editor.typography`, `editor.minibar`, `editor.slash`) | `crates/fub-host/src/settings.rs`; `editor.blocks` letta in `apps/client/src/state/editor-blocks.ts` |
+| le preferenze dell'editor delle note (`editor.blocks`, `editor.toolbar`, `editor.hints`, `editor.link-click`, `editor.typewriter`, `editor.typography`, `editor.minibar`, `editor.slash`) | `crates/fub-host/src/settings/editor_specs.rs` (le chiavi in `settings/keys.rs`); `editor.blocks` letta in `apps/client/src/state/editor-blocks.ts` |
 | i livelli di presenza sul foglio (`markPresence`) | `apps/client/src/editors/core/presence.ts` |
 | la sbirciata (`createNotePeek`) | `apps/client/src/state/note-peek.ts` |
 | i gruppi del blocco nella barra di formato | `apps/client/src/editors/text/profiles/markdown/block-groups.ts`, dalla porta `blockGroup` di `apps/client/src/editors/core/registry.ts` |
@@ -62,10 +62,10 @@
 | la Tabella (i gesti comuni a note, documenti e fogli) | `apps/client/src/tabella/` |
 | `SHELL_COMMANDS` e i suoi mirror | `crates/fub-host/src/shell.rs` e `apps/client/src/ui/shell-keys.generated.ts` |
 | `PluginManifest` (`provides`, `requires`) | `crates/fub-abi/src/traits/plugin.rs` |
-| `plugins.disabled` (spegnere per vault) | `crates/fub-host/src/settings.rs` |
+| `plugins.disabled` (spegnere per vault) | `crates/fub-host/src/settings/specs.rs` |
 | `SettingSpec` e i livelli delle impostazioni | `crates/fub-abi/src/settings.rs` |
-| `perf.probe` (la sonda N0) | `crates/fub-host/src/settings.rs`, montata da `apps/client/src/perf/` |
-| `developer.mode` (la modalità sviluppatore) | `crates/fub-host/src/settings.rs`; la applicano `Host::check_theme_folder` e `Host::install_theme_from_folder`, i bottoni stanno in `apps/client/src/panels/theme-folder.ts` («Installa da cartella…», «Collega una cartella…») e in `apps/client/src/panels/settings.ts` («Tutti i componenti») |
+| `perf.probe` (la sonda N0) | `crates/fub-host/src/settings/specs.rs`, montata da `apps/client/src/perf/` |
+| `developer.mode` (la modalità sviluppatore) | `crates/fub-host/src/settings/specs.rs`; la applicano `Host::check_theme_folder` e `Host::install_theme_from_folder`, i bottoni stanno in `apps/client/src/panels/theme-folder.ts` («Installa da cartella…», «Collega una cartella…») e in `apps/client/src/panels/settings.ts` («Tutti i componenti») |
 | Il tema collegato (`developer.theme-folder`) | `crates/fub-host/src/theme/linked.rs` (lettura con le porte), `crates/fub-host/src/theme_watch.rs` (l'osservatore), `Host::link_theme_folder`; il rimontaggio in `apps/client/src/theme/theme.ts`, il blocco «Cartella collegata» in `apps/client/src/panels/theme-folder.ts` |
 | `draw.workspace` (Semplice o Completo) | le impostazioni della feature `draw`, `crates/fub-features/src/draw.rs` |
 | `draw.keys` (i tasti del Disegno completo cambiati dall'utente) | la chiave in `crates/fub-features/src/draw.rs`; il valore e i file d'insieme in `apps/client/src/editors/spatial/completo/tasti-utente.ts`, il disegno aperto lo segue con `completo/segui-tasti.ts`, la sezione «Disegno completo» di Impostazioni › Scorciatoie è `apps/client/src/panels/settings-disegno.ts` |

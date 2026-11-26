@@ -235,18 +235,18 @@ foglio, in ogni editor di testo che non sia un campo:
 - `apps/client/src/editors/core/surface-modes.ts`: `modeById`, anche con gli id di prima (`formerIds`);
 - `apps/client/src/state/document-controller.ts` e `state/mode-menu.ts`: la
   modalità del riquadro, i comandi `shell.mode.*` e il commutatore della banda;
-- `crates/fub-host/src/settings.rs`: `editor.default-mode` e le sue scelte;
+- `crates/fub-host/src/settings/editor_specs.rs`: `editor.default-mode` e le sue scelte;
   `apps/client/src/panels/settings-model.ts`: le scelte che il pannello mostra;
 - `apps/client/src/editors/core/presence.ts`: i livelli di presenza;
 - `apps/client/src/editors/core/hints.ts`: la porta dei suggerimenti
   (`openHintSource`, `currentHints`, `onHintsChanged`);
   `shells/scrittoio/frame/hints-row.ts`: la riga che la ascolta e i tasti della
   persona (`resolveHints`); `editors/text/profiles/markdown/hints.ts`: i
-  contesti della nota (`markdownHints`); `crates/fub-host/src/settings.rs`: `editor.hints`;
+  contesti della nota (`markdownHints`); `crates/fub-host/src/settings/editor_specs.rs`: `editor.hints`;
   `crates/fub-host/src/support.rs`: «Il giro dell'editor» nella demo;
 - `apps/client/src/editors/text/profiles/markdown/typography.ts`: la
   tipografia italiana (`italianTypography`, montata da `profile.ts`);
-  `crates/fub-host/src/settings.rs`: `editor.typography`;
+  `crates/fub-host/src/settings/editor_specs.rs`: `editor.typography`;
 - `apps/client/src/desktop-shell.ts`: la concentrazione (`toggleFocusMode`,
   «Esci» nella banda, Esc); `apps/client/src/state/concentration.ts`: lo stato
   per chi sta sotto la shell e la regola di Esc;
@@ -255,7 +255,7 @@ foglio, in ogni editor di testo che non sia un campo:
   cosa si attenua;
 - `apps/client/src/editors/text/typewriter.ts`: la macchina da scrivere (la
   faccetta `typewriter`); `apps/client/src/editors/text/engine.ts` la legge
-  da `editor.typewriter` (`crates/fub-host/src/settings.rs`);
+  da `editor.typewriter` (`crates/fub-host/src/settings/editor_specs.rs`);
 - `apps/client/bench/scene.mjs`: le scene `scrittura-a-riposo`,
   `riga-dei-suggerimenti`, `concentration`, `concentration-writing`,
   `typewriter`.
