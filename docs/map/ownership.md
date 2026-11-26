@@ -20,7 +20,7 @@
 | l'impronta FNV-1a si calcola in un posto solo | `crates/fub-abi/src/edit.rs` | `crates/fub-abi/tests/one_fingerprint.rs` | [reference/abi-and-wit.md](../reference/abi-and-wit.md) |
 | il bersaglio di un clic non entra nel contesto di sessione | `crates/fub-abi/src/session.rs` | `crates/fub-abi/tests/context_has_four_fields.rs` | [reference/ipc-contract.md](../reference/ipc-contract.md) |
 | `serialize` non riscrive un documento esistente | i provider, `crates/fub-abi/src/format.rs` | `crates/fub-abi/tests/serialize_non_riscrive.rs` | [reference/abi-and-wit.md](../reference/abi-and-wit.md) |
-| la scrittura è atomica rispetto al parse | `crates/fub-kernel/src/workspace.rs` | `crates/fub-kernel/tests/write_atomicity.rs` | [architecture/storage-and-identity.md](../architecture/storage-and-identity.md) |
+| la scrittura è atomica rispetto al parse | `crates/fub-kernel/src/workspace/writes.rs` | `crates/fub-kernel/tests/write_atomicity.rs` | [architecture/storage-and-identity.md](../architecture/storage-and-identity.md) |
 | la storage accede dai soli handle, la radice non si ripete | `crates/fub-kernel/src/storage/` | `crates/fub-kernel/tests/rooted_cas.rs` | [architecture/storage-and-identity.md](../architecture/storage-and-identity.md) |
 | cancellare è spostare nel cestino, mai distruggere | `crates/fub-kernel/src/os_trash.rs` e `crates/fub-abi/src/rules/trash.rs` | `crates/fub-kernel/tests/trash.rs` | [product/vault-recupero-e-versioni.md](../product/vault-recupero-e-versioni.md) |
 | un provider che pania costa la chiamata, non il vault | `crates/fub-kernel/src/safety.rs` | `crates/fub-kernel/tests/the_panic.rs` | [architecture/runtime-events-and-jobs.md](../architecture/runtime-events-and-jobs.md) |

@@ -863,7 +863,7 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
-            "crates/fub-kernel/src/workspace.rs::new_notes_id",
+            "crates/fub-kernel/src/workspace/notes.rs::new_notes_id",
             (
                 Family::AsciiCase,
                 "legge la stessa impostazione di `formats.rs::new_note_extension` e la porta \
