@@ -62,7 +62,7 @@ fn every_public_surface_family_has_shell_fallback_mirror_native_and_wasm() {
             ),
             (
                 "fallback",
-                "apps/client/src/editors/grid/engine.ts",
+                "apps/client/src/editors/grid/engine-session.ts",
                 "dataset.gridProtocol = \"unavailable\"",
             ),
             (

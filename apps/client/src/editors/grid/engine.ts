@@ -105,6 +105,7 @@ export {
 
 export { fillTarget, gestureRect, openSpan, pixelsToChars } from "./engine-geometry";
 export type { GridChange, GridCommandEffect, GridEngineOptions, GridHost, GridRun } from "./engine-host";
+export { GRID_OVERSCAN, uniformRowRange } from "../core/row-window";
 
 /**
  * I membri `_nome` sono interni al motore: li usano soltanto i file
