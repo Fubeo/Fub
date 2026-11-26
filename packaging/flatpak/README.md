@@ -69,8 +69,12 @@ Perché: il runtime GNOME 51 porta WebKitGTK 2.54.1, che alla fine di
 un'animazione rimette sullo schermo per un fotogramma lo strato com'era prima.
 La correzione a monte (WebKit bug 321993) è nella 2.54.2; la 2.54.3 del
 modulo la contiene senza patch nostre (la diagnosi e la misura sono in
-[`docs/architecture/desktop-webview.md`](../../docs/architecture/desktop-webview.md#i-fotogrammi-vecchi-dopo-unanimazione)).
+[`docs/misure/2026-11-19-linux-fotogrammi-vecchi.md`](../../docs/misure/2026-11-19-linux-fotogrammi-vecchi.md)).
 Con un modulo nostro la versione la sceglie il manifest, non il runtime.
+Questa copia non ha la patch NVIDIA di Debian, come non ce l'ha il runtime;
+il vblank emulato di Fub vale anche qui, perché guarda la versione della
+libreria caricata e il Flatpak ha `--device=dri`
+([`desktop-webview.md`](../../docs/architecture/desktop-webview.md#i-fotogrammi-vecchi-dopo-unanimazione)).
 
 Le opzioni seguono quelle con cui gnome-build-meta costruisce il runtime
 (`elements/sdk/webkit2gtk-4.1.bst` e `webkitgtk.inc`, ramo `gnome-51`); le
