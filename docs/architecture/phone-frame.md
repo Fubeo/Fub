@@ -248,7 +248,7 @@ una scenografia: lo spazio privato è già scelto e montabile, non c'è nessuna
 cartella condivisa, e il sistema non sospende, non riprende e non apre
 indirizzi.
 
-Le scene del telefono stanno in `bench/scene.mjs` su `mobile.html`, in una
+Le scene del telefono stanno in `bench/scene/altre-pagine.mjs` su `mobile.html`, in una
 finestra di 390 × 844 px; `mobile-landscape` la sdraia.
 `bench/scene.test.ts` vieta a una scena del telefono di non dichiarare la
 finestra: a 1280 × 800 la shell mobile sarebbe un desktop stretto, senza barra

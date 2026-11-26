@@ -88,5 +88,5 @@ Lo stesso blocco in più note: nel file è l'embed del blocco col suo id,
   `apps/client/src/editors/text/profiles/markdown/blocks/sync-to.ts` le
   domande del menu del blocco e del «/», caricate al primo uso;
   `apps/client/src/state/sync-block.ts` la strada dal client;
-- `apps/client/bench/scene.mjs`: le scene `trasclusione-viva-*`, sulla nota
+- `apps/client/bench/scene/shell-scrittura.mjs`: le scene `trasclusione-viva-*`, sulla nota
   della Live `trasclusione` di `bench/live-fixture.ts`.

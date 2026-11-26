@@ -15,7 +15,8 @@ file in `src/` knows the bench exists, so keep it that way.
   and the browser; `openPage(browser, light)` fixes viewport (1280×800),
   locale, time zone, reduced motion and clock; `prepareScene(page, scene,
   light, base, sceneUrl)` waits for `document.documentElement.dataset.bench ===
-  "ready"` and the fonts. The scenes are in `bench/scene.mjs`, the light comes
+  "ready"` and the fonts. The scenes are listed in `bench/scene.mjs`, from the
+  per-area pieces in `bench/scene/`; the light comes
   from `?light=dark|light`.
 - `window.bench` drives the fake host from outside with `emit`,
   `fault(port, reason)`, `throttle(port)` and `calls`, for error, pending and

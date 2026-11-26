@@ -422,7 +422,7 @@ byte salvati, non la sessione, e il rapporto conta ciò che il PDF non porta.
   `theme/scrittoio/skin/grid.css` (i colori dei segni, delle formiche e
   della cella aperta) e gli hook in `theme/scrittoio/anatomia/grid.ts` (voce
   `grid-surface`)
-- il banco: le scene `grid-*` di `apps/client/bench/scene.mjs` (sulla
+- il banco: le scene `grid-*` di `apps/client/bench/scene/shell-base-griglia.mjs` (sulla
   cartella grande `?workbook=large`, gli stati del prototipo delle celle nel
   foglio pieno: l'intervallo, oltre la riga bloccata, la cella aperta e la
   colonna tirata, anche a 700 px; il riempimento in attesa, la copia nelle tre

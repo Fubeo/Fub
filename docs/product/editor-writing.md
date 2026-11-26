@@ -256,6 +256,6 @@ foglio, in ogni editor di testo che non sia un campo:
 - `apps/client/src/editors/text/typewriter.ts`: la macchina da scrivere (la
   faccetta `typewriter`); `apps/client/src/editors/text/engine.ts` la legge
   da `editor.typewriter` (`crates/fub-host/src/settings/editor_specs.rs`);
-- `apps/client/bench/scene.mjs`: le scene `scrittura-a-riposo`,
+- `apps/client/bench/scene/` (i pezzi `shell-*.mjs`): le scene `scrittura-a-riposo`,
   `riga-dei-suggerimenti`, `concentration`, `concentration-writing`,
   `typewriter`.

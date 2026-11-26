@@ -215,5 +215,5 @@ Le scene `testata-*` e `mobile-testata` del banco la fotografano.
   `apps/client/src/state/page-icons.ts`: le icone fuori dalla pagina;
   `apps/client/src/ui/page-mark.ts`: che cosa vuol dire un valore d'icona
   (un'emoji o una figura `fub:<nome>`);
-- `apps/client/bench/scene.mjs`: le scene `testata-*`, `mobile-testata` e
-  `proprieta-*` (gli editor dei tipi).
+- `apps/client/bench/scene/shell-testata-diagrammi.mjs`: le scene `testata-*` e
+  `proprieta-*` (gli editor dei tipi); `mobile-testata` in `altre-pagine.mjs`.

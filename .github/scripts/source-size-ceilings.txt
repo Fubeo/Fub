@@ -9,7 +9,6 @@
 4003 apps/client/bench/fake-ipc.ts
 2896 apps/client/bench/grid-gestures.mjs
 1621 apps/client/bench/motion-rules.mjs
-6710 apps/client/bench/scene.mjs
 2223 apps/client/bench/webview/run.mjs
 1547 apps/client/src/desktop-shell.ts
 2617 apps/client/src/editors/base/surface.ts
