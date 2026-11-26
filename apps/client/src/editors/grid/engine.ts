@@ -99,7 +99,7 @@ export {
   GRID_WINDOW_ROWS,
   GRID_WINDOW_COLUMNS,
   MAX_GRID_SESSION_WINDOWS,
-  GridEditMode,
+  type GridEditMode,
   typingOpens,
 } from "./engine-parts";
 
