@@ -2608,7 +2608,33 @@ fn root() -> PathBuf {
 fn sources_of_production() -> BTreeMap<String, String> {
     let mut out = BTreeMap::new();
     walks(&root(), "", &mut out);
+    // Un modulo di prova che sta in un file suo (`#[cfg(test)] mod tests;`)
+    // non è produzione, come non lo è quello scritto dentro il genitore.
+    let tests: Vec<String> = out
+        .iter()
+        .flat_map(|(path, src)| test_files(path, src))
+        .collect();
+    for path in tests {
+        out.remove(&path);
+    }
     out
+}
+
+/// I file dei moduli che `path` dichiara solo per le prove.
+fn test_files(path: &str, src: &str) -> Vec<String> {
+    let dir = match path.rsplit_once('/') {
+        Some((dir, "mod.rs" | "lib.rs" | "main.rs")) => dir.to_string(),
+        _ => path.trim_end_matches(".rs").to_string(),
+    };
+    let rows: Vec<&str> = src.lines().collect();
+    rows.windows(2)
+        .filter(|pair| pair[0].trim() == "#[cfg(test)]")
+        .filter_map(|pair| {
+            let name = pair[1].trim().strip_prefix("mod ")?.strip_suffix(';')?;
+            Some([format!("{dir}/{name}.rs"), format!("{dir}/{name}/mod.rs")])
+        })
+        .flatten()
+        .collect()
 }
 
 fn walks(dir: &Path, rel: &str, out: &mut BTreeMap<String, String>) {
@@ -2656,7 +2682,11 @@ fn code_lines(source: &str) -> Vec<(usize, &str)> {
             n += 1;
             continue;
         }
-        if row == "#[cfg(test)]" && rows.get(n + 1).is_some_and(|r| r.starts_with("mod ")) {
+        if row == "#[cfg(test)]"
+            && rows
+                .get(n + 1)
+                .is_some_and(|r| r.starts_with("mod ") && !r.ends_with(';'))
+        {
             let end = rows
                 .iter()
                 .enumerate()
