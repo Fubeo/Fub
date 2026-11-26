@@ -2,7 +2,7 @@
 
 > **Ambito:** confine JSON fra shell TypeScript e `fub-app`.
 > **Fonti autorevoli:** `apps/client/src/host/contract.ts`,
-> `apps/client/src/host/ipc.ts`, `crates/fub-app/src/lib.rs`.
+> `apps/client/src/host/ipc.ts`, `crates/fub-app/src/ipc/`.
 
 ## Principio
 
@@ -135,7 +135,7 @@ esiti e limiti sono nelle [porte dei temi](theme-ipc.md).
 ## Apri con e anteprime Craft
 
 Tre comandi dell'app servono «Apri con» un'app Craft e l'anteprima fatta dalla
-riga di comando di un'app (`crates/fub-app/src/lib.rs`). Le regole sono
+riga di comando di un'app (`crates/fub-app/src/ipc/craft.rs`). Le regole sono
 dell'host, in [App esterne](external-editors.md) e in
 [Formati Craft](craft-formats.md); il comando IPC apre il cancello, lavora
 fuori dal thread principale e localizza l'errore.

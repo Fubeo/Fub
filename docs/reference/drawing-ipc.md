@@ -3,7 +3,7 @@
 > **Ambito:** le sei porte IPC con cui il client guida il motore del disegno
 > nei disegni `.svg` (profilo «vector»): forme, limiti e chi le usa.
 > **Fonti autorevoli:** `crates/fub-abi/src/drawing.rs`,
-> `crates/fub-host/src/drawing.rs`, `crates/fub-app/src/lib.rs`,
+> `crates/fub-host/src/drawing.rs`, `crates/fub-app/src/ipc/drawing.rs`,
 > `crates/fub-disegno/src/gesti/strumento.rs`,
 > `apps/client/src/host/contract.ts`, `apps/client/src/host/ipc.ts`,
 > `apps/client/src/editors/spatial/motore/sessione.ts`.
@@ -20,7 +20,7 @@ che il client applica in un passo di annullamento. I tipi sono quelli di
 `u64` e viaggiano come stringhe (in lettura si accetta anche il numero).
 
 Sei porte tipate, come quelle della griglia, registrate dall'app
-(`crates/fub-app/src/lib.rs`) e servite dall'host (`crates/fub-host/src/drawing.rs`):
+(`crates/fub-app/src/ipc/drawing.rs`) e servite dall'host (`crates/fub-host/src/drawing.rs`):
 
 - `open_drawing` riceve il documento e il suo testo e risponde un
   `DrawingOpen`: l'istanza, la revisione della copia, quanti elementi il motore
@@ -88,7 +88,7 @@ finisce mai.
 
 Gli errori escono dalle sei porte nella lingua della shell, `{kind,
 message}` con `message` già una frase (`drawing_port` di
-`crates/fub-app/src/lib.rs`, che li passa da `for_the_shell`): l'host dice il
+`crates/fub-app/src/ipc/drawing.rs`, che li passa da `for_the_shell`): l'host dice il
 motore spento con una chiave del suo catalogo, e il client riconosce un
 errore del contratto solo da un messaggio stringa (`asPluginError` di
 `host/errors.ts`). Gli errori che il client legge come «il motore manca»:

@@ -268,7 +268,7 @@ Quello che resta non è di chi apre il gesto, o non vale il rischio:
 - **l'accento** cambia proprietà sulla radice, e WebKit ricalcola lo stile di
   tutta la pagina (circa 1350 elementi): ~25 ms comunque lo si scriva (foglio
   sostituito, testo del foglio, CSSOM, stile in linea su `<html>`);
-- **lo zoom** è della finestra (`set_zoom` in `crates/fub-app/src/lib.rs`):
+- **lo zoom** è della finestra (`set_zoom` in `crates/fub-app/src/ipc/lanes.rs`):
   WebKit rifà il layout di tutto in 20–30 ms fuori da JavaScript. Dentro, la
   barra di formato (`fit` in `panels/format-bar.ts`) rilegge `scrollWidth`
   una volta per gruppo nascosto, fino a 9 letture e 2–6 ms quando la barra è

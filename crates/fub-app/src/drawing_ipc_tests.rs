@@ -1,4 +1,6 @@
 use super::*;
+use camino::Utf8PathBuf;
+use fub_host::doc_id;
 
 /// Il motore spento nel vault arriva alla shell come `unserved` con una
 /// frase: il client lo legge come «spento» e non come un guasto, e il

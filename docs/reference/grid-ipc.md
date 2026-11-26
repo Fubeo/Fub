@@ -3,7 +3,7 @@
 > **Ambito:** la famiglia IPC `grid` con cui la shell apre, legge e cambia i
 > fogli di calcolo sui byte del documento: porte, tipi, comandi e limiti.
 > **Fonti autorevoli:** `crates/fub-abi/src/grid_bytes.rs`,
-> `crates/fub-abi/src/grid.rs`, `crates/fub-app/src/lib.rs`,
+> `crates/fub-abi/src/grid.rs`, `crates/fub-app/src/ipc/grid.rs`,
 > `apps/client/src/host/contract.ts`, `apps/client/src/host/ipc.ts`.
 
 Il resto del confine IPC è nel [contratto IPC](ipc-contract.md); le cartelle

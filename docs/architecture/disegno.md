@@ -218,7 +218,7 @@ cancellato, vault chiuso o cambiato); col file rinominato resta.
 ## I comandi IPC
 
 Sei comandi tipati, nella forma di quelli dei fogli, con le forme in
-`crates/fub-abi/src/drawing.rs` e i comandi in `crates/fub-app/src/lib.rs`:
+`crates/fub-abi/src/drawing.rs` e i comandi in `crates/fub-app/src/ipc/drawing.rs`:
 
 | Comando | Fa |
 |---|---|

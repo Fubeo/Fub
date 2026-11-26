@@ -4,7 +4,7 @@
 > nel vault: il corpo, la testata, il riuso di un file con lo stesso
 > contenuto, la ricevuta e gli errori.
 > **Fonti autorevoli:** `crates/fub-app/src/resources.rs`
-> (`resource_write_body`) e `crates/fub-app/src/lib.rs` (`resource_write`);
+> (`resource_write_body`) e `crates/fub-app/src/ipc/resource_stream.rs` (`resource_write`);
 > lato shell `writeResource` in `apps/client/src/host/ipc.ts`; lo scenario
 > `apps/client/src/__fixtures__/resource-write-scenario.json`.
 

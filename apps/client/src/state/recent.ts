@@ -26,7 +26,7 @@
 // nessun altro posto ha insieme: sta nella cartella di configurazione della
 // **macchina**, quindi non entra in un sync né in un repo git; è recintata per
 // proprietario, e il proprietario lo timbra la porta di Rust e non il webview
-// (`fub-app/src/lib.rs`), quindi nessun altro componente la può leggere;
+// (`fub-app/src/ipc/views.rs`), quindi nessun altro componente la può leggere;
 // `forget_vault` la dimentica già insieme al resto, che è metà «cancellazione
 // dati locali» del §23.2 senza scrivere una riga.
 //

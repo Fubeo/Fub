@@ -28,7 +28,7 @@
 | le capacità si rifiutano da un solo `Guard` per famiglie | `crates/fub-kernel/src/host/guard.rs` | `crates/fub-kernel/tests/effective_capabilities.rs` | [reference/permissions-and-security.md](../reference/permissions-and-security.md) |
 | la tabella di montaggio dei bundle è una, per app, CLI e headless | `crates/fub-host/src/mount.rs` | `crates/fub-host/tests/before_write_bundles.rs` | [architecture/components-and-boundaries.md](../architecture/components-and-boundaries.md) |
 | in quale vault arriva una scrittura è detto, non implicito | `crates/fub-host/src/session/documents.rs` | `crates/fub-host/tests/the_vault_of_a_write.rs` | [architecture/storage-and-identity.md](../architecture/storage-and-identity.md) |
-| la superficie IPC è un elenco chiuso | `crates/fub-app/src/lib.rs` | `crates/fub-app/tests/lean_ipc.rs` | [reference/ipc-contract.md](../reference/ipc-contract.md) |
+| la superficie IPC è un elenco chiuso | `crates/fub-app/src/ipc/` | `crates/fub-app/tests/lean_ipc.rs` | [reference/ipc-contract.md](../reference/ipc-contract.md) |
 | ogni finestra ha solo i permessi che le spettano | `crates/fub-app/permissions/` | `crates/fub-app/tests/ipc_permissions.rs` | [reference/permissions-and-security.md](../reference/permissions-and-security.md) |
 | nessun modulo della shell importa Tauri fuori dalla cucitura | `apps/client/src/host/ipc.ts` | `apps/client/src/host/no-tauri-outside-host.test.ts` | [architecture/frontend-and-ipc.md](../architecture/frontend-and-ipc.md) |
 | CodeMirror resta nel package del testo | `apps/client/src/editors/text/` | `.github/scripts/check-codemirror-boundary.mjs` | [architecture/editor-surfaces.md](../architecture/editor-surfaces.md) |

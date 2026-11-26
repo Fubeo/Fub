@@ -4,7 +4,7 @@
 > Tauri e senza duplicare il contratto?
 > **Fonti autorevoli:** `apps/client/src/host/`, `apps/client/src/platform/`,
 > `apps/client/src/desktop-shell.ts`, `apps/client/src/state/document-session.ts`,
-> `crates/fub-app/src/lib.rs`, `crates/fub-abi/src/ipc.rs`.
+> `crates/fub-app/src/ipc/`, `crates/fub-abi/src/ipc.rs`.
 
 ## Il seam
 

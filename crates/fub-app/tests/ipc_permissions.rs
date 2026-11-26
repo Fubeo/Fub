@@ -8,7 +8,7 @@
 //! strade indipendenti:
 //!
 //! 1. i comandi che il frontend nomina come primo argomento di un `invoke`;
-//! 2. i comandi dentro `tauri::generate_handler!` di `src/lib.rs`;
+//! 2. i comandi dentro `tauri::generate_handler!` di `src/ipc/mod.rs`;
 //! 3. i comandi che le permission di `permissions/*.toml` concedono, **seguiti
 //!    fino alle capability** di `capabilities/*.json` che le usano.
 //!
@@ -33,12 +33,28 @@ fn read(path: &Path) -> String {
     std::fs::read_to_string(path).unwrap_or_else(|e| panic!("{}: {e}", path.display()))
 }
 
+/// I file della superficie IPC (`src/ipc/`), uno dopo l'altro.
+fn ipc_sources() -> String {
+    let dir = root().join("src/ipc");
+    let mut files: Vec<_> = std::fs::read_dir(&dir)
+        .unwrap_or_else(|e| panic!("{}: {e}", dir.display()))
+        .map(|entry| entry.expect("una voce di src/ipc").path())
+        .filter(|path| path.extension().is_some_and(|ext| ext == "rs"))
+        .collect();
+    files.sort();
+    files
+        .iter()
+        .map(|path| read(path))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 /// I nomi dentro `tauri::generate_handler![…]`, senza commenti né righe vuote.
 fn registered() -> BTreeSet<String> {
-    let lib = read(&root().join("src/lib.rs"));
+    let lib = read(&root().join("src/ipc/mod.rs"));
     let start = lib
         .find("tauri::generate_handler![")
-        .expect("generate_handler! in lib.rs");
+        .expect("generate_handler! in src/ipc/mod.rs");
     let body = &lib[start + "tauri::generate_handler![".len()..];
     let body = &body[..body.find(']').expect("fine di generate_handler!")];
     body.lines()
@@ -667,15 +683,15 @@ fn the_craft_commands_are_for_the_main_shell_only() {
     let registered = registered();
     let shell = allowed("allow-shell");
     let mobile = allowed("allow-mobile");
-    let lib = read(&root().join("src/lib.rs"));
+    let lib = ipc_sources();
     for name in ["external_editors", "open_with", "craft_render"] {
         assert!(registered.contains(name), "{name} non è registrato");
         assert!(shell.contains(name), "{name} non è in allow-shell");
         assert!(!mobile.contains(name), "{name} è concesso sul telefono");
-        let head = format!("#[tauri::command]\nasync fn {name}(");
+        let head = format!("#[tauri::command]\npub(crate) async fn {name}(");
         let at = lib
             .find(&head)
-            .unwrap_or_else(|| panic!("{name}: il comando non è in lib.rs"));
+            .unwrap_or_else(|| panic!("{name}: il comando non è in src/ipc/"));
         let body = &lib[at..];
         let body = &body[body.find("{\n").expect("il corpo del comando") + 2..];
         let first = body.lines().next().unwrap_or("").trim();

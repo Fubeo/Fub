@@ -131,7 +131,7 @@ indipendenti.
 | contratto | `crates/fub-abi/src/`, `crates/fub-abi/wit/fub/` |
 | workspace | `crates/fub-kernel/src/` |
 | composizione | `crates/fub-host/src/mount.rs`, `session.rs`, `registry.rs` |
-| desktop | `crates/fub-app/src/lib.rs` |
+| desktop | `crates/fub-app/src/lib.rs`, `crates/fub-app/src/ipc/` |
 | Markdown | `crates/fub-format-markdown/src/` |
 | foglio | `crates/fub-format-xlsx/src/`, `apps/client/src/editors/grid/` |
 | lavagna e base | `crates/fub-canvas-core/src/`, `crates/fub-format-canvas/src/`, `crates/fub-format-base/src/` |
