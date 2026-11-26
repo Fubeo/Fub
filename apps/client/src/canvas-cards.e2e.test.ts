@@ -277,7 +277,7 @@ function at([x, y]: readonly [number, number]): { clientX: number; clientY: numb
 }
 
 /// Un rilascio di file dal sistema sulla vista della lavagna, nel punto `world`.
-/// Il `DataTransfer` porta solo i `File`, come in `engine.test.ts`: nessuna voce
+/// Il `DataTransfer` porta solo i `File`, come in `engine-drag-wheel.test.ts`: nessuna voce
 /// dell'albero, nessun testo.
 function drop(files: File[], world: readonly [number, number]): void {
   const viewport = document.querySelector<HTMLElement>(".canvas-viewport")!;

@@ -1,6 +1,6 @@
 // L'aiuto che monta la tela nei test di parità. È una copia di `mounted` in
-// `engine.test.ts` (la funzione `mounted`): quel file non si tocca, e chi cambia il
-// montaggio lì lo cambia anche qui.
+// `engine-test-support.ts` (la funzione `mounted`): quel file non si tocca, e chi
+// cambia il montaggio lì lo cambia anche qui.
 import { renderMarkdown } from "../text/profiles/markdown/render";
 import { mountMarkdown } from "../text/profiles/markdown/mount";
 import { CanvasEngine, type CanvasChange, type CanvasEngineOptions } from "./engine";
