@@ -40,9 +40,11 @@ Definite nella tabella «L'ordine di lavoro» di
 - **P0–P5**: fasi del PDF (P0 corpus PdfCraft, P1 motore dei PDF, P2 visore,
   P3 annotare, P4 parti dei PDF, P5 completo) — in
   [status.md](../project/status.md).
-- **P00–P18**: pacchetti del piano feature (P00 baseline = issue #77, P01
-  file, P02 editor, …, P16 sincronizzazione = #9, P17 pubblicazione, P18
-  rilascio) — in `piano_feature.md` in radice e nelle issue #76–#93.
+- **P00–P18**: pacchetti del piano feature del 23 settembre (P00 baseline =
+  issue #77, P01 file, P02 editor, …, P16 sincronizzazione = #9, P17
+  pubblicazione, P18 rilascio) — in `piano_feature.md` in radice. Le issue
+  #76–#93 sono chiuse dal 27 novembre 2026, tranne #90 (P14 mobile), #9 e
+  #93.
 
 ## Altre sigle
 

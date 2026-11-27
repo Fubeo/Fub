@@ -149,7 +149,10 @@ supportate; documentazione di avvio coerente col prodotto.
   limiti non promessi (nessuna quota assoluta CPU/RAM di processo, vedi #57 e
   #58) sono in [sicurezza dei plugin](../architecture/plugin-security.md);
 - automazione locale: CLI con REPL, `fub://`, clipper del browser, canale di
-  controllo.
+  controllo;
+- le Basi (file `.base`): viste tabella, schede, elenco, bacheca, mappa,
+  calendario e linea del tempo sopra le proprietà delle note
+  ([Basi](../product/bases.md)).
 
 ## Lavoro residuo e differite
 
@@ -157,12 +160,12 @@ supportate; documentazione di avvio coerente col prodotto.
   esclusa dalla prima release; resta OPEN come lavoro futuro. Watcher,
   catch-up, rejoin e sincronizzazione fra superfici restano capacità locali.
   Rientra in scope soltanto con una capacità end-to-end dimostrata.
-- Database, collaborazione, publishing, AI e marketplace non sono capacità
-  consegnate.
-- [#57](https://github.com/Fubeo/Fub/issues/57) e
-  [#58](https://github.com/Fubeo/Fub/issues/58): follow-up WASM esplicitamente
-  differiti (esercitare i provider in ingresso, quote assolute CPU/RAM di
-  processo).
+- Collaborazione, publishing, AI e marketplace non sono capacità consegnate:
+  il servizio di pubblicazione c'è nel codice, ma non un sito messo in linea
+  ([#93](https://github.com/Fubeo/Fub/issues/93)).
+- Le quote assolute CPU/RAM di processo per i plugin WASM restano fuori, per
+  scelta scritta in `crates/fub-wasm-host/src/budgets.rs` (#58, chiusa): il
+  limite è cooperativo, con un tetto alle istanze vive.
 - La battuta sulle note grandi: in Live e Blocchi a 7.201 righe supera il
   budget di [prestazioni](../product/performance-budget.md#la-battuta);
   serve un passo di ottimizzazione con misura prima e dopo.
