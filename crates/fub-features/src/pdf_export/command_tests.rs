@@ -436,7 +436,9 @@ fn pdf_export_destinazione_nota_e_sostituzione_si_controllano() {
         json!({ "note": "Manca.md" }),
     )
     .expect_err("la nota non c'è");
-    assert!(matches!(errore, PluginError::NotFound(_)));
+    // Il campo segue la regola del nome scritto: un testo che nessuna nota
+    // porta è la frase del catalogo (`docs/reference/document-by-name.md`).
+    assert_eq!(chiave(&errore), crate::formats::E_DOC_MISSING);
     let errore = invoca(
         &p,
         &mut host,
@@ -563,4 +565,32 @@ fn pdf_export_gli_altri_comandi_passano_al_fornitore_di_sotto() {
     let mut host = vault_con_tipo();
     let errore = invoca(&p, &mut host, "draw.new", json!({})).unwrap_err();
     assert!(matches!(errore, PluginError::UnknownCommand(_)));
+}
+
+/// Il campo «Nota» scritto a mano (#486): il nome vale la sola nota Markdown
+/// che lo porta, anche se un PDF si chiama uguale; un nome che nessuna nota
+/// porta è la frase del catalogo, non un id sconosciuto.
+#[test]
+fn pdf_export_la_nota_si_scrive_anche_per_nome() {
+    let p = fornitore();
+    let mut host = vault_con_tipo().with_binary_document("Diario.pdf", b"%PDF-1.7\n");
+    ascolta(&p, &mut host);
+    let esito = invoca(
+        &p,
+        &mut host,
+        PDF_EXPORT_NOTE,
+        json!({ "note": "Diario", "replace": true }),
+    )
+    .expect("il nome trova la nota");
+    let (_, dati) = effetto(&esito);
+    assert_eq!(dati["note"], "Diario.md");
+
+    let errore = invoca(&p, &mut host, PDF_EXPORT_NOTE, json!({ "note": "Manca" }))
+        .expect_err("nessuna nota si chiama così");
+    assert_eq!(chiave(&errore), crate::formats::E_DOC_MISSING);
+
+    let elenco = invoca(&p, &mut host, PDF_PROFILES, json!({ "note": "Dune" }))
+        .expect("l'elenco dei profili legge la nota per nome");
+    let (_, dati) = effetto(&elenco);
+    assert_eq!(dati["note_type"]["doc"], "Tipi/Libro.md");
 }

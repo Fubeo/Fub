@@ -16,7 +16,6 @@
 //! (`fub.search`). Il pannello non la richiede: senza di lei quella sezione
 //! dice che la ricerca manca, e il resto del pannello funziona.
 use fub_abi::command::{ParamKind, ParamSpec};
-use fub_abi::rules::path_policy::{check, Naming};
 use std::collections::{BTreeSet, HashMap};
 
 use fub_abi::error::PluginError;
@@ -136,13 +135,13 @@ impl ViewProvider for BacklinksView {
             return status_count(host);
         }
         let active = if instance.view == BACKLINKS_INLINE_VIEW {
-            let raw = instance.text_param(DOC).ok_or_else(|| {
-                PluginError::BadArgs("document_links requires a doc parameter".into())
-            })?;
-            check(raw, Naming::Existing).map_err(|fault| {
-                PluginError::BadArgs(format!("invalid doc parameter: {fault}").into())
-            })?;
-            DocId::new(raw)
+            // Il campo si compila anche a mano: un nome vale il solo documento
+            // che lo porta (`docs/reference/document-by-name.md`), e un nome
+            // che non ne indica uno solo lo dice la frase del catalogo.
+            crate::formats::any_document(&fub_abi::command::Args::new(&instance.params), DOC, host)?
+                .ok_or_else(|| {
+                    PluginError::BadArgs("document_links requires a doc parameter".into())
+                })?
         } else {
             let Some(active) = host.active_context().and_then(|c| c.doc) else {
                 return Ok(placeholder(NO_ACTIVE_DOC));
@@ -1568,7 +1567,11 @@ mod tests {
 
     #[test]
     fn inline_links_follow_each_instance_document_not_the_global_active_document() {
+        // Le due note ci sono: la view legge il suo documento con la regola
+        // del nome scritto, e un id che non c'è non è un documento.
         let host = MemoryHost::new()
+            .with_document("A.md", "")
+            .with_document("B.md", "")
             .with_backlink("A.md", &["from_a.md"])
             .with_backlink("B.md", &["from_b.md"]);
         host.set_active(Some("B.md"));
@@ -1608,6 +1611,32 @@ mod tests {
         );
         assert!(matches!(
             BacklinksView.render_view(&invalid, &host),
+            Err(PluginError::BadArgs(_))
+        ));
+    }
+
+    /// Il documento della view scritto per nome (#486) vale il solo documento
+    /// che lo porta: i collegamenti sono i suoi.
+    #[test]
+    fn inline_links_read_a_written_name() {
+        let host = MemoryHost::new()
+            .with_document("Lavoro/Relazione.md", "# Relazione\n")
+            .with_backlink("Lavoro/Relazione.md", &["Diario.md"]);
+        let named = ViewInstance::new(
+            BACKLINKS_INLINE_VIEW,
+            "pane",
+            serde_json::json!({ DOC: "Relazione" }),
+        );
+        let tree =
+            serde_json::to_string(&BacklinksView.render_view(&named, &host).unwrap()).unwrap();
+        assert!(tree.contains("Diario.md"), "{tree}");
+        let missing = ViewInstance::new(
+            BACKLINKS_INLINE_VIEW,
+            "pane",
+            serde_json::json!({ DOC: "Manca" }),
+        );
+        assert!(matches!(
+            BacklinksView.render_view(&missing, &host),
             Err(PluginError::BadArgs(_))
         ));
     }
