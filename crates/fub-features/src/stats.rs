@@ -234,24 +234,12 @@ impl ViewProvider for StatsView {
     ) -> Result<UiNode, PluginError> {
         if instance.view == STATS_DOCUMENT_VIEW {
             // Il campo si compila anche a mano: un nome vale il solo documento
-            // che lo porta (`docs/reference/document-by-name.md`).
-            let doc = match crate::formats::any_document(
-                &fub_abi::command::Args::new(&instance.params),
-                DOC,
-                host,
-            ) {
-                Ok(Some(doc)) => doc,
-                Ok(None) => return Err(PluginError::BadArgs(Text::key(E_DOC_PARAM))),
-                // Una nota che non c'è è uno stato da dire, non un errore: la
-                // view si apre anche su un nome scritto a mano. Più omonimi li
-                // dice la frase che li elenca.
-                Err(PluginError::BadArgs(Text::Message(said)))
-                    if said.key == crate::formats::E_DOC_MISSING =>
-                {
-                    return Ok(row(Text::key(NO_DOC)).with_key(NO_DOC));
-                }
-                Err(PluginError::BadArgs(said)) => return Ok(row(said)),
-                Err(error) => return Err(error),
+            // che lo porta (`docs/reference/document-by-name.md`). Una nota
+            // che non c'è è uno stato da dire, non un errore.
+            let doc = match crate::formats::view_document(&instance.params, DOC, host)? {
+                Some(Ok(doc)) => doc,
+                Some(Err(ambiguous)) => return Ok(row(ambiguous)),
+                None => return Err(PluginError::BadArgs(Text::key(E_DOC_PARAM))),
             };
             return match counted_text(host, &doc) {
                 Ok(Some(counted)) => Ok(build_document_counts(count(&counted.text))),

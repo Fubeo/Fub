@@ -11,6 +11,7 @@ use fub_abi::command::{Args, DocumentNameKeys};
 use fub_abi::error::PluginError;
 use fub_abi::format::LinkInsert;
 use fub_abi::model::{DocId, LinkTarget};
+use fub_abi::rules::path_policy::{check, Naming};
 use fub_abi::text::{Arg, StringCatalog, Text};
 use fub_abi::traits::{IndexQuery, IndexResult, ReadApi, VaultRead};
 
@@ -136,6 +137,33 @@ pub(crate) fn written_document_named_by(
     }
     let field = serde_json::json!({ "doc": written });
     Args::new(&field).named_document("doc", host, accepts, DOC_NAMES)
+}
+
+/// Il documento di una view con un parametro documento (`stats.document`, i
+/// collegamenti di un documento), scelto o scritto per nome con la regola di
+/// [`any_document`]. Una view dichiarata si disegna sempre, quindi i due casi
+/// del nome non sono errori: un nome che nessun documento porta resta l'id
+/// scritto, se è un percorso valido, e la view dice a modo suo che non c'è,
+/// com'era prima che il campo leggesse i nomi; più documenti con quel nome
+/// sono `Some(Err)`, la frase che li elenca. Assente: `None`.
+pub(crate) fn view_document(
+    params: &serde_json::Value,
+    name: &str,
+    host: &(impl VaultRead + ?Sized),
+) -> Result<Option<Result<DocId, Text>>, PluginError> {
+    let args = Args::new(params);
+    match any_document(&args, name, host) {
+        Ok(found) => Ok(found.map(Ok)),
+        Err(PluginError::BadArgs(Text::Message(said))) if said.key == E_DOC_MISSING => {
+            let raw = args.text(name).unwrap_or_default();
+            check(raw, Naming::Existing).map_err(|fault| {
+                PluginError::BadArgs(format!("invalid {name} parameter: {fault}").into())
+            })?;
+            Ok(Some(Ok(DocId::new(raw))))
+        }
+        Err(PluginError::BadArgs(said)) => Ok(Some(Err(said))),
+        Err(error) => Err(error),
+    }
 }
 
 /// Come [`written_document_named_by`], fra **tutti i file** del vault e non

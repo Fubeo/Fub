@@ -2277,13 +2277,13 @@ pub(super) fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
-            "crates/fub-features/src/pdf_export/command.rs::esporta",
+            "crates/fub-features/src/pdf_export/command.rs::markdown",
             (
                 Family::AsciiCase,
-                "riconosce `.md` in fondo alla nota che `pdf.export_note` deve esportare senza \
-                 badare al caso ASCII, come `destinazione` fa con `.pdf`: `Nota.MD` è una nota \
-                 Markdown, la sola che la vista sa impaginare. Non decide l'identità del nome: \
-                 la nota la risolve l'host (`document_revision`) prima di questo controllo.",
+                "riconosce `.md` in fondo alla nota del PDF delle note senza badare al caso \
+                 ASCII, come `destinazione` con `.pdf`: `Nota.MD` è Markdown, la sola che la vista \
+                 impagina. Filtra i candidati di un nome scritto nel campo «Nota»; l'identità del \
+                 nome resta di `resolution_key`, dentro `Args::named_document`.",
             ),
         ),
         (
