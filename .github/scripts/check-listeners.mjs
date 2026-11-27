@@ -46,6 +46,11 @@ const ALLOWED_TIMER_FILES = new Set([
   // importano: aspetta un giro di macrotask con un timer che muore con la
   // promessa che risolve (prima stava nel file di prova, escluso dal controllo).
   "apps/client/src/editors/spatial/tools/editor-test-support.ts",
+  // Il supporto delle prove della shell intera, che soltanto i test
+  // importano: `settle` aspetta un giro di macrotask con un timer che muore
+  // con la promessa che risolve; il risponditore delle conferme ha il suo
+  // `clearInterval` (prima stava in `shell.e2e.test.ts`, escluso dal controllo).
+  "apps/client/src/shell-e2e-support.ts",
 ]);
 
 /// `const nome = <un globale>`: la finestra, il documento e i loro figli

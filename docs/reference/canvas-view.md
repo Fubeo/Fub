@@ -434,7 +434,7 @@ col perché. Il punto, e il nome che lo dice:
 | altrove | il file col `subpath` della scheda | «Apri a lato per questo» |
 
 Il percorso va a `onOpenPathBeside`, come «Apri a lato» del menu della
-scheda (`openPathBeside` in `state/document-controller.ts`): la shell lo
+scheda (`openPathBeside` in `state/document-controller-open.ts`): la shell lo
 risolve come un link (`resolvedReference`); `#page=N` di un PDF arriva alla
 pagina, un punto che la risoluzione porta si rivela (`reveal`), e un altro
 frammento apre il file in cima con l'avviso «Questa vista di … non sa portare

@@ -120,7 +120,7 @@ async function setCommands(host: FakeHost, craft: boolean): Promise<void> {
   await settle();
 }
 
-/// Divide dal registro, come `shell.e2e`.
+/// Divide dal registro, come `splitRight` di `shell-e2e-support.ts`.
 async function splitRight(): Promise<void> {
   const registry = await import("./ui/commands");
   await registry.allCommands().find((entry) => entry.id === "shell.pane.split.right")?.run?.();

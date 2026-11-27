@@ -9,7 +9,7 @@
 // sorgente che la superficie dichiara (ADR 0203), sulla stessa sessione: niente
 // rilettura dal disco, niente modifiche perse, il fuoco sulla superficie nuova.
 //
-// Il cablaggio è quello di `shell.e2e.test.ts` — `main.ts` sulla scocca vera,
+// Il cablaggio è quello delle prove `shell-*.e2e.test.ts` — `main.ts` sulla scocca vera,
 // contro l'host finto — con una cosa in più: una famiglia finta, «draw», che
 // chiama «draw» e «read» le sue due modalità e dichiara come vista sorgente il
 // profilo `svg` della famiglia `text`. La famiglia finta prova il meccanismo

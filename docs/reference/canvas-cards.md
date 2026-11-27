@@ -424,7 +424,7 @@ La scheda di foglio arriva con un suo `import()`; finché non c'è, la vista
 tiene il modo chiesto dalla tela e lo passa alla scheda vera.
 
 Le porte vengono dall'opzione `canvasCards?: CanvasCardPorts`, che la shell
-costruisce in `state/document-controller.ts`, e da due opzioni che c'erano
+costruisce in `state/document-controller-ports.ts`, e da due opzioni che c'erano
 già, `media` e `gridHost`:
 
 | Specie | Da dove legge |

@@ -5,7 +5,6 @@
 # e toglie chi è rientrato. Un file nuovo oltre la soglia si divide; solo se
 # davvero non si può senza danno si aggiunge (o si alza) la sua riga a mano,
 # col motivo in coda: `<righe> <percorso> # perché`, e lo si dice nella PR.
-3503 apps/client/bench/conformita/mappa-editor.mjs
 2896 apps/client/bench/grid-gestures.mjs
 1621 apps/client/bench/motion-rules.mjs
 2223 apps/client/bench/webview/run.mjs
@@ -38,9 +37,7 @@
 1934 apps/client/src/panels/document.ts
 1600 apps/client/src/panels/explorer.ts
 1686 apps/client/src/panels/settings.ts
-5544 apps/client/src/shell.e2e.test.ts
 2444 apps/client/src/shells/scrittoio/launcher/launcher.test.ts
-5405 apps/client/src/state/document-controller.ts
 2293 apps/client/src/state/document-session.ts
 1758 apps/client/src/tabella/frame/frame.ts
 1986 apps/client/src/theme/scrittoio/skin/draw.css

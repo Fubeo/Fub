@@ -268,7 +268,7 @@ mostrano. Ciò che succede a quel testo quando un gesto tocca la sessione:
   tiene buffer, bozza e salvataggio in attesa: il salvataggio successivo va
   sul nome nuovo. Con la stessa estensione un riquadro non rimonta la
   superficie che mostra il documento: `followRenameInPanes` in
-  `state/document-controller.ts` passa la superficie alla scheda col nome
+  `state/document-controller-surfaces.ts` passa la superficie alla scheda col nome
   nuovo e la riattacca alla sessione, così fuoco, cursore, selezione, annulla
   e scorrimento restano. Vale per una superficie di testo (Markdown o testo
   semplice, che legge l'identità dalla sessione) e per una che dichiara
@@ -384,5 +384,5 @@ mostrano. Ciò che succede a quel testo quando un gesto tocca la sessione:
 - `crates/fub-format-xlsx/tests/corpus.rs`
 - `apps/client/src/editors/grid/workbook.ts`
 - `apps/client/src/state/document-session.ts`
-- `apps/client/src/state/document-controller.ts`
+- `apps/client/src/state/document-controller.ts` e le sue parti `document-controller-*.ts`
 - `crates/fub-format-svg/src/parse.rs`

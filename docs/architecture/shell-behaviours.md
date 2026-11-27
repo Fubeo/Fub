@@ -159,7 +159,7 @@ Ciò che la shell fa sopra le porte generiche, senza contratti propri:
   ×, l'editor che una divisione sposta), il fuoco torna nel riquadro col
   fuoco: all'elemento di prima se è ancora lì, altrimenti alla superficie
   della scheda attiva, alla linguetta attiva o al riquadro vuoto
-  (`keepFocusInPanes` in `state/document-controller.ts`). Un fuoco andato
+  (`keepFocusInPanes` in `state/document-controller-draw.ts`). Un fuoco andato
   altrove intanto non si tocca. Il divisore fra riquadri mosso con le
   frecce si rifà a ogni passo e il fuoco passa a quello nuovo nello stesso
   posto (`layoutTree`). Il lanciatore, aprendosi, chiude il menu aperto
@@ -170,7 +170,7 @@ Ciò che la shell fa sopra le porte generiche, senza contratti propri:
   altro pulsante) lascia il fuoco lì: né il menu né i suoi sottomenu lo
   riportano al pulsante d'origine (`keepFocusWhereItIs` in `ui/a11y.ts`).
   Torna al pulsante con Esc, con una voce scelta e con un clic su ciò che il
-  fuoco non lo prende. Guardie: `ui/menu.test.ts` e `shell.e2e.test.ts`.
+  fuoco non lo prende. Guardie: `ui/menu.test.ts` e le prove `shell-*.e2e.test.ts`.
 - **Fuoco dopo un cambio di scheda da tastiera.** Un comando che cambia la
   scheda attiva (Ctrl+W, Ctrl+Tab e Ctrl+Maiusc+Tab, Ctrl+PagGiù/PagSu,
   Ctrl+1…9, Ctrl+Maiusc+T, Ctrl+\ e «Dividi sotto», Ctrl+Maiusc+W,
@@ -179,7 +179,7 @@ Ciò che la shell fa sopra le porte generiche, senza contratti propri:
   attiva: il testo col suo cursore, il foglio di un disegno, la pagina in
   Lettura. Se la superficie non lo prende va sulla linguetta attiva, mai sul
   `body` (`focusShownAfter` e `focusPaneSurface` in
-  `state/document-controller.ts`). Vale anche se il fuoco era sulla
+  `state/document-controller-draw.ts`). Vale anche se il fuoco era sulla
   linguetta o nell'albero; un fuoco andato intanto altrove fuori dai riquadri
   (un dialogo, il lanciatore) non si tocca. Un clic su una linguetta lascia
   invece il fuoco sulla linguetta, da cui le frecce della striscia
