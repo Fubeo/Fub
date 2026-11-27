@@ -344,18 +344,30 @@ function done() {
 }
 
 /// I percorsi gestiti di `rev`, estratti con `git archive` in una cartella
-/// nuova.
+/// nuova. Un percorso gestito che l'upstream non ha più a `rev` non si chiede a
+/// `git archive` (si fermerebbe con «pathspec did not match»): finisce in
+/// `missing`, e chi chiama decide che cosa dirne.
 function extract(repo, rev) {
   if (!/^[0-9a-f]{40}$/.test(rev)) fail(`--rev vuole uno SHA di 40 caratteri, non ${rev}`);
   const dir = tempdir("upstream");
-  const tar = git(["-C", repo, "archive", "--format=tar", rev, "--", ...MANAGED]);
-  const untar = spawnSync("tar", ["-x", "-C", dir], { input: tar });
-  if (untar.status !== 0) fail(`tar: ${untar.stderr}`);
+  const present = new Set(git(["-C", repo, "ls-tree", "--name-only", rev, "--", ...MANAGED]).toString().split("\n").filter(Boolean));
+  const missing = MANAGED.filter((managed) => !present.has(managed));
+  const found = MANAGED.filter((managed) => present.has(managed));
+  if (found.length > 0) {
+    const tar = git(["-C", repo, "archive", "--format=tar", rev, "--", ...found]);
+    const untar = spawnSync("tar", ["-x", "-C", dir], { input: tar });
+    if (untar.status !== 0) fail(`tar: ${untar.stderr}`);
+  }
   const date = git(["-C", repo, "show", "-s", "--format=%cs", rev]).toString().trim();
   const manifest = git(["-C", repo, "show", `${rev}:Cargo.toml`]).toString();
   const version = /\[workspace\.package\][^[]*?\nversion = "([^"]+)"/.exec(manifest)?.[1];
   if (!version) fail("il Cargo.toml dell'upstream non dichiara la versione del workspace");
-  return { dir, date, version };
+  return { dir, date, version, missing };
+}
+
+/// La riga che dice quali percorsi gestiti l'upstream ha tolto a `rev`.
+function missingLine(missing, rev) {
+  return `percorsi gestiti che l'upstream non ha più a ${rev.slice(0, 12)}: ${missing.join(", ")}. Prima di \`update\` va deciso da dove prenderli (o tolti da \`gestiti\` in motori.mjs, se Fub non li usa più).`;
 }
 
 // --- manifest --------------------------------------------------------------------
@@ -569,7 +581,13 @@ function update(rev, source, tag) {
   // L'upstream di prima si rilegge alla sua revisione: la pila di patch può
   // essere cambiata da allora.
   const previous = { lock: old, upstream: old.rev ? extract(repo, old.rev).dir : tempdir("none") };
-  const { dir, date, version } = extract(repo, rev);
+  const { dir, date, version, missing } = extract(repo, rev);
+  // Togliere dalla copia un crate che l'upstream ha spostato lascerebbe Fub
+  // senza un pezzo che usa: si decide prima, a mano.
+  if (missing.length > 0) {
+    for (const d of [dir, previous.upstream]) fs.rmSync(d, { recursive: true, force: true });
+    fail(missingLine(missing, rev));
+  }
 
   // Il risultato si costruisce a parte; la copia si sostituisce alla fine.
   // Senza una revisione di prima non c'è una base per le tre vie, e la pila
@@ -693,6 +711,7 @@ function report(rev, source) {
   );
   console.log(`vendor/${ID}: da ${lock.rev.slice(0, 12)} (${lock.version}) a ${rev.slice(0, 12)} (${next.date}, ${next.version}), a vuoto.`);
   console.log(`file gestiti che l'upstream cambia: ${changedUpstream.size}.`);
+  if (next.missing.length > 0) console.log(missingLine(next.missing, rev));
 
   // La pila portata sulla revisione nuova come farebbe `update`: una patch
   // che si ferma si salta, e le successive si provano lo stesso.
@@ -732,7 +751,7 @@ function report(rev, source) {
   for (const line of observed) console.log(`  ${line}`);
 
   for (const d of [previous.dir, next.dir, moved.dir]) fs.rmSync(d, { recursive: true, force: true });
-  const ready = failing + absorbedCount === 0 && problems.length === 0;
+  const ready = failing + absorbedCount === 0 && problems.length === 0 && next.missing.length === 0;
   if (ready) console.log(`la pila si applica: \`update --rev ${rev}\`, poi \`${ID} gate\`.`);
   if (absorbedCount > 0) console.log(`${absorbedCount} patch da togliere (e da togliere da UPSTREAM.md) prima di \`update\`.`);
   if (failing > 0) console.log(`${failing} patch da rifare sui file nuovi prima di \`update\` (vedi vendor/${ID}/UPSTREAM.md).`);
@@ -887,8 +906,38 @@ function selfTest() {
   fs.writeFileSync(path.join(patches, "riscritta"), rows[1].text ?? "");
   if (!applies(fresh, path.join(patches, "riscritta")).ok) problems.push("2-tre-vie: la patch riscritta non si applica sui file nuovi");
   for (const d of [v1, v2, patches, dir, fresh]) fs.rmSync(d, { recursive: true, force: true });
+  problems.push(...removedPathCase());
   if (problems.length > 0) fail(`autoprova di vendor.mjs fallita:\n- ${problems.join("\n- ")}`);
-  console.log("autoprova di vendor.mjs riuscita: mirror, versioni, applica, tre vie, conflitto, assorbita, file tolto.");
+  console.log("autoprova di vendor.mjs riuscita: mirror, versioni, applica, tre vie, conflitto, assorbita, file tolto, percorso gestito tolto.");
+}
+
+/// Un percorso gestito che l'upstream ha tolto (WordCraft ha spostato
+/// `crates/proof` fuori dal repository, #254): `extract` prende gli altri e lo
+/// nomina in `missing`, invece di fermarsi su `git archive`.
+function removedPathCase() {
+  const problems = [];
+  const repo = tempdir("tolto");
+  writeOr(repo, "src/a.txt", Buffer.from("a\n"));
+  writeOr(repo, "Cargo.toml", Buffer.from('[workspace]\n\n[workspace.package]\nversion = "1.0.0"\n'));
+  const quiet = { cwd: repo };
+  git(["init", "-q"], quiet);
+  git(["add", "."], quiet);
+  git(["-c", "user.name=autoprova", "-c", "user.email=autoprova@invalid", "-c", "commit.gpgsign=false", "commit", "-q", "-m", "uno"], quiet);
+  const rev = git(["rev-parse", "HEAD"], quiet).toString().trim();
+  const managed = MANAGED;
+  MANAGED = ["src", "tolto"];
+  try {
+    const { dir, missing } = extract(repo, rev);
+    if (missing.join() !== "tolto") problems.push(`percorso tolto: missing è «${missing.join()}», atteso «tolto»`);
+    if (readOr(dir, "src/a.txt")?.toString() !== "a\n") problems.push("percorso tolto: gli altri percorsi gestiti non sono stati estratti");
+    fs.rmSync(dir, { recursive: true, force: true });
+  } catch (error) {
+    problems.push(`percorso tolto: extract si ferma (${error.message.split("\n")[0]})`);
+  } finally {
+    MANAGED = managed;
+    fs.rmSync(repo, { recursive: true, force: true });
+  }
+  return problems;
 }
 
 /// Le regole delle versioni su manifest finti: zero righe nel Cargo.toml di
