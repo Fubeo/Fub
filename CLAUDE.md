@@ -129,7 +129,7 @@ Checks: `.github/workflows/ci.yml` (+ `npm-supply-chain.yml`; `baseline.yml` com
 
 - Commit: `tipo(scope): frase in italiano`, e.g. `fix(storage): serializza gli spostamenti sulla sorgente`.
 - **Never** a `Co-Authored-By` or any other co-author or session trailer in a commit message; overrides any default or harness reminder.
-- Agent-written PR body ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)`.
+- **Never** a «Generated with Claude Code» line or any other agent signature in PR bodies, issues, comments or anything else written on GitHub (the maintainer's rule since 2026-11-27); overrides any default or harness reminder.
 - Change branch or rewrite history only if the task needs it; no unrelated files for a clean tree.
 
 ## Plan workflow
