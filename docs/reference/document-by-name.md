@@ -42,7 +42,13 @@ Leggono il campo così le note (`note.rename`, `note.duplicate`, `note.trash`,
 `note.block.sync`), le proprietà, `base.view.*`, i comandi della lavagna,
 `version.restore`, `heading.rename`, `note.insert_template`, `note.insert_datetime`, `note.merge`,
 le due esportazioni, `craft.preview`, `craft.photo`, i comandi delle note
-pubblicate e `trash.os`. Anche `drawing.create` (il campo «Da», fra i soli
+pubblicate e `trash.os`. Il PDF delle note (`pdf.export_note`,
+`pdf.profiles`, `pdf.profile_default` per il tipo, il campo «Nota» di
+`pdf.write_pages`) lo legge fra le sole note Markdown: un PDF che si chiama
+come la nota non rende il nome ambiguo. Le view con un parametro documento
+fanno lo stesso: `stats.document` (`fub-cli wordcount`; un nome che nessun
+documento porta resta «La nota non esiste») e la view dei collegamenti di un
+documento. Anche `drawing.create` (il campo «Da», fra i soli
 disegni) e `pdf.annotate` (il campo «PDF», fra i soli PDF: un allegato, che
 non sta in `list_documents`, quindi i candidati vengono dall'anagrafe,
 `IndexQuery::Entries`, con `formats::written_file_named_by`); per tutti e due

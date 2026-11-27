@@ -503,7 +503,7 @@ pub(crate) fn invoke(
         .with_doc(target);
         return Ok(CommandOutcome::done().with_effect(CommandEffect::Plan(plan)));
     }
-    let (title, author, lang) = match args.document(P_NOTE) {
+    let (title, author, lang) = match super::command::nota_scritta(&args, &*host)? {
         Some(note) => dati_della_nota(&note, host),
         None => Default::default(),
     };

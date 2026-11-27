@@ -51,7 +51,7 @@ use fub_abi::model::DocId;
 use fub_abi::rules::doc_data;
 use fub_abi::rules::path::resolution_key;
 use fub_abi::text::{Arg, StringCatalog, Text};
-use fub_abi::traits::{CommandProvider, DataRead, DataWrite, HostApi, ReadApi};
+use fub_abi::traits::{CommandProvider, DataRead, DataWrite, HostApi, ReadApi, VaultRead};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 
@@ -576,13 +576,12 @@ impl<P> ConIlComando<P> {
         host: &mut dyn HostApi,
     ) -> Result<CommandOutcome, PluginError> {
         let letti = Args::new(&args);
-        let nota = letti
-            .document(P_NOTE)
+        let nota = nota_scritta(&letti, &*host)?
             .ok_or_else(|| PluginError::BadArgs(Text::key(T_NOTE_DESC)))?;
         // La nota c'è (un `NotFound` dell'host dice già quale manca) ed è una
         // nota Markdown, la sola che la vista sa impaginare.
         host.document_revision(&nota)?;
-        if !nota.as_str().to_ascii_lowercase().ends_with(".md") {
+        if !markdown(&nota) {
             return Err(PluginError::BadArgs(con_doc(E_NOTE, &nota)));
         }
         let scelto = profilo_per(host, &nota, letti.text(P_PROFILE).unwrap_or_default())?;
@@ -974,7 +973,7 @@ fn profili(args: Value, host: &mut dyn HostApi) -> Result<CommandOutcome, Plugin
         "type_default": null,
         "effective": null,
     });
-    if let Some(nota) = letti.document(P_NOTE) {
+    if let Some(nota) = nota_scritta(&letti, &*host)? {
         if let Some(tipo) = tipo_della_nota(&*host, &nota) {
             let del_tipo = leggi_predefinito(&*host, &percorso_tipo(&tipo))
                 .ok()
@@ -1101,8 +1100,7 @@ fn imposta_predefinito(
         Some(id)
     };
     let percorso = if letti.text(P_SCOPE) == Some(SCOPE_TYPE) {
-        let nota = letti
-            .document(P_NOTE)
+        let nota = nota_scritta(&letti, &*host)?
             .ok_or_else(|| PluginError::BadArgs(Text::key(T_DEFAULT_NOTE_DESC)))?;
         let tipo = tipo_della_nota(&*host, &nota)
             .ok_or_else(|| PluginError::BadArgs(con_doc(E_DEFAULT_TYPE, &nota)))?;
@@ -1132,6 +1130,21 @@ fn imposta_predefinito(
 
 fn con_doc(chiave: &str, doc: &DocId) -> Text {
     Text::message(chiave, vec![Arg::text("doc", doc.as_str())])
+}
+
+/// Una nota Markdown, la sola che la vista sa impaginare.
+fn markdown(doc: &DocId) -> bool {
+    doc.as_str().to_ascii_lowercase().ends_with(".md")
+}
+
+/// La nota del campo «Nota», scelta dall'elenco o scritta per nome, fra le
+/// sole note Markdown: un PDF o un foglio che si chiamano uguale non rendono il
+/// nome ambiguo (`docs/reference/document-by-name.md`).
+pub(super) fn nota_scritta(
+    args: &Args<'_>,
+    host: &(impl VaultRead + ?Sized),
+) -> Result<Option<DocId>, PluginError> {
+    crate::formats::document_named_by(args, P_NOTE, host, markdown)
 }
 
 /// L'errore di un profilo come lo vede chi ha chiesto: tipato, con un testo

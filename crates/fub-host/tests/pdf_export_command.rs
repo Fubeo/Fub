@@ -277,7 +277,9 @@ fn il_vecchio_pdf_con_l_app_aperta_passa_al_comando_nuovo() {
 
 /// Più note, o nessuna, sono un errore tipato che dice che cosa fare: il PDF
 /// di più note lo fa l'app («Esporta in PDF…» su una cartella), e da fuori si
-/// chiede una nota alla volta. Una nota che non c'è è il `NotFound` di sempre.
+/// chiede una nota alla volta. Una nota che non c'è la dice la regola del nome
+/// scritto (`docs/reference/document-by-name.md`): un `BadArgs` con la frase
+/// «nessun documento… si chiama».
 #[test]
 fn il_vecchio_pdf_con_piu_note_o_nessuna_e_un_errore_tipato() {
     let (_dir, root) = vault();
@@ -307,5 +309,11 @@ fn il_vecchio_pdf_con_piu_note_o_nessuna_e_un_errore_tipato() {
         InvokeMode::Apply,
     )
     .expect_err("la nota non c'è");
-    assert!(matches!(errore, PluginError::NotFound(_)), "{errore:?}");
+    assert!(matches!(errore, PluginError::BadArgs(_)), "{errore:?}");
+    assert!(
+        errore
+            .to_string()
+            .contains("Nessun documento che questo comando può usare"),
+        "{errore}"
+    );
 }

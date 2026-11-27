@@ -325,3 +325,43 @@ fn a_drawing_offers_no_mentions_from_its_markup() {
         assert!(!json.contains(markup), "{markup}: {json}");
     }
 }
+
+/// I collegamenti di un documento (`document_links`) col documento scritto per
+/// nome (#486), attraverso il kernel vero: il nome vale il solo documento che
+/// lo porta; più omonimi sono la frase che li elenca, non un errore; una nota
+/// che non c'è si disegna lo stesso, senza collegamenti.
+#[test]
+fn the_links_of_a_document_read_a_written_name() {
+    let vault = Vault::new();
+    vault.put("Lavoro/Relazione.md", "# Relazione\n");
+    vault.put("Diario.md", "vedi [[Relazione]]\n");
+    vault.put("Bozza.md", "# Bozza\n");
+    vault.put("Altro/Bozza.md", "# Bozza\n");
+    let ws = vault.open();
+    let links = |doc: &str| {
+        ws.render_view(&ViewInstance::new(
+            "document_links",
+            "pane",
+            serde_json::json!({ "doc": doc }),
+        ))
+        .expect("una view dichiarata si disegna")
+    };
+
+    assert_eq!(
+        backlink_titles(&links("Relazione")),
+        vec!["Diario".to_string()]
+    );
+    assert_eq!(links("Relazione"), links("Lavoro/Relazione.md"));
+    assert!(backlink_titles(&links("Manca.md")).is_empty());
+    let ambiguous = links("Bozza");
+    assert!(
+        matches!(ambiguous.kind, UiKind::EmptyState { .. }),
+        "{ambiguous:?}"
+    );
+    assert!(
+        serde_json::to_string(&ambiguous)
+            .unwrap()
+            .contains("e_doc_ambiguous"),
+        "{ambiguous:?}"
+    );
+}

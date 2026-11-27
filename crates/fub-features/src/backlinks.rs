@@ -16,7 +16,6 @@
 //! (`fub.search`). Il pannello non la richiede: senza di lei quella sezione
 //! dice che la ricerca manca, e il resto del pannello funziona.
 use fub_abi::command::{ParamKind, ParamSpec};
-use fub_abi::rules::path_policy::{check, Naming};
 use std::collections::{BTreeSet, HashMap};
 
 use fub_abi::error::PluginError;
@@ -136,13 +135,12 @@ impl ViewProvider for BacklinksView {
             return status_count(host);
         }
         let active = if instance.view == BACKLINKS_INLINE_VIEW {
-            let raw = instance.text_param(DOC).ok_or_else(|| {
-                PluginError::BadArgs("document_links requires a doc parameter".into())
-            })?;
-            check(raw, Naming::Existing).map_err(|fault| {
-                PluginError::BadArgs(format!("invalid doc parameter: {fault}").into())
-            })?;
-            DocId::new(raw)
+            // Il campo si compila anche a mano (`docs/reference/document-by-name.md`).
+            match crate::formats::view_document(&instance.params, DOC, host)? {
+                Some(Ok(doc)) => doc,
+                Some(Err(ambiguous)) => return Ok(UiNode::empty_state(ambiguous)),
+                None => return Err(PluginError::BadArgs("document_links requires a doc".into())),
+            }
         } else {
             let Some(active) = host.active_context().and_then(|c| c.doc) else {
                 return Ok(placeholder(NO_ACTIVE_DOC));

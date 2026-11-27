@@ -233,12 +233,15 @@ impl ViewProvider for StatsView {
         host: &dyn ReadApi,
     ) -> Result<UiNode, PluginError> {
         if instance.view == STATS_DOCUMENT_VIEW {
-            let doc = instance
-                .text_param(DOC)
-                .ok_or_else(|| PluginError::BadArgs(Text::key(E_DOC_PARAM)))?;
-            // Una nota che non c'è è uno stato da dire, non un errore: la view
-            // si apre anche su un id scritto a mano.
-            return match counted_text(host, &DocId::new(doc)) {
+            // Il campo si compila anche a mano: un nome vale il solo documento
+            // che lo porta (`docs/reference/document-by-name.md`). Una nota
+            // che non c'è è uno stato da dire, non un errore.
+            let doc = match crate::formats::view_document(&instance.params, DOC, host)? {
+                Some(Ok(doc)) => doc,
+                Some(Err(ambiguous)) => return Ok(row(ambiguous)),
+                None => return Err(PluginError::BadArgs(Text::key(E_DOC_PARAM))),
+            };
+            return match counted_text(host, &doc) {
                 Ok(Some(counted)) => Ok(build_document_counts(count(&counted.text))),
                 Ok(None) => Ok(not_text()),
                 Err(PluginError::NotFound(_)) => Ok(row(Text::key(NO_DOC)).with_key(NO_DOC)),
@@ -733,7 +736,9 @@ const MINUTES: &str = "minutes";
 /// [`backlinks::catalog`](crate::backlinks::catalog) per il perché stia nel
 /// componente e non nella shell.
 pub fn catalog() -> Vec<StringCatalog> {
-    vec![
+    // Le frasi del nome scritto nel campo «Documento» della view per un
+    // documento: «più documenti si chiamano…».
+    crate::formats::speaking(vec![
         StringCatalog::new("it")
             .with(VIEW_TITLE, "Statistiche")
             .with(NO_DOC, "La nota non esiste.")
@@ -780,7 +785,7 @@ pub fn catalog() -> Vec<StringCatalog> {
                 "Selection ({selections} spots) — words: {words} · characters: {chars}",
             )
             .with(READING_TIME, "~{minutes} min read"),
-    ]
+    ])
 }
 
 #[cfg(test)]
@@ -1344,6 +1349,38 @@ mod tests {
                 "en"
             ),
             Vec::<String>::new()
+        );
+    }
+
+    /// Il campo «Documento» scritto a mano (#486): il nome vale il solo
+    /// documento che lo porta; nessuno resta «la nota non esiste», più d'uno
+    /// lo dice la frase che li elenca.
+    #[test]
+    fn the_document_view_reads_a_written_name() {
+        let host = MemoryHost::new()
+            .with_document("Lavoro/Relazione.md", "uno due tre")
+            .with_document("Bozza.md", "quattro")
+            .with_document("Altro/Bozza.md", "cinque");
+        let named = |doc: &str| ViewInstance {
+            view: STATS_DOCUMENT_VIEW.into(),
+            instance: "cli".into(),
+            params: serde_json::json!({ "doc": doc }),
+        };
+        let by_id = StatsView
+            .render_view(&named("Lavoro/Relazione.md"), &host)
+            .unwrap();
+        assert!(matches!(by_id.kind, UiKind::Table { .. }), "{by_id:?}");
+        assert_eq!(
+            StatsView.render_view(&named("Relazione"), &host).unwrap(),
+            by_id
+        );
+        let missing = StatsView.render_view(&named("Manca"), &host).unwrap();
+        assert_eq!(missing.key.as_deref(), Some(NO_DOC), "{missing:?}");
+        let ambiguous =
+            serde_json::to_string(&StatsView.render_view(&named("Bozza"), &host).unwrap()).unwrap();
+        assert!(
+            ambiguous.contains(crate::formats::E_DOC_AMBIGUOUS),
+            "{ambiguous}"
         );
     }
 }
