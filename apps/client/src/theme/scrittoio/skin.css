@@ -10363,11 +10363,11 @@ button.cm-fub-page-icon:focus-visible {
    incolla, anche quando la tabella perde il fuoco. Il tratteggio è quello
    del prototipo (`.tg-cut`): quattro bordi di 1,5 px, 4 px pieni e 4 vuoti,
    che girano attorno alle celle come formiche in fila (`tg-ants`).
-   È l'unica eccezione al foglio fermo (`skin/motion.css` spegne ogni moto
-   dentro l'editor): il giro dice che il taglio aspetta ancora di essere
-   incollato, e finisce con lui — col taglio chiuso il riquadro è `hidden`.
-   Per questo la regola scrive `!important` con più peso di quella di
-   `motion.css`, e `theme/motion.test.ts` la nomina come sola eccezione.
+   È l'unico moto senza fine del foglio (`theme/motion.test.ts` la nomina
+   come sola eccezione ai giri infiniti): il giro dice che il taglio aspetta
+   ancora di essere incollato, e finisce con lui — col taglio chiuso il
+   riquadro è `hidden`. Scrive `!important` perché nessun tema la spenga per
+   sbaglio insieme alla scrittura ferma di `skin/motion.css`.
    Col moto ridotto, del sistema o di Fub, il tratteggio sta fermo. */
 .cm-editor .cm-content .tb-grid .tb-cut {
   border: 0;
@@ -11506,12 +11506,6 @@ button.cm-fub-page-icon:focus-visible {
 [data-markdown-mode="live_preview"] .cm-content .cm-activeLine,
 [data-markdown-mode="blocks"] .cm-content .cm-activeLine {
   background-color: transparent;
-}
-/* In concentrazione i blocchi lontani dal cursore si attenuano e il blocco
-   del cursore resta acceso (la regola sta in `structure.css`): il passaggio
-   è morbido, e il movimento ridotto lo toglie. */
-.pane-editor .cm-content > * {
-  transition: opacity var(--duration-state) var(--ease);
 }
 /* La riga attiva si spegne dove c'è una selezione (`editors/text/engine.ts`
    mette `cm-fub-no-active-line` sulle righe selezionate): la banda coprirebbe
@@ -20585,9 +20579,9 @@ button.draw-isolation-crumb:hover {
    è del foglio — e i suoi comandi non sono strisce attaccate ai bordi ma
    pillole in rialzo posate sopra: l'oggetto resta solo sulla pagina.
 
-   Dentro il foglio non si dichiarano transizioni: `motion.css` le spegne tutte
-   sotto `.pane-editor`. La lightbox e le slide stanno fuori, sul corpo della
-   pagina, e lì il moto è quello delle modali.
+   Dentro il foglio le transizioni vivono come nel prototipo (`motion.css`
+   ferma solo la scrittura, e tutto col moto ridotto). La lightbox e le slide
+   stanno fuori, sul corpo della pagina, e lì il moto è quello delle modali.
 */
 
 /* ── La superficie ───────────────────────────────────────────────────────── */
@@ -32790,15 +32784,61 @@ h6.ui-heading {
   transform-origin: top left;
 }
 
-/* Il moto è della scocca, mai del foglio. La scrittura sta ferma. Il cursore
-   no: se lampeggia lo decide `editor.cursor-blink` (di serie fermo), che ne
-   fissa la cadenza; qui non lo si spegne una seconda volta. */
+/* Il prototipo della cornice anima dentro il foglio; la scrittura resta
+   ferma. Le transizioni copiate dal prototipo (la maniglia dei blocchi, le
+   schede vive, le trasclusioni, i commenti, la Concentrazione) vivono; non si
+   muove ciò che cambia a ogni tasto: le righe e tutto ciò che sta dentro di
+   loro (i segni della sintassi, che CodeMirror rifà o riveste mentre si
+   scrive: un colore che sfuma lì sarebbe un ritardo sotto le dita), la
+   selezione e i suoi strati, i numeri e i segni del margine. Il cursore no:
+   se lampeggia lo decide `editor.cursor-blink` (di serie fermo), che ne fissa
+   la cadenza sullo strato; qui si ferma solo il tratto.
+   In Concentrazione le righe lontane dal cursore si attenuano piano (la
+   regola qui sotto): solo lì una riga ha la sua transizione, d'opacità. */
 .cm-editor,
-.cm-editor *:not(.cm-cursorLayer),
-.pane-editor,
-.pane-editor *:not(.cm-cursorLayer) {
+.cm-editor .cm-scroller,
+.cm-editor .cm-content,
+.cm-editor .cm-line,
+.cm-editor .cm-line *,
+.cm-editor .cm-selectionLayer,
+.cm-editor .cm-selectionLayer *,
+.cm-editor .cm-cursorLayer *,
+.cm-editor .cm-gutters,
+.cm-editor .cm-gutters *,
+.pane-editor {
   animation: none !important;
   transition: none !important;
+}
+
+/* Col moto ridotto, del sistema o di Fub, dentro il foglio non si muove
+   niente: né le transizioni copiate dal prototipo né la Concentrazione. Il
+   moto che passa da `src/moto` lo spegne il livello `reduced`. */
+@media (prefers-reduced-motion: reduce) {
+  .cm-editor,
+  .cm-editor *:not(.cm-cursorLayer),
+  .pane-editor,
+  .pane-editor *:not(.cm-cursorLayer) {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+:root[data-motion="reduced"] .cm-editor,
+:root[data-motion="reduced"] .cm-editor *:not(.cm-cursorLayer),
+:root[data-motion="reduced"] .pane-editor,
+:root[data-motion="reduced"] .pane-editor *:not(.cm-cursorLayer) {
+  animation: none !important;
+  transition: none !important;
+}
+
+/* La Concentrazione: i blocchi lontani dal cursore si attenuano e quello del
+   cursore resta acceso (la regola sta in `structure.css`); il passaggio è
+   morbido, 0,25 s `ease` come nel prototipo (`.win.focus .blocks > .blk`).
+   È l'unica transizione che una riga ha, e solo d'opacità: per questo batte
+   la regola delle righe ferme, e solo quando il moto non è ridotto. */
+@media (prefers-reduced-motion: no-preference) {
+  :root:not([data-motion="reduced"]) #app[data-focus-mode] .pane-editor .cm-content > * {
+    transition: opacity 0.25s ease !important;
+  }
 }
 
 /* La sagoma di un foglio appena chiuso: carta senza niente sopra, con il

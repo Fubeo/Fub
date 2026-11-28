@@ -773,8 +773,8 @@ export const CHOREOGRAPHIES = [
   },
   {
     id: "menu-punto",
-    title: "Menu del tasto destro: nasce dal punto del clic, le parti entrano una dopo l'altra; esce sfumando, ferma",
-    sources: ["src/ui/menu.ts"],
+    title: "Menu del tasto destro: nasce dal punto del clic, le parti entrano una dopo l'altra e l'icona della testata fa il suo salto; esce sfumando, ferma",
+    sources: ["src/ui/menu.ts", "src/ui/menu-enter.ts"],
     scene: "startup",
     act: (page) => page.click('.pane.focus .pane-editor .cm-content .cm-line:has-text("Questa è la nota")', { button: "right", position: { x: 60, y: 8 } }),
     arrived: has("#context-menu .menu-foot"),

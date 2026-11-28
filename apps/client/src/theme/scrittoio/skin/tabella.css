@@ -294,11 +294,11 @@
    incolla, anche quando la tabella perde il fuoco. Il tratteggio è quello
    del prototipo (`.tg-cut`): quattro bordi di 1,5 px, 4 px pieni e 4 vuoti,
    che girano attorno alle celle come formiche in fila (`tg-ants`).
-   È l'unica eccezione al foglio fermo (`skin/motion.css` spegne ogni moto
-   dentro l'editor): il giro dice che il taglio aspetta ancora di essere
-   incollato, e finisce con lui — col taglio chiuso il riquadro è `hidden`.
-   Per questo la regola scrive `!important` con più peso di quella di
-   `motion.css`, e `theme/motion.test.ts` la nomina come sola eccezione.
+   È l'unico moto senza fine del foglio (`theme/motion.test.ts` la nomina
+   come sola eccezione ai giri infiniti): il giro dice che il taglio aspetta
+   ancora di essere incollato, e finisce con lui — col taglio chiuso il
+   riquadro è `hidden`. Scrive `!important` perché nessun tema la spenga per
+   sbaglio insieme alla scrittura ferma di `skin/motion.css`.
    Col moto ridotto, del sistema o di Fub, il tratteggio sta fermo. */
 .cm-editor .cm-content .tb-grid .tb-cut {
   border: 0;

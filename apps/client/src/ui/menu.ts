@@ -12,7 +12,8 @@ import { icon, iconEl } from "./icons";
 import { openLifetime, type Lifetime } from "./lifetime";
 import { figureLabel, figureValue, PAGE_FIGURES } from "./page-mark";
 import { enterSurface, exitSurface } from "./motion";
-import { DURATION, enter, flip, motionLevel, stagger } from "../moto";
+import { DURATION, enter, flip, motionLevel } from "../moto";
+import { ENTER_EASING, SUB_SHIFT, enterAtPoint } from "./menu-enter";
 import { createGroupLabel } from "../kit/group-label";
 import { createRow, markGlideHost, markLit, markPressed } from "../kit/row";
 import { createTile } from "../kit/tile";
@@ -282,25 +283,11 @@ interface Row {
 /// si chiuda e il gesto si faccia.
 const PRESS_MS = 200;
 
-/// L'entrata del menu aperto in un punto: nasce dal punto del clic, e come
-/// ogni moto del menu sta sotto un quinto di secondo.
-const POINT_ENTER_MS = 180;
-const ENTER_EASING = "cubic-bezier(0.2, 0.85, 0.25, 1)";
-
-/// Testata, appunti e voci arrivano una dopo l'altra, a questa distanza; oltre
-/// le prime `PART_STAGGER_MAX` le altre arrivano insieme, perché l'entrata
-/// intera resti sotto un quinto di secondo.
-const PART_STAGGER_MS = 15;
-const PART_STAGGER_MAX = 5;
-
 /// Quanto ci mettono a scivolare la pastiglia della scelta da una voce
 /// all'altra, e la linguetta da una parte all'altra della barra: a tempo, non
 /// a molla, perché la coda di una molla supererebbe il quinto di secondo.
 const GLIDE_MS = 150;
 const TAB_GLIDE_MS = 200;
-
-/// Di quanto scivola un sottomenu che entra, da destra, o torna, da sinistra.
-const SUB_SHIFT = 12;
 
 /// I segni dei formati che una scelta in riga sa disegnare (`icons.ts`).
 const SIGNS: ReadonlySet<string> = new Set(["copy-markdown", "copy-html", "copy-text", "copy-latex", "copy-image", "copy-equation"]);
@@ -552,26 +539,6 @@ export function showContextMenu(
       root.update(withClipboard(next));
     },
   };
-}
-
-/// L'entrata del menu aperto in un punto: cresce dal punto del clic (l'origine
-/// la mette `growFrom`) mentre testata, appunti e voci arrivano una dopo
-/// l'altra. Il sottomenu che col dito prende il posto del menu entra invece da
-/// destra, e il menu di prima torna da sinistra. Col moto ridotto c'è e basta.
-///
-/// Le corse delle parti non sono legate alla vita del menu: chiuderlo a metà
-/// entrata le fermerebbe prima che l'uscita ne fotografi la posa, e le parti
-/// salterebbero al riposo nell'immagine che sfuma. Finiscono da sole.
-function enterAtPoint(menu: HTMLElement, parts: readonly HTMLElement[], entry: "forward" | "back" | null): void {
-  if (entry !== null) {
-    enter(menu, { from: { x: entry === "forward" ? SUB_SHIFT : -SUB_SHIFT, opacity: 0 }, duration: DURATION.swap, easing: ENTER_EASING, whenReduced: "none" });
-    return;
-  }
-  enter(menu, { from: { scale: 0.94, opacity: 0 }, duration: POINT_ENTER_MS, easing: ENTER_EASING, whenReduced: "none" });
-  stagger(parts, (part) => enter(part, { from: { y: 5, opacity: 0 }, duration: DURATION.swap, easing: ENTER_EASING, whenReduced: "none" }), {
-    each: PART_STAGGER_MS,
-    max: PART_STAGGER_MAX,
-  });
 }
 
 /// Le voci di un sottomenu, preparate se serve.

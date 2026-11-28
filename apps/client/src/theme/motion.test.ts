@@ -24,8 +24,9 @@
 // Un loop infinito è decorazione, non moto: la scocca non respira, il brand
 // non ruota, un pallino non pulsa. L'unica eccezione è il lavoro in corso, che
 // non sa quando finisce: una barra indeterminata, una tela che si carica. Chi scrive non deve vedere la pagina che
-// si muove da sola, e l'editor è sacro — il moto si ferma alla soglia di
-// `.cm-editor` e `.pane-editor`, e lì diventa `none`. Entrata e uscita delle
+// si muove da sola: dentro il foglio vivono le transizioni del prototipo, ma
+// le righe, la selezione e il margine restano `none` (`skin/motion.css`,
+// provato su stili calcolati da `sheet-motion.test.ts`). Entrata e uscita delle
 // superfici sovrane passano dallo stesso attributo; `[hidden]` arriva soltanto
 // dopo l'uscita, e il moto ridotto resta immediato nella struttura.
 //
@@ -210,11 +211,11 @@ describe("niente keyframe lime", () => {
 
 describe("hard-stop dell'editor", () => {
   it("la pelle ferma il moto su .cm-editor con animation: none", () => {
-    // L'editor è sacro: il moto si ferma alla soglia di `.cm-editor` e
-    // `.pane-editor`, e lì diventa `none`. Chi scrive non deve vedere la
-    // pagina che si muove da sola sotto le proprie mani. Basta che il file
-    // includa entrambe le stringhe: il banco non ricostruisce la regola, ne
-    // presidia la presenza.
+    // La scrittura sta ferma: le righe, la selezione e il margine di
+    // `.cm-editor` hanno `none`. Chi scrive non deve vedere la pagina che si
+    // muove da sola sotto le proprie mani. Basta che il file includa entrambe
+    // le stringhe: il banco non ricostruisce la regola, ne presidia la
+    // presenza; gli stili calcolati li prova `sheet-motion.test.ts`.
     expect(
       SKIN,
       "la pelle contiene `.cm-editor`: l'editor è il confine del moto",

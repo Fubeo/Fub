@@ -224,12 +224,6 @@
 [data-markdown-mode="blocks"] .cm-content .cm-activeLine {
   background-color: transparent;
 }
-/* In concentrazione i blocchi lontani dal cursore si attenuano e il blocco
-   del cursore resta acceso (la regola sta in `structure.css`): il passaggio
-   è morbido, e il movimento ridotto lo toglie. */
-.pane-editor .cm-content > * {
-  transition: opacity var(--duration-state) var(--ease);
-}
 /* La riga attiva si spegne dove c'è una selezione (`editors/text/engine.ts`
    mette `cm-fub-no-active-line` sulle righe selezionate): la banda coprirebbe
    il rettangolo della selezione, che CodeMirror disegna sotto il testo. Pesa
