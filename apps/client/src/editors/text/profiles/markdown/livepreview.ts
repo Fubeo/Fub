@@ -791,7 +791,7 @@ export function computeDecorations(
       }
       if (reveal.policy !== "mai" && !(embedImage && imageShown(rangeStart, rangeEnd)) && reveal.source(rangeStart, rangeEnd, rangeStart)) {
         // Sorgente visibile ma link comunque cliccabile e stilato.
-        out.push({ from: innerFrom, to: innerA, kind: "wikilink", data });
+        out.push({ from: innerFrom, to: innerA, kind: "wikilink", data, writing: true });
       } else {
         // Un'immagine incorporata si vede com'è in Lettura, anche in mezzo al
         // testo: il widget ha lo stesso HTML dell'embed reso.
@@ -814,7 +814,8 @@ export function computeDecorations(
         if (w.alias === null) showFrom = innerFrom;
         while (showFrom < innerA && /[ \t]/.test(doc.sliceString(showFrom, showFrom + 1))) showFrom++;
         out.push({ from: rangeStart, to: showFrom, kind: "hide" });
-        out.push({ from: showFrom, to: innerA, kind: "wikilink", data });
+        // Col cursore accanto, anche con `mai`, lo si sta scrivendo (UX-016).
+        out.push({ from: showFrom, to: innerA, kind: "wikilink", data, ...(reveal.near(rangeStart, rangeEnd) ? { writing: true as const } : {}) });
         // Di un wikilink con alias, col cursore dentro e `mai`, la pastiglia
         // dice quale nota: l'alias da solo non lo direbbe.
         const pill = reveal.policy === "mai" && w.alias !== null && !w.embed && reveal.near(rangeStart, rangeEnd);

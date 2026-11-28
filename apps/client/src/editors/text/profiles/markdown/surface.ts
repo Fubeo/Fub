@@ -174,7 +174,9 @@ export interface PageIcons {
   icon(page: string): string | null;
   /// Il wikilink nomina una persona (K5): la Live lo mostra come pastiglia.
   isPerson?(page: string): boolean;
-  /// Avvisa quando le icone o le persone cambiano; torna lo smontaggio.
+  /// La pagina scritta nella nota `from` non c'è ancora (UX-016).
+  missing?(page: string, from: string | undefined): boolean;
+  /// Avvisa quando le icone, le persone o i link che mancano cambiano; torna lo smontaggio.
   watch(changed: () => void): () => void;
 }
 
@@ -577,8 +579,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
         openWikilink: (page, heading, block) => void opts.onOpenWikilink(page, heading, block, doc),
         searchTag: opts.onSearchTag,
         openPath: (path) => void Promise.resolve(opts.onOpenPath(path, doc)).catch(() => {}),
-        pageIcon: opts.pageIcons?.icon,
-        isPerson: opts.pageIcons?.isPerson,
+        pageIcon: opts.pageIcons?.icon, isPerson: opts.pageIcons?.isPerson, missing: (page) => opts.pageIcons?.missing?.(page, doc) === true,
         mountRendered: (container, html, actions) => mountMarkdown(container, html, {
           ...actions,
           documentId: doc,
@@ -662,8 +663,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
           });
       },
       slashEnabled: () => Boolean(slashMenu && slashHost?.enabled()),
-      pageIcon: opts.pageIcons?.icon,
-      isPerson: opts.pageIcons?.isPerson,
+      pageIcon: opts.pageIcons?.icon, isPerson: opts.pageIcons?.isPerson, missing: (page) => opts.pageIcons?.missing?.(page, docId()) === true,
       linkCard: linkCards,
       ...(liveCards ? { liveCards } : {}),
       ...(cellValues ? { cellValues } : {}),
