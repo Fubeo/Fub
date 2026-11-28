@@ -88,12 +88,19 @@ export async function leggi(page, radice, richieste) {
 /// `tipo` è `hover`, `focus` o `click`, `selettore` quello del proprio lato. I
 /// selettori del prototipo vivono dentro `#win` (la `radice`), quelli
 /// dell'app nella pagina.
+///
+/// `selettore` può essere un elenco: il gesto passa da ognuno, in ordine, e
+/// l'ultimo è quello che conta. Serve a un elemento che compare solo col
+/// puntatore sopra un altro (la presa delle maniglie del prototipo, che si
+/// accende al passaggio sul blocco e senza la quale la pagina la copre).
 export async function gesto(page, radice, tipo, selettore) {
-  const dove = radice ? `${radice} ${selettore}` : selettore;
-  if (tipo === "hover") await page.hover(dove);
-  else if (tipo === "focus") await page.focus(dove);
-  else if (tipo === "click") await page.click(dove);
-  else throw new Error(`gesto sconosciuto: «${tipo}»`);
+  for (const s of [selettore].flat()) {
+    const dove = radice ? `${radice} ${s}` : s;
+    if (tipo === "hover") await page.hover(dove);
+    else if (tipo === "focus") await page.focus(dove);
+    else if (tipo === "click") await page.click(dove);
+    else throw new Error(`gesto sconosciuto: «${tipo}»`);
+  }
   await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
 }
 

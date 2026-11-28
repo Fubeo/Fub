@@ -163,12 +163,12 @@ try {
         try {
           await page.setViewportSize(stato.finestra);
           await prepareScene(page, scena, stato.luce, stage.base, sceneUrl);
+          if (stato.app?.monta) await stato.app.monta(page);
           if (vista.app.prepara) await vista.app.prepara(page);
           for (const pezzo of pezzi) {
             const proprieta = espandi(pezzo.proprieta);
             if (pezzo.gesto) await gesto(page, null, pezzo.gesto.tipo, pezzo.gesto.app);
             const [trovati] = await leggi(page, null, [{ selettore: pezzo.app, proprieta }]);
-            if (pezzo.gesto) await riposo(page);
             const estratto = attesi.valori[pezzo.id]?.[idStato] ?? null;
             const atteso = estratto && { ...estratto.proprieta };
             // I colori fatti di token: l'atteso è l'espressione coi token di
@@ -180,6 +180,9 @@ try {
                 atteso[v.proprieta] = v.espressioni.map((come, j) => ({ come, valore: risolti[i][j] }));
               });
             }
+            // A riposo solo dopo aver risolto i token: un elemento che c'è
+            // solo col puntatore sopra (le maniglie accese) sparirebbe prima.
+            if (pezzo.gesto) await riposo(page);
             const esito = confrontaPezzo(pezzo, idStato, atteso, trovati);
             differenze.push(...esito.differenze);
             mancanti.push(...esito.mancanti);

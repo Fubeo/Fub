@@ -14,7 +14,8 @@ export const STATI: Record<
   string,
   {
     luce: "light" | "dark";
-    prototipo: { luce: string; larghezza: string };
+    prototipo: { luce: string; larghezza: string; monta?: Gesto };
+    app?: { monta: Gesto };
     finestra: { width: number; height: number };
   }
 >;
@@ -27,6 +28,6 @@ export const VISTE: Record<
   }
 >;
 export const PEZZI: Array<
-  Pezzo & { vista: string; gesto?: { tipo: "hover" | "focus" | "click"; prototipo: string; app: string } }
+  Pezzo & { vista: string; gesto?: { tipo: "hover" | "focus" | "click"; prototipo: string | string[]; app: string | string[] } }
 >;
 export const DA_COPRIRE: DaCoprire[];
