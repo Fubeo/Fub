@@ -75,6 +75,17 @@ describe("in Live con `mai`", () => {
     expect(document.querySelector(".cm-fub-fence-close-line")).not.toBeNull();
   });
 
+  it("i pulsanti della testata sono alti 24 px, come `.codeb-h button` del prototipo", () => {
+    // UX-017: a 18 px «Copia» era sotto il bersaglio minimo.
+    mount(SOURCE, SOURCE.indexOf("Dopo"));
+    const buttons = [...document.querySelectorAll<HTMLElement>(".cm-fub-code-header button")];
+    expect(buttons.length).toBeGreaterThanOrEqual(3);
+    for (const button of buttons) {
+      const style = getComputedStyle(button);
+      expect([style.height, style.paddingLeft, style.paddingRight, style.borderRadius, style.fontSize]).toEqual(["24px", "8px", "8px", "6px", "12px"]);
+    }
+  });
+
   it("il cursore non si posa sui recinti: dalla testata va nel corpo", () => {
     const view = mount(SOURCE, 0);
     view.dispatch({ selection: { anchor: SOURCE.indexOf("```rust") + 2 } });
