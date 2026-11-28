@@ -198,3 +198,4 @@ area, letto dal codice dei due lati; il banco lo confermerà.
 | 2026-11-28 | `PLAN-ui/editor.html` (`piano/editor-completo`) | blocchi | [Blocchi](animazioni-editor/blocchi.md) |
 | 2026-11-28 | `PLAN-ui/editor.html` (`piano/editor-completo`) | tabelle, Base e diagramma | [Tabelle, Base e diagramma](animazioni-editor/tabelle-base-diagramma.md) |
 | 2026-11-28 | `PLAN-ui/editor.html` (`piano/editor-completo`) | formule ed Esporta PDF | [Formule ed Esporta PDF](animazioni-editor/formule-esporta-pdf.md) |
+| 2026-11-28 | `PLAN-ui/editor.html` (`piano/editor-completo`) | menu, finestre, riquadri, sbirciata e avvisi | [Menu, finestre e sbirciata](animazioni-editor/menu-finestre-sbirciata.md) |
