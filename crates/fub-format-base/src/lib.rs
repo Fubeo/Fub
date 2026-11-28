@@ -13,7 +13,7 @@ pub mod patch;
 pub use embed::{
     catalog as embed_catalog, BaseRenderer, BaseRule, BASE_CUSTOM_KIND,
     BASE_FORMAT as BASE_EMBED_FORMAT, BASE_NS as BASE_EMBED_NS, BASE_RENDERER_ID, BASE_RULE_ID,
-    MARKDOWN_FORMAT,
+    FILE_KEY as BASE_EMBED_FILE_KEY, MARKDOWN_FORMAT,
 };
 pub use model::{
     AggregateKind, BaseDefinition, BaseDocumentView, BaseViewDef, ColumnDef, FilterDef, GroupDef,
@@ -68,6 +68,10 @@ impl FormatProvider for BaseProvider {
         // No view is invented when parsing fails or the definition has none.
         let mut model = DocumentModel::empty(DocId::new(ctx.doc_id.clone()));
         model.text = text.to_string();
+        // `BASE_EMBED_FILE_KEY` dice che il sorgente è il file intero, e quale: una Base
+        // incorporata con `![[x.base]]` scrive le sue viste in quel file,
+        // mentre un blocco ```base``` di una nota (`embed.rs`) non ha la chiave
+        // e resta da leggere.
         let attrs = match BaseDefinition::parse(text) {
             // Le viste sono le sezioni nominate del blocco: `[[x.base#Vista]]`
             // ne sceglie una, e il kernel la consegna in `SECTION_ATTR`.
@@ -76,9 +80,10 @@ impl FormatProvider for BaseProvider {
                 "view": definition.views.first().map(|view| &view.name),
                 SECTIONS_ATTR: definition.views.iter().map(|view| &view.name).collect::<Vec<_>>(),
                 "container": ctx.doc_id,
+                BASE_EMBED_FILE_KEY: ctx.doc_id,
             }),
             Err(_) => {
-                serde_json::json!({ "source": text, "view": null, SECTIONS_ATTR: [], "container": ctx.doc_id })
+                serde_json::json!({ "source": text, "view": null, SECTIONS_ATTR: [], "container": ctx.doc_id, BASE_EMBED_FILE_KEY: ctx.doc_id })
             }
         };
         model.body.push(Block::Custom {
@@ -147,6 +152,20 @@ mod tests {
             }),
             Some("note.base")
         );
+        // Il testo letto da un `.base` è il file intero, valido o no: la shell
+        // sa in quale file scrivere le viste.
+        for source in [
+            "filters:\n  and: []\n",
+            "views:\n  - {name: A, type: table}\n",
+        ] {
+            let model = provider
+                .parse(&DocumentSource::Text(source.into()), &ctx)
+                .unwrap();
+            let Some(Block::Custom { attrs, .. }) = model.body.first() else {
+                panic!("atteso il blocco della Base");
+            };
+            assert_eq!(attrs[BASE_EMBED_FILE_KEY], serde_json::json!("note.base"));
+        }
         let html = provider
             .render_html(&model, &RenderOptions::preview())
             .unwrap();

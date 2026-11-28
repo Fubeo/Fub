@@ -33,6 +33,12 @@ pub const BASE_CUSTOM_KIND: &str = "base";
 const VIEW_TITLE: &str = "view_title";
 const SOURCE_KEY: &str = "source";
 const VIEW_KEY: &str = "view";
+/// Il path del file `.base` di cui `source` è il testo intero: c'è solo per una
+/// Base letta da un file (`BaseProvider::parse`, cioè `![[x.base]]`), mai per
+/// un blocco ```base``` di una nota. Con lui la shell scrive le viste nel file;
+/// senza, il blocco resta da leggere. Stessa chiave e stesso senso del payload
+/// del riquadro «Base» della scrivania (`{ "base": path }`).
+pub const FILE_KEY: &str = "base";
 
 /// Le stringhe del blocco base (solo il fallback ne ha una).
 pub fn catalog() -> Vec<StringCatalog> {
@@ -145,9 +151,15 @@ impl CustomRenderer for BaseRenderer {
                 children: vec![UiNode::text(source)],
             })],
         });
+        let mut payload = json!({ SOURCE_KEY: source, VIEW_KEY: view, "container": block.attrs.get("container") });
+        // Additivo: una shell che non conosce `base` accanto a `source` disegna
+        // il sorgente come prima.
+        if let Some(file) = block.attrs.get(FILE_KEY).and_then(|v| v.as_str()) {
+            payload[FILE_KEY] = json!(file);
+        }
         Ok(CustomRendering::Ui(Box::new(UiNode::new(UiKind::Custom {
             ns: BASE_NS.into(),
-            payload: json!({ SOURCE_KEY: source, VIEW_KEY: view, "container": block.attrs.get("container") }),
+            payload,
             fallback: vec![fallback],
         }))))
     }
@@ -234,7 +246,23 @@ mod tests {
             good.attrs.get("source").and_then(|source| source.as_str())
         );
         assert_eq!(payload["container"], json!("Projects/host.md"));
+        // Un blocco di una nota non dice di essere un file.
+        assert!(payload.get(FILE_KEY).is_none(), "{payload}");
         assert_eq!(fallback.len(), 1);
+        // Il testo intero di un `.base` lo dice, col suo path.
+        let mut file = good.clone();
+        file.attrs[FILE_KEY] = json!("Liste/Opere.base");
+        let CustomRendering::Ui(node) = BaseRenderer
+            .render(&file, &RenderOptions::preview())
+            .unwrap()
+        else {
+            panic!("atteso Ui");
+        };
+        let UiKind::Custom { payload, .. } = &node.kind else {
+            panic!("atteso Custom");
+        };
+        assert_eq!(payload[FILE_KEY], json!("Liste/Opere.base"));
+        assert_eq!(payload[SOURCE_KEY], good.attrs["source"]);
         let mut unknown = good.clone();
         unknown.attrs["view"] = json!("Missing");
         assert!(matches!(
