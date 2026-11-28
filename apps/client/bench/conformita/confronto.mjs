@@ -460,7 +460,9 @@ export function applicaEccezioni(differenze, eccezioni) {
 /// con `proprieta` diventano, una proprietà alla volta, voci della stessa
 /// forma di un'eccezione (con `daCoprire: true`), così `applicaEccezioni` le
 /// tratta allo stesso modo, anche quando non coprono più niente. Le voci
-/// senza `proprieta` sono pezzi interi che non si confrontano. Una voce con
+/// senza `proprieta` sono pezzi interi che non si confrontano. `stati`
+/// (facoltativo) restringe la voce a quegli stati, come in un'eccezione: una
+/// differenza solo di giorno si copre senza fare rosso di notte. Una voce con
 /// `escluso` (la ragione, per esempio «fuori dal foglio della cornice») è
 /// fuori dal lavoro che corregge le altre: si tratta come le altre, ma la
 /// copertura lo porta con sé perché il referto la conti a parte.
@@ -481,7 +483,10 @@ export function coperture(daCoprire, pezzi) {
       errori.push(`${d.id}: ha proprietà da coprire, ma non è in PEZZI`);
       continue;
     }
-    if (d.stati !== undefined && !Array.isArray(d.stati)) errori.push(`${d.id}: «stati» è un elenco`);
+    if (d.stati !== undefined && (!Array.isArray(d.stati) || d.stati.length === 0)) {
+      errori.push(`${d.id}: \`stati\` da coprire è un elenco non vuoto`);
+      continue;
+    }
     const sue = espandi(pezzo.proprieta);
     for (const p of d.proprieta) {
       if (!espandi([p]).every((l) => sue.includes(l))) {

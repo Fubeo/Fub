@@ -52,7 +52,7 @@
   {
     "pezzo": "schede.lavagna.zona",
     "proprieta": "height",
-    "motivo": "Nel prototipo .cvz è alta 300 px sotto la testata (e si stringe a 295 o 279 px nella colonna flessibile); in Fub l'altezza dell'embed (|640x300) è quella di tutta la scheda, testata compresa, per ogni specie (live-cards.css, height: calc(var(--live-card-height) - 35px)): la zona è 265 px, e la nota occupa i 300 px che l'embed scrive.",
+    "motivo": "Nel prototipo .cvz è alta 300 px sotto la testata (e si stringe a 295 px nella colonna flessibile, a 224 a 700 px); in Fub l'altezza dell'embed (|640x300) è quella di tutta la scheda, testata compresa, per ogni specie (live-cards.css, height: calc(var(--live-card-height) - 35px)): la zona è 265 px, e la nota occupa i 300 px che l'embed scrive.",
     "riferimento": "PLAN.md, T47 «Dal prototipo» (passo 18, .cvz) e T43 (misura dell'embed, docs/product/live-cards.md «Misura, «Mostra come», affiancare»)"
   },
   {

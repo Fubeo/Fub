@@ -305,6 +305,23 @@ describe("le eccezioni", () => {
     expect(new Set(esclusi)).toEqual(new Set(["compiti", "cornice", "banda", "ispettore"]));
     expect(DA_COPRIRE.find((d) => d.id === "compiti.ispettore")?.escluso).toBe("fuori dal foglio della cornice");
   });
+
+  it("una proprietà da coprire può valere solo in alcuni stati", () => {
+    const { errori, voci } = coperture(
+      [{ id: pezzo.id, proprieta: ["padding"], stati: ["chiaro-1280"], perche: "solo di giorno" }],
+      [pezzo],
+    );
+    expect(errori).toEqual([]);
+    const { rosse, inutili } = applicaEccezioni(
+      [differenza("padding-top", "chiaro-1280"), differenza("padding-top", "scuro-1280")],
+      voci,
+    );
+    expect(rosse.map((d) => d.stato)).toEqual(["scuro-1280"]);
+    expect(inutili).toEqual([]);
+    expect(coperture([{ id: pezzo.id, proprieta: ["padding"], stati: [], perche: "x" }], [pezzo]).errori).toEqual([
+      "prova.superficie: `stati` da coprire è un elenco non vuoto",
+    ]);
+  });
 });
 
 describe("i token del prototipo", () => {

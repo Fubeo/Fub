@@ -184,8 +184,9 @@ un'eccezione non copre più niente. Le eccezioni (`eccezioni-<prototipo>.json`)
 hanno pezzo, proprietà, motivo e il riferimento alla voce di DECISIONS o del
 piano che le giustifica. `DA_COPRIRE` nella mappa elenca invece ciò che va
 ancora corretto: un pezzo intero non si confronta; una proprietà di un pezzo
-coperto si confronta, e diventa rossa quando coincide, perché la si tolga. Una
-voce con `escluso` (la ragione: per l'editor «fuori dal foglio della cornice»,
+coperto si confronta, e diventa rossa quando coincide, perché la si tolga
+(`stati` restringe la voce a una differenza che c'è solo in alcuni stati, per
+esempio solo di giorno). Una voce con `escluso` (la ragione: per l'editor «fuori dal foglio della cornice»,
 sulla cornice della finestra, la banda di stato e l'ispettore) vale come le
 altre, ma è fuori dal lavoro che corregge queste: la riga di riepilogo conta a
 parte le differenze da coprire e quelle escluse, coi pezzi interi di ognuna,
