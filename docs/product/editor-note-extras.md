@@ -18,7 +18,11 @@ rendono e il sanitizzatore lascia passare da sola:
 
 «Colore» li scrive dalla barra (`markdown.color.*` e `markdown.background.*`
 in [`ipc-contract`](../reference/ipc-contract.md)), dal «/» e dal menu del
-blocco: sulla selezione, o sul testo della riga dopo i segni del blocco. Un
+blocco: sulla selezione, o sul testo della riga dopo i segni del blocco. In
+una riga ancora vuota il colore aspetta la prima lettera in una coppia
+nascosta, come il grassetto: nella Live, se il cursore esce o Esc rinuncia
+prima di scrivere, la coppia se ne va e nel file non resta un tag vuoto (in
+Sorgente i tag si vedono e restano). Un
 testo già colorato cambia classe invece di prendere un tag in più;
 «predefinito» toglie la classe, e con l'ultima il tag. Le tinte sono del tema,
 in entrambe le luci, con un contrasto di almeno 4,5:1 sul foglio.

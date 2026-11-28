@@ -5,12 +5,15 @@
 // colori veri li dà il tema.
 //
 // «Colore» lavora sulla selezione, o senza selezione sul testo della riga del
-// cursore, dopo i segni del blocco; in una riga vuota scrive la coppia vuota. Se quel testo è già avvolto da un tag di
-// colore, cambia la sua classe invece di avvolgerlo di nuovo; «Predefinito»
+// cursore, dopo i segni del blocco; in una riga vuota apre la coppia vuota
+// del colore, che aspetta la prima lettera e, come quella del grassetto
+// (`empty-pair.ts`), se ne va se il cursore esce o si preme Esc senza
+// scrivere. Se quel testo è già avvolto da un tag di colore, cambia la sua classe invece di avvolgerlo di nuovo; «Predefinito»
 // toglie la classe, e con l'ultima il tag.
 import { EditorSelection, type ChangeSpec, type EditorState, type StateCommand } from "@codemirror/state";
 import { CONTENT_COLORS } from "../../../../ui/sanitize";
 import { blockGesture } from "./block-gesture";
+import { openedPair } from "./empty-pair";
 import { liveStrings } from "./strings";
 import { colorClasses } from "./render-inline";
 
@@ -114,12 +117,17 @@ export function setContentColor(kind: ColorKind, color: ContentColor | null, at?
     if (plan.k === "empty") {
       // Una riga ancora vuota (il «/» appena scritto): la coppia vuota, col
       // cursore dentro, perché il colore valga per ciò che si scrive dopo.
+      // È una coppia vuota come quella del grassetto: nella Live i tag non si
+      // vedono, e se il cursore esce o Esc rinuncia prima della prima
+      // lettera la coppia se ne va, senza lasciare un segno vuoto nel file.
       if (!color) return false;
       const head = state.selection.main.head;
       const open = `<${ELEMENT[kind]} class="${PREFIX[kind]}${color}">`;
+      const close = `</${ELEMENT[kind]}>`;
       dispatch(state.update({
-        changes: { from: head, insert: `${open}</${ELEMENT[kind]}>` },
+        changes: { from: head, insert: `${open}${close}` },
         selection: EditorSelection.cursor(head + open.length),
+        effects: openedPair.of({ from: head, open: open.length, close: close.length }),
         userEvent: "input.format",
       }));
       return true;

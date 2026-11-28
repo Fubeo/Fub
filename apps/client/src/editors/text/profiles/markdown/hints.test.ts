@@ -63,6 +63,24 @@ describe("i contesti della Live", () => {
     expect(context?.items.map((item) => item.say)).toEqual(["inserisce un blocco", "persone e date", "cerca o esegue", "seleziona il blocco"]);
   });
 
+  it("in un paragrafo coi blocchi: Maiusc+Invio va a capo nel paragrafo", () => {
+    const view = mount("# Titolo\n\nun paragrafo| qui\n\n- una voce\n", blocksMode({ page: () => "Nota" }));
+    const context = hints(view);
+    expect(context?.id).toBe("text");
+    expect(named(context)).toEqual(["/", "@", "Shift-Enter", "shell.switcher", "Escape"]);
+    expect(context?.items[2]?.say).toBe("a capo nel paragrafo");
+    // Sul titolo e sulla voce di un elenco Invio è quello di sempre.
+    for (const pos of [3, view.state.doc.toString().indexOf("una voce") + 3]) {
+      view.dispatch({ selection: EditorSelection.cursor(pos) });
+      expect(named(hints(view)), String(pos)).toEqual(["/", "@", "shell.switcher", "Escape"]);
+    }
+  });
+
+  it("senza i blocchi Invio va a capo, e Maiusc+Invio non si dice", () => {
+    const view = mount("un paragrafo| qui");
+    expect(named(hints(view))).toEqual(["/", "@", "shell.switcher"]);
+  });
+
   it("in concentrazione Esc esce dalla concentrazione, e con Vim non si dice", () => {
     const view = mount("prima\n|\ndopo", blocksMode({ page: () => "Nota" }));
     setConcentrating(true);

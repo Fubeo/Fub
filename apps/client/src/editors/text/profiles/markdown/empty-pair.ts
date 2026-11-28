@@ -1,6 +1,8 @@
 // La coppia vuota di un gesto di formato, come in Word: Mod-b senza niente da
 // avvolgere apre `**|**`, e se il cursore se ne va senza scrivere la coppia
-// sparisce nella stessa transazione. Soltanto in Live e in Blocchi: in
+// sparisce nella stessa transazione; Esc prima della prima lettera vale come
+// rinuncia, e la toglie lo stesso. Vale anche per la coppia del colore
+// (`color.ts`). Soltanto in Live e in Blocchi: in
 // Sorgente i segni si vedono, e chi li lascia li vuole.
 import { type ChangeSet, EditorState, type Extension, Prec, StateEffect, StateField, type Transaction, type TransactionSpec } from "@codemirror/state";
 import { Decoration, EditorView, keymap } from "@codemirror/view";
@@ -135,6 +137,14 @@ const dropHeld = (view: EditorView): boolean => {
   return false;
 };
 
+/// Esc in una coppia vuota: chi la apre e poi rinuncia non lascia nel file un
+/// segno che non si vede. Il tasto fa poi quello che farebbe senza (chiude un
+/// menu, seleziona il blocco, passa all'ospite).
+const dropOnEscape = (view: EditorView): boolean => {
+  dropHeld(view);
+  return false;
+};
+
 /// Le coppie vuote aperte, se lo stato le porta.
 export function emptyPairsOf(state: EditorState): readonly EmptyPair[] {
   return state.field(emptyPairs, false) ?? [];
@@ -187,5 +197,5 @@ const hidePairs = EditorView.decorations.compute([emptyPairs], (state) =>
 
 /// La coppia vuota che sparisce: il campo e il filtro, per la Live.
 export function emptyPairsExtension(): Extension {
-  return [emptyPairs, leave, hidePairs, Prec.highest(keymap.of([{ key: "Backspace", run: dropHeld }, { key: "Delete", run: dropHeld }]))];
+  return [emptyPairs, leave, hidePairs, Prec.highest(keymap.of([{ key: "Backspace", run: dropHeld }, { key: "Delete", run: dropHeld }, { key: "Escape", run: dropOnEscape }]))];
 }

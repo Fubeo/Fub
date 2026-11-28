@@ -234,7 +234,10 @@ scrittura; il «+» della maniglia mette un blocco vuoto e ci apre il «/».
   (`flowchart TD`) lo scrive in un recinto `mermaid` vuoto. Una tabella
   appena messa prende il fuoco sulla prima intestazione: si scrive nella
   cella. I venti colori non sono voci del «/»: stanno sotto «Colore ›» e
-  si trovano scrivendo («/blu»).
+  si trovano scrivendo («/blu»). Su una riga che resta vuota il colore
+  scelto aspetta la prima lettera, come Ctrl+B: si scrive già colorato, e
+  se il cursore esce o si preme Esc senza scrivere non resta niente nel
+  file ([i colori](editor-note-extras.md#i-colori)).
 - **Niente trovato.** Il pannello resta aperto e lo dice («Nessun blocco per
   «qwerty».»); la sola riga, accesa, cerca fra tutti i comandi, con Invio o
   Ctrl+/. Esc lascia il testo com'è.
