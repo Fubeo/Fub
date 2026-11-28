@@ -11,7 +11,9 @@
 //
 // - `STATI`: le coordinate di uno stato, luce e larghezza. Dal lato del
 //   prototipo sono i pulsanti Giorno/Notte e Piena/700/Telefono; dal lato
-//   dell'app la luce della scena e la finestra del banco.
+//   dell'app la luce della scena e la finestra del banco. `prototipo.monta`
+//   e `app.monta` (facoltativi) mettono l'editor altrove prima della vista:
+//   gli stati `*-foglio-*` lo mettono in un foglio stretto della cornice.
 // - `VISTE`: come si arriva al pezzo dai due lati. `prototipo.prepara(page)`
 //   gira dopo che luce e larghezza sono scelte (può premere «Avanti» fino a un
 //   passo, chiamare una funzione del prototipo, scrivere); `app.scena` è l'id
@@ -22,7 +24,8 @@
 //   `confronto.mjs` (`padding`, `border`, `font`, …) e le proprietà lunghe.
 //   `gesto` (facoltativo) porta puntatore o fuoco su un elemento dai due lati
 //   prima di leggere: `{ tipo: "hover" | "focus" | "click", prototipo, app }`,
-//   coi selettori dei due lati. `stati` (facoltativo) restringe gli stati della vista.
+//   coi selettori dei due lati (un elenco passa da ognuno, in ordine:
+//   `leggi.mjs`, `gesto`). `stati` (facoltativo) restringe gli stati della vista.
 //   `attende` (facoltativo) nomina la PR o il ramo che porta il pezzo
 //   nell'app: i suoi valori attesi si estraggono, ma la verifica non lo legge
 //   finché c'è (con `--attese` sì, per misurare quel lavoro su un ramo locale
@@ -48,6 +51,10 @@
 // `verifica.mjs` lo prenderebbe per una mappa in più.
 import { PEZZI_CORNICE_PANNELLI } from "./editor/pezzi-cornice-pannelli.mjs";
 import { PEZZI_ESPORTA_PDF } from "./editor/pezzi-esporta-pdf.mjs";
+import { PEZZI_ESPORTA_PAGINE } from "./editor/pezzi-esporta-pagine.mjs";
+import { PEZZI_BLOCCHI_LIVE } from "./editor/pezzi-blocchi-live.mjs";
+import { PEZZI_FOGLI_STRETTI } from "./editor/pezzi-fogli-stretti.mjs";
+import { DA_COPRIRE_PARTE_2 } from "./editor/da-coprire-parte-2.mjs";
 import { PEZZI_FORMULA_TABELLA_TESTATA } from "./editor/pezzi-formula-tabella-testata.mjs";
 import { PEZZI_LANCIATORE_MENU } from "./editor/pezzi-lanciatore-menu.mjs";
 import { PEZZI_SLASH_SCHEDE } from "./editor/pezzi-slash-schede.mjs";
@@ -148,6 +155,9 @@ export const PEZZI = [
   ...PEZZI_CORNICE_PANNELLI,
   ...PEZZI_SLASH_SCHEDE,
   ...PEZZI_ESPORTA_PDF,
+  ...PEZZI_ESPORTA_PAGINE,
+  ...PEZZI_BLOCCHI_LIVE,
+  ...PEZZI_FOGLI_STRETTI,
 ];
 
 /// I pezzi che hanno ancora differenze, e chi li corregge. Non si
@@ -309,4 +319,6 @@ export const DA_COPRIRE = [
     proprieta: ["font-size", "white-space"],
     perche: "controllo del 2026-11-21: la Sorgente a 14 px invece di 13",
   },
+  // ── controllo del 2026-11-28, parte 2 (`editor/da-coprire-parte-2.mjs`) ──
+  ...DA_COPRIRE_PARTE_2,
 ];
