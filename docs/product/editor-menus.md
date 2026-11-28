@@ -194,9 +194,12 @@ telefono, sotto i 600 px o col dito, è un foglio a tutta larghezza in fondo
 alla finestra, sopra la tastiera, con righe da 44 px. Vale in ogni modalità di
 scrittura; il «+» della maniglia mette un blocco vuoto e ci apre il «/».
 
-- **In alto, i sei più usati**, come tessere con l'icona e una parola. In un
+- **In alto, i sei più usati**, come tessere con l'icona e una parola: una
+  parola del nome intero della riga, così tessera e riga non sembrano due
+  comandi («Puntato» per «Elenco puntato», «Attività» per «Elenco di
+  attività»; solo «Piega» resta più corta di «Ripiegabile»). In un
   vault nuovo: Attività, Titolo, Riquadro, Tabella, Base (con le Basi accese)
-  e Punti; senza Base, Codice prende il sesto posto. L'uso li riordina: prima i Preferiti,
+  e Puntato; senza Base, Codice prende il sesto posto. L'uso li riordina: prima i Preferiti,
   poi i blocchi scelti di recente, poi l'ordine scritto; una voce nascosta
   lascia il posto alla seguente, e stili e comandi del vault non diventano
   tessere (`byUse` in `panels/slash/rank.ts`). A menu appena aperto Invio mette
