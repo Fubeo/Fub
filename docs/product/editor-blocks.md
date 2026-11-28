@@ -134,7 +134,8 @@ ogni movimento del puntatore.
 Esc seleziona il blocco del cursore, e soltanto lui: su una riga vuota o nel
 frontmatter non seleziona niente, e il velo copre le righe del blocco, non la
 testata della pagina che sta sopra la prima riga. Righe scritte con un solo a
-capo sono un paragrafo solo, come in Markdown, e Esc le sceglie insieme.
+capo (Maiusc+Invio) sono un paragrafo solo, come in Markdown, e Esc le sceglie
+insieme.
 Shift+↑/↓ allarga ai fratelli, ↑/↓
 passano al blocco vicino, Canc e Backspace eliminano i blocchi con le loro righe
 vuote, Mod+D duplica, Invio ed Esc tornano al testo. Copiare e tagliare
@@ -160,7 +161,14 @@ sono selezionati.
   `---`.
 - Alt+↑/↓ sulle righe del testo (fuori dalle proprietà) non portano una riga
   del corpo dentro il frontmatter, né le sue righe `---` fuori.
-- Backspace all'inizio di un paragrafo lo unisce al testo del blocco sopra.
+- Invio dentro un paragrafo ne apre uno nuovo, come in Notion: mette una riga
+  vuota e porta lì il testo dopo il cursore, così ogni paragrafo è un blocco
+  suo, ed Esc e Backspace toccano soltanto quello. Maiusc+Invio va a capo
+  dentro il paragrafo. Sulla riga di una tabella scritta a mano e dopo un a
+  capo forzato (`\` o due spazi in fondo) Invio resta un a capo solo; titoli,
+  elenchi, citazioni e codice hanno il loro Invio.
+- Backspace all'inizio di un paragrafo lo unisce al testo del blocco sopra; sulla
+  riga vuota che Invio ha appena aperto torna in fondo al paragrafo in un colpo.
 - Dentro un blocco di codice Tab e Shift+Tab rientrano il codice.
 - Mod+Alt+0 fa un paragrafo, Mod+Alt+1…3 un titolo, 4 un'attività, 5 un
   elenco puntato, 6 uno numerato, 7 un ripiegabile, 8 un blocco di codice;
@@ -181,6 +189,7 @@ pagina e la resa dei segni restano, il «/» resta, e i gesti cambiano così.
 | --- | --- | --- |
 | Maniglia e «+» | al passaggio e sul blocco del cursore | non ci sono |
 | Mod+A | il testo del blocco, poi tutti i blocchi | il corpo della nota, dal primo all'ultimo blocco; titolo e proprietà fuori; la seconda volta niente |
+| Invio in un paragrafo | apre un paragrafo nuovo; Maiusc+Invio va a capo dentro | va a capo |
 | Esc | seleziona il blocco del cursore | chiude ciò che è aperto; con Vim resta di Vim |
 | Mod+Shift+↑/↓ | sposta il blocco o la selezione di blocchi | sposta la riga, o le righe scelte, senza entrare nella testata |
 | Mod+D | duplica il blocco | sceglie la prossima occorrenza, con un cursore in più |

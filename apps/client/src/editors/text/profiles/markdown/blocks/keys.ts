@@ -1,7 +1,8 @@
 // I tasti di Scrittura, coi blocchi accesi e spenti (`editor.blocks`, E2).
 //
 // Accesi: Mod-Shift-↑/↓ spostano il blocco (H5), Backspace all'inizio di un
-// testo lo unisce al blocco sopra (H8), Mod-a prende il testo del blocco e poi
+// testo lo unisce al blocco sopra (H8), Invio in un paragrafo ne apre uno
+// nuovo (Maiusc+Invio va a capo dentro), Mod-a prende il testo del blocco e poi
 // tutti i blocchi, Mod-d duplica il blocco, e dentro un blocco di codice Tab
 // rientra il codice (C4).
 // Spenti, come un editor di testo: Mod-a il corpo della nota (titolo e
@@ -18,7 +19,7 @@ import { getCM } from "@replit/codemirror-vim";
 import { calloutHead } from "../callout-head";
 import { keepingHeader, movesHeader } from "../commands";
 import { frontmatterRange } from "../render";
-import { type Block, type BlockKind, subtreeEnd } from "./model";
+import { type Block, type BlockKind, innermostAt, subtreeEnd } from "./model";
 import { cursorRun, moveRun, siblingsOf } from "./move";
 import { blockSelection, duplicateRun, runOfSelection, selectBlocks, setBlockSelection, spanOf, vimOn } from "./selection";
 import { modelOf, unwrap } from "./transform";
@@ -79,11 +80,66 @@ export function mergeUpChange(state: EditorState, blocks: readonly Block[]): { f
 
 const mergeUp: Command = (view) => {
   if (view.state.readOnly) return false;
-  const range = mergeUpChange(view.state, modelOf(view.state));
+  const blocks = modelOf(view.state);
+  const range = mergeUpChange(view.state, blocks) ?? emptyParagraphChange(view.state, blocks);
   if (!range) return false;
   view.dispatch({ changes: range, selection: EditorSelection.cursor(range.from), userEvent: "delete.backward", scrollIntoView: true });
   return true;
 };
+
+/// Una riga che chiede un a capo vero: la riga di una tabella che si sta
+/// scrivendo (un `|` davanti: la riga dei trattini viene dopo, senza righe
+/// vuote) o un a capo forzato di Markdown in fondo (`\` o due spazi).
+const TABLE_ROW = /^\s*\|/;
+const HARD_BREAK = /(?:\\| {2,})$/;
+
+/// Invio coi blocchi, come in Notion e nel prototipo: dentro un paragrafo
+/// apre un paragrafo nuovo (una riga vuota in mezzo, cioè un blocco suo), e il
+/// testo dopo il cursore ci va dentro. Senza, le righe scritte con Invio
+/// sarebbero un paragrafo solo di Markdown, e Esc e Backspace le
+/// prenderebbero tutte insieme, la nota intera se è tutta lì (IMP-6106).
+/// L'a capo dentro il paragrafo resta Maiusc+Invio. Altrove (titoli, elenchi,
+/// citazioni, codice, una riga vuota) Invio è quello di sempre.
+function paragraphBreakChange(state: EditorState, blocks: readonly Block[]): { from: number; to: number; insert: string } | null {
+  const { main } = state.selection;
+  if (!main.empty || state.selection.ranges.length > 1) return null;
+  const index = innermostAt(blocks, main.head);
+  if (index < 0 || blocks[index]!.kind !== "paragraph") return null;
+  const block = blocks[index]!;
+  if (TABLE_ROW.test(state.doc.lineAt(block.from).text)) return null;
+  const line = state.doc.lineAt(main.head);
+  if (main.head === line.to && HARD_BREAK.test(line.text)) return null;
+  return { from: main.head, to: main.head, insert: "\n\n" };
+}
+
+const paragraphBreak: Command = (view) => {
+  if (view.state.readOnly) return false;
+  const change = paragraphBreakChange(view.state, modelOf(view.state));
+  if (!change) return false;
+  view.dispatch({
+    changes: change,
+    selection: EditorSelection.cursor(change.from + change.insert.length),
+    userEvent: "input",
+    scrollIntoView: true,
+  });
+  return true;
+};
+
+/// Backspace sulla riga vuota che Invio ha appena aperto sotto un paragrafo:
+/// torna in fondo al paragrafo in un colpo, come in Notion, invece di
+/// mangiare una riga vuota alla volta.
+function emptyParagraphChange(state: EditorState, blocks: readonly Block[]): { from: number; to: number } | null {
+  const { main } = state.selection;
+  if (!main.empty || state.selection.ranges.length > 1) return null;
+  const line = state.doc.lineAt(main.head);
+  if (line.text !== "" || line.number < 3) return null;
+  const gap = state.doc.line(line.number - 1);
+  const text = state.doc.line(line.number - 2);
+  if (gap.text.trim() !== "" || text.text.trim() === "") return null;
+  const index = innermostAt(blocks, text.to);
+  if (index < 0 || blocks[index]!.kind !== "paragraph" || blocks[index]!.to !== text.to) return null;
+  return { from: text.to, to: main.head };
+}
 
 /// Il testo del blocco di codice recintato che contiene `pos`.
 export function codeTextAt(state: EditorState, pos: number): { from: number; to: number } | null {
@@ -226,6 +282,7 @@ const duplicateBlock: Command = (view) => {
 
 export const blockKeys: readonly KeyBinding[] = [
   { key: "Backspace", run: guarded(mergeUp) },
+  { key: "Enter", run: guarded(paragraphBreak) },
   { key: "Tab", run: guarded(codeTab) },
   { key: "Shift-Tab", run: guarded(codeUntab) },
 ];
