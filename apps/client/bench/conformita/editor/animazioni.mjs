@@ -22,9 +22,10 @@
 //   dove l'ha lasciato il gesto (un blocco trascinato): se ne confronta il
 //   progresso, non lo scarto di partenza.
 //
-// Una riga dell'inventario (`docs/misure/animazioni-editor/<area>.md`) diventa
-// una voce: «elemento» dà gli elementi, «causa» il gesto, «proprietà» le
-// proprietà; «da → a», durata, ritardo, curva e moto ridotto li misura il banco.
+// Una riga dell'inventario delle animazioni diventa una voce: «elemento» dà gli
+// elementi, «causa» il gesto, «proprietà» le proprietà; «da → a», durata,
+// ritardo, curva e moto ridotto li misura il banco (`docs/development/
+// visual-bench.md`, «Le animazioni»).
 import { passo } from "./comuni.mjs";
 
 const MANIGLIA_APP = '.pane.focus .pane-editor .cm-fub-block-handles[data-active="true"] .cm-fub-block-grip';

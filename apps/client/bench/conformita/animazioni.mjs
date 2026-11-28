@@ -7,7 +7,7 @@
 //     node bench/conformita/animazioni.mjs --estrai editor   # rigenera i valori attesi dal prototipo
 //
 // Le voci stanno nella mappa del prototipo (`ANIMAZIONI` di
-// `mappa-<prototipo>.mjs`, scritte in `editor/animazioni-*.mjs`). Per ogni
+// `mappa-<prototipo>.mjs`, scritte in `editor/animazioni.mjs`). Per ogni
 // voce, ogni stato (di base le due luci a 1280 px) e ogni moto (pieno e
 // ridotto):
 //
