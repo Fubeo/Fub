@@ -39,7 +39,9 @@
 //   lo stesso, come un'eccezione non più usata, così chi le corregge le toglie
 //   da qui. Non è un'eccezione: un'eccezione è una differenza voluta, con il
 //   suo motivo in DECISIONS o nel piano (`eccezioni-<prototipo>.json`); qui
-//   c'è una differenza da correggere.
+//   c'è una differenza da correggere. Una voce con `escluso` (la ragione,
+//   per esempio «fuori dal foglio della cornice») vale come le altre, ma è
+//   fuori dal lavoro che corregge queste: il riassunto la conta a parte.
 //
 // Un task grafico aggiunge i suoi pezzi nel file di `editor/pezzi-*.mjs` della
 // sua area (le viste in `editor/viste.mjs`, gli stati e gli aiuti comuni in
@@ -150,6 +152,11 @@ export const PEZZI = [
   ...PEZZI_ESPORTA_PDF,
 ];
 
+/// La ragione delle voci escluse: la cornice della finestra, la banda di
+/// stato e l'ispettore non sono nel foglio della cornice nuova, e li corregge
+/// un altro lavoro.
+const FUORI_DAL_FOGLIO = "fuori dal foglio della cornice";
+
 /// I pezzi che hanno ancora differenze, e chi li corregge. Non si
 /// confrontano finché non passano in `PEZZI`.
 export const DA_COPRIRE = [
@@ -162,6 +169,7 @@ export const DA_COPRIRE = [
   // ── pezzi che la mappa nomina ma non può ancora leggere ──────────────────
   {
     id: "compiti.ispettore",
+    escluso: FUORI_DAL_FOGLIO,
     prototipo: ".trow",
     app: '.declared-view[data-view-id="tasks"] .ui-list-item',
     perche:
@@ -195,118 +203,87 @@ export const DA_COPRIRE = [
   // docs/misure/2026-11-21-conformita-editor.md: nessun lavoro le ha ancora
   // corrette; quando una torna uguale al prototipo la voce diventa rossa.
   {
-    id: "base.vista-scelta",
-    proprieta: ["line-height"],
-    perche: "controllo del 2026-11-21: l'interlinea delle schede delle viste segue quella del testo dell'app",
-  },
-  {
-    id: "base.vista",
-    proprieta: ["line-height"],
-    perche: "controllo del 2026-11-21: l'interlinea delle schede delle viste segue quella del testo dell'app",
-  },
-  {
     id: "base.attrezzo",
-    proprieta: ["padding", "line-height", "opacity"],
-    perche: "controllo del 2026-11-21: attrezzi più stretti; il primo («Nuova vista») nell'app è spento dentro la nota, nel prototipo no",
-  },
-  {
-    id: "base.nuova-riga",
-    proprieta: ["font-weight", "color"],
-    perche: "controllo del 2026-11-21: «Nuova riga» nell'app è in colore testo e semigrassetto, nel prototipo attenuata",
+    proprieta: ["opacity"],
+    perche:
+      "«+ Nuova vista» è spento nella `![[Opere.base#Tabella]]` della scena: `mountBaseEmbed` (`editors/base/surface.ts`) tratta ogni Base incorporata come il blocco ```base``` della nota (`sourceInNote`), perché il kernel le manda tutte col sorgente; DECISIONS 2026-11-15 T15 vuole i gesti sulla Base incorporata da file. Si corregge nella superficie della Base, non nel tema",
   },
   {
     id: "cornice.barra",
+    escluso: FUORI_DAL_FOGLIO,
     proprieta: ["height", "padding", "gap", "color"],
     perche: "controllo del 2026-11-21: barra del titolo alta 40 invece di 44, senza margini e spazi propri",
   },
   {
     id: "cornice.pillola",
+    escluso: FUORI_DAL_FOGLIO,
     proprieta: ["padding", "margin", "border-radius", "box-shadow", "font-size", "line-height", "background-color", "height"],
     perche: "controllo del 2026-11-21: pillola alta 28, a 14 px, senza filo, su un altro fondo",
   },
   {
     id: "cornice.pillola-testo",
+    escluso: FUORI_DAL_FOGLIO,
     proprieta: ["font-size", "line-height"],
     perche: "controllo del 2026-11-21: il titolo nella pillola a 14 px invece di 13",
   },
   {
     id: "cornice.vault",
+    escluso: FUORI_DAL_FOGLIO,
     proprieta: ["padding", "border-radius"],
     perche: "controllo del 2026-11-21: angoli e margine sinistro del nome del vault",
   },
   {
     id: "cornice.pulsante",
+    escluso: FUORI_DAL_FOGLIO,
     proprieta: ["gap", "border-radius", "font-size", "line-height"],
     perche: "controllo del 2026-11-21: i pulsanti della barra del titolo a 12 px e con angoli da 8",
   },
   {
     id: "banda.fascia",
+    escluso: FUORI_DAL_FOGLIO,
     proprieta: ["height", "padding", "gap"],
     perche: "controllo del 2026-11-21: la banda di stato alta 26 invece di 32",
   },
   {
     id: "banda.salvato",
+    escluso: FUORI_DAL_FOGLIO,
     proprieta: ["width", "height", "border-radius", "background-color", "margin-right"],
     perche: "controllo del 2026-11-21: il pallino «salvato» da 6 px, nel verde di --success invece dell'accento, attaccato al testo",
   },
   {
     id: "banda.modo",
+    escluso: FUORI_DAL_FOGLIO,
     proprieta: ["padding", "gap", "border-radius", "font-weight", "color", "height"],
     perche: "controllo del 2026-11-21: il pulsante del modo più basso, attenuato e non semigrassetto",
   },
   {
     id: "banda.modo-freccia",
+    escluso: FUORI_DAL_FOGLIO,
     proprieta: ["width", "height"],
     perche: "controllo del 2026-11-21: la freccia del modo da 12 px invece di 14",
   },
   {
-    id: "barra.superficie",
-    proprieta: ["font-size", "line-height", "color", "height"],
-    perche: "controllo del 2026-11-21: barra di formato alta 36 a 12 px, in colore attenuato",
-  },
-  {
-    id: "barra.pulsante",
-    proprieta: ["font-size", "line-height", "opacity"],
-    perche: "controllo del 2026-11-21: pulsanti della barra a 12 px; nella scena il primo (Annulla) è spento, nel prototipo acceso",
-  },
-  {
-    id: "barra.stile",
-    proprieta: ["font-size", "line-height"],
-    perche: "controllo del 2026-11-21: il menu dello stile a 12 px",
-  },
-  {
-    id: "barra.freccia",
-    proprieta: ["width", "height"],
-    perche: "controllo del 2026-11-21: la freccia dello stile da 12 px invece di 14",
-  },
-  {
-    id: "barra.inserisci",
-    proprieta: ["font-size", "line-height"],
-    perche: "controllo del 2026-11-21: «Inserisci» a 12 px",
-  },
-  {
     id: "ispettore.superficie",
+    escluso: FUORI_DAL_FOGLIO,
     proprieta: ["width", "padding", "background-color"],
     perche: "controllo del 2026-11-21: l'ispettore largo 264 su fondo pieno, senza margini interni",
   },
   {
     id: "ispettore.schede",
+    escluso: FUORI_DAL_FOGLIO,
     proprieta: ["margin", "border-radius", "background-color", "height"],
     perche: "controllo del 2026-11-21: le schede dell'ispettore alte 30, angoli da 8, su un altro fondo",
   },
   {
     id: "ispettore.scheda-scelta",
+    escluso: FUORI_DAL_FOGLIO,
     proprieta: ["border-radius", "box-shadow", "background-color", "height"],
     perche: "controllo del 2026-11-21: la scheda scelta alta 26, angoli da 6, ombra e fondo diversi",
   },
   {
     id: "ispettore.scheda",
+    escluso: FUORI_DAL_FOGLIO,
     proprieta: ["border-radius", "height"],
     perche: "controllo del 2026-11-21: le schede alte 26 con angoli da 6",
-  },
-  {
-    id: "sorgente.testo",
-    proprieta: ["font-size", "white-space"],
-    perche: "controllo del 2026-11-21: la Sorgente a 14 px invece di 13",
   },
 ];

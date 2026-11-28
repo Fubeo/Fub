@@ -54,5 +54,17 @@
     "proprieta": "height",
     "motivo": "Nel prototipo .cvz è alta 300 px sotto la testata (e si stringe a 295 o 279 px nella colonna flessibile); in Fub l'altezza dell'embed (|640x300) è quella di tutta la scheda, testata compresa, per ogni specie (live-cards.css, height: calc(var(--live-card-height) - 35px)): la zona è 265 px, e la nota occupa i 300 px che l'embed scrive.",
     "riferimento": "PLAN.md, T47 «Dal prototipo» (passo 18, .cvz) e T43 (misura dell'embed, docs/product/live-cards.md «Misura, «Mostra come», affiancare»)"
+  },
+  {
+    "pezzo": "barra.pulsante",
+    "proprieta": "opacity",
+    "motivo": "Il primo pulsante della barra è Annulla, e nella scena non c'è niente da annullare: la superficie lo dice spento e la fila del kit lo attenua (opacity 0,4, .kit-bar-button:disabled). Il prototipo non ha una cronologia e disegna Annulla sempre acceso; acceso a vuoto prometterebbe un gesto che non fa niente. Acceso, Annulla ha l'opacità del prototipo (1).",
+    "riferimento": "apps/client/src/panels/format-bar.ts, «Chi decide cosa» (la superficie dice lo stato di un'azione: premuta o spenta)"
+  },
+  {
+    "pezzo": "sorgente.testo",
+    "proprieta": "white-space",
+    "motivo": "La Sorgente va a capo con EditorView.lineWrapping di CodeMirror, che scrive white-space: break-spaces sul contenuto: gli spazi in fondo a una riga che va a capo restano spazi veri, e il cursore ci si ferma; con pre-wrap del prototipo sparirebbero a fine riga e il cursore salterebbe. A vista le righe vanno a capo negli stessi punti.",
+    "riferimento": "apps/client/src/editors/text/engine.ts (layout.lineWrap → EditorView.lineWrapping); @codemirror/view, tema di .cm-lineWrapping"
   }
 ]

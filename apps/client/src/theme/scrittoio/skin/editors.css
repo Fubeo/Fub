@@ -149,12 +149,13 @@
 .pane-editor .cm-editor.cm-focused {
   outline: none;
 }
-/* Sorgente: lo stesso testo in monospazio, con l'aria della prosa. Un file che
-   non è Markdown è codice, e sta più serrato. */
+/* Sorgente: lo stesso testo in monospazio, con l'aria della prosa (13/1,75,
+   il `.src` del prototipo dell'editor). Un file che non è Markdown è codice,
+   e sta più serrato. */
 .pane-editor[data-markdown-mode="source"] .cm-content {
   font-family: var(--font-mono);
-  font-size: var(--text-source);
-  line-height: var(--leading-relaxed);
+  font-size: var(--text-base);
+  line-height: 1.75;
 }
 .pane-editor:not([data-markdown-mode]) > .cm-editor .cm-content {
   font-family: var(--font-mono);
@@ -175,7 +176,7 @@
   line-height: calc(var(--text-source) * var(--leading-normal));
 }
 .pane-editor[data-markdown-mode="source"] .cm-scroller .cm-gutters {
-  line-height: calc(var(--text-source) * var(--leading-relaxed));
+  line-height: calc(var(--text-base) * 1.75);
 }
 /* In Sorgente i numeri stanno accanto alla colonna, non sul bordo del foglio:
    su un foglio largo resterebbero a mezzo schermo dal testo che contano. La
