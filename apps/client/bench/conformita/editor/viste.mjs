@@ -1,8 +1,10 @@
 // Le viste della mappa dell'editor: come si porta l'app e il prototipo allo stesso punto.
 // Un pezzo di `bench/conformita/mappa-editor.mjs`, che lo monta.
 import { LARGHI, TUTTI, chiudiPannello, passo } from "./comuni.mjs";
+import { VISTE_BLOCCHI_FOGLI } from "./viste-blocchi-fogli.mjs";
 
 export const VISTE = {
+  ...VISTE_BLOCCHI_FOGLI,
   /// Il lanciatore Ctrl O sul modo Tutto, con le note nell'elenco e
   /// l'anteprima della prima. Il prototipo lo apre dalla pillola (`cmdk()`,
   /// riga 4342) a campo vuoto: le «Recenti» sono note, e la prima è attiva

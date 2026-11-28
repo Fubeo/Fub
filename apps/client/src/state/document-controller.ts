@@ -49,6 +49,7 @@ import { createPerson, isPersonTarget, peopleFolder, searchPeople } from "./peop
 import { dailyDate, dailyPath, firstWeekday } from "./dates";
 import { linkCardView, requestLinkCard } from "./link-cards";
 import { holdNoteCard, mountNoteCards, noteCardView, watchNoteCards } from "./note-cards";
+import { linkTargetMissing, mountLinkTargets, watchLinkTargets } from "./link-targets";
 import { themeSeries } from "../theme/theme";
 import { api } from "../host/ipc";
 import { WITHOUT_PAGE, existingDocuments, notesByName, renderPrint, resolvedReference, settings, vaultEntries, vaultTags } from "../host/query";
@@ -337,6 +338,7 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
     dismissNotePeek();
   });
   mountNoteCards(lifetime);
+  mountLinkTargets(lifetime);
   watchLinkClick(lifetime);
  // L'esportazione chiesta da fuori (T79): finché la shell è aperta dice al
   // core che sa impaginare, e impagina fuori dallo schermo le note che un
@@ -515,12 +517,15 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
     pageIcons: {
       icon: linkedPageIcon,
       isPerson: (page) => isPersonTarget(page),
+      missing: linkTargetMissing,
       watch: (changed) => {
         const icons = on("page-icons", changed);
         const people = on("people", changed);
+        const targets = watchLinkTargets(changed);
         return () => {
           icons();
           people();
+          targets();
         };
       },
     },

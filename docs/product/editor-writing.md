@@ -13,7 +13,11 @@
 Una nota Markdown ha tre modalità:
 
 - **Scrittura**, dove si scrive sulla pagina resa: i segni Markdown si
-  attenuano o spariscono, e coi blocchi accesi ogni blocco ha la sua maniglia;
+  attenuano o spariscono, e coi blocchi accesi ogni blocco ha la sua maniglia.
+  Le entità HTML (`&amp;`, `&lt;`, `&#39;`) fuori dal codice, dall'HTML
+  grezzo e dai wikilink si leggono risolte, come in Lettura; il file le tiene
+  scritte com'erano, e la sorgente torna dove tornano i segni (la riga del
+  cursore, o accanto all'entità con gli altri livelli);
 - **Sorgente**, con la sintassi esplicita;
 - **Lettura**, la resa senza cursore di testo (**Ctrl+E** ci va e torna alla
   modalità di prima).
@@ -134,6 +138,7 @@ sta facendo. Niente finestre che coprono il lavoro: la riga suggerisce e basta.
 | Dove sta il cursore | Che cosa dice la riga |
 | --- | --- |
 | in una riga qualunque | «/ inserisce un blocco · @ persone e date · Ctrl+O cerca o esegue · Esc seleziona il blocco» |
+| in un paragrafo, coi blocchi accesi | come sopra, e dopo «@» anche «Shift+Enter a capo nel paragrafo»: lì Invio apre un paragrafo nuovo ([i blocchi](editor-blocks.md)) |
 | su un testo scelto | «Ctrl+B grassetto · Ctrl+I corsivo · Ctrl+K collega» |
 | in un compito | «Ctrl+Enter spunta · @ una data diventa la scadenza · Tab rientra» |
 | su un link | «Ctrl sopra il link: l'anteprima · Alt+Enter lo apre» |
@@ -200,8 +205,9 @@ lascia il foglio e poco altro:
   attenua nei colori, leggibile, e torna piena al passaggio o col fuoco;
 - nel foglio che ha il fuoco resta acceso il blocco del cursore (le righe fino
   alla riga vuota prima e dopo, o tutte quelle che una scelta attraversa) e gli
-  altri si attenuano; la riga sotto il puntatore si riaccende. Vale in ogni
-  modalità e in ogni linguaggio, e segna soltanto le righe montate;
+  altri si attenuano in un quarto di secondo; la riga sotto il puntatore si
+  riaccende. Col moto ridotto il cambio è immediato. Vale in ogni modalità e
+  in ogni linguaggio, e segna soltanto le righe montate;
 - la banda resta, con «Esci dalla concentrazione»; la riga dei suggerimenti
   dice che Esc esce;
 - Esc esce quando nessuno lo prende prima: un menu, un dialogo o la sbirciata

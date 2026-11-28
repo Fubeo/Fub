@@ -14,6 +14,13 @@ in Scrittura come un vassoio col filo d'accento: in testata la provenienza
 sta. L'embed di un blocco (`![[Riunioni#^decisioni]]`) è un blocco
 sincronizzato, qui sotto: le regole del salvataggio sono le stesse.
 
+Finché la nota riportata non arriva, il suo posto tiene l'altezza che aveva
+l'ultima volta che si è vista a quella larghezza, anche in Lettura: il testo
+sotto non salta. La memoria è della finestra, non del file
+(`editors/text/profiles/markdown/embed-heights.ts`). La prima volta, nella
+Scrittura che si scrive, il posto tiene almeno il vassoio con una riga, e
+cresce quando il contenuto arriva.
+
 - **Modifica qui**, o Invio sul blocco scelto, o «Modifica qui» nel gruppo
   «Trasclusione» della barra, apre dentro l'embed un editor sul solo tratto,
   col bordo d'accento e la fascia «Scrivi in X: si salva là, con la sua

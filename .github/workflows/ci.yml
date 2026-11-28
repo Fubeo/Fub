@@ -651,8 +651,16 @@ jobs:
         id: bench_conformita
         run: npm run bench:conformita
         working-directory: apps/client
+      # Le animazioni dei pezzi portati, contro quelle del prototipo: tempo
+      # fermo dai due lati, moto pieno e ridotto, nelle due luci
+      # (`bench/conformita/animazioni.mjs`). Stesso palco del passo sopra.
+      - name: le animazioni seguono il prototipo
+        id: bench_animazioni
+        if: ${{ !cancelled() && steps.bench_conformita.outcome != 'skipped' }}
+        run: npm run bench:animazioni
+        working-directory: apps/client
       - name: referto della conformità al prototipo
-        if: ${{ failure() && steps.bench_conformita.outcome == 'failure' }}
+        if: ${{ failure() && (steps.bench_conformita.outcome == 'failure' || steps.bench_animazioni.outcome == 'failure') }}
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: conformita-${{ github.sha }}

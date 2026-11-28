@@ -63,7 +63,7 @@ vi.mock("../../../i18n/strings", () => ({
   },
 }));
 
-import { mountHeadingThread } from "./heading-thread";
+import { mountHeadingThread, WIDE_ROOM } from "./heading-thread";
 
 /// L'osservatore delle misure, che happy-dom non fa scattare: lo si fa a mano.
 class Resize {
@@ -391,6 +391,24 @@ describe("il filo dei titoli: lo spazio", () => {
     Resize.fire(made.panel);
     expect(shown(made)).toBe(true);
     expect(asked).toHaveLength(1);
+  });
+
+  it("col margine largo le tacche prendono il puntatore su 24 px, in uno stretto no", async () => {
+    // UX-021: la zona larga 24 px coprirebbe, in un margine stretto, la barra
+    // «Aggiungi una colonna» di una tabella.
+    const made = sheet("p1", "Guida/Sintassi.md", { margin: WIDE_ROOM - 1 });
+    mountHeadingThread(lifetime);
+    await settled();
+    expect(shown(made)).toBe(true);
+    expect(navOf(made)?.dataset.room).toBeUndefined();
+
+    measure(made, 672, WIDE_ROOM);
+    Resize.fire(made.panel);
+    expect(navOf(made)?.dataset.room).toBe("wide");
+
+    measure(made, 672, 32);
+    Resize.fire(made.panel);
+    expect(navOf(made)?.dataset.room).toBeUndefined();
   });
 
   it("in Lettura misura l'anteprima, non l'editor", async () => {

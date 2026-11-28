@@ -6,9 +6,9 @@
    è del foglio — e i suoi comandi non sono strisce attaccate ai bordi ma
    pillole in rialzo posate sopra: l'oggetto resta solo sulla pagina.
 
-   Dentro il foglio non si dichiarano transizioni: `motion.css` le spegne tutte
-   sotto `.pane-editor`. La lightbox e le slide stanno fuori, sul corpo della
-   pagina, e lì il moto è quello delle modali.
+   Dentro il foglio le transizioni vivono come nel prototipo (`motion.css`
+   ferma solo la scrittura, e tutto col moto ridotto). La lightbox e le slide
+   stanno fuori, sul corpo della pagina, e lì il moto è quello delle modali.
 */
 
 /* ── La superficie ───────────────────────────────────────────────────────── */

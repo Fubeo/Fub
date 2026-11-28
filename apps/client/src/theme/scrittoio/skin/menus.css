@@ -780,8 +780,16 @@
    blocco a parole, il gruppo del blocco sul velo d'accento col suo nome in
    maiuscoletto, e «+ Inserisci» in fondo a destra, rialzato sul vassoio.
    È la barra del prototipo dell'editor (`.fbar`), coi gettoni di Fub; il
-   menu che apre è un menu come gli altri. */
+   menu che apre è un menu come gli altri. Il vassoio scrive come il
+   prototipo (13/1,45, inchiostro pieno) e non come la fila del kit, e la sua
+   altezza è quella dei pulsanti più il bordo del vassoio (28 + 3 + 3), come
+   `.fbar`, non la misura ferma della barra di un riquadro. */
 .format-bar-follow.kit-bar {
+  flex: none;
+  height: auto;
+  color: var(--text);
+  font-size: var(--text-base);
+  line-height: var(--leading-normal);
   gap: var(--space-1);
   margin: 0 var(--space-5) var(--space-1);
   padding: 3px;
@@ -810,6 +818,7 @@
 }
 .format-bar-follow .kit-bar-button {
   height: 28px;
+  line-height: inherit;
   min-width: 28px;
   padding: 0 var(--space-3);
   border-radius: 7px;
@@ -829,9 +838,17 @@
 .format-bar-follow .format-bar-labelled {
   padding: 0 var(--space-4);
 }
+/* Nella finestra stretta (sotto i 940 px, il `@container win` del
+   prototipo) i gesti del blocco restano la figura sola, col nome nel
+   suggerimento e in `aria-label`; lo stile e «Inserisci» tengono il nome. */
+@media (max-width: 940px) {
+  .format-bar-follow .format-bar-labelled:not(.format-bar-insert, .format-bar-style):has(svg:not(.format-bar-caret)) > .format-bar-text {
+    display: none;
+  }
+}
 .format-bar-follow .format-bar-caret {
-  width: 12px;
-  height: 12px;
+  width: 14px;
+  height: 14px;
   margin-left: -1px;
   color: var(--muted);
 }

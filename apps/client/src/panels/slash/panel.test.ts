@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { SlashChoice, SlashPanelEvents, SlashPlace, SlashTransform } from "../../editors/core/editor-menu";
 import { slashCatalog, slashMenuEntries } from "./entries";
 import { ALL, SPECS } from "./fixture.test-data";
-import { createSlashPanel, type SlashPanelDeps } from "./panel";
+import { createSlashPanel, tileLabel, type SlashPanelDeps } from "./panel";
 
 const EMPTY: SlashPlace = { line: "empty", above: null, inList: false };
 const today = new Date(2026, 9, 29);
@@ -63,7 +63,7 @@ describe("il pannello del «/» in inglese", () => {
     vi.stubGlobal("navigator", { ...navigator, language: "en-US", platform: "Linux" });
     const { made, key } = panel();
     made.update("", EMPTY);
-    expect([...made.dom.querySelectorAll(".slash-tile")].map((tile) => tile.textContent)).toEqual(["Tasks", "Heading", "Callout", "Table", "Bullets", "Code"]);
+    expect([...made.dom.querySelectorAll(".slash-tile")].map((tile) => tile.textContent)).toEqual(["Task", "Heading", "Callout", "Table", "Bulleted", "Code"]);
     expect(made.dom.querySelector(".slash-group-label")?.textContent).toBe("Text");
     key("ArrowRight");
     expect(made.dom.querySelector(".slash-syntax")?.textContent).toBe("Typing ## · also /h2");
@@ -82,7 +82,7 @@ describe("il pannello del «/»", () => {
     expect(choices.getAttribute("role")).toBe("listbox");
     expect(choices.id).toBe(made.listId);
     const tiles = [...made.dom.querySelectorAll<HTMLElement>(".slash-top .slash-tile")];
-    expect(tiles.map((tile) => tile.textContent)).toEqual(["Attività", "Titolo", "Riquadro", "Tabella", "Punti", "Codice"]);
+    expect(tiles.map((tile) => tile.textContent)).toEqual(["Attività", "Titolo", "Riquadro", "Tabella", "Puntato", "Codice"]);
     expect(tiles[0]!.getAttribute("aria-label")).toBe("Elenco di attività");
     expect(tiles.every((tile) => tile.getAttribute("role") === "option" && tile.tabIndex === -1)).toBe(true);
     expect([...made.dom.querySelectorAll(".slash-group-label")].map((label) => label.textContent)).toContain("Testo");
@@ -310,5 +310,22 @@ describe("il pannello del «/»", () => {
     made.update("", EMPTY);
     made.close();
     expect(key("ArrowDown")).toBe(false);
+  });
+});
+
+// UX-015: la tessera e la riga dello stesso blocco non hanno due nomi. Il nome
+// breve sotto il quadrato è una parola del nome intero («Puntato» di «Elenco
+// puntato», «Attività» di «Elenco di attività»), come il sottomenu «Tipo di
+// elenco» del prototipo. «Piega» resta: «Ripiegabile» non sta sotto i 40 px.
+describe("i nomi brevi delle tessere", () => {
+  it("ogni nome breve è una parola del nome intero del comando", () => {
+    const words = (text: string) => new Set(text.toLocaleLowerCase("it").split(/[\s']+/u));
+    const { listed } = slashCatalog(SPECS, ALL, use);
+    const checked = listed.filter((entry) => entry.id !== "markdown.details" && entry.id.startsWith("markdown.") && !entry.id.startsWith("markdown.color") && !entry.id.startsWith("markdown.background"));
+    expect(checked.length).toBeGreaterThan(15);
+    for (const entry of checked) {
+      const short = tileLabel(entry).toLocaleLowerCase("it").replace(/ \d$/u, "");
+      expect([entry.id, short === entry.label.toLocaleLowerCase("it") || words(entry.label).has(short)]).toEqual([entry.id, true]);
+    }
   });
 });

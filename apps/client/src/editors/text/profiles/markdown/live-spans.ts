@@ -179,3 +179,52 @@ export function grownSpan(from: number, to: number, marks: readonly Span[]): Spa
   }
   return { from, to };
 }
+
+/// I tratti coperti da uno dei due elenchi e non dall'altro.
+export function symmetricDifference(
+  a: readonly { from: number; to: number }[],
+  b: readonly { from: number; to: number }[],
+): { from: number; to: number }[] {
+  const out: { from: number; to: number }[] = [];
+  const key = (range: { from: number; to: number }) => `${range.from}:${range.to}`;
+  const inB = new Set(b.map(key));
+  const inA = new Set(a.map(key));
+  for (const range of a) if (!inB.has(key(range))) out.push(range);
+  for (const range of b) if (!inA.has(key(range))) out.push(range);
+  return out;
+}
+
+/// I tratti dove uno dei due elenchi copre il testo e l'altro no, coi punti
+/// dove la copertura cambia in uno solo dei due: anche un bordo che si sposta
+/// conta.
+export function uncovered(
+  a: readonly { from: number; to: number }[],
+  b: readonly { from: number; to: number }[],
+): { from: number; to: number }[] {
+  const edges = (list: readonly { from: number; to: number }[]) => new Set(list.flatMap((range) => [range.from, range.to]));
+  const inA = edges(a);
+  const inB = edges(b);
+  const covers = (list: readonly { from: number; to: number }[], pos: number) => list.some((range) => range.from <= pos && pos < range.to);
+  const points = [...new Set([...inA, ...inB])].sort((x, y) => x - y);
+  const out: { from: number; to: number }[] = [];
+  for (let index = 0; index < points.length; index++) {
+    const at = points[index]!;
+    // Un bordo di uno soltanto: il nodo che lo tiene cambia taglio.
+    if (inA.has(at) !== inB.has(at)) out.push({ from: at, to: at });
+    const next = points[index + 1];
+    if (next !== undefined && covers(a, at) !== covers(b, at)) out.push({ from: at, to: next });
+  }
+  return out;
+}
+
+/// I tratti in ordine, uniti quando si toccano.
+export function mergeRanges(ranges: { from: number; to: number }[]): { from: number; to: number }[] {
+  ranges.sort((x, y) => x.from - y.from);
+  const out: { from: number; to: number }[] = [];
+  for (const range of ranges) {
+    const last = out[out.length - 1];
+    if (last && range.from <= last.to) last.to = Math.max(last.to, range.to);
+    else out.push({ from: range.from, to: range.to });
+  }
+  return out;
+}

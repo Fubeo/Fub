@@ -226,7 +226,7 @@ globalThis.__fubTreeBench = Object.freeze({
 // `?live=<caso>` mette nel vault la nota delle scene della Live
 // (`live-fixture.ts`), con il punto del cursore che la scena legge da qui.
 // Soltanto le scene che la chiedono la hanno.
-export const LIVE = liveCase(params.get("live"));
+export const LIVE = liveCase(params.get("live"), params.get("testo"));
 
 globalThis.__fubLiveBench = Object.freeze({
   doc: LIVE === null ? null : LIVE_DOC,

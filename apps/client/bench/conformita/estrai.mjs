@@ -56,6 +56,26 @@ const commit = git("rev-parse", `${rev}^{commit}`);
 const cartella = PROTOTIPO.file.split("/")[0];
 const temp = await mkdtemp(join(tmpdir(), "fub-conformita-"));
 
+/// Aspetta che la finestra del prototipo arrivi alla larghezza scelta, poi le
+/// fa rifare le misure. `.win` scorre sulla sua `max-width` per 0,28 s anche
+/// col moto ridotto (le sue regole spengono le transizioni di `.win *`, non
+/// della finestra stessa), e il prototipo calcola alcune misure in JS dalla
+/// larghezza del momento: l'altezza della lavagna (`renderCv`, 300 px per
+/// larghezza/720) si ricalcola solo a un `resize` o a un `renderMargin`.
+/// Letta a metà corsa, `schede.lavagna.zona` a 700 px veniva 279 o 260 px
+/// secondo il momento; a larghezza ferma è 224 (controllo del 2026-11-28).
+async function larghezzaFerma(page) {
+  await page.evaluate(async (radice) => {
+    const win = document.querySelector(radice);
+    if (!win) return;
+    // Lo stile calcolato fa partire la transizione, se non è ancora partita.
+    void getComputedStyle(win).maxWidth;
+    await Promise.all(win.getAnimations().map((a) => a.finished.catch(() => null)));
+    window.dispatchEvent(new Event("resize"));
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+  }, radiceSchermo);
+}
+
 /// Aspetta che nel prototipo non scorra più niente: animazioni d'entrata e
 /// transizioni dei passaggi del mouse cambiano proprio gli stili che si
 /// leggono.
@@ -105,7 +125,11 @@ try {
           await page.click(`[data-set="light"][data-v="${stato.prototipo.luce}"]`);
           await page.click(`[data-set="width"][data-v="${stato.prototipo.larghezza}"]`);
           await page.click('[data-set="motion"][data-v="ridotto"]');
+          await larghezzaFerma(page);
         }
+        // Uno stato può montare il prototipo altrove prima della vista (i
+        // fogli stretti della cornice, `editor/comuni.mjs`).
+        if (stato.prototipo.monta) await stato.prototipo.monta(page);
         await vista.prototipo.prepara(page);
         await fermo(page);
         const leggiPezzo = async (pezzo) => {

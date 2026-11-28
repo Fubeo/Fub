@@ -2556,11 +2556,11 @@ export function mountBaseSurface(
   };
 }
 
-/// Una Base incorporata in una nota, da un blocco ```` ```base ```` o da un
-/// `![[Nome.base]]`: la stessa superficie e le stesse porte di un `.base`
-/// aperto. La monta la resa registrata da `renderer.ts` quando questo modulo
-/// è arrivato; `vault` è quello in cui la resa è partita (FUB-001). Torna come
-/// smontarla, o niente se il payload non è una Base.
+/// Una Base incorporata in una nota: un `![[Nome.base]]` (payload con `base`)
+/// ha la superficie, le porte e i gesti di un `.base` aperto e scrive nel file;
+/// un blocco ```` ```base ```` resta da leggere. La monta `renderer.ts` col
+/// modulo arrivato; `vault` è quello in cui la resa è partita (FUB-001). Torna
+/// come smontarla, o niente se il payload non è una Base.
 export function mountBaseEmbed(host: HTMLElement, payload: unknown, context: CustomRenderContext, vault: string | undefined, onOpenDocument: (doc: string) => void | Promise<void>, documentWrites?: BaseDocumentWrites): (() => void) | undefined {
   const parsed = parseBaseEmbed({ node: "custom", ns: BASE_RENDERER_NS, payload, fallback: [] });
   if (!parsed) return;

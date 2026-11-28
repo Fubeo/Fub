@@ -6884,6 +6884,12 @@ kbd,
   color: var(--accent-soft);
   text-decoration-color: currentColor;
 }
+/* La nota che non esiste ancora (UX-016): lo stesso inchiostro, il filo a
+   tratti, come il collegamento rotto della Lettura ma senza il suo rosso: qui
+   un clic crea la nota, non è un errore. Il prototipo non ha questo stato. */
+.cm-editor .cm-content .cm-fub-wikilink[data-wikilink-missing] {
+  text-decoration-style: dashed;
+}
 /* In Live la sintassi colora per conto suo lo span interno: qui eredita, o il
    filo sarebbero due e il passaggio non cambierebbe niente. */
 .cm-editor .cm-content .cm-fub-link span,
@@ -9397,6 +9403,19 @@ button.cm-fub-page-icon:focus-visible {
   font-family: var(--font-ui);
   font-size: var(--text-sm);
 }
+/* Il posto di una nota riportata che non è ancora arrivata (UX-019): tiene
+   l'altezza che aveva l'ultima volta a questa larghezza (`--embed-reserve`,
+   `embed-heights.ts`), così il testo sotto non salta quando arriva. La prima
+   volta, nella Scrittura che si scrive, tiene almeno il vassoio della
+   trasclusione con una riga: la testata di 30 px, i 14 px del suo margine e
+   una riga, che nessuna nota riportata ha di meno. */
+.embed[data-embed-pending] {
+  box-sizing: border-box;
+  min-height: var(--embed-reserve, 0);
+}
+.cm-content[contenteditable="true"] .embed[data-embed-pending] {
+  min-height: var(--embed-reserve, calc(44px + 1lh));
+}
 .embed.unresolved {
   border-left-color: var(--doc-rule-soft);
   color: var(--muted);
@@ -10363,11 +10382,11 @@ button.cm-fub-page-icon:focus-visible {
    incolla, anche quando la tabella perde il fuoco. Il tratteggio è quello
    del prototipo (`.tg-cut`): quattro bordi di 1,5 px, 4 px pieni e 4 vuoti,
    che girano attorno alle celle come formiche in fila (`tg-ants`).
-   È l'unica eccezione al foglio fermo (`skin/motion.css` spegne ogni moto
-   dentro l'editor): il giro dice che il taglio aspetta ancora di essere
-   incollato, e finisce con lui — col taglio chiuso il riquadro è `hidden`.
-   Per questo la regola scrive `!important` con più peso di quella di
-   `motion.css`, e `theme/motion.test.ts` la nomina come sola eccezione.
+   È l'unico moto senza fine del foglio (`theme/motion.test.ts` la nomina
+   come sola eccezione ai giri infiniti): il giro dice che il taglio aspetta
+   ancora di essere incollato, e finisce con lui — col taglio chiuso il
+   riquadro è `hidden`. Scrive `!important` perché nessun tema la spenga per
+   sbaglio insieme alla scrittura ferma di `skin/motion.css`.
    Col moto ridotto, del sistema o di Fub, il tratteggio sta fermo. */
 .cm-editor .cm-content .tb-grid .tb-cut {
   border: 0;
@@ -10458,6 +10477,23 @@ button.cm-fub-page-icon:focus-visible {
   bottom: 0;
   right: -19px;
   width: 15px;
+}
+/* Il bersaglio è di 24 px sul lato corto, la barra che si vede resta di 15
+   (UX-018): una zona invisibile la allarga di 4 px verso la tabella, fino al
+   suo bordo, e di 5 px verso l'esterno. Le due zone non si toccano: la riga
+   cresce solo in altezza, la colonna solo in larghezza. */
+.cm-editor .cm-content .tb-add::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+}
+.cm-editor .cm-content .tb-add[data-add="row"]::before {
+  top: -4px;
+  bottom: -5px;
+}
+.cm-editor .cm-content .tb-add[data-add="column"]::before {
+  left: -4px;
+  right: -5px;
 }
 .cm-editor .cm-content .tb-add svg {
   width: 14px;
@@ -11432,12 +11468,13 @@ button.cm-fub-page-icon:focus-visible {
 .pane-editor .cm-editor.cm-focused {
   outline: none;
 }
-/* Sorgente: lo stesso testo in monospazio, con l'aria della prosa. Un file che
-   non è Markdown è codice, e sta più serrato. */
+/* Sorgente: lo stesso testo in monospazio, con l'aria della prosa (13/1,75,
+   il `.src` del prototipo dell'editor). Un file che non è Markdown è codice,
+   e sta più serrato. */
 .pane-editor[data-markdown-mode="source"] .cm-content {
   font-family: var(--font-mono);
-  font-size: var(--text-source);
-  line-height: var(--leading-relaxed);
+  font-size: var(--text-base);
+  line-height: 1.75;
 }
 .pane-editor:not([data-markdown-mode]) > .cm-editor .cm-content {
   font-family: var(--font-mono);
@@ -11458,7 +11495,7 @@ button.cm-fub-page-icon:focus-visible {
   line-height: calc(var(--text-source) * var(--leading-normal));
 }
 .pane-editor[data-markdown-mode="source"] .cm-scroller .cm-gutters {
-  line-height: calc(var(--text-source) * var(--leading-relaxed));
+  line-height: calc(var(--text-base) * 1.75);
 }
 /* In Sorgente i numeri stanno accanto alla colonna, non sul bordo del foglio:
    su un foglio largo resterebbero a mezzo schermo dal testo che contano. La
@@ -11505,12 +11542,6 @@ button.cm-fub-page-icon:focus-visible {
 [data-markdown-mode="live_preview"] .cm-content .cm-activeLine,
 [data-markdown-mode="blocks"] .cm-content .cm-activeLine {
   background-color: transparent;
-}
-/* In concentrazione i blocchi lontani dal cursore si attenuano e il blocco
-   del cursore resta acceso (la regola sta in `structure.css`): il passaggio
-   è morbido, e il movimento ridotto lo toglie. */
-.pane-editor .cm-content > * {
-  transition: opacity var(--duration-state) var(--ease);
 }
 /* La riga attiva si spegne dove c'è una selezione (`editors/text/engine.ts`
    mette `cm-fub-no-active-line` sulle righe selezionate): la banda coprirebbe
@@ -14830,6 +14861,9 @@ input.canvas-toolbar-item {
   color: var(--text);
   font-family: var(--font-ui);
   font-size: var(--text-base);
+  /* Il passo della scatola del prototipo (`div.base`, 13/1,4): la barra, le
+     linguette e le righe lo ereditano, invece del passo della pagina. */
+  line-height: 1.4;
 }
 /* La Base è una scatola: bordo sottile, angoli tondi, la barra dentro in
    alto e la tabella fino ai bordi (prototipo `div.base`). Alta quanto il suo
@@ -14959,10 +14993,6 @@ input.canvas-toolbar-item {
 .base-bar-space {
   flex: 1;
   min-width: var(--space-2);
-}
-/* «+»: una vista nuova, subito dopo le linguette, con la figura sola. */
-.base-tool-new-view {
-  padding: 0 var(--space-3);
 }
 .base-new {
   display: inline-flex;
@@ -15137,9 +15167,6 @@ input.canvas-toolbar-item {
   display: none;
 }
 @container sheet (max-width: 420px) {
-  .base-tool {
-    padding: 0 var(--space-3);
-  }
   .base-tab .base-tab-label {
     display: none;
   }
@@ -15543,8 +15570,11 @@ input.canvas-toolbar-item {
   background: var(--accent-veil);
 }
 /* Il nome della nota apre la nota: inchiostro pieno, e la matita blu al
-   passaggio. Vale per la tabella, le schede e la bacheca. */
-.base-table td > button,
+   passaggio. Vale per la tabella, le schede e la bacheca; non per «Nuova
+   nota» in fondo alla tabella, che resta grigia e leggera (prototipo
+   `.btab .addrow td`); `:where` non alza il peso della regola, e il titolo
+   in grassetto qui sopra resta più forte. */
+.base-table td > button:where(:not(.base-add-row-button)),
 .base-card > button,
 .base-kanban-card > button {
   max-width: 100%;
@@ -15558,8 +15588,8 @@ input.canvas-toolbar-item {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.base-table td > button:hover,
-.base-table td > button:focus-visible,
+.base-table td > button:where(:not(.base-add-row-button)):hover,
+.base-table td > button:where(:not(.base-add-row-button)):focus-visible,
 .base-card > button:hover,
 .base-card > button:focus-visible,
 .base-kanban-card > button:hover,
@@ -15567,7 +15597,7 @@ input.canvas-toolbar-item {
   background: var(--accent-wash);
   color: var(--accent);
 }
-.base-table td > button:active,
+.base-table td > button:where(:not(.base-add-row-button)):active,
 .base-card > button:active,
 .base-kanban-card > button:active {
   background: var(--accent-wash);
@@ -17714,11 +17744,20 @@ input.canvas-toolbar-item {
   height: calc(var(--live-card-full, 80vh) - 36px);
 }
 .live-card[data-card-state="missing"] .live-card-body,
-.live-card[data-card-state="unsupported"] .live-card-body,
-.live-card[data-card-state="loading"] .live-card-body {
+.live-card[data-card-state="unsupported"] .live-card-body {
   height: auto;
   min-height: 0;
   cursor: default;
+}
+/* L'attesa tiene già l'altezza che avrà la vista (UX-019): quella scritta
+   nell'embed o quella della specie, così il testo sotto non salta quando il
+   file arriva. Una scheda mostrata come riga resta una riga. */
+.live-card[data-card-state="loading"] .live-card-body {
+  cursor: default;
+}
+.live-card[data-card-state="loading"][data-card-display="row"] .live-card-body {
+  height: auto;
+  min-height: 0;
 }
 
 /* Il file mancante, il formato senza vista, l'attesa: una riga che dice
@@ -18024,7 +18063,8 @@ input.canvas-toolbar-item {
   width: min(var(--live-card-width), 100%);
   margin-left: 0;
 }
-.live-card[data-card-state="view"][data-card-height="set"]:not([data-card-full="true"]) .live-card-body {
+.live-card[data-card-state="view"][data-card-height="set"]:not([data-card-full="true"]) .live-card-body,
+.live-card[data-card-state="loading"][data-card-height="set"] .live-card-body {
   height: min(calc(var(--live-card-height) - 35px), 80vh);
   min-height: 60px;
 }
@@ -20585,9 +20625,9 @@ button.draw-isolation-crumb:hover {
    è del foglio — e i suoi comandi non sono strisce attaccate ai bordi ma
    pillole in rialzo posate sopra: l'oggetto resta solo sulla pagina.
 
-   Dentro il foglio non si dichiarano transizioni: `motion.css` le spegne tutte
-   sotto `.pane-editor`. La lightbox e le slide stanno fuori, sul corpo della
-   pagina, e lì il moto è quello delle modali.
+   Dentro il foglio le transizioni vivono come nel prototipo (`motion.css`
+   ferma solo la scrittura, e tutto col moto ridotto). La lightbox e le slide
+   stanno fuori, sul corpo della pagina, e lì il moto è quello delle modali.
 */
 
 /* ── La superficie ───────────────────────────────────────────────────────── */
@@ -24572,8 +24612,16 @@ h6.ui-heading {
    blocco a parole, il gruppo del blocco sul velo d'accento col suo nome in
    maiuscoletto, e «+ Inserisci» in fondo a destra, rialzato sul vassoio.
    È la barra del prototipo dell'editor (`.fbar`), coi gettoni di Fub; il
-   menu che apre è un menu come gli altri. */
+   menu che apre è un menu come gli altri. Il vassoio scrive come il
+   prototipo (13/1,45, inchiostro pieno) e non come la fila del kit, e la sua
+   altezza è quella dei pulsanti più il bordo del vassoio (28 + 3 + 3), come
+   `.fbar`, non la misura ferma della barra di un riquadro. */
 .format-bar-follow.kit-bar {
+  flex: none;
+  height: auto;
+  color: var(--text);
+  font-size: var(--text-base);
+  line-height: var(--leading-normal);
   gap: var(--space-1);
   margin: 0 var(--space-5) var(--space-1);
   padding: 3px;
@@ -24602,6 +24650,7 @@ h6.ui-heading {
 }
 .format-bar-follow .kit-bar-button {
   height: 28px;
+  line-height: inherit;
   min-width: 28px;
   padding: 0 var(--space-3);
   border-radius: 7px;
@@ -24621,9 +24670,17 @@ h6.ui-heading {
 .format-bar-follow .format-bar-labelled {
   padding: 0 var(--space-4);
 }
+/* Nella finestra stretta (sotto i 940 px, il `@container win` del
+   prototipo) i gesti del blocco restano la figura sola, col nome nel
+   suggerimento e in `aria-label`; lo stile e «Inserisci» tengono il nome. */
+@media (max-width: 940px) {
+  .format-bar-follow .format-bar-labelled:not(.format-bar-insert, .format-bar-style):has(svg:not(.format-bar-caret)) > .format-bar-text {
+    display: none;
+  }
+}
 .format-bar-follow .format-bar-caret {
-  width: 12px;
-  height: 12px;
+  width: 14px;
+  height: 14px;
   margin-left: -1px;
   color: var(--muted);
 }
@@ -32773,15 +32830,61 @@ h6.ui-heading {
   transform-origin: top left;
 }
 
-/* Il moto è della scocca, mai del foglio. La scrittura sta ferma. Il cursore
-   no: se lampeggia lo decide `editor.cursor-blink` (di serie fermo), che ne
-   fissa la cadenza; qui non lo si spegne una seconda volta. */
+/* Il prototipo della cornice anima dentro il foglio; la scrittura resta
+   ferma. Le transizioni copiate dal prototipo (la maniglia dei blocchi, le
+   schede vive, le trasclusioni, i commenti, la Concentrazione) vivono; non si
+   muove ciò che cambia a ogni tasto: le righe e tutto ciò che sta dentro di
+   loro (i segni della sintassi, che CodeMirror rifà o riveste mentre si
+   scrive: un colore che sfuma lì sarebbe un ritardo sotto le dita), la
+   selezione e i suoi strati, i numeri e i segni del margine. Il cursore no:
+   se lampeggia lo decide `editor.cursor-blink` (di serie fermo), che ne fissa
+   la cadenza sullo strato; qui si ferma solo il tratto.
+   In Concentrazione le righe lontane dal cursore si attenuano piano (la
+   regola qui sotto): solo lì una riga ha la sua transizione, d'opacità. */
 .cm-editor,
-.cm-editor *:not(.cm-cursorLayer),
-.pane-editor,
-.pane-editor *:not(.cm-cursorLayer) {
+.cm-editor .cm-scroller,
+.cm-editor .cm-content,
+.cm-editor .cm-line,
+.cm-editor .cm-line *,
+.cm-editor .cm-selectionLayer,
+.cm-editor .cm-selectionLayer *,
+.cm-editor .cm-cursorLayer *,
+.cm-editor .cm-gutters,
+.cm-editor .cm-gutters *,
+.pane-editor {
   animation: none !important;
   transition: none !important;
+}
+
+/* Col moto ridotto, del sistema o di Fub, dentro il foglio non si muove
+   niente: né le transizioni copiate dal prototipo né la Concentrazione. Il
+   moto che passa da `src/moto` lo spegne il livello `reduced`. */
+@media (prefers-reduced-motion: reduce) {
+  .cm-editor,
+  .cm-editor *:not(.cm-cursorLayer),
+  .pane-editor,
+  .pane-editor *:not(.cm-cursorLayer) {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+:root[data-motion="reduced"] .cm-editor,
+:root[data-motion="reduced"] .cm-editor *:not(.cm-cursorLayer),
+:root[data-motion="reduced"] .pane-editor,
+:root[data-motion="reduced"] .pane-editor *:not(.cm-cursorLayer) {
+  animation: none !important;
+  transition: none !important;
+}
+
+/* La Concentrazione: i blocchi lontani dal cursore si attenuano e quello del
+   cursore resta acceso (la regola sta in `structure.css`); il passaggio è
+   morbido, 0,25 s `ease` come nel prototipo (`.win.focus .blocks > .blk`).
+   È l'unica transizione che una riga ha, e solo d'opacità: per questo batte
+   la regola delle righe ferme, e solo quando il moto non è ridotto. */
+@media (prefers-reduced-motion: no-preference) {
+  :root:not([data-motion="reduced"]) [data-focus-mode] .pane-editor .cm-content > * {
+    transition: opacity 0.25s ease !important;
+  }
 }
 
 /* La sagoma di un foglio appena chiuso: carta senza niente sopra, con il

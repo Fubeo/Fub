@@ -640,12 +640,20 @@ export function cellText(value: BaseCellValue | undefined): string {
     case "link": return value.value.label ?? value.value.target;
   }
 }
+/// Una Base incorporata: o il path del file `.base` da cui viene (`base`), e
+/// allora le sue viste si scrivono in quel file; o il sorgente di un blocco
+/// ```` ```base ```` scritto nella nota (`source`), che resta da leggere.
 export interface BaseEmbed { readonly source?: string; readonly base?: string; readonly view: string | null; readonly container: string | null }
 export function parseBaseEmbed(node: UiNode): BaseEmbed | null {
   if (node.node !== "custom" || node.ns !== BASE_RENDERER_NS) return null;
   const payload = object(node.payload, "embed");
-  if (typeof payload.source === "string") return { source: payload.source, view: typeof payload.view === "string" ? payload.view : null, container: typeof payload.container === "string" ? payload.container : null };
-  if (typeof payload.base === "string") return { base: payload.base, view: typeof payload.view === "string" ? payload.view : null, container: typeof payload.container === "string" ? payload.container : null };
+  const view = typeof payload.view === "string" ? payload.view : null;
+  const container = typeof payload.container === "string" ? payload.container : null;
+  // Il file vince sul sorgente: un `![[Nome.base]]` arriva con tutti e due (il
+  // sorgente è il testo del file, per chi non conosce `base`), e le sue viste
+  // vanno nel file, mai nella nota che lo incorpora (DECISIONS T15).
+  if (typeof payload.base === "string") return { base: payload.base, view, container };
+  if (typeof payload.source === "string") return { source: payload.source, view, container };
   return null;
 }
 export function baseSurfaceModes(): SurfaceMode[] { return [{ id: "base", label: () => "Base", presentation: "surface", contextMode: "live_preview", looks: ["tema"] }]; }

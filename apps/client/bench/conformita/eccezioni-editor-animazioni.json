@@ -1,0 +1,16 @@
+[
+  {
+    "pezzo": "menu.entrata-selezione.piede",
+    "proprieta": "da.geometria.y",
+    "stati": ["chiaro-1280/pieno", "scuro-1280/pieno"],
+    "motivo": "Il piede sale di 5 px con gli stessi tempi del prototipo (ritardo 155 ms, 240 ms, stessa curva: quei canali sono verdi), ma mentre il menu cresce da scala 0,94 dal suo angolo in alto, il piede viene tirato su in proporzione a quanto sta sotto quell'angolo. Nel menu della selezione dell'app il piede sta circa 173 px sotto la cima, nel prototipo circa 247 px, perché le voci del menu dell'app non sono quelle del prototipo: lo scarto di partenza è -5,4 px invece di -10,1. È la lunghezza del menu, non il moto.",
+    "riferimento": "brief animazioni giro 1; docs/misure/animazioni-editor/menu-finestre-sbirciata.md, righe 4 e 6"
+  },
+  {
+    "pezzo": "menu.entrata-selezione.piede",
+    "proprieta": "campioni.geometria.y",
+    "stati": ["chiaro-1280/pieno", "scuro-1280/pieno"],
+    "motivo": "Lo stesso scarto di partenza diverso (vedi l'eccezione sopra): il campione a 155 ms, normalizzato su un punto di partenza più vicino, cade fuori dalla fascia del prototipo. Tempi e curva del piede coincidono.",
+    "riferimento": "brief animazioni giro 1; docs/misure/animazioni-editor/menu-finestre-sbirciata.md, righe 4 e 6"
+  }
+]

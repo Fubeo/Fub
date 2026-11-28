@@ -106,7 +106,7 @@ In una nota Markdown in scrittura le voci del posto sono:
 | Sotto il puntatore | Voci |
 |---|---|
 | Testo | Incolla; Trasforma il blocco ▸, Inserisci un blocco… (`/`); Copia il link a questo punto |
-| Selezione | la barra degli appunti; Collega a una nota… (Ctrl K), Copia come (i tre formati nella riga); Estrai in una nota nuova |
+| Selezione | la barra degli appunti; Link… (Ctrl K), Copia come (i tre formati nella riga); Estrai in una nota nuova |
 | Link alla nota | Apri, Apri a lato, Copia il link, Togli il link |
 | Indirizzo web | Apri nel browser, Copia l'indirizzo, Togli il link |
 | Immagine | Apri nel visore, Copia l'immagine, Larghezza ▸, Sostituisci l'immagine…, Mostra nell'esploratore |
@@ -130,10 +130,12 @@ coprirli: dove sotto non c'è posto va sopra, poi a destra o a sinistra, e
 solo se la finestra non ha posto da nessuna parte resta dentro di lei anche
 sopra la cosa scelta.
 
-Il menu nasce dal punto del clic, in meno di un quinto di secondo: testata,
-barra e voci arrivano una dopo l'altra, il sottomenu entra da destra, e
-chiuso il menu sfuma senza muoversi. I menu a tendina entrano con una
-dissolvenza breve. Col moto ridotto niente si muove.
+Il menu nasce dal punto del clic in meno di un quinto di secondo. Testata,
+barra e voci salgono dal basso una dopo l'altra, 15 ms l'una dall'altra, e la
+riga della ricerca in fondo arriva con la decima: l'entrata intera dura meno
+di mezzo secondo. L'icona della testata fa un piccolo salto. Il sottomenu
+entra da destra, e chiuso il menu sfuma senza muoversi. I menu a tendina
+entrano con una dissolvenza breve. Col moto ridotto niente si muove.
 
 Su Linux il menu compare alla pressione del tasto destro, non al rilascio come
 su Windows. Il rilascio che segue non lo chiude e non sceglie la voce che
@@ -155,11 +157,13 @@ Maiusc+tasto destro, che dà sempre il menu del sistema.
 La **mini-barra** è una fila compatta, scura di giorno e color foglio di
 notte, con quest'ordine: «Trasforma» (lo stesso menu «Trasforma in» dello
 stile nella [barra di formato](editor-toolbar.md)), Grassetto, Corsivo,
-Sottolineato, Barrato, Codice in riga, Collega, Colore e «Commenta». Ogni
+Sottolineato, Barrato, Codice in riga, Link, Colore e «Commenta». Ogni
 pulsante esegue l'azione della sua scorciatoia, con lo stesso passo
 d'annullamento, e la sua didascalia dice la scorciatoia vera della persona
-(Ctrl B, Ctrl K, Ctrl Alt M…). «Collega» fa ciò che fa Ctrl K: il riquadro
-«Collegamento» in Scrittura, il wikilink in Sorgente. «Colore» apre
+(Ctrl B, Ctrl K, Ctrl Alt M…). «Link» fa ciò che fa Ctrl K: il riquadro
+del link («Inserisci un link») in Scrittura, il wikilink in Sorgente. Il link
+ha un nome solo, «Link», in mini-barra, menu, riquadro e barra di formato,
+come il titolo del comando del registro. «Colore» apre
 le due righe dei nove [colori](editor-note-extras.md#i-colori), Testo e Sfondo; il colore già dato
 alla selezione è segnato, e un clic lo toglie. «Commenta» apre il primo
 messaggio della discussione sulla selezione, come Ctrl Alt M: su più blocchi
@@ -194,9 +198,12 @@ telefono, sotto i 600 px o col dito, è un foglio a tutta larghezza in fondo
 alla finestra, sopra la tastiera, con righe da 44 px. Vale in ogni modalità di
 scrittura; il «+» della maniglia mette un blocco vuoto e ci apre il «/».
 
-- **In alto, i sei più usati**, come tessere con l'icona e una parola. In un
+- **In alto, i sei più usati**, come tessere con l'icona e una parola: una
+  parola del nome intero della riga, così tessera e riga non sembrano due
+  comandi («Puntato» per «Elenco puntato», «Attività» per «Elenco di
+  attività»; solo «Piega» resta più corta di «Ripiegabile»). In un
   vault nuovo: Attività, Titolo, Riquadro, Tabella, Base (con le Basi accese)
-  e Punti; senza Base, Codice prende il sesto posto. L'uso li riordina: prima i Preferiti,
+  e Puntato; senza Base, Codice prende il sesto posto. L'uso li riordina: prima i Preferiti,
   poi i blocchi scelti di recente, poi l'ordine scritto; una voce nascosta
   lascia il posto alla seguente, e stili e comandi del vault non diventano
   tessere (`byUse` in `panels/slash/rank.ts`). A menu appena aperto Invio mette
@@ -234,7 +241,10 @@ scrittura; il «+» della maniglia mette un blocco vuoto e ci apre il «/».
   (`flowchart TD`) lo scrive in un recinto `mermaid` vuoto. Una tabella
   appena messa prende il fuoco sulla prima intestazione: si scrive nella
   cella. I venti colori non sono voci del «/»: stanno sotto «Colore ›» e
-  si trovano scrivendo («/blu»).
+  si trovano scrivendo («/blu»). Su una riga che resta vuota il colore
+  scelto aspetta la prima lettera, come Ctrl+B: si scrive già colorato, e
+  se il cursore esce o si preme Esc senza scrivere non resta niente nel
+  file ([i colori](editor-note-extras.md#i-colori)).
 - **Niente trovato.** Il pannello resta aperto e lo dice («Nessun blocco per
   «qwerty».»); la sola riga, accesa, cerca fra tutti i comandi, con Invio o
   Ctrl+/. Esc lascia il testo com'è.

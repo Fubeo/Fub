@@ -14,12 +14,13 @@ stesse specie, la stessa resa, lo stesso modo di scrivere dentro. In testata
 l'icona della specie, il nome del file e la parte mostrata («p. 3»); al
 passaggio, da attiva e al tocco **Apri** (il file nella sua linguetta, alla
 parte) e **A tutta pagina** (la scheda alta quanto la vista; «Torna alla nota»
-la riporta com'era).
+la riporta com'era). Mentre il file arriva dice «Apro …», già alta quanto la
+vista che avrà (scritta nell'embed o della specie; una riga resta riga): il
+testo sotto non si sposta.
 
-Non sono schede le note (la [trasclusione viva](editor-transclusion.md)), le
-immagini, i suoni, i video e le Basi, che la nota mostra già a modo suo; una
-lavagna è una [zona lavagna](#la-zona-lavagna). Un embed in mezzo a una frase
-resta un embed.
+Non sono schede le note ([trasclusione viva](editor-transclusion.md)), le
+immagini, i suoni, i video e le Basi, che la nota mostra a modo suo; una lavagna
+è una [zona lavagna](#la-zona-lavagna). Un embed in una frase resta un embed.
 
 ## Tre stati
 
@@ -31,8 +32,7 @@ resta un embed.
   del testo sopra di lei (`objectsChosen` in `markdown/live-cards.ts`, letto
   da `selectionBox` della superficie). Le colonne con dentro delle schede,
   scelte, restano rese. Un secondo **Esc** torna al testo col cursore nella
-  riga dopo la scheda (o in quella prima, se è l'ultima), e la scheda resta
-  scheda.
+  riga dopo la scheda (o in quella prima, se è l'ultima), e resta scheda.
 - **Attiva**: un clic dentro, Invio, o un tocco. Il bordo è d'accento e la
   testata dice «Esc per uscire» (al tocco c'è **Fine**). Tasti, rotella e
   selezione sono della scheda; la riga dei suggerimenti dice i suoi tasti.

@@ -33,6 +33,9 @@
 // I colori fatti di token del prototipo si confrontano con la loro
 // espressione coi token di Fub, risolta nell'app (`confronto.mjs`, «I token»).
 //
+// Il riassunto conta a parte le differenze da coprire e quelle escluse (le
+// voci di `DA_COPRIRE` con `escluso`, fuori dal lavoro che corregge le altre).
+//
 // Il referto intero va in `bench/.output/conformita/<prototipo>.json`.
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -163,12 +166,12 @@ try {
         try {
           await page.setViewportSize(stato.finestra);
           await prepareScene(page, scena, stato.luce, stage.base, sceneUrl);
+          if (stato.app?.monta) await stato.app.monta(page);
           if (vista.app.prepara) await vista.app.prepara(page);
           for (const pezzo of pezzi) {
             const proprieta = espandi(pezzo.proprieta);
             if (pezzo.gesto) await gesto(page, null, pezzo.gesto.tipo, pezzo.gesto.app);
             const [trovati] = await leggi(page, null, [{ selettore: pezzo.app, proprieta }]);
-            if (pezzo.gesto) await riposo(page);
             const estratto = attesi.valori[pezzo.id]?.[idStato] ?? null;
             const atteso = estratto && { ...estratto.proprieta };
             // I colori fatti di token: l'atteso è l'espressione coi token di
@@ -180,6 +183,9 @@ try {
                 atteso[v.proprieta] = v.espressioni.map((come, j) => ({ come, valore: risolti[i][j] }));
               });
             }
+            // A riposo solo dopo aver risolto i token: un elemento che c'è
+            // solo col puntatore sopra (le maniglie accese) sparirebbe prima.
+            if (pezzo.gesto) await riposo(page);
             const esito = confrontaPezzo(pezzo, idStato, atteso, trovati);
             differenze.push(...esito.differenze);
             mancanti.push(...esito.mancanti);
@@ -201,16 +207,34 @@ try {
         return id === e.pezzo && (!e.stati || e.stati.includes(stato));
       }),
     );
-    const daCoprire = giustificate.filter((d) => d.eccezione.daCoprire);
+    const daCoprire = giustificate.filter((d) => d.eccezione.daCoprire && d.eccezione.escluso === undefined);
+    const esclusi = giustificate.filter((d) => d.eccezione.daCoprire && d.eccezione.escluso !== undefined);
     const volute = giustificate.filter((d) => !d.eccezione.daCoprire);
-    const pezziInteri = DA_COPRIRE.filter((d) => !d.proprieta).length;
+    const pezziInteri = DA_COPRIRE.filter((d) => !d.proprieta && d.escluso === undefined).length;
+    const pezziInteriEsclusi = DA_COPRIRE.filter((d) => !d.proprieta && d.escluso !== undefined).length;
 
     const pezziGuardati = new Set([...statiFatti].map((k) => k.split(" ")[0])).size;
     console.log(
       `conformità a ${nome} (${attesi.ramo} @ ${attesi.commit.slice(0, 9)}): ` +
         `${pezziGuardati} pezzi, ${statiFatti.size} letture, ${confronti} proprietà; ` +
-        `${volute.length} differenze con eccezione, ${daCoprire.length} da coprire, ${pezziInteri} pezzi interi da coprire`,
+        `${volute.length} differenze con eccezione, ${daCoprire.length} da coprire, ${pezziInteri} pezzi interi da coprire, ` +
+        `${esclusi.length} escluse, ${pezziInteriEsclusi} pezzi interi esclusi`,
     );
+    const perRagione = Map.groupBy(
+      DA_COPRIRE.filter((d) => d.escluso !== undefined),
+      (d) => d.escluso,
+    );
+    if (perRagione.size) {
+      console.log(
+        `  esclusi: ` +
+          [...perRagione]
+            .map(([ragione, voci]) => {
+              const sue = esclusi.filter((d) => d.eccezione.escluso === ragione).length;
+              return `${ragione} (${voci.length} voci, ${sue} differenze)`;
+            })
+            .join("; "),
+      );
+    }
     if (attese.length) {
       const perLavoro = Map.groupBy(attese, (p) => p.attende);
       console.log(
@@ -240,7 +264,7 @@ try {
     await mkdir(REFERTO, { recursive: true });
     await writeFile(
       join(REFERTO, `${nome}.json`),
-      `${JSON.stringify({ prototipo: nome, commit: attesi.commit, errori, mancanti, rosse, eccezioni: volute, daCoprire, inutili: inutiliGuardate }, null, 2)}\n`,
+      `${JSON.stringify({ prototipo: nome, commit: attesi.commit, errori, mancanti, rosse, eccezioni: volute, daCoprire, esclusi, inutili: inutiliGuardate }, null, 2)}\n`,
     );
   }
 } finally {

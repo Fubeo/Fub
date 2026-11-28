@@ -15,7 +15,7 @@ import { createList, openPopover, type PopoverHandle } from "../../../../kit";
 import { openLifetime } from "../../../../ui/lifetime";
 import { openHintSource, type HintContext, type HintItem, type HintSource } from "../../../core/hints";
 import { lineHeading, MARKDOWN_ACTIONS, markdownActionState } from "./actions";
-import { blockModel } from "./blocks/model";
+import { blockModel, innermostAt } from "./blocks/model";
 import { blockSelection, escapeLeaves, vimOn } from "./blocks/selection";
 import { mainElements } from "./cursor-elements";
 import { isTaskLine } from "./dates";
@@ -189,10 +189,16 @@ export function markdownHints(state: EditorState, focus: HintFocus, slash: boole
       action("markdown.list.indent", "live.keys.indent"),
     ] };
   }
-  const blocks = state.field(blockModel, false) !== undefined;
+  const model = state.field(blockModel, false);
+  const blocks = model !== undefined;
+  // Coi blocchi Invio in un paragrafo ne apre uno nuovo (`blocks/keys.ts`):
+  // l'a capo dentro il paragrafo è Maiusc+Invio, e la riga lo dice lì.
+  const at = model ? innermostAt(model.blocks, main.head) : -1;
+  const paragraph = at >= 0 && model!.blocks[at]!.kind === "paragraph";
   return { id: "text", items: [
     ...(slash ? [keys(["/"], "live.keys.insert")] : []),
     keys(["@"], "live.keys.mention"),
+    ...(paragraph ? [keys(["Shift-Enter"], "live.keys.soft_break")] : []),
     { command: "shell.switcher", say: say("live.keys.launcher") },
     // In concentrazione Esc è della shell, che ne esce (T24).
     ...(state.facet(escapeLeaves) ? []
