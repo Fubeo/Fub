@@ -9,6 +9,9 @@
   color: var(--text);
   font-family: var(--font-ui);
   font-size: var(--text-base);
+  /* Il passo della scatola del prototipo (`div.base`, 13/1,4): la barra, le
+     linguette e le righe lo ereditano, invece del passo della pagina. */
+  line-height: 1.4;
 }
 /* La Base è una scatola: bordo sottile, angoli tondi, la barra dentro in
    alto e la tabella fino ai bordi (prototipo `div.base`). Alta quanto il suo
@@ -138,10 +141,6 @@
 .base-bar-space {
   flex: 1;
   min-width: var(--space-2);
-}
-/* «+»: una vista nuova, subito dopo le linguette, con la figura sola. */
-.base-tool-new-view {
-  padding: 0 var(--space-3);
 }
 .base-new {
   display: inline-flex;
@@ -316,9 +315,6 @@
   display: none;
 }
 @container sheet (max-width: 420px) {
-  .base-tool {
-    padding: 0 var(--space-3);
-  }
   .base-tab .base-tab-label {
     display: none;
   }

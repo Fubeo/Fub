@@ -11432,12 +11432,13 @@ button.cm-fub-page-icon:focus-visible {
 .pane-editor .cm-editor.cm-focused {
   outline: none;
 }
-/* Sorgente: lo stesso testo in monospazio, con l'aria della prosa. Un file che
-   non è Markdown è codice, e sta più serrato. */
+/* Sorgente: lo stesso testo in monospazio, con l'aria della prosa (13/1,75,
+   il `.src` del prototipo dell'editor). Un file che non è Markdown è codice,
+   e sta più serrato. */
 .pane-editor[data-markdown-mode="source"] .cm-content {
   font-family: var(--font-mono);
-  font-size: var(--text-source);
-  line-height: var(--leading-relaxed);
+  font-size: var(--text-base);
+  line-height: 1.75;
 }
 .pane-editor:not([data-markdown-mode]) > .cm-editor .cm-content {
   font-family: var(--font-mono);
@@ -11458,7 +11459,7 @@ button.cm-fub-page-icon:focus-visible {
   line-height: calc(var(--text-source) * var(--leading-normal));
 }
 .pane-editor[data-markdown-mode="source"] .cm-scroller .cm-gutters {
-  line-height: calc(var(--text-source) * var(--leading-relaxed));
+  line-height: calc(var(--text-base) * 1.75);
 }
 /* In Sorgente i numeri stanno accanto alla colonna, non sul bordo del foglio:
    su un foglio largo resterebbero a mezzo schermo dal testo che contano. La
@@ -14830,6 +14831,9 @@ input.canvas-toolbar-item {
   color: var(--text);
   font-family: var(--font-ui);
   font-size: var(--text-base);
+  /* Il passo della scatola del prototipo (`div.base`, 13/1,4): la barra, le
+     linguette e le righe lo ereditano, invece del passo della pagina. */
+  line-height: 1.4;
 }
 /* La Base è una scatola: bordo sottile, angoli tondi, la barra dentro in
    alto e la tabella fino ai bordi (prototipo `div.base`). Alta quanto il suo
@@ -14959,10 +14963,6 @@ input.canvas-toolbar-item {
 .base-bar-space {
   flex: 1;
   min-width: var(--space-2);
-}
-/* «+»: una vista nuova, subito dopo le linguette, con la figura sola. */
-.base-tool-new-view {
-  padding: 0 var(--space-3);
 }
 .base-new {
   display: inline-flex;
@@ -15137,9 +15137,6 @@ input.canvas-toolbar-item {
   display: none;
 }
 @container sheet (max-width: 420px) {
-  .base-tool {
-    padding: 0 var(--space-3);
-  }
   .base-tab .base-tab-label {
     display: none;
   }
@@ -15543,8 +15540,11 @@ input.canvas-toolbar-item {
   background: var(--accent-veil);
 }
 /* Il nome della nota apre la nota: inchiostro pieno, e la matita blu al
-   passaggio. Vale per la tabella, le schede e la bacheca. */
-.base-table td > button,
+   passaggio. Vale per la tabella, le schede e la bacheca; non per «Nuova
+   nota» in fondo alla tabella, che resta grigia e leggera (prototipo
+   `.btab .addrow td`); `:where` non alza il peso della regola, e il titolo
+   in grassetto qui sopra resta più forte. */
+.base-table td > button:where(:not(.base-add-row-button)),
 .base-card > button,
 .base-kanban-card > button {
   max-width: 100%;
@@ -15558,8 +15558,8 @@ input.canvas-toolbar-item {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.base-table td > button:hover,
-.base-table td > button:focus-visible,
+.base-table td > button:where(:not(.base-add-row-button)):hover,
+.base-table td > button:where(:not(.base-add-row-button)):focus-visible,
 .base-card > button:hover,
 .base-card > button:focus-visible,
 .base-kanban-card > button:hover,
@@ -15567,7 +15567,7 @@ input.canvas-toolbar-item {
   background: var(--accent-wash);
   color: var(--accent);
 }
-.base-table td > button:active,
+.base-table td > button:where(:not(.base-add-row-button)):active,
 .base-card > button:active,
 .base-kanban-card > button:active {
   background: var(--accent-wash);
@@ -24572,8 +24572,16 @@ h6.ui-heading {
    blocco a parole, il gruppo del blocco sul velo d'accento col suo nome in
    maiuscoletto, e «+ Inserisci» in fondo a destra, rialzato sul vassoio.
    È la barra del prototipo dell'editor (`.fbar`), coi gettoni di Fub; il
-   menu che apre è un menu come gli altri. */
+   menu che apre è un menu come gli altri. Il vassoio scrive come il
+   prototipo (13/1,45, inchiostro pieno) e non come la fila del kit, e la sua
+   altezza è quella dei pulsanti più il bordo del vassoio (28 + 3 + 3), come
+   `.fbar`, non la misura ferma della barra di un riquadro. */
 .format-bar-follow.kit-bar {
+  flex: none;
+  height: auto;
+  color: var(--text);
+  font-size: var(--text-base);
+  line-height: var(--leading-normal);
   gap: var(--space-1);
   margin: 0 var(--space-5) var(--space-1);
   padding: 3px;
@@ -24602,6 +24610,7 @@ h6.ui-heading {
 }
 .format-bar-follow .kit-bar-button {
   height: 28px;
+  line-height: inherit;
   min-width: 28px;
   padding: 0 var(--space-3);
   border-radius: 7px;
@@ -24621,9 +24630,17 @@ h6.ui-heading {
 .format-bar-follow .format-bar-labelled {
   padding: 0 var(--space-4);
 }
+/* Nella finestra stretta (sotto i 940 px, il `@container win` del
+   prototipo) i gesti del blocco restano la figura sola, col nome nel
+   suggerimento e in `aria-label`; lo stile e «Inserisci» tengono il nome. */
+@media (max-width: 940px) {
+  .format-bar-follow .format-bar-labelled:not(.format-bar-insert, .format-bar-style):has(svg:not(.format-bar-caret)) > .format-bar-text {
+    display: none;
+  }
+}
 .format-bar-follow .format-bar-caret {
-  width: 12px;
-  height: 12px;
+  width: 14px;
+  height: 14px;
   margin-left: -1px;
   color: var(--muted);
 }

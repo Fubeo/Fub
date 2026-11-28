@@ -160,8 +160,11 @@
   background: var(--accent-veil);
 }
 /* Il nome della nota apre la nota: inchiostro pieno, e la matita blu al
-   passaggio. Vale per la tabella, le schede e la bacheca. */
-.base-table td > button,
+   passaggio. Vale per la tabella, le schede e la bacheca; non per «Nuova
+   nota» in fondo alla tabella, che resta grigia e leggera (prototipo
+   `.btab .addrow td`); `:where` non alza il peso della regola, e il titolo
+   in grassetto qui sopra resta più forte. */
+.base-table td > button:where(:not(.base-add-row-button)),
 .base-card > button,
 .base-kanban-card > button {
   max-width: 100%;
@@ -175,8 +178,8 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.base-table td > button:hover,
-.base-table td > button:focus-visible,
+.base-table td > button:where(:not(.base-add-row-button)):hover,
+.base-table td > button:where(:not(.base-add-row-button)):focus-visible,
 .base-card > button:hover,
 .base-card > button:focus-visible,
 .base-kanban-card > button:hover,
@@ -184,7 +187,7 @@
   background: var(--accent-wash);
   color: var(--accent);
 }
-.base-table td > button:active,
+.base-table td > button:where(:not(.base-add-row-button)):active,
 .base-card > button:active,
 .base-kanban-card > button:active {
   background: var(--accent-wash);
