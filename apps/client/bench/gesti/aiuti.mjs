@@ -94,7 +94,7 @@ export function aiuti(page) {
     /// sopra il puntatore.
     maniglia: async (testo, quale = ".cm-fub-block-grip") => {
       await h.passa(testo);
-      const el = page.locator(`.pane.focus .pane-editor ${quale}`).first();
+      const el = page.locator(`.pane.focus .pane-editor ${quale} >> visible=true`).first();
       await el.waitFor({ state: "visible", timeout: 3_000 });
       const b = await el.boundingBox();
       return { x: b.x + b.width / 2, y: b.y + b.height / 2 };

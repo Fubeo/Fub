@@ -143,6 +143,22 @@ export const VOCI = [
     leggi: (page) => page.evaluate(() => { const l = [...document.querySelectorAll(".pane.focus .cm-line")].find((x) => x.textContent.includes("Il treno")); return l ? { classi: l.className, colore: getComputedStyle(l.querySelector("span") ?? l).color, fondo: getComputedStyle(l).backgroundColor } : null; }),
   },
   { n: 23, titolo: "Menu → Commenta", partenza: a("Il treno", 4), gesto: (p, h) => apriMenu(h, "Il treno"), leggi: vociDelMenu },
+  // Una scheda viva: la cartella di Excel del banco (`workbook=1`) incorporata
+  // da sola nel suo paragrafo.
+  ...[24, 25].map((n) => ({
+    n, titolo: "Menu del blocco di una scheda viva",
+    partenza: { testo: "# Casa\n\nI conti:\n\n![[Conti.xlsx#Conti!A1:C4]]\n\nFine.", query: "workbook=1" },
+    gesto: async (page, h) => {
+      await page.waitForTimeout(800);
+      await page.getByText("Conti.xlsx").first().hover();
+      await h.fotogrammi();
+      const g = page.locator(".pane.focus .pane-editor .cm-fub-block-grip >> visible=true").first();
+      await g.waitFor({ state: "visible", timeout: 3_000 });
+      await g.click();
+      await h.fotogrammi();
+    },
+    leggi: vociDelMenu,
+  })),
   {
     n: 26, titolo: "Menu di una tabella", partenza: SENZA,
     gesto: async (page, h) => {
@@ -183,6 +199,18 @@ export const VOCI = [
   { n: 43, titolo: "Esc con una scelta", partenza: a("Il treno", 4), gesto: (p, h) => sceltaBlocchi(h, "Escape") },
   { n: 44, titolo: "Ctrl A una volta", partenza: a("Il treno", 4), gesto: (p, h) => h.tasti("Control+a") },
   { n: 45, titolo: "Ctrl A due volte", partenza: a("Il treno", 4), gesto: (p, h) => h.tasti("Control+a", "Control+a") },
+  {
+    // Il menu del riquadro è il «⋯» in alto a destra del foglio.
+    n: 46, titolo: "Blocchi spenti dal menu del riquadro, poi Ctrl A", partenza: a("Il treno", 4),
+    gesto: async (page, h) => {
+      await h.clicSu(".pane.focus [data-pane-menu]");
+      await h.voce("Blocchi", "#context-menu");
+      await page.waitForTimeout(300);
+      await h.clic("Il treno", 4);
+      await h.tasti("Control+a");
+    },
+    leggi: (page) => page.evaluate(() => document.querySelectorAll(".pane.focus .cm-fub-block-handles").length),
+  },
   { n: 47, titolo: "Canc sulla scelta", partenza: a("Il treno", 4), gesto: (p, h) => sceltaBlocchi(h, "Delete") },
   { n: 48, titolo: "Backspace sulla scelta", partenza: a("Il treno", 4), gesto: (p, h) => sceltaBlocchi(h, "Backspace") },
   { n: 49, titolo: "Ctrl Maiusc giù sulla scelta", partenza: a("Il treno", 4), gesto: (p, h) => sceltaBlocchi(h, "Control+Shift+ArrowDown") },
