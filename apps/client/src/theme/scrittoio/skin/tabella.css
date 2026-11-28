@@ -390,6 +390,23 @@
   right: -19px;
   width: 15px;
 }
+/* Il bersaglio è di 24 px sul lato corto, la barra che si vede resta di 15
+   (UX-018): una zona invisibile la allarga di 4 px verso la tabella, fino al
+   suo bordo, e di 5 px verso l'esterno. Le due zone non si toccano: la riga
+   cresce solo in altezza, la colonna solo in larghezza. */
+.cm-editor .cm-content .tb-add::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+}
+.cm-editor .cm-content .tb-add[data-add="row"]::before {
+  top: -4px;
+  bottom: -5px;
+}
+.cm-editor .cm-content .tb-add[data-add="column"]::before {
+  left: -4px;
+  right: -5px;
+}
 .cm-editor .cm-content .tb-add svg {
   width: 14px;
   height: 14px;
