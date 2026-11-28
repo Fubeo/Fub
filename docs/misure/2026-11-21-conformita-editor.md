@@ -327,21 +327,97 @@ I 12 pezzi con `attende "#421"` sono verdi con `--attese`: il lavoro che
 aspettavano è entrato, e chi tocca la mappa può togliere il loro
 `attende`.
 
+## Controllo del 2026-11-28, parte 2
+
+Tre aree della tabella qui sotto entrano nella mappa: le pagine di
+Esporta PDF, i blocchi della Live e l'editor nei fogli stretti della
+cornice. Base `310cfff58` (ramo `integra/editor-cornice-1`), prototipo a
+`9a4cf1e94`, stessa macchina e stesso Chromium del primo controllo;
+estrazione e verifica nelle due luci dalla coda dei controlli pesanti.
+Nell'app non si è corretto niente: ogni differenza è una voce di
+`DA_COPRIRE` (`apps/client/bench/conformita/editor/da-coprire-parte-2.mjs`)
+coi suoi numeri.
+
+| Area | Pezzi aggiunti | Uguali | Diversi | Pezzi interi da coprire |
+|---|---|---|---|---|
+| esporta PDF, la pagina | 12 | 2 | 10 | 6 |
+| blocchi Live e maniglie | 17 | 3 | 14 | 7 |
+| fogli stretti (620, 540, 400, 340 px) | 4 | 1 | 3 | 2 |
+
+Il pezzo dei fogli sui margini della copertina aspetta `#421`, come gli
+altri della copertina: è diverso con `--attese`, e la sua voce di
+`DA_COPRIRE` è già scritta.
+
+Le differenze più visibili:
+
+- **il richiamo della Live**: nel prototipo è una riga flessibile, icona
+  e testo, col carattere di lettura a 18 px, raggio 10 e un filo verde
+  interno; nell'app è un blocco col carattere dell'interfaccia a 14 px,
+  bordo grigio, raggio 8, e l'icona nel margine (44 px di rientro). Il
+  titolo è verde nel prototipo, del colore del testo nell'app;
+- **il collegamento**: nel prototipo è testo del documento sottolineato in
+  verde, nell'app testo verde;
+- **i fogli stretti**: il prototipo tiene la pagina a 60 e 24 px di
+  margine e riduce «Inserisci» all'icona a 540 px e sotto; l'app stringe i
+  margini (40 e 20 a 540, 18 sotto) e tiene la parola;
+- **la pagina stampata**: il richiamo ha un filo verde a sinistra nel
+  prototipo e una cornice grigia nell'app; la tabella ha le celle
+  distanziate (`border-collapse: separate`) e senza spazio sopra e sotto;
+  il compito è un elemento d'elenco e non una riga con la casella;
+- **la casella dei compiti**: 17 px con un'ombra interna nel prototipo,
+  16 px con un bordo nell'app; la barratura del testo fatto è più tenue
+  nel prototipo.
+
+Il resto è minore: interlinea 1,62 contro 1,65 su paragrafo, compito,
+ripiegabile e trasclusione; raggi di 1 o 2 px; la didascalia a 13 px
+contro 12.
+
+I pezzi interi da coprire sono tipi che una delle due parti non mostra: la
+nota della scena `esporta-pdf` non ha ripiegabili, figure, formule in
+blocco, trasclusioni né schede di nota (il prototipo non ha una
+citazione); nessuna scena della Live mostra la scheda di una nota, la
+scadenza lontana, la persona in riga o il corpo del ripiegabile aperto;
+l'icona del richiamo dell'app non è un elemento. Nei fogli stretti i
+gruppi nascosti della barra non hanno stili da leggere, e la sbirciata
+non ha una scena.
+
+### Come si applica `embed.css`
+
+Le regole dei fogli stretti non sono nel prototipo: le aggiunge il
+simulatore della cornice (`simulatore-cornice/src/embed.css`), che monta
+l'editor dentro un foglio `container: pane / inline-size`. Il banco ne
+tiene una copia identica,
+`apps/client/bench/conformita/editor/cornice-embed.css`, e gli stati
+`chiaro-foglio-N` e `scuro-foglio-N` di `editor/comuni.mjs` la applicano
+come la cornice: un `<style>` con la copia, e `#win` dentro un `.pane` e
+un `.pane-sheet` larghi N px, con le stesse regole di contenimento di
+`frame.css`. È la via più piccola che non riscrive niente: le regole
+restano quelle del simulatore, byte per byte, e scattano per la stessa
+ragione (la larghezza del foglio, non quella della finestra). Dal lato
+dell'app lo stato stringe il foglio a fuoco a N px nella finestra a
+1280. Chi aggiorna il simulatore ricopia il file.
+
+Due correzioni al banco sono servite per i pezzi col puntatore sopra: il
+gesto accetta un elenco di selettori (passa dal blocco e poi dalla
+maniglia, che senza si spegne), e la verifica torna a riposo solo dopo
+aver risolto i token, perché un elemento che c'è solo col puntatore sopra
+non sparisca prima.
+
 ## Ciò che la mappa non copre ancora
 
 Pezzi del prototipo senza una voce nella mappa, e perché:
 
 | Area | Non coperti | Perché |
 |---|---|---|
-| esporta PDF | 36 | varianti dei pannelli che nessuna vista apre |
-| blocchi Live | 50 | callout, toggle, link, scadenze, citazioni: il banco ha scene per alcuni (callout, toggle), la mappa non ne ha le viste |
+| esporta PDF | 24 | varianti dei pannelli che nessuna vista apre; la pagina stampata entra il 2026-11-28 (12 pezzi), ma 6 tipi di blocco la nota della scena non li ha |
+| blocchi Live | 33 | entrano il 2026-11-28 testo, compiti, richiamo, collegamento, ripiegabile, immagine, trasclusione e maniglie (17 pezzi); restano la scheda di una nota, la scadenza lontana, la persona in riga, il corpo del ripiegabile e l'icona del richiamo, senza scena o senza elemento, e citazione, elenco e codice, che il prototipo non mostra |
 | cornice di contesto | 42 | binario, cassetto e schede di Scrittoio 2: cornice d'altro piano, non dell'editor |
 | tabelle e fogli | 31 | menu della griglia, tratteggio del taglio, scelte: nessuna vista |
 | diagramma | 21 | il pannello del diagramma: nessuna vista dai due lati |
 | commenti | 16 | fumetti e discussioni: il banco ha solo le scene del telefono (`mobile-commenti`) |
 | menu e finestre | 16 | selettore della data, menu contestuali, finestrella d'avviso: l'avviso dell'app (`toast`) è una pila di errori in basso a destra, un altro disegno |
 | ispettore | 12 | Struttura, Compiti, Versioni: la scena del banco apre Collegamenti |
-| sbirciata | 7 | l'app ha `.note-peek`, ma nessuna scena del banco |
+| sbirciata | 7 | l'app ha `.note-peek`, ma nessuna scena del banco; nel foglio stretto (dal 2026-11-28 gli stati `*-foglio-*`) il prototipo la allarga a tutto il foglio |
 | altro | 44 | pezzi minori sparsi, dall'inventario |
 | le altre aree | 70 | Base 17, lanciatore 13, formule 10, «/» 8, pagina e testata 6, cornice 6, Sorgente 5, barra di formato 5: stati e varianti dei pezzi già coperti |
 

@@ -106,6 +106,9 @@ try {
           await page.click(`[data-set="width"][data-v="${stato.prototipo.larghezza}"]`);
           await page.click('[data-set="motion"][data-v="ridotto"]');
         }
+        // Uno stato può montare il prototipo altrove prima della vista (i
+        // fogli stretti della cornice, `editor/comuni.mjs`).
+        if (stato.prototipo.monta) await stato.prototipo.monta(page);
         await vista.prototipo.prepara(page);
         await fermo(page);
         const leggiPezzo = async (pezzo) => {

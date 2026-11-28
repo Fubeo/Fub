@@ -481,6 +481,7 @@ export function coperture(daCoprire, pezzi) {
       errori.push(`${d.id}: ha proprietà da coprire, ma non è in PEZZI`);
       continue;
     }
+    if (d.stati !== undefined && !Array.isArray(d.stati)) errori.push(`${d.id}: «stati» è un elenco`);
     const sue = espandi(pezzo.proprieta);
     for (const p of d.proprieta) {
       if (!espandi([p]).every((l) => sue.includes(l))) {
@@ -489,6 +490,7 @@ export function coperture(daCoprire, pezzi) {
       }
       const voce = { pezzo: d.id, proprieta: p, motivo: d.perche, riferimento: "DA_COPRIRE", daCoprire: true };
       if (d.escluso !== undefined) voce.escluso = d.escluso;
+      if (d.stati) voce.stati = d.stati;
       voci.push(voce);
     }
   }

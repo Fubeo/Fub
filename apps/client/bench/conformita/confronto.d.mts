@@ -59,6 +59,7 @@ export interface DaCoprire {
   perche: string;
   escluso?: string;
   proprieta?: readonly string[];
+  stati?: readonly string[];
   prototipo?: string;
   app?: string | null;
 }

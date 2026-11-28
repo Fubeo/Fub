@@ -193,6 +193,15 @@ e una riga `esclusi:` dice per ogni ragione quante voci e quante differenze;
 il referto le scrive in `esclusi`. Un task grafico aggiunge i suoi pezzi alla mappa, rigenera l'estrazione e passa il
 controllo; il referto intero va in `bench/.output/conformita/`.
 
+Uno stato può montare i due lati prima della vista: `prototipo.monta` e
+`app.monta` in `STATI`. Gli stati `chiaro-foglio-N` e `scuro-foglio-N`
+dell'editor (620, 540, 400 e 340 px) mettono il prototipo dentro un foglio
+come quello della cornice, con la copia delle regole del simulatore
+(`editor/cornice-embed.css`), e stringono a N px il foglio a fuoco
+dell'app. Il gesto di un pezzo può essere un elenco di selettori, percorsi
+in ordine: serve a un pulsante che compare solo col puntatore sopra un
+altro elemento.
+
 Un pezzo con `attende: "#<PR>"` ha i valori attesi già estratti, ma la verifica
 non lo legge finché quella PR non è in `main`: il suo selettore, e a volte la
 sua scena, nascono lì. La riga di riepilogo conta i pezzi che attendono, per
