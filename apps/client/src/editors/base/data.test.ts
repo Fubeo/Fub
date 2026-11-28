@@ -194,6 +194,12 @@ describe("Base contract", () => {
   it("recognizes source embeds without misreading them as vault file IDs", () => {
     expect(parseBaseEmbed({ node: "custom", ns: "fub:base", payload: { source, view: "Board" }, fallback: [] }))
       .toEqual({ source, view: "Board", container: null });
+    // `![[Opere.base]]`: il kernel manda il testo e, accanto, il file; vince il
+    // file, così le viste si scrivono lì e non nella nota (DECISIONS T15).
+    expect(parseBaseEmbed({ node: "custom", ns: "fub:base", payload: { source, base: "Liste/Opere.base", view: "Board", container: "Liste/Opere.base" }, fallback: [] }))
+      .toEqual({ base: "Liste/Opere.base", view: "Board", container: "Liste/Opere.base" });
+    expect(parseBaseEmbed({ node: "custom", ns: "fub:base", payload: { base: "Opere.base" }, fallback: [] }))
+      .toEqual({ base: "Opere.base", view: null, container: null });
     expect(cellText({ kind: "file", value: { path: "a.png", label: null } })).toBe("a.png");
   });
   it("threads the containing document through derivation without confusing it with a member", async () => {

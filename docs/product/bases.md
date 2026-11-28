@@ -330,10 +330,10 @@ Il gesto non scrive, e la barra lo dice sotto le etichette, quando:
   file com'è ora, e il gesto si rifà da lì;
 - la Base è in sola lettura: gli attrezzi che scrivono sono spenti, filtro,
   ordine e colonne si guardano soltanto;
-- la Base sta in un blocco ```` ```base ```` dentro una nota: i comandi scrivono
-  solo un file `.base`, quindi la barra la mostra in sola lettura e lo dice.
-  «Apri come file» apre la nota che contiene il blocco, dove filtro, ordine e
-  colonne si cambiano.
+- la Base sta in un blocco ```` ```base ```` dentro una nota: i comandi scrivono solo un file `.base`,
+  quindi la barra la mostra in sola lettura e lo dice. «Apri come file» apre la nota che contiene il
+  blocco, dove filtro, ordine e colonne si cambiano. Un `![[Nome.base]]` non è un blocco: ha i gesti di
+  un `.base` aperto e li scrive nel file, con la sua revisione, mai nella nota che lo incorpora.
 
 Il piano della vista (`op: "plan"` della query `fub.base`) porta per questo,
 oltre alle colonne, il filtro (`filters`), l'ordinamento (`sort`), le colonne
@@ -438,8 +438,8 @@ tenui e lo dicono («su tutte le 50 note della vista»).
 
 Una Base va in una nota con un blocco ```` ```base ````, un `![[Nome.base#Vista]]`
 (col `#` la vista nominata, senza la prima) o «Base» del [menu «/»](editor-menus.md#una-base-dal-),
-che crea il file accanto. Nella pagina si allarga fino al margine (64 dei 96 px
-di destra), resta nella colonna sotto i 940 px e non ha il filo delle note.
+che crea il file accanto. Per `![[…]]` il kernel manda il testo e il path del file (`base` nel payload di `fub:base`, come la scrivania), per il blocco solo il testo.
+Nella pagina si allarga fino al margine (64 dei 96 px di destra), resta nella colonna sotto i 940 px e non ha il filo delle note.
 
 ## Vedi anche
 
