@@ -70,11 +70,6 @@ export function linkModifier(event: MouseEvent, platform: string = globalThis.na
   return /Mac|iPhone|iPad|iPod/i.test(platform) ? event.metaKey : event.ctrlKey;
 }
 
-/// Il nome di quel tasto, per le frasi che lo dicono: «Cmd» sul Mac, «Ctrl» altrove.
-export function linkModifierName(platform: string = globalThis.navigator?.platform ?? ""): string {
-  return /Mac|iPhone|iPad|iPod/i.test(platform) ? "Cmd" : "Ctrl";
-}
-
 /// Il gesto di un clic sul testo che si scrive: Alt sbircia, Ctrl (Cmd sul
 /// Mac) è il clic che apre; `null` per il clic semplice, che è del cursore, e
 /// per le combinazioni (Ctrl+Alt, Maiusc).

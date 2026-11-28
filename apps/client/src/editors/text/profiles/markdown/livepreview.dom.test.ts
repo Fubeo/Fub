@@ -309,13 +309,13 @@ describe("wikilink in Live", () => {
       ],
     });
     const marks = () => [...parent.querySelectorAll<HTMLElement>(".cm-fub-wikilink")]
-      .map((link) => [link.textContent, link.dataset.wikilinkMissing, link.title]);
+      .map((link) => [link.textContent, link.dataset.wikilinkMissing]);
     try {
       const doc = "Primo\n\nVai a [[Nota B]] e [[Inesistente]]\n\n[[Nuo";
       engine.setDoc(doc);
       expect(marks()).toEqual([
-        ["Nota B", undefined, ""],
-        ["Inesistente", "", "La nota non esiste ancora: Ctrl+clic la crea"],
+        ["Nota B", undefined],
+        ["Inesistente", ""],
       ]);
       absent.delete("Inesistente");
       engine.runViewCommand((view) => {

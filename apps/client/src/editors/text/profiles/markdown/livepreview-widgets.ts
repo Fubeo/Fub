@@ -17,7 +17,7 @@ import { isAllowedLink } from "../../../../ui/sanitize";
 import { readPageMark } from "../../../../ui/page-mark";
 import { parseWikilinkInner } from "../../../../rules/syntax";
 import { decodeDestination, normalizeLabel, routeHref } from "./link-syntax";
-import { followPath, followWikilink, linkModifierName, textLinkGesture } from "./link-gesture";
+import { followPath, followWikilink, textLinkGesture } from "./link-gesture";
 import { FOOTNOTE_DEFINITION } from "./grammar";
 import { mountMarkdown } from "./mount";
 import { mountMathBlocks } from "./math";
@@ -491,13 +491,15 @@ export function inDecoration(d: LiveDeco, callbacks: LivePreviewCallbacks): Deco
       // maschera (`data-page-figure`); un `fub:` sconosciuto non si mostra.
       const mark = readPageMark(target.page ? callbacks.pageIcon?.(target.page) ?? null : null);
       const person = target.page !== "" && callbacks.isPerson?.(target.page) === true;
-      // La nota che non c'è ancora (UX-016): a tratti, e il passaggio dice che
-      // un clic la crea. Il link che si sta scrivendo non lo chiede.
+      // La nota che non c'è ancora (UX-016): a tratti. Al passaggio lo dice la
+      // scheda del collegamento (`sheets/link-card.ts`), con «Crea la nota»: un
+      // `title` sopra sarebbe un secondo avviso. Il link che si sta scrivendo
+      // non lo chiede.
       const missing = target.page !== "" && d.writing !== true && callbacks.missing?.(target.page) === true;
       return Decoration.mark({
         class: person ? "cm-fub-wikilink cm-fub-person" : "cm-fub-wikilink",
         attributes: {
-          ...(missing ? { "data-wikilink-missing": "", title: liveStrings.t("live.wikilink.missing", { key: linkModifierName() }) } : {}),
+          ...(missing ? { "data-wikilink-missing": "" } : {}),
           [ATTR_WIKILINK]: d.data ?? "",
           "data-wikilink-page": target.page,
           ...(mark?.kind === "text" ? { "data-page-icon": mark.text } : {}),

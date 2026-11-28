@@ -52,8 +52,9 @@ celle delle tabelle e sulle schede (`link-gesture.ts`):
 - Alt col clic sbircia sempre; «Apri» del menu del link apre sempre.
 
 In Scrittura un wikilink a una nota che non c'è ancora ha il filo a tratti,
-nello stesso inchiostro, e al passaggio dice «La nota non esiste ancora:
-Ctrl+clic la crea» (Cmd sul Mac); seguirlo crea la nota e la apre. Lo dice
+nello stesso inchiostro; al passaggio la scheda del collegamento dice «Questa
+nota non esiste ancora.» con **Crea la nota**, e Ctrl col clic (Cmd sul Mac)
+lo segue: la nota nasce e si apre. Lo dice
 l'indice, con una risoluzione per link nuovo raccolta in un giro solo
 (`state/link-targets.ts`): finché non ha risposto, o se non risponde, il link
 si mostra come gli altri. Il link che si sta scrivendo, con la sorgente in
