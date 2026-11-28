@@ -181,11 +181,20 @@
   height: calc(var(--live-card-full, 80vh) - 36px);
 }
 .live-card[data-card-state="missing"] .live-card-body,
-.live-card[data-card-state="unsupported"] .live-card-body,
-.live-card[data-card-state="loading"] .live-card-body {
+.live-card[data-card-state="unsupported"] .live-card-body {
   height: auto;
   min-height: 0;
   cursor: default;
+}
+/* L'attesa tiene già l'altezza che avrà la vista (UX-019): quella scritta
+   nell'embed o quella della specie, così il testo sotto non salta quando il
+   file arriva. Una scheda mostrata come riga resta una riga. */
+.live-card[data-card-state="loading"] .live-card-body {
+  cursor: default;
+}
+.live-card[data-card-state="loading"][data-card-display="row"] .live-card-body {
+  height: auto;
+  min-height: 0;
 }
 
 /* Il file mancante, il formato senza vista, l'attesa: una riga che dice
@@ -491,7 +500,8 @@
   width: min(var(--live-card-width), 100%);
   margin-left: 0;
 }
-.live-card[data-card-state="view"][data-card-height="set"]:not([data-card-full="true"]) .live-card-body {
+.live-card[data-card-state="view"][data-card-height="set"]:not([data-card-full="true"]) .live-card-body,
+.live-card[data-card-state="loading"][data-card-height="set"] .live-card-body {
   height: min(calc(var(--live-card-height) - 35px), 80vh);
   min-height: 60px;
 }

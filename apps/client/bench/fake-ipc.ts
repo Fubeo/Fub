@@ -764,6 +764,11 @@ declare global {
 /// chi risponde alle misure tirate (`?misure=si`) al posto del finto.
 const sizeGates: { held: Promise<void> | null; fault: boolean } = { held: null, fault: false };
 
+/// Le domande all'indice frenate dal banco per specie (`query:render_embed`):
+/// quelle che il banco risponde da sé (`RESPONSES`) non passano dalla porta
+/// `queryIndex` del finto, e senza questo un incorporato lento non si prova.
+const queryHolds = new Map<string, Promise<void>>();
+
 globalThis.window.bench = {
   emit: host.emit,
   fault: (gate, reason) => {
@@ -776,6 +781,16 @@ globalThis.window.bench = {
     };
   },
   throttle: (gate) => {
+    if (gate.startsWith("query:")) {
+      const kind = gate.slice("query:".length);
+      let open = () => {};
+      const held = new Promise<void>((resolve) => { open = resolve; });
+      queryHolds.set(kind, held);
+      return () => {
+        if (queryHolds.get(kind) === held) queryHolds.delete(kind);
+        open();
+      };
+    }
     const release = host.throttle(gate);
     if (gate !== "gridBytesCommand") return release;
     let open = () => {};
@@ -1308,6 +1323,8 @@ export const api: typeof host.module.api = {
     return outcome;
   },
   queryIndex: (q) => timedQuery(q, async () => {
+    const held = queryHolds.get(q.kind);
+    if (held) await held;
     // Le note con un'icona (`icon:` nel frontmatter), come le legge l'indice:
     // il finto non sa leggere le proprietà, e del banco ce l'ha solo la nota
     // della Live delle scene della pagina.
