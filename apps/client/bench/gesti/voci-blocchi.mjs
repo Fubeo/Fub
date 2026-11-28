@@ -1,5 +1,7 @@
 // Le voci della pagina «blocchi e trascinamento»
 // (`docs/misure/gesti-editor/blocchi.md`): `n` è la riga della tabella.
+import { vociDelMenu } from "./letture.mjs";
+
 export const DOC = "blocchi.md";
 
 const LUNGO =
@@ -59,17 +61,6 @@ async function maniglia(page) {
       return b.top <= y && y <= b.bottom;
     });
     return `visibile accanto a «${(riga?.textContent ?? "?").slice(0, 30)}»`;
-  });
-}
-
-/// Le voci del menu aperto (blocco o contesto), in ordine.
-async function vociDelMenu(page) {
-  return page.evaluate(() => {
-    const menu = [...document.querySelectorAll("[role=menu], .cm-fub-block-menu")].filter((m) => m.getClientRects().length > 0).pop();
-    if (!menu) return "nessun menu";
-    return [...menu.querySelectorAll("[role=menuitem], [role=menuitemradio], [role=menuitemcheckbox]")]
-      .filter((v) => v.getClientRects().length > 0)
-      .map((v) => (v.querySelector(".menu-label, .label")?.textContent ?? v.textContent).replace(/\s+/g, " ").trim().slice(0, 40));
   });
 }
 
