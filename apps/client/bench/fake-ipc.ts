@@ -236,13 +236,16 @@ const RESPONSES: Partial<Record<IndexQuery["kind"], (q: IndexQuery) => IndexResu
     // kernel darebbe, col testo del file e la vista della sezione. Le domande
     // `fub.base` del finto rispondono per `Opere.base` qualunque sia il file.
     if (BASE !== null && q.page.endsWith(".base") && !q.block) {
+      // Come il kernel, accanto al testo il path del file (`base`): la Base
+      // incorporata da un file scrive le sue viste lì.
       const source = BASE.files[BASE_DOC] ?? "";
+      const doc = q.page.includes("/") ? q.page : BASE_DOC;
       return {
         kind: "render_embed",
         value: {
-          doc_id: q.page.includes("/") ? q.page : BASE_DOC,
+          doc_id: doc,
           html: '<div class="ui-slot" data-ui-slot="0" data-custom-kind="base"></div>',
-          parts: [{ slot: 0, kind: "base", node: { node: "custom", ns: "fub:base", payload: { source, view: q.heading ?? null, container: q.page.includes("/") ? q.page : BASE_DOC }, fallback: [] } }],
+          parts: [{ slot: 0, kind: "base", node: { node: "custom", ns: "fub:base", payload: { source, base: doc, view: q.heading ?? null, container: doc }, fallback: [] } }],
         },
       };
     }

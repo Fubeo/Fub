@@ -206,12 +206,6 @@ export const DA_COPRIRE = [
   // docs/misure/2026-11-21-conformita-editor.md: nessun lavoro le ha ancora
   // corrette; quando una torna uguale al prototipo la voce diventa rossa.
   {
-    id: "base.attrezzo",
-    proprieta: ["opacity"],
-    perche:
-      "«+ Nuova vista» è spento nella `![[Opere.base#Tabella]]` della scena: `mountBaseEmbed` (`editors/base/surface.ts`) tratta ogni Base incorporata come il blocco ```base``` della nota (`sourceInNote`), perché il kernel le manda tutte col sorgente; DECISIONS 2026-11-15 T15 vuole i gesti sulla Base incorporata da file. Si corregge nella superficie della Base, non nel tema",
-  },
-  {
     id: "cornice.barra",
     escluso: FUORI_DAL_FOGLIO,
     proprieta: ["height", "padding", "gap", "color"],

@@ -22,6 +22,7 @@ fn file_backed_base_embeds_select_views_without_losing_source_fallback() {
         "![[views/foo.base]]\n![[views/foo.base#Board]]\n",
     )
     .unwrap();
+    std::fs::write(root.join("fenced.md"), format!("```base\n{SOURCE}```\n")).unwrap();
     let mut mounted = fub_host::mount::mount(
         &root,
         MachineSettings::in_memory(),
@@ -73,6 +74,8 @@ fn file_backed_base_embeds_select_views_without_losing_source_fallback() {
         assert_eq!(ns, BASE_EMBED_NS);
         assert_eq!(payload["source"], SOURCE);
         assert_eq!(payload["view"], expected);
+        // Incorporata da file: la shell scrive le viste nel `.base`, non nella nota.
+        assert_eq!(payload["base"], "views/foo.base");
 
         let IndexResult::RenderEmbed(via_query) = mounted
             .workspace
@@ -87,6 +90,19 @@ fn file_backed_base_embeds_select_views_without_losing_source_fallback() {
         };
         assert_eq!(via_query.content.parts[0].node, rendered.parts[0].node);
     }
+    // Un blocco ```base``` della nota non dice di essere un file: resta da leggere.
+    let fenced = mounted
+        .workspace
+        .render_preview(&DocId::new("fenced.md"))
+        .unwrap();
+    assert_eq!(fenced.parts.len(), 1, "{}", fenced.html);
+    let UiKind::Custom { payload, .. } = &fenced.parts[0].node.kind else {
+        panic!("the fenced Base must be a declarative custom part");
+    };
+    assert_eq!(payload["source"], SOURCE);
+    assert_eq!(payload["container"], "fenced.md");
+    assert!(payload.get("base").is_none(), "{payload}");
+
     let missing = mounted
         .workspace
         .render_embed("views/foo.base", Some("Missing"), None)
