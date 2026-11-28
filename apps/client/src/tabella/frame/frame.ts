@@ -587,9 +587,9 @@ export class TableFrame {
   /// Posa un riquadro sul posto `box` già misurato (o lo nasconde): la prima
   /// volta senza scivolare, poi scivola da `was`, il posto di prima, in
   /// `SELECT_MS`. Il posto è dell'impaginazione (`left`, `top`, `width`,
-  /// `height`); il moto è soltanto `transform`, con `moto`, perché nella
-  /// pagina le transizioni del CSS sono spente (`skin/motion.css`). Qui si
-  /// scrive soltanto: niente letture del layout.
+  /// `height`); il moto è soltanto `transform`, con `moto`, che sa
+  /// interrompersi e ripartire da dov'era. Qui si scrive soltanto: niente
+  /// letture del layout.
   #place(
     element: HTMLElement,
     box: { left: number; top: number; width: number; height: number } | null,

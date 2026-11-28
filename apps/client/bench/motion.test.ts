@@ -41,7 +41,7 @@ const scenes = [...SCENE, ...GESTURE_SCENE];
 /// radice del client e il testo.
 const sources = new Map(
   Object.entries(
-    import.meta.glob(["../src/shells/scrittoio/**/*.ts", "../src/panels/**/*.ts", "../src/kit/**/*.ts", "../src/editors/rich/**/*.ts", "../src/editors/text/profiles/markdown/blocks/**/*.ts", "../src/editors/grid/**/*.ts", "../src/ui/motion.ts", "../src/ui/menu.ts"], {
+    import.meta.glob(["../src/shells/scrittoio/**/*.ts", "../src/panels/**/*.ts", "../src/kit/**/*.ts", "../src/editors/rich/**/*.ts", "../src/editors/text/profiles/markdown/blocks/**/*.ts", "../src/editors/grid/**/*.ts", "../src/ui/motion.ts", "../src/ui/menu.ts", "../src/ui/menu-enter.ts"], {
       eager: true,
       query: "?raw",
       import: "default",

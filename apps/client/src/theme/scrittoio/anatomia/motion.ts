@@ -7,7 +7,7 @@ export const MOTION: PartAnatomy = {
   components: [
     { name: "context-menu", states: INTERACTIVE, hooks: ["context-menu"] },
     { name: "modal-palette", states: SELECTABLE, hooks: ["palette-box"] },
-    { name: "editor-motion-surface", layers: { "cm-editor": "contenuto", "cm-cursorLayer": "segno" }, states: [S("rest"), S("focused")], hooks: ["cm-editor", "pane-editor", "cm-cursorLayer"] },
+    { name: "editor-motion-surface", layers: { "cm-editor": "contenuto", "cm-scroller": "contenuto", "cm-content": "contenuto", "cm-line": "contenuto", "cm-selectionLayer": "segno", "cm-cursorLayer": "segno" }, states: [S("rest"), S("focused")], hooks: ["cm-editor", "pane-editor", "cm-scroller", "cm-content", "cm-line", "cm-selectionLayer", "cm-cursorLayer", "cm-gutters"] },
     { name: "sheet-ghost", states: REST, hooks: ["sheet-ghost"] },
   ],
 };

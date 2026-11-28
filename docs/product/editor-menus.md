@@ -130,10 +130,12 @@ coprirli: dove sotto non c'è posto va sopra, poi a destra o a sinistra, e
 solo se la finestra non ha posto da nessuna parte resta dentro di lei anche
 sopra la cosa scelta.
 
-Il menu nasce dal punto del clic, in meno di un quinto di secondo: testata,
-barra e voci arrivano una dopo l'altra, il sottomenu entra da destra, e
-chiuso il menu sfuma senza muoversi. I menu a tendina entrano con una
-dissolvenza breve. Col moto ridotto niente si muove.
+Il menu nasce dal punto del clic in meno di un quinto di secondo. Testata,
+barra e voci salgono dal basso una dopo l'altra, 15 ms l'una dall'altra, e la
+riga della ricerca in fondo arriva con la decima: l'entrata intera dura meno
+di mezzo secondo. L'icona della testata fa un piccolo salto. Il sottomenu
+entra da destra, e chiuso il menu sfuma senza muoversi. I menu a tendina
+entrano con una dissolvenza breve. Col moto ridotto niente si muove.
 
 Su Linux il menu compare alla pressione del tasto destro, non al rilascio come
 su Windows. Il rilascio che segue non lo chiude e non sceglie la voce che

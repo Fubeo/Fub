@@ -318,25 +318,25 @@ pannelli) lo Scrittoio compone:
   `theme/scrittoio/skin/kit.css`; il vassoio è il ruolo facoltativo
   `--bar-tray` della ricetta (ripiego `--sheet-2`); `appearance.bars`
   «marcate» mette `data-bars="marked"` sulla radice e il vassoio su `--sheet-2`;
-- `moto/`: molle, FLIP, presenza e gesti. Le animazioni sono fotogrammi chiave
-  WAAPI di sola `transform` e `opacity`. Le molle si campionano al ritmo dello
-  schermo (60–240 Hz, `samplePeriodMs`), con chiavi diradate sopra i 60 Hz. Il
-  livello `appearance.motion` e la preferenza del sistema decidono quanto
-  movimento esiste, e lo stato finale è lo stesso con e senza movimento. Nel
-  livello calmo le molle non superano il bersaglio; ciò che entra o esce fa metà
-  strada, con una molla critica più rigida che non dura più di quella piena.
-  Menu, modali, pannelli, centri e avvisi entrano ed escono da `ui/motion.ts`,
-  sopra `moto`: la pelle non ha fotogrammi chiave d'entrata o d'uscita, e
-  un'uscita è un'immagine che se ne va in 140 ms al più. Il default di
-  `appearance.motion` lo decide l'host (`fub_host::settings::motion_default`):
-  `""` (segue il sistema), tranne su Linux con WebKitGTK dalla 2.54.0, che dopo
-  un'animazione ripresenta fotogrammi vecchi; lì parte da `reduced`. La versione
-  è quella della libreria caricata, che l'app dichiara per prima cosa, prima del
-  percorso di disegno e dell'host (`declare_the_webview` in
-  `crates/fub-app/src/lib.rs`); l'intervallo difettoso è la costante
-  `WEBKITGTK_FLICKER_FROM`, aperta in alto finché una versione corretta non è
-  verificata. Un valore scritto, anche `""`, vale sempre; sotto la riga
-  Animazioni le Impostazioni dicono perché il valore di partenza è «ridotte»;
+- `moto/`: molle, FLIP, presenza e gesti. Le animazioni sono fotogrammi chiave WAAPI di sola
+  `transform` e `opacity`. Le molle si campionano al ritmo dello schermo (60–240 Hz,
+  `samplePeriodMs`), con chiavi diradate sopra i 60 Hz. Il livello `appearance.motion` e la
+  preferenza del sistema decidono quanto movimento esiste, e lo stato finale è lo stesso con e
+  senza movimento. Nel livello calmo le molle non superano il bersaglio; ciò che entra o esce fa
+  metà strada, con una molla critica più rigida che non dura più di quella piena. Menu, modali,
+  pannelli, centri e avvisi entrano ed escono da `ui/motion.ts`, sopra `moto`: la pelle non ha
+  fotogrammi chiave d'entrata o d'uscita, e un'uscita è un'immagine che se ne va in 140 ms al più.
+  Nel foglio vivono le transizioni CSS del prototipo (maniglia, schede vive, trasclusioni,
+  commenti, Concentrazione); righe, selezione e margine restano fermi (`skin/motion.css`,
+  `theme/sheet-motion.test.ts`); col moto ridotto nel foglio niente si muove. Il default di
+  `appearance.motion` lo decide l'host (`fub_host::settings::motion_default`): `""` (segue il
+  sistema), tranne su Linux con WebKitGTK dalla 2.54.0, che dopo un'animazione ripresenta
+  fotogrammi vecchi; lì parte da `reduced`. La versione è quella della libreria caricata, che
+  l'app dichiara per prima cosa, prima del percorso di disegno e dell'host (`declare_the_webview`
+  in `crates/fub-app/src/lib.rs`); l'intervallo difettoso è la costante `WEBKITGTK_FLICKER_FROM`,
+  aperta in alto finché una versione corretta non è verificata. Un valore scritto, anche `""`,
+  vale sempre; sotto la riga Animazioni le Impostazioni dicono perché il valore di partenza è
+  «ridotte»;
 - `theme/scrittoio/`: la serie di serie (motore `theme-2`), con ricetta dei
   colori, fogli, e struttura e pelle a pezzi (`structure/`, `skin/`) montate
   da `theme:generate`. La pelle passa dal sanitizer CSS del motore, e ogni

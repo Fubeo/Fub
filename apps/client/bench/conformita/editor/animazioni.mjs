@@ -66,7 +66,7 @@ export const ANIMAZIONI = [
   /// (scala 0,94 → 1 e opacità), poi le parti arrivano una dopo l'altra dal
   /// basso, 15 ms fra l'una e l'altra; l'icona della testata ha un suo piccolo
   /// salto. Prototipo righe 1277–1298 (`cxin`, `cxrow`, `cxpop`); app
-  /// `ui/menu.ts`, `enterAtPoint`. Si parte dalla selezione già fatta e dal
+  /// `ui/menu-enter.ts`, `enterAtPoint`. Si parte dalla selezione già fatta e dal
   /// menu chiuso con Esc: la copia del prototipo che svanisce (`.pop.cx.out`,
   /// tolta dal suo `onfinish`) se n'è già andata.
   {
@@ -209,67 +209,5 @@ async function tastoDestroSullaSelezione(page) {
 }
 
 /// Le differenze vere trovate dal banco e non ancora corrette (la forma in
-/// `confronto-animazioni.mjs`, `copertureAnimazioni`).
-/// Col moto ridotto le tre voci coincidono; queste sono del moto pieno.
-const CAMPIONI_GEOMETRIA = ["campioni.geometria.x", "campioni.geometria.y", "campioni.geometria.larghezza", "campioni.geometria.altezza"];
-const DA_GEOMETRIA = ["da.geometria.x", "da.geometria.y", "da.geometria.larghezza", "da.geometria.altezza"];
-/// Le parti del menu: nell'app 140 ms con la curva dell'entrata e 15 ms fra
-/// l'una e l'altra a partire da 0; nel prototipo `cxrow`, 240 ms
-/// `cubic-bezier(0.2, 0.8, 0.2, 1)`, ritardo 20 + 15 n ms.
-const PARTE_DEL_MENU = [
-  "campioni.geometria.y",
-  "campioni.opacity",
-  "ritardo.geometria",
-  "ritardo.opacity",
-  "durata.geometria",
-  "durata.opacity",
-  "curva.geometria",
-  "curva.opacity",
-];
-
-export const DA_COPRIRE_ANIMAZIONI = [
-  {
-    id: "maniglie.presa-passaggio.presa",
-    proprieta: ["campioni.background-color", "campioni.color"],
-    perche:
-      "nell'app la presa salta subito al velo d'accento: la regola di `skin/motion.css` che toglie animazioni e transizioni a tutto `.cm-editor *` spegne anche le transizioni della presa di `skin/document.css`; il prototipo passa in 120 ms `ease`",
-  },
-  {
-    id: "maniglie.presa-passaggio.occhi",
-    proprieta: [...CAMPIONI_GEOMETRIA, ...DA_GEOMETRIA],
-    perche:
-      "nell'app gli occhi sono già a scala 1,12 al primo fotogramma (la stessa regola di `skin/motion.css`); il prototipo va da 16 a 17,92 px in 160 ms `cubic-bezier(0.3, 1.5, 0.5, 1)`",
-  },
-  {
-    id: "menu.entrata-selezione.testata",
-    proprieta: PARTE_DEL_MENU,
-    perche: "`ui/menu.ts` (`enterAtPoint`): ritardo 0 ms invece di 20, 140 ms invece di 240, curva dell'entrata invece di quella delle righe; al ritardo del prototipo l'app è già a 0,54 della corsa",
-  },
-  {
-    id: "menu.entrata-selezione.testata-icona",
-    proprieta: [...CAMPIONI_GEOMETRIA, "campioni.opacity", ...DA_GEOMETRIA, "da.opacity"],
-    perche:
-      "nell'app l'icona della testata non ha il suo salto: il prototipo (`cxpop`) la fa nascere da scala 0,5, ruotata di −12° e trasparente, 340 ms dopo 40 ms, `cubic-bezier(0.3, 1.5, 0.5, 1)`; l'app la muove solo con la testata",
-  },
-  {
-    id: "menu.entrata-selezione.appunti",
-    proprieta: PARTE_DEL_MENU,
-    perche: "`ui/menu.ts`: ritardo 15 ms invece di 35, 140 ms invece di 240, curva dell'entrata invece di quella delle righe",
-  },
-  {
-    id: "menu.entrata-selezione.voce-1",
-    proprieta: PARTE_DEL_MENU,
-    perche: "`ui/menu.ts`: ritardo 30 ms invece di 50, 140 ms invece di 240, curva dell'entrata invece di quella delle righe",
-  },
-  {
-    id: "menu.entrata-selezione.voce-2",
-    proprieta: PARTE_DEL_MENU,
-    perche: "`ui/menu.ts`: ritardo 45 ms invece di 65, 140 ms invece di 240, curva dell'entrata invece di quella delle righe",
-  },
-  {
-    id: "menu.entrata-selezione.piede",
-    proprieta: [...PARTE_DEL_MENU, "da.geometria.y"],
-    perche:
-      "`ui/menu.ts` ferma lo scaglionamento alla quinta parte: il piede parte a 60 ms invece di 155 (nel prototipo è la decima riga), dura 140 ms invece di 240, con un'altra curva e da un altro scarto",
-  },
-];
+/// `confronto-animazioni.mjs`, `copertureAnimazioni`). Oggi nessuna.
+export const DA_COPRIRE_ANIMAZIONI = [];

@@ -205,8 +205,9 @@ lascia il foglio e poco altro:
   attenua nei colori, leggibile, e torna piena al passaggio o col fuoco;
 - nel foglio che ha il fuoco resta acceso il blocco del cursore (le righe fino
   alla riga vuota prima e dopo, o tutte quelle che una scelta attraversa) e gli
-  altri si attenuano; la riga sotto il puntatore si riaccende. Vale in ogni
-  modalità e in ogni linguaggio, e segna soltanto le righe montate;
+  altri si attenuano in un quarto di secondo; la riga sotto il puntatore si
+  riaccende. Col moto ridotto il cambio è immediato. Vale in ogni modalità e
+  in ogni linguaggio, e segna soltanto le righe montate;
 - la banda resta, con «Esci dalla concentrazione»; la riga dei suggerimenti
   dice che Esc esce;
 - Esc esce quando nessuno lo prende prima: un menu, un dialogo o la sbirciata

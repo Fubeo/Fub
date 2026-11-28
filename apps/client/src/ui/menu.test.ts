@@ -1218,20 +1218,20 @@ describe("il moto del menu", () => {
     vi.useRealTimers();
   });
 
-  it("aperto in un punto nasce da lì in non più di 200 ms, con le parti una dopo l'altra", () => {
+  it("aperto in un punto nasce da lì in 190 ms; le parti a 20 ms più 15 per posto, la ricerca al 9; l'icona salta (cxrow, cxpop)", () => {
     showContextMenu(clickEvent(), [
       { label: "Apri", run: () => {} },
       { label: "Chiudi", run: () => {} },
-    ], { header: { icon: "link", kind: "Link", name: "Media" }, clipboard: [{ label: "Taglia", run: () => {} }, { label: "Copia", run: () => {} }] });
+    ], { header: { icon: "notes", kind: "Link", name: "Media" }, clipboard: [{ label: "Taglia", run: () => {} }, { label: "Copia", run: () => {} }] });
     const menu = document.getElementById("context-menu")!;
     const play = driver.plays.find((p) => p.el === menu)!;
-    expect(play.timing.duration).toBeLessThanOrEqual(200);
-    expect(play.keyframes[0]!.transform).toContain("scale(0.94");
-    const parts = driver.plays.filter((p) => p.el !== menu && menu.contains(p.el));
+    expect([play.timing.duration, play.keyframes[0]!.transform]).toEqual([190, expect.stringContaining("scale(0.94")]);
+    const icon = menu.querySelector(".menu-head > svg")!;
+    const parts = driver.plays.filter((p) => p.el !== menu && p.el !== icon && menu.contains(p.el));
     const rows = [...menu.querySelectorAll(".menu-items [role=menuitem]")];
     expect(parts.map((p) => p.el)).toEqual([menu.querySelector(".menu-head"), menu.querySelector(".menu-clipboard"), ...rows, menu.querySelector(".menu-foot")]);
-    expect(parts.map((p) => p.timing.delay)).toEqual([0, 15, 30, 45, 60]);
-    for (const part of parts) expect(part.timing.delay + part.timing.duration).toBeLessThanOrEqual(200);
+    expect(parts.map((p) => [p.timing.delay, p.timing.duration])).toEqual([[20, 240], [35, 240], [50, 240], [65, 240], [155, 240]]);
+    expect(driver.plays.find((p) => p.el === icon)).toMatchObject({ timing: { duration: 340, delay: 40 }, keyframes: [{ transform: expect.stringContaining("rotate(-12deg)") }, {}] });
   });
 
   it("a tendina entra con una dissolvenza di 90 ms, senza spostarsi", () => {
