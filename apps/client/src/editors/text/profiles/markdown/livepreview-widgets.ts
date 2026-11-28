@@ -136,6 +136,23 @@ class InlineMathWidget extends WidgetType {
   }
 }
 
+/// Il carattere che un'entità nomina, al posto della sua sorgente: il testo
+/// del file non cambia, e col cursore accanto torna `&amp;`.
+class EntityWidget extends WidgetType {
+  constructor(readonly text: string) { super(); }
+  eq(other: EntityWidget) {
+    return other.text === this.text;
+  }
+  toDOM() {
+    const span = document.createElement("span");
+    span.textContent = this.text;
+    return span;
+  }
+  ignoreEvent() {
+    return false;
+  }
+}
+
 const imageMounts = new WeakMap<HTMLElement, () => void>();
 
 /// Un'immagine del vault in mezzo al testo, fuori dalla riga attiva. L'HTML è
@@ -411,6 +428,8 @@ export function inDecoration(d: LiveDeco, callbacks: LivePreviewCallbacks): Deco
       return d.data === "x" ? checkedBox : boxEmpty;
     case "math":
       return Decoration.replace({ widget: new InlineMathWidget(d.data ?? "") });
+    case "entity":
+      return Decoration.replace({ widget: new EntityWidget(d.data ?? "") });
     case "image":
       return Decoration.replace({ widget: new InlineImageWidget(d.data ?? "", d.to - d.from, d.selected === true, callbacks) });
     case "cell-value": {

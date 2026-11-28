@@ -97,6 +97,9 @@ export type LiveDecoKind =
   | "checkbox"
   // widget: formula in riga resa, `data` è il TeX
   | "math"
+  // widget: un'entità HTML (`&amp;`) risolta, come in Lettura; `data` è il
+  // carattere che nomina (UX-102)
+  | "entity"
   // widget: immagine del vault in mezzo al testo, `data` è l'HTML della Lettura
   | "image"
   // widget: il valore di una cella di un foglio in mezzo al testo (T53),

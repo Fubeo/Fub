@@ -1,5 +1,16 @@
 {
  "$generato": "File generato da apps/client/src/editors/text/profiles/markdown/livepreview-identica.test.ts, non modificare a mano; rigenera con UPDATE_MIRROR=1 npx vitest run src/editors/text/profiles/markdown/livepreview-identica.test.ts da apps/client",
+ "live/valutatore": {
+  "zero/riga/1-25": "3d31fee8cda77131",
+  "zero/elemento/1-25": "2c19265fce670120",
+  "zero/mai/1-25": "eee34ad432d51223",
+  "terzo/riga/1-25": "021b2e4930ea39c4",
+  "terzo/elemento/1-25": "dd93477baa8d72a6",
+  "terzo/mai/1-25": "dd93477baa8d72a6",
+  "fine/riga/1-25": "045f01dbb7ddb2ca",
+  "fine/elemento/1-25": "eee34ad432d51223",
+  "fine/mai/1-25": "eee34ad432d51223"
+ },
  "live/commenti": {
   "zero/riga/1-12": "6bb1d295a97f36a2",
   "zero/elemento/1-12": "6bb1d295a97f36a2",

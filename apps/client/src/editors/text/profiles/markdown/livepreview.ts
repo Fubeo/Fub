@@ -53,7 +53,7 @@ import {
   renderMarkdownStatePrefix,
   renderPatch,
 } from "./render";
-import { decodeDestination, normalizeLabel } from "./link-syntax";
+import { decodeDestination, decodeEntities, normalizeLabel } from "./link-syntax";
 import { FOOTNOTE_DEFINITION } from "./grammar";
 import { commentCopy } from "./comments/copy";
 import { commentDecorations, commentEditing } from "./comments/mask";
@@ -117,7 +117,7 @@ import { CodeHeaderWidget, codeBlocks, codeWrapChanged, codeWraps } from "./code
 import { blockPrefixes } from "./block-prefix";
 import { linkDialogOpener } from "./link-dialog";
 import { topChanges } from "./top-changes";
-import { RowSweep, SpanIndex } from "./live-spans";
+import { mergeRanges, RowSweep, SpanIndex, symmetricDifference, uncovered } from "./live-spans";
 import {
   bareUrl,
   bareWikilink,
@@ -221,6 +221,9 @@ export function computeDecorations(
   // Il giro sull'albero le raccoglie in fila; il secondo strato le legge da un
   // indice ordinato (`SpanIndex`), a cui aggiunge i wikilink che trova.
   const exclusions: { from: number; to: number }[] = [];
+  // Le entità HTML risolte (UX-102): si posano alla fine, fuori dai wikilink,
+  // che le leggono come lettere, e da ciò che il secondo strato esclude.
+  const entities: LiveDeco[] = [];
   let excluded: SpanIndex | null = null;
   const codeRows = new Set<number>();
   const isFree = (a: number, b: number) => !(excluded ??= new SpanIndex(exclusions)).overlaps(a, b);
@@ -585,6 +588,15 @@ export function computeDecorations(
             out.push({ from: node.from, to: node.from + 1, kind: "hide" });
           }
           return;
+        // `&amp;`, `&lt;`, `&#39;` si leggono risolte, come in Lettura: il
+        // widget prende il posto della sorgente, che torna col cursore accanto.
+        // Un nome che HTML non conosce (`&nonesiste;`) resta testo, anche là.
+        case "Entity": {
+          const raw = doc.sliceString(node.from, node.to);
+          const text = decodeEntities(raw);
+          if (text !== raw && !reveal.source(node.from, node.to, node.from)) entities.push({ from: node.from, to: node.to, kind: "entity", data: text });
+          return;
+        }
         // HTML grezzo e commenti: il testo letterale del markup non è sintassi
         // Obsidian (un `#frag` in un attributo non è un tag). Il testo FRA i
         // tag resta decorabile: di là lo si legge come prosa.
@@ -929,6 +941,7 @@ export function computeDecorations(
   }
 
   keepPunctuation(doc, out);
+  for (const entity of entities) if (isFree(entity.from, entity.to)) out.push(entity);
   out.push(...wholePills(pills, out));
   // A pari tratto la pastiglia viene prima, cioè fuori: CodeMirror annida per
   // primo il segno che trova per primo.
@@ -1146,55 +1159,6 @@ function topCover(tree: Tree, doc: Text, from: number, to: number): { from: numb
   let next = tree.topNode.childAfter(end);
   while (next && next.from <= end) next = next.nextSibling;
   return { from: first ? Math.min(first.from, start) : 0, to: next ? next.from : tree.length };
-}
-
-/// I tratti coperti da uno dei due elenchi e non dall'altro.
-function symmetricDifference(
-  a: readonly { from: number; to: number }[],
-  b: readonly { from: number; to: number }[],
-): { from: number; to: number }[] {
-  const out: { from: number; to: number }[] = [];
-  const key = (range: { from: number; to: number }) => `${range.from}:${range.to}`;
-  const inB = new Set(b.map(key));
-  const inA = new Set(a.map(key));
-  for (const range of a) if (!inB.has(key(range))) out.push(range);
-  for (const range of b) if (!inA.has(key(range))) out.push(range);
-  return out;
-}
-
-/// I tratti dove uno dei due elenchi copre il testo e l'altro no, coi punti
-/// dove la copertura cambia in uno solo dei due: anche un bordo che si sposta
-/// conta.
-function uncovered(
-  a: readonly { from: number; to: number }[],
-  b: readonly { from: number; to: number }[],
-): { from: number; to: number }[] {
-  const edges = (list: readonly { from: number; to: number }[]) => new Set(list.flatMap((range) => [range.from, range.to]));
-  const inA = edges(a);
-  const inB = edges(b);
-  const covers = (list: readonly { from: number; to: number }[], pos: number) => list.some((range) => range.from <= pos && pos < range.to);
-  const points = [...new Set([...inA, ...inB])].sort((x, y) => x - y);
-  const out: { from: number; to: number }[] = [];
-  for (let index = 0; index < points.length; index++) {
-    const at = points[index]!;
-    // Un bordo di uno soltanto: il nodo che lo tiene cambia taglio.
-    if (inA.has(at) !== inB.has(at)) out.push({ from: at, to: at });
-    const next = points[index + 1];
-    if (next !== undefined && covers(a, at) !== covers(b, at)) out.push({ from: at, to: next });
-  }
-  return out;
-}
-
-/// I tratti in ordine, uniti quando si toccano.
-function mergeRanges(ranges: { from: number; to: number }[]): { from: number; to: number }[] {
-  ranges.sort((x, y) => x.from - y.from);
-  const out: { from: number; to: number }[] = [];
-  for (const range of ranges) {
-    const last = out[out.length - 1];
-    if (last && range.from <= last.to) last.to = Math.max(last.to, range.to);
-    else out.push({ from: range.from, to: range.to });
-  }
-  return out;
 }
 
 export function livePreview(
@@ -1617,7 +1581,7 @@ export function livePreview(
         } else {
           const range = decoration.range(item.from, item.to);
           out.decorations.push(range);
-          if (item.kind === "hide" || item.kind === "hr" || item.kind === "checkbox" || item.kind === "math"
+          if (item.kind === "hide" || item.kind === "hr" || item.kind === "checkbox" || item.kind === "math" || item.kind === "entity"
             || item.kind === "image" || item.kind === "cell-value" || item.kind === "link-pill" || item.kind === "footnote-back" || item.kind === "task-reminder"
             || item.kind === "code-header" || item.kind === "fence-close" || item.kind === "callout-type" || item.kind === "column-label") out.atomic.push(range);
           // Le righe dei recinti nascosti: la testata, e la chiusura raccolta.

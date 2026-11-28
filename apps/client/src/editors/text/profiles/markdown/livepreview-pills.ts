@@ -78,7 +78,7 @@ export function wholePills(
   });
 }
 
-const REPLACED: ReadonlySet<LiveDecoKind> = new Set(["hide", "math", "image", "cell-value", "link-pill", "footnote-back"]);
+const REPLACED: ReadonlySet<LiveDecoKind> = new Set(["hide", "math", "entity", "image", "cell-value", "link-pill", "footnote-back"]);
 
 /// La punteggiatura che non comincia una riga.
 const TRAILING_PUNCTUATION = /^[,.;:!?)\]»”’]+/;
