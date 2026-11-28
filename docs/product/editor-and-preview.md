@@ -154,9 +154,8 @@ formule o note in riga; una nota attraversata si perde.
 premuti, il cursore si ferma due volte al bordo, Backspace cancella oltre i segni o il
 prefisso. Un link ha una pastiglia col dominio: Mod-k o un clic aprono «Collegamento».
 I gesti di formato, come in Word, a metà di una parola la formattano tutta, al bordo
-aprono una coppia nascosta che sparisce se resta vuota (il cursore esce, o Esc prima
-della prima lettera), in un elemento lo tolgono e
-alla fine ne escono. Segni che non reggono (`^a b^`) passano al tag gemello (`<sup>`);
+aprono una coppia nascosta che sparisce se il cursore esce o con Esc prima di scrivere,
+in un elemento lo tolgono e alla fine ne escono. Segni che non reggono (`^a b^`) passano al tag gemello (`<sup>`);
 un taglio a metà elemento ne tiene i segni. `elemento` e `riga` mostrano i segni
 attenuati. `~x~` è pedice (ADR 0228); un rimando `[^nota]` definito è un apice e la
 definizione ha un ↩. La guida (`editor.live-guide`) dà lo stile al testo dopo un segno
