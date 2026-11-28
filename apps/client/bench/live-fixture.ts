@@ -1025,10 +1025,27 @@ export const LIVE_CASES: Readonly<Record<string, LiveCase>> = {
   "lunga-4000": longNote(4000),
 };
 
-/// Il caso della query, o niente.
-export function liveCase(name: string | null): LiveCase | null {
+/// Il caso della query, o niente. `sonda` prende il testo da `text` (vedi
+/// `probeCase`).
+export function liveCase(name: string | null, text: string | null = null): LiveCase | null {
   if (name === null) return null;
+  if (name === "sonda") return probeCase(text);
   const found = LIVE_CASES[name];
   if (!found) throw new RangeError(`la Live del banco non ha il caso «${name}»`);
   return found;
+}
+
+/// Il caso delle sonde dei gesti (`bench/gesti/`): `?live=sonda&testo=…` porta
+/// il testo della nota nell'indirizzo, col segnaposto del cursore. Due
+/// segnaposti fanno una selezione, dal primo al secondo; nessuno, la nota senza
+/// fuoco. Ogni sonda parte così da una nota sua, appena aperta e senza storia
+/// da annullare.
+function probeCase(text: string | null): LiveCase {
+  if (text === null) throw new RangeError("il caso «sonda» della Live vuole il testo in `testo`");
+  const first = text.indexOf(CARET);
+  if (first === -1) return { text, cursor: null };
+  const second = text.indexOf(CARET, first + 1);
+  if (second === -1) return at(text);
+  const plain = text.slice(0, first) + text.slice(first + 1, second) + text.slice(second + 1);
+  return { text: plain, cursor: first, head: second - 1 };
 }
