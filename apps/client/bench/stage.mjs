@@ -239,13 +239,17 @@ export async function openStage({
 ///
 /// `clock: false` lascia alla pagina l'ora vera: serve a chi misura l'heap e i
 /// frame e non fotografa niente (`graph-scale.mjs` spiega perché).
-export async function openPage(browser, light, { clock = true } = {}) {
+///
+/// `reducedMotion` è la preferenza del sistema che la pagina vede: di base
+/// `reduce` (la regola 4). Il banco delle animazioni (`conformita/animazioni.mjs`)
+/// chiede `no-preference` per misurare il moto pieno.
+export async function openPage(browser, light, { clock = true, reducedMotion = "reduce" } = {}) {
   const context = await browser.newContext({
     viewport: WINDOW,
     deviceScaleFactor: 1,
     locale: LOCALE,
     timezoneId: TIMEZONE,
-    reducedMotion: "reduce",
+    reducedMotion,
     colorScheme: light,
   });
   await watchCsp(context);

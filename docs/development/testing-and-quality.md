@@ -268,7 +268,7 @@ Tutti i comandi girano da `apps/client/`; gli script sorgente sono in
 | `npm run bench:a11y` | accessibilità della pagina resa (`-- --scene=a,b` per alcune scene, `-- --light=dark` per una luce) |
 | `npm run bench:motion` | le coreografie del moto dello Scrittoio |
 | `npm run bench:lampo` | lo strato d'avvio prima di ogni modulo |
-| `npm run bench:conformita` | gli stili calcolati dell'app contro quelli del prototipo del piano (`-- --light=dark` per una luce, vedi [la conformità al prototipo](visual-bench.md)) |
+| `npm run bench:conformita` | gli stili calcolati dell'app contro quelli del prototipo del piano (`-- --light=dark` per una luce, vedi [la conformità al prototipo](visual-bench.md)); `npm run bench:animazioni` fa lo stesso per il moto, lo stesso gesto a tempo fermo ([le animazioni](visual-bench.md#le-animazioni)) |
 | `npm run bench:interaction` | il budget d'interazione (menu, palette, nota) |
 | `npm run bench:ink` | l'inchiostro in TypeScript e in WebAssembly, fianco a fianco |
 | `npm run bench:fidelity` | la fedeltà pixel dei disegni (foglio, PNG, Lettura) |

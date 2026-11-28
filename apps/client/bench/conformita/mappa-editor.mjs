@@ -55,6 +55,9 @@ import { PEZZI_LANCIATORE_MENU } from "./editor/pezzi-lanciatore-menu.mjs";
 import { PEZZI_SLASH_SCHEDE } from "./editor/pezzi-slash-schede.mjs";
 export { STATI } from "./editor/comuni.mjs";
 export { VISTE } from "./editor/viste.mjs";
+/// Le voci del banco delle animazioni (`animazioni.mjs`) e le loro differenze
+/// ancora da correggere: la forma la spiega `editor/animazioni.mjs`.
+export { ANIMAZIONI, DA_COPRIRE_ANIMAZIONI } from "./editor/animazioni.mjs";
 
 /// Il prototipo: dove sta, e come si chiamano i file che ne nascono.
 export const PROTOTIPO = {

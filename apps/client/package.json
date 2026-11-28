@@ -27,6 +27,7 @@
     "bench:tree": "node bench/tree.mjs",
     "bench:giro": "node bench/giro.mjs",
     "bench:conformita": "node bench/conformita/verifica.mjs",
+    "bench:animazioni": "node bench/conformita/animazioni.mjs",
     "bench:webview": "node bench/webview/run.mjs",
     "theme:generate": "node theme/generate.mjs",
     "theme:verify": "node theme/generate.mjs --verify",

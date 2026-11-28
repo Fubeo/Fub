@@ -134,6 +134,7 @@ nomina il comando esatto.
 | l'accessibilità | `npm run bench:a11y` |
 | il moto | `npm run bench:motion` |
 | la grafica uguale al prototipo | `npm run bench:conformita` |
+| il moto uguale al prototipo | `npm run bench:animazioni` |
 | la battuta | `node bench/interaction.mjs --only=battuta` |
 | la WebView vera | `npm run bench:webview` |
 | un motore di terzi | `node tools/motori-prova/misura.mjs --out DIR` |

@@ -234,3 +234,93 @@ Regole:
 - spiegare ogni cambiamento intenzionale;
 - usare moto ridotto nelle scene pertinenti;
 - non mascherare una regressione alzando la soglia.
+
+## Le animazioni
+
+Il banco delle animazioni (`npm run bench:animazioni`, `-- --light=dark|light`,
+`-- --only=<inizio dell'id>`) fa lo stesso gesto nel prototipo e nell'app e
+confronta il moto che ne nasce. Vive accanto alla conformità, in
+[`bench/conformita/`](../../apps/client/bench/conformita/), e ne riusa la
+lettura degli stili (`leggi.mjs`), il confronto a riposo (`confronto.mjs`), la
+mappa e la forma delle eccezioni. Va in due tempi, come la conformità:
+`node bench/conformita/animazioni.mjs --estrai editor` (dopo `git fetch`) prende
+il prototipo dal ramo del piano e scrive `editor-animazioni.json`, un file
+generato con commit e sorgente nell'intestazione; la verifica apre la scena del
+banco e confronta. Gira in Chromium di Playwright, senza GPU.
+
+Per ogni voce, in ogni luce, col moto pieno e col moto ridotto: il `prepara`
+della voce porta al punto di partenza a tempo vero, si legge a riposo, si ferma
+il tempo, si fa il gesto, si leggono le corse nate (`document.getAnimations()`:
+proprietà, ritardo, durata, curva) e le pose ai punti 0, 25, 50, 75 e 100 %
+della corsa del prototipo, poi si ridà il tempo e si rilegge a riposo.
+
+Il tempo si ferma in un modo per tipo di animazione (il perché in
+`campiona.mjs`):
+
+| Animazione | Come si ferma | Perché |
+| --- | --- | --- |
+| Transizioni CSS, `@keyframes`, `el.animate()` | CDP `Animation.setPlaybackRate(0)`, poi `currentTime` a mano | le ferma tutte senza sapere chi le crea, anche quelle che nascono un fotogramma dopo il gesto: nascono già ferme |
+| Corse del moto dell'app (`src/moto`) | l'orologio manuale del moto (`createManualDriver`) | il motore vero chiude la corsa con un timer a tempo vero, che a linea del tempo ferma la toglierebbe a metà |
+| Moto scritto a mano in JS | `page.clock` di Playwright, nel `prepara` della voce | tiene i timer e `requestAnimationFrame`, non la linea del tempo delle animazioni |
+
+`anim.pause()` da solo arriva tardi (una transizione nata dopo il gesto ha già
+fatto un passo) e serve solo a spostare il tempo di ciò che è già fermo. Lo
+zero di ogni lato è la nascita della prima animazione del gesto: la latenza
+prima del moto non si misura qui.
+
+I campioni contano più del modo. Si confronta il progresso di ogni canale
+(geometria, opacità, colori premoltiplicati): 0 alla partenza, 1 a riposo,
+oltre 1 se una molla oltrepassa. Il progresso dell'app al tempo `t` deve stare
+fra il minimo e il massimo del prototipo fra `t − 16,7 ms` e `t + 16,7 ms`, più
+0,02 della corsa, o la tolleranza assoluta del canale divisa per la corsa se è
+più larga. Un fotogramma di scarto non si vede a 60 Hz e assorbe la latenza
+del gesto; 0,02 della corsa è sotto il mezzo pixel di quasi ogni movimento
+dell'editor. Così una molla e una `cubic-bezier` che si muovono uguali sono
+uguali. Durata e curva diverse sono rosse solo se lo sono anche i campioni di
+quel canale; altrimenti finiscono fra le note del referto. Il ritardo resta
+stretto (1 ms) sempre: è lo scaglionamento, e un passo di 15 ms starebbe dentro
+la finestra. Contano anche il punto di partenza (lo scarto dalla posa di
+riposo, l'opacità alla nascita) e i colori a riposo prima e dopo il gesto, coi
+token tradotti come nella conformità. Col moto ridotto le corse rimaste devono
+essere le stesse dai due lati.
+
+Le trappole note:
+
+- CodeMirror rifà le righe dopo una modifica: un elemento dell'app si può
+  cercare per testo, `{ css, testo }` (solo per la geometria);
+- una transizione che parte un fotogramma dopo il gesto nasce già ferma; col
+  motore manuale il banco fa passare un fotogramma alla volta finché nasce;
+- un'animazione infinita si confronta su un periodo; quelle vive a riposo (il
+  cursore) non sono del gesto;
+- una copia che svanisce e si toglie da sé (`onfinish = remove`) si lascia
+  andare nel `prepara`, e i selettori la escludono (`:not(.out)`);
+- un elemento che parte da dove l'ha lasciato la mano (un blocco trascinato)
+  ha `corsa: true`: se ne confronta il progresso, non lo scarto di partenza.
+
+### Aggiungere una voce
+
+L'inventario delle animazioni ha una riga per moto, con le colonne elemento,
+causa, proprietà, da → a, durata, ritardo, curva, moto ridotto, righe (dove sta
+nel prototipo) e app (dove sta nell'app). Una riga diventa una voce di
+`ANIMAZIONI` in `bench/conformita/editor/animazioni.mjs`, la cui intestazione
+ne dice la forma:
+
+1. «causa» diventa il `gesto` dei due lati, con il `prepara` che porta al punto
+   di partenza e la scena del banco (`app.scena`);
+2. «elemento» e «proprietà» diventano gli `elementi`: il selettore del
+   prototipo dentro `#win`, quello dell'app, e le proprietà fra `geometria`,
+   `opacity` e i colori;
+3. «da → a», durata, ritardo, curva e moto ridotto non si scrivono: li misura
+   il banco;
+4. si rigenera `editor-animazioni.json` con `--estrai editor` e si passa
+   `npm run bench:animazioni -- --only=<id>`.
+
+È rosso, con elemento, stato (`chiaro-1280/pieno`), i due selettori, atteso e
+trovato, se una differenza non ha un'eccezione
+(`eccezioni-editor-animazioni.json`, la forma di `eccezioni-editor.json`) né
+una voce in `DA_COPRIRE_ANIMAZIONI`, se un elemento non si trova, se i valori
+estratti non sono quelli delle voci, o se una copertura non copre più niente.
+`DA_COPRIRE_ANIMAZIONI` elenca le differenze vere da correggere, con
+`{ id: "<voce>.<elemento>", proprieta: ["durata.opacity", …], perche }`: chi
+corregge il moto nell'app toglie la sua voce. Il referto intero, con i
+campioni dei due lati, va in `bench/.output/conformita/editor-animazioni.json`.
