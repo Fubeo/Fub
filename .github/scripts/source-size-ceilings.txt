@@ -45,7 +45,7 @@
 1910 apps/client/src/theme/scrittoio/skin/kit.css
 2165 apps/client/src/theme/scrittoio/skin/settings.css
 1757 apps/client/src/ui/menu.test.ts
-1884 apps/client/src/ui/menu.ts
+1851 apps/client/src/ui/menu.ts
 1577 apps/client/src/ui/mermaid.ts
 2003 apps/client/src/ui/node.test.ts
 2168 apps/client/src/ui/node.ts
