@@ -581,7 +581,7 @@ export const IT_TELEFONO = {
 "mini_bar.underline": "Sottolineato",
 "mini_bar.strike": "Barrato",
 "mini_bar.code": "Codice in riga",
-"mini_bar.link": "Collega",
+"mini_bar.link": "Link",
 "mini_bar.color": "Colore",
 "mini_bar.comment": "Commenta",
 "mini_bar.color.text": "Testo",

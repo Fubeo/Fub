@@ -474,7 +474,7 @@ export const IT_MENU = {
   "editor_menu.link.preview": "Anteprima",
   "editor_menu.link.copy": "Copia il link",
   "editor_menu.link.browser": "Apri nel browser",
-  "editor_menu.link.to_note": "Collega a una nota…",
+  "editor_menu.link.to_note": "Link…",
   "editor_menu.image.open": "Apri nel visore",
   "editor_menu.image.copy": "Copia l'immagine",
   "editor_menu.image.width": "Larghezza",

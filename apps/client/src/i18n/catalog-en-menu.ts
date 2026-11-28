@@ -476,7 +476,7 @@ export const EN_MENU: Record<keyof typeof IT_MENU, string> = {
  "editor_menu.link.preview": "Preview",
  "editor_menu.link.copy": "Copy link",
  "editor_menu.link.browser": "Open in the browser",
- "editor_menu.link.to_note": "Link to a note…",
+ "editor_menu.link.to_note": "Link…",
  "editor_menu.image.open": "Open in the viewer",
  "editor_menu.image.copy": "Copy image",
  "editor_menu.image.width": "Width",

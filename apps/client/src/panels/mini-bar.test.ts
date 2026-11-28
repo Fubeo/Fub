@@ -159,7 +159,7 @@ describe("la mini-barra", () => {
     expect(commandsOf(element)).toEqual(ORDER);
     expect(element.querySelectorAll(".mini-bar-rule")).toHaveLength(3);
     const names = [...element.querySelectorAll("button")].map((button) => button.getAttribute("aria-label"));
-    expect(names).toEqual(["Trasforma", "Grassetto", "Corsivo", "Sottolineato", "Barrato", "Codice in riga", "Collega", "Colore", "Commenta"]);
+    expect(names).toEqual(["Trasforma", "Grassetto", "Corsivo", "Sottolineato", "Barrato", "Codice in riga", "Link", "Colore", "Commenta"]);
     // Trasforma e Commenta hanno il nome scritto, B I U S sono lettere.
     expect(element.querySelector("[data-command='mini-bar.transform'] .mini-bar-text")?.textContent).toBe("Trasforma");
     expect(element.querySelector(`[data-command='${COMMENT_ACTION}'] .mini-bar-text`)?.textContent).toBe("Commenta");
@@ -315,5 +315,25 @@ describe("la mini-barra del menu", () => {
     const host = document.createElement("div");
     mountMiniBar(barHost, SPECS, own)!(host);
     expect(own.mount).toHaveBeenCalledWith(host);
+  });
+});
+
+// UX-020: il link ha un nome solo. La barra di formato mostra il titolo del
+// comando del registro («Link», `markdown.link` in `formatting.rs`); il gesto
+// di Ctrl K porta lo stesso nome nella mini-barra, nel menu col tasto destro e
+// nel titolo del riquadro che apre.
+describe("il nome del link", () => {
+  it("è «Link» nella mini-barra, nel menu e nel riquadro, come nella barra di formato", async () => {
+    const { t } = await import("../i18n/strings");
+    const { liveStrings } = await import("../editors/text/profiles/markdown/strings");
+    const { FORMATTING } = await import("./slash/fixture.test-data");
+    const name = FORMATTING.find(([id]) => id === "markdown.link")![1];
+    expect(name).toBe("Link");
+    expect(t("mini_bar.link")).toBe(name);
+    expect(t("editor_menu.link.to_note")).toBe(`${name}…`);
+    expect(t("editor_menu.head.link")).toBe(name);
+    for (const key of ["live.link.title", "live.link.edit", "live.link.remove"] as const) {
+      expect(liveStrings.t(key)).toMatch(/\blink\b/u);
+    }
   });
 });

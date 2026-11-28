@@ -106,7 +106,7 @@ In una nota Markdown in scrittura le voci del posto sono:
 | Sotto il puntatore | Voci |
 |---|---|
 | Testo | Incolla; Trasforma il blocco ▸, Inserisci un blocco… (`/`); Copia il link a questo punto |
-| Selezione | la barra degli appunti; Collega a una nota… (Ctrl K), Copia come (i tre formati nella riga); Estrai in una nota nuova |
+| Selezione | la barra degli appunti; Link… (Ctrl K), Copia come (i tre formati nella riga); Estrai in una nota nuova |
 | Link alla nota | Apri, Apri a lato, Copia il link, Togli il link |
 | Indirizzo web | Apri nel browser, Copia l'indirizzo, Togli il link |
 | Immagine | Apri nel visore, Copia l'immagine, Larghezza ▸, Sostituisci l'immagine…, Mostra nell'esploratore |
@@ -155,11 +155,13 @@ Maiusc+tasto destro, che dà sempre il menu del sistema.
 La **mini-barra** è una fila compatta, scura di giorno e color foglio di
 notte, con quest'ordine: «Trasforma» (lo stesso menu «Trasforma in» dello
 stile nella [barra di formato](editor-toolbar.md)), Grassetto, Corsivo,
-Sottolineato, Barrato, Codice in riga, Collega, Colore e «Commenta». Ogni
+Sottolineato, Barrato, Codice in riga, Link, Colore e «Commenta». Ogni
 pulsante esegue l'azione della sua scorciatoia, con lo stesso passo
 d'annullamento, e la sua didascalia dice la scorciatoia vera della persona
-(Ctrl B, Ctrl K, Ctrl Alt M…). «Collega» fa ciò che fa Ctrl K: il riquadro
-«Collegamento» in Scrittura, il wikilink in Sorgente. «Colore» apre
+(Ctrl B, Ctrl K, Ctrl Alt M…). «Link» fa ciò che fa Ctrl K: il riquadro
+del link («Inserisci un link») in Scrittura, il wikilink in Sorgente. Il link
+ha un nome solo, «Link», in mini-barra, menu, riquadro e barra di formato,
+come il titolo del comando del registro. «Colore» apre
 le due righe dei nove [colori](editor-note-extras.md#i-colori), Testo e Sfondo; il colore già dato
 alla selezione è segnato, e un clic lo toglie. «Commenta» apre il primo
 messaggio della discussione sulla selezione, come Ctrl Alt M: su più blocchi
