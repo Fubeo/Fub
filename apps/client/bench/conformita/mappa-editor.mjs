@@ -40,7 +40,8 @@
 //   perche }`, con l'id di un pezzo di `PEZZI`) si leggono e si confrontano,
 //   ma la loro differenza non fa rosso; se però non differiscono più, è rosso
 //   lo stesso, come un'eccezione non più usata, così chi le corregge le toglie
-//   da qui. Non è un'eccezione: un'eccezione è una differenza voluta, con il
+//   da qui. `stati` (facoltativo) le restringe ad alcuni stati, come in
+//   un'eccezione. Non è un'eccezione: un'eccezione è una differenza voluta, con il
 //   suo motivo in DECISIONS o nel piano (`eccezioni-<prototipo>.json`); qui
 //   c'è una differenza da correggere.
 //

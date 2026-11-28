@@ -36,7 +36,7 @@ export const PEZZI_FOGLI_STRETTI = [
   },
   {
     id: "foglio.copertina",
-    vista: "foglio",
+    vista: "foglio-testata",
     attende: "#421",
     contesto: "documento",
     prototipo: ".cover",

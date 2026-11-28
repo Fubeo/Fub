@@ -121,8 +121,14 @@ export const DA_COPRIRE_PARTE_2 = [
   },
   {
     id: "live.fatto",
-    proprieta: ["color","text-decoration-color"],
+    proprieta: ["text-decoration-color"],
     perche: `${C}: il testo del compito fatto. Prototipo → app: color: rgb(91, 102, 95) → rgb(87, 98, 91) (giorno 1280, giorno 700); text-decoration-color: rgba(23, 34, 27, 0.3) → rgb(87, 98, 91) (giorno 1280, giorno 700); rgba(228, 233, 230, 0.34) → rgb(158, 167, 161) (notte 1280, notte 700)`,
+  },
+  {
+    id: "live.fatto",
+    proprieta: ["color"],
+    stati: ["chiaro-1280", "chiaro-700"],
+    perche: `${C}: il colore del documento attenuato, diverso solo di giorno (di notte coincide): vedi la voce sopra`,
   },
   {
     id: "live.richiamo",
@@ -156,8 +162,14 @@ export const DA_COPRIRE_PARTE_2 = [
   },
   {
     id: "live.didascalia",
-    proprieta: ["font-size","line-height","color","padding-top"],
+    proprieta: ["font-size", "line-height", "padding-top"],
     perche: `${C}: la didascalia dell'immagine. Prototipo → app: font-size: 13px → 12px; line-height: 19.5px → 17.4px; color: rgb(91, 102, 95) → rgb(87, 98, 91) (giorno 1280, giorno 700); padding-top: 8px → 0px`,
+  },
+  {
+    id: "live.didascalia",
+    proprieta: ["color"],
+    stati: ["chiaro-1280", "chiaro-700"],
+    perche: `${C}: il colore del documento attenuato, diverso solo di giorno (di notte coincide): vedi la voce sopra`,
   },
   {
     id: "live.trasclusione",
@@ -222,6 +234,11 @@ export const DA_COPRIRE_PARTE_2 = [
     id: "foglio.inserisci",
     proprieta: ["width","padding-left","padding-right"],
     perche: `${C}: «Inserisci» nel foglio stretto: il prototipo lo riduce all'icona, l'app tiene la parola. Prototipo → app: width: 85.35px → 83.64px (620); 28px → 83.64px (540, 400, 340); padding-left: 6px → 8px (540, 400, 340); padding-right: 6px → 10px (540, 400, 340)`,
+  },
+  {
+    id: "foglio.copertina",
+    proprieta: ["margin-left", "margin-right"],
+    perche: `${C}: la copertina segue i margini della pagina, dai due lati (misurata con \`--attese\`, il pezzo aspetta #421). Prototipo → app: margin-left: -60px → -104px (620); -60px → -40px (540); -60px → -18px (400, 340); margin-right: -24px → -96px (620); -24px → -20px (540); -24px → -18px (400, 340)`,
   },
   // ── fogli stretti: ciò che non si legge come stile ──────────────────────
   {

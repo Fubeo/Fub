@@ -10,6 +10,12 @@ async function aRiposo(page) {
   await page.waitForSelector("#win .blk[data-t='callout'] .callout");
 }
 
+/// Il prototipo nel foglio stretto, a riposo, con la barra di formato.
+async function nelFoglio(page) {
+  await passo(page, "A riposo");
+  await page.waitForSelector("#win #fbar .fb.ins");
+}
+
 export const VISTE_BLOCCHI_FOGLI = {
   /// I blocchi di testo della Live: paragrafo, titolo, compiti, richiamo e
   /// collegamento. Il prototipo a riposo; l'app dalla panoramica della Live,
@@ -59,12 +65,14 @@ export const VISTE_BLOCCHI_FOGLI = {
   /// quanto il foglio del prototipo, nella scena della barra di formato.
   foglio: {
     stati: FOGLI,
-    prototipo: {
-      prepara: async (page) => {
-        await passo(page, "A riposo");
-        await page.waitForSelector("#win #fbar .fb.ins");
-      },
-    },
+    prototipo: { prepara: nelFoglio },
     app: { scena: "barra-formato" },
+  },
+  /// La stessa vista con la testata della nota dal lato dell'app, che nella
+  /// scena della barra di formato non ha la copertina.
+  "foglio-testata": {
+    stati: FOGLI,
+    prototipo: { prepara: nelFoglio },
+    app: { scena: "testata-01-scrittura" },
   },
 };

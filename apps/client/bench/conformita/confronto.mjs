@@ -475,13 +475,14 @@ export function coperture(daCoprire, pezzi) {
       errori.push(`${d.id}: ha proprietà da coprire, ma non è in PEZZI`);
       continue;
     }
+    if (d.stati !== undefined && !Array.isArray(d.stati)) errori.push(`${d.id}: «stati» è un elenco`);
     const sue = espandi(pezzo.proprieta);
     for (const p of d.proprieta) {
       if (!espandi([p]).every((l) => sue.includes(l))) {
         errori.push(`${d.id}: «${p}» da coprire non è fra le proprietà che il pezzo confronta`);
         continue;
       }
-      voci.push({ pezzo: d.id, proprieta: p, motivo: d.perche, riferimento: "DA_COPRIRE", daCoprire: true });
+      voci.push({ pezzo: d.id, proprieta: p, motivo: d.perche, riferimento: "DA_COPRIRE", daCoprire: true, ...(d.stati ? { stati: d.stati } : {}) });
     }
   }
   return { errori, voci };

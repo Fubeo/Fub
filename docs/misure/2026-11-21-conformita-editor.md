@@ -342,10 +342,11 @@ coi suoi numeri.
 |---|---|---|---|---|
 | esporta PDF, la pagina | 12 | 2 | 10 | 6 |
 | blocchi Live e maniglie | 17 | 3 | 14 | 7 |
-| fogli stretti (620, 540, 400, 340 px) | 4 | 1 | 2 | 2 |
+| fogli stretti (620, 540, 400, 340 px) | 4 | 1 | 3 | 2 |
 
-Il quarto pezzo dei fogli, i margini della copertina, aspetta `#421`
-come gli altri della copertina.
+Il pezzo dei fogli sui margini della copertina aspetta `#421`, come gli
+altri della copertina: è diverso con `--attese`, e la sua voce di
+`DA_COPRIRE` è già scritta.
 
 Le differenze più visibili:
 
