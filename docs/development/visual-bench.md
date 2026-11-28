@@ -184,7 +184,9 @@ un'eccezione non copre più niente. Le eccezioni (`eccezioni-<prototipo>.json`)
 hanno pezzo, proprietà, motivo e il riferimento alla voce di DECISIONS o del
 piano che le giustifica. `DA_COPRIRE` nella mappa elenca invece ciò che va
 ancora corretto: un pezzo intero non si confronta; una proprietà di un pezzo
-coperto si confronta, e diventa rossa quando coincide, perché la si tolga. Un
+coperto si confronta, e diventa rossa quando coincide, perché la si tolga
+(`stati` restringe la voce a una differenza che c'è solo in alcuni stati, per
+esempio solo di giorno). Un
 task grafico aggiunge i suoi pezzi alla mappa, rigenera l'estrazione e passa il
 controllo; il referto intero va in `bench/.output/conformita/`.
 
