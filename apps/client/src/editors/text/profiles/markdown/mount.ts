@@ -12,6 +12,7 @@ import { craftPlaceholder, showEmbeddedCraft } from "../../../craft/figure";
 import { hydrateVaultMedia, scenePlaceholder, showEmbeddedDrawing, showRemoteImages, vaultImageSource } from "./media";
 import { lazyPart } from "../../../../ui/lazy-part";
 import { mediaKindOfId, mimeOfId } from "../../../media/media-types";
+import { embedHeightKey, rememberEmbedHeight, rememberedEmbedHeight } from "./embed-heights";
 import type { MarkdownResources, NativeMarkdownContent } from "../../../../ui/markdown-resources";
 import type { FenceEdit } from "./render-types";
 import { isMathInfo } from "./render";
@@ -545,6 +546,14 @@ async function hydrateEmbeds(
     const heading = slot.dataset.embedHeading ?? null;
     const block = slot.dataset.embedBlock ?? null;
     const key = JSON.stringify([page, heading, block]);
+    // Il posto tiene l'altezza che la nota riportata aveva l'ultima volta a
+    // questa larghezza (UX-019), finché il contenuto non arriva. Scrittura e
+    // Lettura la vestono in modo diverso: ognuna ricorda la sua.
+    const place = slot.closest(".cm-content") ? "scrittura" : "lettura";
+    const reserve = embedHeightKey(place, options.documentId, page, heading, block, slot.getBoundingClientRect().width);
+    const reserved = rememberedEmbedHeight(reserve);
+    slot.dataset.embedPending = "";
+    if (reserved !== null) slot.style.setProperty("--embed-reserve", `${reserved}px`);
     let requested = memo.get(key);
     if (!requested) {
       requested = options.resources
@@ -552,7 +561,13 @@ async function hydrateEmbeds(
         : renderEmbed(page, heading, block);
       memo.set(key, requested);
     }
-    const content = await expected(requested.catch(() => null));
+    let content: EmbedContent | null;
+    try {
+      content = await expected(requested.catch(() => null));
+    } finally {
+      delete slot.dataset.embedPending;
+      slot.style.removeProperty("--embed-reserve");
+    }
     if (!content) {
       slot.classList.add("unresolved");
       // Un blocco sincronizzato il cui blocco non c'è più (T30): lo dice al
@@ -618,6 +633,7 @@ async function hydrateEmbeds(
       hydrateEmbeds(slot, new Set([...chain, identity]), memo, expected, embeddedOptions, life, null),
       hydrateVaultMedia(slot, content.doc_id, expected, life, undefined, opener(embeddedOptions, life)),
     ]));
+    if (!life.closed) rememberEmbedHeight(reserve, slot.getBoundingClientRect().height);
   })));
 }
 

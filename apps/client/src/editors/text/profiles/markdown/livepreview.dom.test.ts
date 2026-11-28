@@ -295,6 +295,49 @@ describe("wikilink in Live", () => {
     }
   });
 
+  it("segna a tratti il link a una nota che non c'è, non quello che si scrive (UX-016)", () => {
+    const parent = document.createElement("div");
+    document.body.append(parent);
+    const absent = new Set(["Inesistente"]);
+    const asked: string[] = [];
+    const engine = createTextEngine(parent, {
+      onChange() {},
+      onSelectionChange() {},
+      extensions: () => [
+        markdown({ base: markdownGrammar }),
+        livePreview({ openWikilink() {}, searchTag() {}, missing: (page) => (asked.push(page), absent.has(page)) }),
+      ],
+    });
+    const marks = () => [...parent.querySelectorAll<HTMLElement>(".cm-fub-wikilink")]
+      .map((link) => [link.textContent, link.dataset.wikilinkMissing]);
+    try {
+      const doc = "Primo\n\nVai a [[Nota B]] e [[Inesistente]]\n\n[[Nuo";
+      engine.setDoc(doc);
+      expect(marks()).toEqual([
+        ["Nota B", undefined],
+        ["Inesistente", ""],
+      ]);
+      absent.delete("Inesistente");
+      engine.runViewCommand((view) => {
+        view.dispatch({ effects: pageIconsChanged.of(null) });
+        return true;
+      });
+      expect(marks().map(([, missing]) => missing)).toEqual([undefined, undefined]);
+      // Col cursore dentro il link la sorgente è in vista: si sta scrivendo, e
+      // ogni lettera sarebbe una domanda all'indice.
+      asked.length = 0;
+      engine.runViewCommand((view) => {
+        view.dispatch({ changes: { from: doc.length, insert: "va]]" }, selection: { anchor: doc.length + 2 } });
+        return true;
+      });
+      expect(asked).not.toContain("Nuova");
+      expect(engine.getDoc()).toBe(`${doc}va]]`);
+    } finally {
+      engine.destroy();
+      parent.remove();
+    }
+  });
+
   it("dà al testo colorato le classi del tag e nasconde i tag (K1)", () => {
     const parent = document.createElement("div");
     document.body.append(parent);

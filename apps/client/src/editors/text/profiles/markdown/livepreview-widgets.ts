@@ -136,6 +136,23 @@ class InlineMathWidget extends WidgetType {
   }
 }
 
+/// Il carattere che un'entità nomina, al posto della sua sorgente: il testo
+/// del file non cambia, e col cursore accanto torna `&amp;`.
+class EntityWidget extends WidgetType {
+  constructor(readonly text: string) { super(); }
+  eq(other: EntityWidget) {
+    return other.text === this.text;
+  }
+  toDOM() {
+    const span = document.createElement("span");
+    span.textContent = this.text;
+    return span;
+  }
+  ignoreEvent() {
+    return false;
+  }
+}
+
 const imageMounts = new WeakMap<HTMLElement, () => void>();
 
 /// Un'immagine del vault in mezzo al testo, fuori dalla riga attiva. L'HTML è
@@ -411,6 +428,8 @@ export function inDecoration(d: LiveDeco, callbacks: LivePreviewCallbacks): Deco
       return d.data === "x" ? checkedBox : boxEmpty;
     case "math":
       return Decoration.replace({ widget: new InlineMathWidget(d.data ?? "") });
+    case "entity":
+      return Decoration.replace({ widget: new EntityWidget(d.data ?? "") });
     case "image":
       return Decoration.replace({ widget: new InlineImageWidget(d.data ?? "", d.to - d.from, d.selected === true, callbacks) });
     case "cell-value": {
@@ -472,9 +491,15 @@ export function inDecoration(d: LiveDeco, callbacks: LivePreviewCallbacks): Deco
       // maschera (`data-page-figure`); un `fub:` sconosciuto non si mostra.
       const mark = readPageMark(target.page ? callbacks.pageIcon?.(target.page) ?? null : null);
       const person = target.page !== "" && callbacks.isPerson?.(target.page) === true;
+      // La nota che non c'è ancora (UX-016): a tratti. Al passaggio lo dice la
+      // scheda del collegamento (`sheets/link-card.ts`), con «Crea la nota»: un
+      // `title` sopra sarebbe un secondo avviso. Il link che si sta scrivendo
+      // non lo chiede.
+      const missing = target.page !== "" && d.writing !== true && callbacks.missing?.(target.page) === true;
       return Decoration.mark({
         class: person ? "cm-fub-wikilink cm-fub-person" : "cm-fub-wikilink",
         attributes: {
+          ...(missing ? { "data-wikilink-missing": "" } : {}),
           [ATTR_WIKILINK]: d.data ?? "",
           "data-wikilink-page": target.page,
           ...(mark?.kind === "text" ? { "data-page-icon": mark.text } : {}),

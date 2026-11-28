@@ -13,7 +13,11 @@
 Una nota Markdown ha tre modalità:
 
 - **Scrittura**, dove si scrive sulla pagina resa: i segni Markdown si
-  attenuano o spariscono, e coi blocchi accesi ogni blocco ha la sua maniglia;
+  attenuano o spariscono, e coi blocchi accesi ogni blocco ha la sua maniglia.
+  Le entità HTML (`&amp;`, `&lt;`, `&#39;`) fuori dal codice, dall'HTML
+  grezzo e dai wikilink si leggono risolte, come in Lettura; il file le tiene
+  scritte com'erano, e la sorgente torna dove tornano i segni (la riga del
+  cursore, o accanto all'entità con gli altri livelli);
 - **Sorgente**, con la sintassi esplicita;
 - **Lettura**, la resa senza cursore di testo (**Ctrl+E** ci va e torna alla
   modalità di prima).

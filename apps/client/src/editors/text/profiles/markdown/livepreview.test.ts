@@ -273,7 +273,7 @@ describe("wikilink", () => {
     const ds = decorate("vedi [[Nota|N]] qui", [1]);
     expect(ofKind(ds, "hide")).toEqual([]);
     expect(ofKind(ds, "wikilink")).toEqual([
-      { from: 7, to: 13, kind: "wikilink", data: "Nota" },
+      { from: 7, to: 13, kind: "wikilink", data: "Nota", writing: true },
     ]);
   });
 });

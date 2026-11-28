@@ -370,9 +370,12 @@ const plugin = ViewPlugin.fromClass(
 const theme = EditorView.baseTheme({
   // I colori sono della pelle (`document.css`).
   ".cm-fub-code-header": { display: "inline-flex", width: "100%", gap: "0.4em", alignItems: "center", userSelect: "none" },
+  // Le misure di `.codeb-h button` del prototipo (e di `.dg-ed-h button`):
+  // alte 24 px, il bersaglio minimo, coi 12 px della testata.
   ".cm-fub-code-header button": {
-    border: "0", background: "none", padding: "0.1em 0.45em", borderRadius: "4px", cursor: "pointer",
-    fontSize: "0.75rem", lineHeight: "1.6",
+    display: "inline-flex", alignItems: "center", boxSizing: "border-box", height: "24px",
+    border: "0", background: "none", padding: "0 8px", borderRadius: "6px", cursor: "pointer",
+    fontSize: "12px", lineHeight: "normal",
   },
   ".cm-fub-code-lang": { marginRight: "auto" },
   ".cm-fub-fence-close-line": { fontSize: "0", lineHeight: "0" },

@@ -53,6 +53,9 @@ export interface LivePreviewCallbacks {
   /// Il wikilink nomina una persona (K5, `state/people.ts`): si mostra come
   /// una pastiglia. Quando la cartella cambia arriva [`pageIconsChanged`].
   isPerson?(page: string): boolean;
+  /// La pagina che un wikilink nomina non c'è ancora (UX-016): `true` soltanto
+  /// quando l'indice l'ha detto. Quando cambia arriva [`pageIconsChanged`].
+  missing?(page: string): boolean;
   /// Le schede dei collegamenti (K8, `state/link-cards.ts`): senza, un URL da
   /// solo resta un link. Quando cambiano arriva [`linkCardsChanged`]. Con
   /// `note`, anche un wikilink da solo in un paragrafo è una scheda (E11).
@@ -97,6 +100,9 @@ export type LiveDecoKind =
   | "checkbox"
   // widget: formula in riga resa, `data` è il TeX
   | "math"
+  // widget: un'entità HTML (`&amp;`) risolta, come in Lettura; `data` è il
+  // carattere che nomina (UX-102)
+  | "entity"
   // widget: immagine del vault in mezzo al testo, `data` è l'HTML della Lettura
   | "image"
   // widget: il valore di una cella di un foglio in mezzo al testo (T53),
@@ -182,6 +188,9 @@ export interface LiveDeco {
   data?: string;
   /// Un'immagine selezionata: la selezione copre esattamente i suoi byte.
   selected?: true;
+  /// Un wikilink con la sorgente in vista, cioè che si sta scrivendo: non
+  /// chiede all'indice se la sua nota c'è (UX-016).
+  writing?: true;
 }
 
 /// Le righe "attive" (numeri 1-based): ogni riga toccata da una selezione.

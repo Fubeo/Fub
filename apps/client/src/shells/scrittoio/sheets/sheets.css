@@ -211,6 +211,15 @@
   height: 9px;
   padding: 0;
 }
+/* La tacca che si vede resta di 12 px, la zona che apre l'indice è larga 24
+   (UX-021): il filo chiuso è trasparente, e la tacca sta a destra. Solo col
+   margine largo (`WIDE_ROOM` in `heading-thread.ts`): in uno stretto la zona
+   coprirebbe la barra «Aggiungi una colonna» di una tabella. In altezza resta
+   9 px: le tacche sono a 9 px l'una dall'altra, e una zona più alta
+   coprirebbe la vicina; il clic lo prende l'indice aperto, a righe di 26 px. */
+.sheet-thread[data-room="wide"] .sheet-thread-item {
+  min-width: 24px;
+}
 .sheet-thread-notch {
   flex: 0 0 auto;
   width: 12px;

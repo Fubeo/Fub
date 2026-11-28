@@ -113,7 +113,9 @@ celle il puntatore resta la freccia.
   vuote in fondo), allinea a sinistra, al centro o a destra, copia, taglia e
   svuota. Col puntatore sopra la tabella o il fuoco dentro compaiono due
   barre col «+», una sotto la tabella («Aggiungi una riga») e una alla sua
-  destra («Aggiungi una colonna»), che aggiungono in fondo; non sono fermate
+  destra («Aggiungi una colonna»), che aggiungono in fondo. Si vedono di 15
+  px, ma prendono il clic su 24 sul lato corto, fino al bordo della tabella
+  e senza coprirla. Non sono fermate
   del Tab (la tastiera ha Tab dall'ultima cella e Mod+«+»), e al telefono resta
   soltanto quella della riga. Al tocco due maniglie agli angoli della
   selezione la allargano.

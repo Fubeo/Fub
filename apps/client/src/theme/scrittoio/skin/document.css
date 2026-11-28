@@ -451,6 +451,12 @@
   color: var(--accent-soft);
   text-decoration-color: currentColor;
 }
+/* La nota che non esiste ancora (UX-016): lo stesso inchiostro, il filo a
+   tratti, come il collegamento rotto della Lettura ma senza il suo rosso: qui
+   un clic crea la nota, non è un errore. Il prototipo non ha questo stato. */
+.cm-editor .cm-content .cm-fub-wikilink[data-wikilink-missing] {
+  text-decoration-style: dashed;
+}
 /* In Live la sintassi colora per conto suo lo span interno: qui eredita, o il
    filo sarebbero due e il passaggio non cambierebbe niente. */
 .cm-editor .cm-content .cm-fub-link span,

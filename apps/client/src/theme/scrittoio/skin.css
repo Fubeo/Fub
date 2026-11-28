@@ -6884,6 +6884,12 @@ kbd,
   color: var(--accent-soft);
   text-decoration-color: currentColor;
 }
+/* La nota che non esiste ancora (UX-016): lo stesso inchiostro, il filo a
+   tratti, come il collegamento rotto della Lettura ma senza il suo rosso: qui
+   un clic crea la nota, non è un errore. Il prototipo non ha questo stato. */
+.cm-editor .cm-content .cm-fub-wikilink[data-wikilink-missing] {
+  text-decoration-style: dashed;
+}
 /* In Live la sintassi colora per conto suo lo span interno: qui eredita, o il
    filo sarebbero due e il passaggio non cambierebbe niente. */
 .cm-editor .cm-content .cm-fub-link span,
@@ -9397,6 +9403,19 @@ button.cm-fub-page-icon:focus-visible {
   font-family: var(--font-ui);
   font-size: var(--text-sm);
 }
+/* Il posto di una nota riportata che non è ancora arrivata (UX-019): tiene
+   l'altezza che aveva l'ultima volta a questa larghezza (`--embed-reserve`,
+   `embed-heights.ts`), così il testo sotto non salta quando arriva. La prima
+   volta, nella Scrittura che si scrive, tiene almeno il vassoio della
+   trasclusione con una riga: la testata di 30 px, i 14 px del suo margine e
+   una riga, che nessuna nota riportata ha di meno. */
+.embed[data-embed-pending] {
+  box-sizing: border-box;
+  min-height: var(--embed-reserve, 0);
+}
+.cm-content[contenteditable="true"] .embed[data-embed-pending] {
+  min-height: var(--embed-reserve, calc(44px + 1lh));
+}
 .embed.unresolved {
   border-left-color: var(--doc-rule-soft);
   color: var(--muted);
@@ -10458,6 +10477,23 @@ button.cm-fub-page-icon:focus-visible {
   bottom: 0;
   right: -19px;
   width: 15px;
+}
+/* Il bersaglio è di 24 px sul lato corto, la barra che si vede resta di 15
+   (UX-018): una zona invisibile la allarga di 4 px verso la tabella, fino al
+   suo bordo, e di 5 px verso l'esterno. Le due zone non si toccano: la riga
+   cresce solo in altezza, la colonna solo in larghezza. */
+.cm-editor .cm-content .tb-add::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+}
+.cm-editor .cm-content .tb-add[data-add="row"]::before {
+  top: -4px;
+  bottom: -5px;
+}
+.cm-editor .cm-content .tb-add[data-add="column"]::before {
+  left: -4px;
+  right: -5px;
 }
 .cm-editor .cm-content .tb-add svg {
   width: 14px;
@@ -17714,11 +17750,20 @@ input.canvas-toolbar-item {
   height: calc(var(--live-card-full, 80vh) - 36px);
 }
 .live-card[data-card-state="missing"] .live-card-body,
-.live-card[data-card-state="unsupported"] .live-card-body,
-.live-card[data-card-state="loading"] .live-card-body {
+.live-card[data-card-state="unsupported"] .live-card-body {
   height: auto;
   min-height: 0;
   cursor: default;
+}
+/* L'attesa tiene già l'altezza che avrà la vista (UX-019): quella scritta
+   nell'embed o quella della specie, così il testo sotto non salta quando il
+   file arriva. Una scheda mostrata come riga resta una riga. */
+.live-card[data-card-state="loading"] .live-card-body {
+  cursor: default;
+}
+.live-card[data-card-state="loading"][data-card-display="row"] .live-card-body {
+  height: auto;
+  min-height: 0;
 }
 
 /* Il file mancante, il formato senza vista, l'attesa: una riga che dice
@@ -18024,7 +18069,8 @@ input.canvas-toolbar-item {
   width: min(var(--live-card-width), 100%);
   margin-left: 0;
 }
-.live-card[data-card-state="view"][data-card-height="set"]:not([data-card-full="true"]) .live-card-body {
+.live-card[data-card-state="view"][data-card-height="set"]:not([data-card-full="true"]) .live-card-body,
+.live-card[data-card-state="loading"][data-card-height="set"] .live-card-body {
   height: min(calc(var(--live-card-height) - 35px), 80vh);
   min-height: 60px;
 }

@@ -746,7 +746,41 @@ const LIVE_CARDS_PDF_NOTE = [
   "Da rileggere prima della riunione di giovedì.",
 ].join("\n");
 
+/// La nota delle voci del valutatore (UX-016…UX-021, UX-102): un link a una
+/// nota che c'è e uno a una che non c'è, un blocco di codice, una tabella, i
+/// titoli del filo a margine, un'entità HTML, una trasclusione e un disegno
+/// incorporato con del testo sotto, per misurare se salta.
+const UX_NOTE = [
+  "# Collaudo dell'editor",
+  "",
+  "Vedi [[Nota B]] e anche [[Inesistente]].",
+  "",
+  "Testo con <b>tag</b> &amp; fine, &lt;segni&gt; e l&#39;apostrofo.",
+  "",
+  "## Codice",
+  "",
+  `${FENCE}js`,
+  "const giorni = 3;",
+  FENCE,
+  "",
+  "## Tabella",
+  "",
+  "| Giorno | Posto |",
+  "| --- | --- |",
+  "| 1 | Alfama |",
+  "",
+  "## Incorporati",
+  "",
+  `![[${DRAWING_CARD_FILE}]]`,
+  "",
+  "![[Nota B]]",
+  "",
+  "La riga sotto gli incorporati.",
+].join("\n");
+const UX_NOTE_B = ["# Nota B", "", "Il primo paragrafo della nota B.", "", "Il secondo paragrafo, un po' più lungo del primo.", ""].join("\n");
+
 export const LIVE_CASES: Readonly<Record<string, LiveCase>> = {
+  valutatore: { text: UX_NOTE, cursor: null, files: { "Nota B.md": UX_NOTE_B, [DRAWING_CARD_FILE]: DRAWING_CARD_SVG } },
   commenti: { text: COMMENTS, cursor: null },
   "commenti-scelta": {
     text: COMMENTS,

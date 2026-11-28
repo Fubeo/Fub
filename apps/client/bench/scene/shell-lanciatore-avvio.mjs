@@ -3,6 +3,7 @@
 import { waitForEmbeddedBase } from "./gesti-documenti.mjs";
 import {
   chooseFromViewMenu,
+  drawWholeLive,
   expectVeilOnCard,
   openLive,
   openNote,
@@ -406,6 +407,7 @@ export const S_LANCIATORE = [
     ...(viewport ? { viewport } : {}),
     prepare: async (page) => {
       await openLive(page, [], "top");
+      await drawWholeLive(page);
       const cards = '.pane.focus .pane-editor .live-card[data-card-kind="drawing"]';
       // Le due schede mostrano il loro disegno: la pianta di Fub, il logo estraneo.
       await page.waitForFunction((selector) => {
