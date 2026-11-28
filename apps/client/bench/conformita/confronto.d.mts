@@ -32,6 +32,7 @@ export interface Eccezione {
   riferimento: string;
   stati?: readonly string[];
   daCoprire?: boolean;
+  escluso?: string;
 }
 
 export interface Differenza {
@@ -56,6 +57,7 @@ export interface Mancante {
 export interface DaCoprire {
   id: string;
   perche: string;
+  escluso?: string;
   proprieta?: readonly string[];
   prototipo?: string;
   app?: string | null;

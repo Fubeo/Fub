@@ -267,6 +267,44 @@ describe("le eccezioni", () => {
     ]);
     expect(coperture([{ id: "nessuno", proprieta: ["width"], perche: "" }], [pezzo]).errori).toHaveLength(2);
   });
+
+  it("una voce esclusa copre come le altre e porta la sua ragione", () => {
+    const { errori, voci } = coperture(
+      [{ id: pezzo.id, proprieta: ["padding"], perche: "da correggere", escluso: "fuori dal foglio" }],
+      [pezzo],
+    );
+    expect(errori).toEqual([]);
+    expect(voci).toEqual([
+      {
+        pezzo: pezzo.id,
+        proprieta: "padding",
+        motivo: "da correggere",
+        riferimento: "DA_COPRIRE",
+        daCoprire: true,
+        escluso: "fuori dal foglio",
+      },
+    ]);
+    const differenza = {
+      pezzo: pezzo.id,
+      stato: "chiaro-1280",
+      selettorePrototipo: ".x",
+      selettoreApp: ".y",
+      proprieta: "padding-left",
+      atteso: "8px",
+      trovato: "6px",
+      motivo: "8px ≠ 6px",
+    };
+    expect(applicaEccezioni([differenza], voci).giustificate[0]?.eccezione.escluso).toBe("fuori dal foglio");
+    expect(coperture([{ id: pezzo.id, proprieta: ["padding"], perche: "x", escluso: " " }], [pezzo]).errori).toEqual([
+      "prova.superficie: una voce esclusa dice da che cosa",
+    ]);
+  });
+
+  it("le voci escluse della mappa dell'editor sono la cornice, la banda e l'ispettore", () => {
+    const esclusi = DA_COPRIRE.filter((d) => d.escluso !== undefined).map((d) => d.id.split(".")[0]);
+    expect(new Set(esclusi)).toEqual(new Set(["compiti", "cornice", "banda", "ispettore"]));
+    expect(DA_COPRIRE.find((d) => d.id === "compiti.ispettore")?.escluso).toBe("fuori dal foglio della cornice");
+  });
 });
 
 describe("i token del prototipo", () => {

@@ -184,8 +184,13 @@ un'eccezione non copre più niente. Le eccezioni (`eccezioni-<prototipo>.json`)
 hanno pezzo, proprietà, motivo e il riferimento alla voce di DECISIONS o del
 piano che le giustifica. `DA_COPRIRE` nella mappa elenca invece ciò che va
 ancora corretto: un pezzo intero non si confronta; una proprietà di un pezzo
-coperto si confronta, e diventa rossa quando coincide, perché la si tolga. Un
-task grafico aggiunge i suoi pezzi alla mappa, rigenera l'estrazione e passa il
+coperto si confronta, e diventa rossa quando coincide, perché la si tolga. Una
+voce con `escluso` (la ragione: per l'editor «fuori dal foglio della cornice»,
+sulla cornice della finestra, la banda di stato e l'ispettore) vale come le
+altre, ma è fuori dal lavoro che corregge queste: la riga di riepilogo conta a
+parte le differenze da coprire e quelle escluse, coi pezzi interi di ognuna,
+e una riga `esclusi:` dice per ogni ragione quante voci e quante differenze;
+il referto le scrive in `esclusi`. Un task grafico aggiunge i suoi pezzi alla mappa, rigenera l'estrazione e passa il
 controllo; il referto intero va in `bench/.output/conformita/`.
 
 Un pezzo con `attende: "#<PR>"` ha i valori attesi già estratti, ma la verifica
