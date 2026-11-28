@@ -206,8 +206,8 @@ export const DA_COPRIRE = [
   },
   {
     id: "base.attrezzo",
-    proprieta: ["padding", "line-height", "opacity"],
-    perche: "controllo del 2026-11-21: attrezzi più stretti; il primo («Nuova vista») nell'app è spento dentro la nota, nel prototipo no",
+    proprieta: ["padding", "line-height"],
+    perche: "controllo del 2026-11-21: attrezzi più stretti",
   },
   {
     id: "base.nuova-riga",
