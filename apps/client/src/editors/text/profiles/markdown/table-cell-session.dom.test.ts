@@ -35,8 +35,8 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-async function setup() {
-  const api = fakeApi(NOTE);
+async function setup(note = NOTE) {
+  const api = fakeApi(note);
   const sessions = new DocumentSessionCollection(api);
   await sessions.read(ID);
   const parent = document.createElement("div");
@@ -170,5 +170,84 @@ describe("la cella della griglia e la sessione del documento", () => {
     expect(ed.undo()).toBe(true);
     expect(rows(sessions.text(ID)!)).toBe(3);
     expect(sessions.text(ID)).toBe(NOTE);
+  });
+
+  // Le battute della cella stavano fuori dalla cronologia e la conferma le
+  // toglieva rimettendo la tabella intera: l'annulla di un passo di prima che
+  // copre la tabella non la toglieva più, e la lasciava incollata al testo
+  // («/tabella 9x3| Colonna 1 |…», IMP-6105).
+  describe("l'annulla dei passi di prima della cella (IMP-6105)", () => {
+    const BEFORE = "Paragrafo.\n/tabella\n";
+    const TABLE = "| A | B |\n| --- | --- |\n|  |  |\n";
+    const ONE = "Paragrafo.\n| A | B |\n| --- | --- |\n| Uno |  |\n";
+
+    /// «/tabella» diventa la tabella con un passo d'annulla dell'editor.
+    async function inserted() {
+      const made = await setup(BEFORE);
+      made.view.dispatch({ changes: { from: 11, to: 20, insert: TABLE }, userEvent: "input" });
+      expect(made.sessions.text(ID)).toBe(`Paragrafo.\n${TABLE}`);
+      const grid = made.parent.querySelector<HTMLElement>(".tb-grid")!;
+      grid.focus();
+      press(grid, "ArrowDown");
+      return { ...made, grid };
+    }
+
+    it("dopo la conferma della cella, il secondo annulla toglie la tabella intera", async () => {
+      const { sessions, ed, parent, grid } = await inserted();
+      press(grid, "U");
+      typeInto(cellInput(parent), "no");
+      press(cellInput(parent), "Tab");
+      expect(sessions.text(ID)).toBe(ONE);
+      expect(ed.undo()).toBe(true);
+      expect(sessions.text(ID)).toBe(`Paragrafo.\n${TABLE}`);
+      expect(ed.undo()).toBe(true);
+      expect(sessions.text(ID)).toBe(BEFORE);
+      expect(ed.buffer.getDoc()).toBe(BEFORE);
+      // Il ripeti rimette i due passi, nello stesso ordine.
+      expect(ed.redo()).toBe(true);
+      expect(sessions.text(ID)).toBe(`Paragrafo.\n${TABLE}`);
+      expect(ed.redo()).toBe(true);
+      expect(sessions.text(ID)).toBe(ONE);
+    });
+
+    it("una cella lasciata con Escape non resta da nessuna parte: l'annulla toglie la tabella", async () => {
+      const { sessions, ed, parent, grid } = await inserted();
+      press(grid, "Q");
+      typeInto(cellInput(parent), "ui");
+      press(cellInput(parent), "Escape");
+      expect(sessions.text(ID)).toBe(`Paragrafo.\n${TABLE}`);
+      expect(ed.undo()).toBe(true);
+      expect(sessions.text(ID)).toBe(BEFORE);
+      expect(ed.undo()).toBe(false);
+    });
+
+    it("dopo Escape, Ripeti rimette le battute lasciate, una alla volta", async () => {
+      const { sessions, ed, parent, grid } = await inserted();
+      press(grid, "Q");
+      typeInto(cellInput(parent), "u");
+      press(cellInput(parent), "Escape");
+      expect(ed.redo()).toBe(true);
+      expect(sessions.text(ID)).toBe("Paragrafo.\n| A | B |\n| --- | --- |\n| Q |  |\n");
+      expect(ed.redo()).toBe(true);
+      expect(sessions.text(ID)).toBe("Paragrafo.\n| A | B |\n| --- | --- |\n| Qu |  |\n");
+      expect(ed.redo()).toBe(false);
+    });
+
+    it("due celle confermate sono due passi, poi viene la tabella", async () => {
+      const { sessions, ed, parent, grid } = await inserted();
+      press(grid, "U");
+      typeInto(cellInput(parent), "no");
+      press(cellInput(parent), "Tab");
+      press(document.activeElement as HTMLElement, "D");
+      typeInto(cellInput(parent), "ue");
+      press(cellInput(parent), "Enter");
+      expect(sessions.text(ID)).toBe("Paragrafo.\n| A | B |\n| --- | --- |\n| Uno | Due |\n");
+      expect(ed.undo()).toBe(true);
+      expect(sessions.text(ID)).toBe(ONE);
+      expect(ed.undo()).toBe(true);
+      expect(sessions.text(ID)).toBe(`Paragrafo.\n${TABLE}`);
+      expect(ed.undo()).toBe(true);
+      expect(sessions.text(ID)).toBe(BEFORE);
+    });
   });
 });

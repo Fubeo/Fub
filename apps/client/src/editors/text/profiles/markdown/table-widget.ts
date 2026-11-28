@@ -7,9 +7,9 @@
 // `dispatch` della tastiera (`userEvent: "input"`), quindi entrano nella
 // cronologia locale della superficie e nella sessione del documento come ogni
 // battuta; annulla e ripeti sono quelli nativi dell'editor.
-import { Prec, Transaction, type Extension, type TransactionSpec } from "@codemirror/state";
+import { Prec, type EditorState, type Extension, type Transaction, type TransactionSpec } from "@codemirror/state";
 import { EditorView, ViewPlugin, WidgetType, keymap, type ViewUpdate } from "@codemirror/view";
-import { redo, undo } from "@codemirror/commands";
+import { redo, undo, undoDepth } from "@codemirror/commands";
 import { resolvedLanguage } from "../../../../i18n/strings";
 import { isAllowedLink } from "../../../../ui/sanitize";
 import { notify } from "../../../../ui/notify";
@@ -59,6 +59,13 @@ export interface TableWidgetCallbacks extends WikilinkFollow {
 
 type GridSelection = { anchor: GridPosition; focus: GridPosition };
 
+/// Le battute della cella aperta già scritte nel testo (IMP-6100): `base` è
+/// la tabella prima della prima battuta, `last` com'è dopo l'ultima. Ogni
+/// battuta è un passo della cronologia, `steps` in tutto sopra i `depth`
+/// passi che c'erano prima; la scrittura di conferma li annulla e scrive la
+/// cella in un passo solo.
+type CellTyping = { readonly base: string; readonly last: string; readonly depth: number; readonly steps: number };
+
 /// Quanto testo sotto la tabella si guarda per ritrovare il grafico scritto
 /// da «Grafico da questa tabella» (T54).
 const CHART_LOOKAHEAD = 64 * 1024;
@@ -92,11 +99,7 @@ class TableController {
   #widget: TableWidget;
   #parsed: ParsedTable;
   readonly #observer: ResizeObserver | null = null;
-  /// Le battute della cella aperta già scritte nel testo, fuori dalla
-  /// cronologia: `base` è la tabella prima della prima battuta, `last` com'è
-  /// dopo l'ultima. La scrittura di conferma le raccoglie in un solo passo
-  /// d'annulla (IMP-6100).
-  #typing: { readonly base: string; readonly last: string } | null = null;
+  #typing: CellTyping | null = null;
 
   constructor(view: EditorView, widget: TableWidget, parsed: ParsedTable) {
     this.#view = view;
@@ -214,26 +217,20 @@ class TableController {
     if (!located || view.state.readOnly) return false;
     const typing = this.#typing;
     this.#typing = null;
-    // Le battute della cella sono già nel testo, fuori dalla cronologia: si
-    // torna alla tabella di prima e si scrive quella nuova nello stesso
-    // aggiornamento della vista. La cronologia registra un passo solo, da
-    // prima della cella a dopo; chi annulla la cella ritrova i byte di prima.
-    // Se intanto la tabella è cambiata da un'altra parte, le battute restano
-    // come sono e si scrive soltanto la differenza.
-    const base = typing !== null && typing.last === located.parsed.source && typing.base !== typing.last
-      ? parseTable(typing.base)
-      : null;
-    if (typing !== null && base !== null) {
-      const revert = view.state.update({
-        changes: { from: located.from, to: located.to, insert: withLineBreaks(view.state, typing.base) },
-        annotations: Transaction.addToHistory.of(false),
-        userEvent: "input",
-        // Rimette testo che c'era già: i filtri della battuta non c'entrano.
-        filter: false,
-      });
-      const transactions = [revert];
-      const spec = this.#changes(revert.state, located.from, base, next);
-      if (spec !== null) transactions.push(revert.state.update(spec));
+    // Le battute della cella sono già nel testo, ognuna un passo della
+    // cronologia: si annullano e si scrive la cella nuova nello stesso
+    // aggiornamento della vista. La cronologia tiene un passo solo, da prima
+    // della cella a dopo, e i passi di prima restano interi: chi annulla poi
+    // l'inserimento della tabella la toglie tutta (IMP-6105). Battute tolte
+    // da fuori dalla cronologia non vanno: ogni passo di prima le
+    // attraverserebbe, e il suo annulla lascerebbe il testo che hanno messo.
+    // Se intanto la tabella o la cronologia sono cambiate da un'altra parte,
+    // le battute restano passi come sono e si scrive soltanto la differenza.
+    const undone = typing !== null && typing.last === located.parsed.source ? this.#undoTyping(typing, located.from) : null;
+    if (undone !== null) {
+      const transactions = undone.transactions;
+      const spec = this.#changes(undone.state, located.from, undone.base, next);
+      if (spec !== null) transactions.push(undone.state.update(spec));
       pending.set(view, { from: located.from, selection, focused: this.grid.hasFocus() });
       view.dispatch(transactions);
       if (controllers.get(this.grid.element) === this && this.grid.element.isConnected) pending.delete(view);
@@ -248,6 +245,30 @@ class TableController {
     return true;
   }
 
+  /// Gli annulla delle battute di `typing`, ancora da mandare alla vista, e
+  /// la tabella di prima che rimettono a `from`. `null` se la cronologia non
+  /// è più quella delle battute (un altro passo in mezzo, passi vecchi
+  /// lasciati cadere dal limite) o se gli annulla non rimettono la tabella.
+  #undoTyping(typing: CellTyping, from: number): { transactions: Transaction[]; state: EditorState; base: ParsedTable } | null {
+    let state = this.#view.state;
+    if (undoDepth(state) !== typing.depth + typing.steps) return null;
+    const base = parseTable(typing.base);
+    if (!base) return null;
+    const transactions: Transaction[] = [];
+    const target = {
+      get state() { return state; },
+      dispatch: (tr: Transaction) => {
+        transactions.push(tr);
+        state = tr.state;
+      },
+    };
+    for (let step = 0; step < typing.steps; step++) {
+      if (!undo(target)) return null;
+    }
+    if (undoDepth(state) !== typing.depth || state.doc.sliceString(from, from + typing.base.length) !== typing.base) return null;
+    return { transactions, state, base };
+  }
+
   /// La battuta che porta la tabella `from`, letta come `parsed`, a `next`;
   /// `null` se sono uguali.
   #changes(state: EditorView["state"], from: number, parsed: ParsedTable, next: TableData): TransactionSpec | null {
@@ -260,15 +281,20 @@ class TableController {
   }
 
   /// Una battuta nella cella aperta: entra nel testo subito, come ogni
-  /// battuta (sessione, bozza, salvataggio), ma fuori dalla cronologia. La
-  /// conferma la registra (`#write`).
+  /// battuta (sessione, bozza, salvataggio), e come un passo della cronologia
+  /// che la conferma raccoglie con gli altri della cella (`#write`).
   #draft(next: TableData, selection: GridSelection): boolean {
     const view = this.#view;
     const located = this.locate();
     if (!located || view.state.readOnly) return false;
-    // Una tabella cambiata sotto (un altro riquadro, un annulla) chiude la
-    // serie: da qui si riparte dalla tabella di adesso.
-    const typing = this.#typing !== null && this.#typing.last === located.parsed.source ? this.#typing : null;
+    // Una tabella cambiata sotto (un altro riquadro, un annulla) o un altro
+    // passo in mezzo chiudono la serie: da qui si riparte dalla tabella di
+    // adesso, e le battute di prima restano passi a sé.
+    const depth = undoDepth(view.state);
+    const typing = this.#typing !== null && this.#typing.last === located.parsed.source &&
+        depth === this.#typing.depth + this.#typing.steps
+      ? this.#typing
+      : null;
     const base = typing?.base ?? located.parsed.source;
     const parsedBase = typing ? parseTable(base) : located.parsed;
     if (!parsedBase) return false;
@@ -280,10 +306,16 @@ class TableController {
     if (changes.length === 0) return true;
     const spec: TransactionSpec = { changes, userEvent: "input" };
     pending.set(view, { from: located.from, selection, focused: this.grid.hasFocus() });
-    view.dispatch({ ...spec, annotations: Transaction.addToHistory.of(false) });
+    view.dispatch(spec);
     if (controllers.get(this.grid.element) === this && this.grid.element.isConnected) pending.delete(view);
     const after = this.locate();
-    this.#typing = after ? { base, last: after.parsed.source } : null;
+    // Un passo che non si è aggiunto da solo (unito a un altro, il limite
+    // della cronologia) non si sa annullare a parte: la serie si ferma qui.
+    const steps = (typing?.steps ?? 0) + 1;
+    const startDepth = typing?.depth ?? depth;
+    this.#typing = after && undoDepth(view.state) === startDepth + steps
+      ? { base, last: after.parsed.source, depth: startDepth, steps }
+      : null;
     return true;
   }
 

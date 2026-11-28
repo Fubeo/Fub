@@ -154,7 +154,10 @@ battuta, come nel resto della nota: la bozza e il salvataggio lo portano sul
 disco anche se la cella resta aperta, e «Salvato» vuol dire che il file ha
 anche quel testo. Le battute di una cella fanno un solo passo d'annullamento,
 registrato quando la cella si conferma; Escape rimette la tabella com'era,
-byte per byte.
+byte per byte. I passi di prima della cella restano interi: dopo una cella
+confermata o lasciata con Escape, l'annullamento che toglie la tabella appena
+inserita la toglie tutta e rimette il testo di prima. Dopo un Escape, Ripeti
+può rimettere le battute lasciate, una alla volta.
 
 Le celle mostrano la resa in riga (grassetto, codice, link, formule); Mod+clic
 segue un link o un tag. Con la griglia a fuoco la barra di formattazione agisce
