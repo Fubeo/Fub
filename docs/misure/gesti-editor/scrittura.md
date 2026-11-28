@@ -49,7 +49,7 @@ Così la prima misura, del 2026-11-21; il ripasso sopra la rifà con le sonde.
 | 10 | Clic su una voce («Citazione») | voce del menu | 3137, 3123-3135 | citazione e avviso | citazione, nessun avviso | diverso | manca l'avviso |
 | 11 | Invio su «Titolo 2» | voce del menu | 3123-3135 | titolo 2 e avviso «al posto della riga vuota» | «## » senza avviso | diverso | manca l'avviso |
 | 12 | Invio senza risultati (`/qwerty`) | ricerca dei comandi | 3136, 4172 | apre la ricerca dei comandi | apre la ricerca dei comandi, senza risultati | uguale | le scritte degli stati vuoti differiscono |
-| 13 | «/persona» scrive «@» e apre le persone | voce Persona | 3165, 3128 | «@» e quattro persone con le date | «@» e solo le date di oggi e di domani | diverso | il banco non ha persone nel vault; «Nuova persona» compare solo scrivendo un nome |
+| 13 | «/persona» scrive «@» e apre le persone | voce Persona | 3165, 3128 | «@» e quattro persone con le date | «@» e solo le date del giorno e del giorno dopo | diverso | il banco non ha persone nel vault; «Nuova persona» compare solo scrivendo un nome |
 | 14 | «/domani» inserisce la data | voce Data (parseWhen) | 3106, 3131 | pillola «10 novembre 2026» | link alla nota giornaliera con la data | diverso | forma diversa |
 | 15 | «/separatore» | voce Separatore | 3132 | linea e paragrafo sotto | linea «---» e riga nuova | uguale | - |
 | 16 | «/tabella» (voce del menu) | voce Tabella | 3134 | solo avviso «Nel prodotto», nessuna tabella | passo della tabella (griglia 3 × 3) | diverso | il prototipo non inserisce la tabella |
