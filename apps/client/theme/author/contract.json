@@ -12344,7 +12344,12 @@
       "hooks": [
         "cm-editor",
         "pane-editor",
-        "cm-cursorLayer"
+        "cm-scroller",
+        "cm-content",
+        "cm-line",
+        "cm-selectionLayer",
+        "cm-cursorLayer",
+        "cm-gutters"
       ],
       "states": [
         "rest",

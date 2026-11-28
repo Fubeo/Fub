@@ -32836,7 +32836,7 @@ h6.ui-heading {
    È l'unica transizione che una riga ha, e solo d'opacità: per questo batte
    la regola delle righe ferme, e solo quando il moto non è ridotto. */
 @media (prefers-reduced-motion: no-preference) {
-  :root:not([data-motion="reduced"]) #app[data-focus-mode] .pane-editor .cm-content > * {
+  :root:not([data-motion="reduced"]) [data-focus-mode] .pane-editor .cm-content > * {
     transition: opacity 0.25s ease !important;
   }
 }
