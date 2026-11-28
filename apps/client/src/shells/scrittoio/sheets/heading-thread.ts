@@ -46,6 +46,12 @@ import { paneIdOf, watchParts } from "./panes";
 /// toccarlo: la barra di scorrimento, le tacche, un po' d'aria. È poco meno
 /// del margine che la colonna del testo tiene di suo.
 const ROOM = 30;
+/// Il margine che serve perché le tacche prendano il puntatore su 24 px di
+/// larghezza (UX-021) senza coprire niente: i 24 px che la barra «Aggiungi una
+/// colonna» di una tabella prende a destra del testo (4 di distanza, 15 di
+/// barra, 5 di zona), i 24 della zona, i 2 del bordo, i 10 dal bordo destro.
+/// Con meno, la zona resta quella della tacca.
+export const WIDE_ROOM = 60;
 /// Sotto questa larghezza un foglio non ha posto per un indice.
 const MIN_WIDTH = 440;
 
@@ -76,24 +82,32 @@ export function mountHeadingThread(lifetime: Lifetime): void {
 
   // --- lo spazio --------------------------------------------------------------
 
-  /// C'è posto per il filo: il foglio è abbastanza largo, e fra il testo e il
-  /// bordo destro resta il margine che serve.
-  const roomy = (thread: Thread): boolean => {
+  /// Il margine fra il testo e il bordo destro, o `null` se il foglio è
+  /// troppo stretto per un indice.
+  const margin = (thread: Thread): number | null => {
     const surface =
       thread.editor.dataset.markdownMode === "reading"
         ? thread.editor.querySelector<HTMLElement>(":scope > .pane-preview")
         : thread.editor.querySelector<HTMLElement>(".cm-content");
-    if (!surface) return false;
+    if (!surface) return null;
     const panel = thread.panel.getBoundingClientRect();
-    if (panel.width < MIN_WIDTH) return false;
+    if (panel.width < MIN_WIDTH) return null;
     const padding = Number.parseFloat(getComputedStyle(surface).paddingRight) || 0;
     const text = surface.getBoundingClientRect().right - padding;
-    return panel.right - text >= ROOM;
+    return panel.right - text;
   };
 
+  /// C'è posto per il filo quando resta il margine che serve; con il margine
+  /// largo le tacche prendono il puntatore su 24 px (`data-room="wide"`).
   const fit = (thread: Thread): void => {
-    const show = thread.doc !== null && thread.headings.length > 0 && roomy(thread);
+    const room = margin(thread);
+    const show = thread.doc !== null && thread.headings.length > 0 && room !== null && room >= ROOM;
     if (thread.nav.hidden === show) thread.nav.hidden = !show;
+    const wide = room !== null && room >= WIDE_ROOM;
+    if ((thread.nav.dataset.room === "wide") !== wide) {
+      if (wide) thread.nav.dataset.room = "wide";
+      else delete thread.nav.dataset.room;
+    }
   };
 
   // --- il disegno -------------------------------------------------------------

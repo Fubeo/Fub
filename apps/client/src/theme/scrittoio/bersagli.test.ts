@@ -6,6 +6,7 @@
 // tengono le regole.
 import { describe, expect, it } from "vitest";
 import tabella from "./skin/tabella.css?raw";
+import sheets from "../../shells/scrittoio/sheets/sheets.css?raw";
 
 /// Le dichiarazioni delle regole il cui selettore è esattamente `selector`.
 function declarations(css: string, selector: string): Record<string, string> {
@@ -52,5 +53,18 @@ describe("le barre «Aggiungi una riga» e «Aggiungi una colonna»", () => {
     expect(-px(row.bottom) - 15).toBe(4);
     expect(-px(declarations(tabella, `${add}[data-add="row"]::before`).top)).toBeLessThanOrEqual(4);
     expect(-px(declarations(tabella, `${add}[data-add="column"]::before`).left)).toBeLessThanOrEqual(4);
+  });
+});
+
+describe("le tacche dei titoli a margine", () => {
+  it("la tacca resta di 12 px, la zona che apre l'indice è larga 24 col margine largo", () => {
+    expect(declarations(sheets, ".sheet-thread-notch").width).toBe("12px");
+    expect(px(declarations(sheets, `.sheet-thread[data-room="wide"] .sheet-thread-item`)["min-width"])).toBeGreaterThanOrEqual(24);
+    expect(declarations(sheets, ".sheet-thread-item")["min-width"]).toBeUndefined();
+  });
+
+  it("aperto, l'indice ha righe di almeno 24 px", () => {
+    const open = declarations(sheets, ".sheet-thread:is(:hover, :has(:focus-visible)) .sheet-thread-item");
+    expect(px(open.height)).toBeGreaterThanOrEqual(24);
   });
 });
