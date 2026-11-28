@@ -3,6 +3,7 @@
 import {
   LINE_WORDS,
   chooseMode,
+  drawWholeLive,
   expectVeilOnCard,
   expectWordPainted,
   openLive,
@@ -447,6 +448,7 @@ export const S_SCRITTURA = [
     ...(viewport ? { viewport } : {}),
     prepare: async (page) => {
       await openLive(page, [], scroll === "bottom" ? "bottom" : "top");
+      await drawWholeLive(page);
       await page.waitForFunction(() => {
         const cards = [...document.querySelectorAll(".pane.focus .pane-editor .live-card")];
         return cards.length > 0 && cards.every((card) => card.dataset.cardState !== "loading");
@@ -628,6 +630,7 @@ export const S_SCRITTURA = [
     ...(viewport ? { viewport } : {}),
     prepare: async (page) => {
       await openLive(page, [], "top");
+      await drawWholeLive(page);
       const cards = '.pane.focus .pane-editor .live-card[data-card-kind="document"]';
       await page.waitForFunction((selector) => {
         const all = [...document.querySelectorAll(selector)];

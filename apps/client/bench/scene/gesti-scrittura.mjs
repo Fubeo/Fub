@@ -1011,7 +1011,47 @@ export async function settleLive(page, bottom) {
 /// (`.cm-gap`), nessuna scheda in caricamento, l'altezza ferma e lo
 /// scorrimento in fondo. Se non ci si arriva, si alza.
 export async function scrollLiveToEnd(page) {
-  const settled = () => page.evaluate(async () => {
+  const settled = () => liveSettled(page);
+  let state = await drawWholeLive(page);
+  for (let tries = 0; ; tries += 1) {
+    if (tries >= 10) throw new Error("la nota non resta in fondo: la sua altezza cambia a ogni giro");
+    await page.evaluate(() => {
+      const scroller = document.querySelector(".pane.focus .pane-editor .cm-scroller");
+      scroller.scrollTop = scroller.scrollHeight;
+    });
+    state = await settled();
+    if (state.bottom) break;
+  }
+  // In fondo la nota dev'essere ancora disegnata tutta: se CodeMirror avesse
+  // rifatto il viewport, la foto tornerebbe a dipendere da quando.
+  if (state.gaps > 0) throw new Error("in fondo la nota ha di nuovo dei vuoti stimati: è troppo lunga per questa preparazione");
+}
+
+/// La nota disegnata tutta, con la finestra di prima: la finestra si allunga
+/// finché la nota ci sta, ogni scheda si monta e legge il suo file, poi la
+/// finestra torna com'era. CodeMirror tiene il viewport che copre la nota
+/// intera, e le scene che guardano tutte le schede le trovano anche sotto la
+/// prima pagina (le schede in arrivo tengono già l'altezza della vista, e non
+/// entrano più per caso nel primo disegno). Rende lo stato misurato.
+export async function drawWholeLive(page) {
+  const settled = () => liveSettled(page);
+  const window = page.viewportSize();
+  if (!window) throw new Error("la pagina non ha una finestra fissa");
+  let state = await settled();
+  for (let tries = 0; state.overflow > 0 || state.gaps > 0; tries += 1) {
+    if (tries >= 10) throw new Error(`la nota non sta in una finestra lunga: avanza di ${state.overflow} px con ${state.gaps} vuoti`);
+    const { height } = page.viewportSize();
+    await page.setViewportSize({ width: window.width, height: height + Math.max(state.overflow, 0) + 200 });
+    state = await settled();
+  }
+  await page.setViewportSize(window);
+  return settled();
+}
+
+/// L'altezza e lo scorrimento della nota fermi per due fotogrammi, e nessuna
+/// scheda che legge ancora il suo file.
+function liveSettled(page) {
+  return page.evaluate(async () => {
     const scroller = document.querySelector(".pane.focus .pane-editor .cm-scroller");
     if (!scroller) throw new Error("la nota a fuoco non ha lo scorrimento di CodeMirror");
     const frame = () => new Promise((resolve) => requestAnimationFrame(() => resolve()));
@@ -1032,29 +1072,6 @@ export async function scrollLiveToEnd(page) {
     }
     throw new Error("la nota non si ferma: CodeMirror rimisura a ogni fotogramma");
   });
-  const window = page.viewportSize();
-  if (!window) throw new Error("la pagina non ha una finestra fissa");
-  let state = await settled();
-  for (let tries = 0; state.overflow > 0 || state.gaps > 0; tries += 1) {
-    if (tries >= 10) throw new Error(`la nota non sta in una finestra lunga: avanza di ${state.overflow} px con ${state.gaps} vuoti`);
-    const { height } = page.viewportSize();
-    await page.setViewportSize({ width: window.width, height: height + Math.max(state.overflow, 0) + 200 });
-    state = await settled();
-  }
-  await page.setViewportSize(window);
-  await settled();
-  for (let tries = 0; ; tries += 1) {
-    if (tries >= 10) throw new Error("la nota non resta in fondo: la sua altezza cambia a ogni giro");
-    await page.evaluate(() => {
-      const scroller = document.querySelector(".pane.focus .pane-editor .cm-scroller");
-      scroller.scrollTop = scroller.scrollHeight;
-    });
-    state = await settled();
-    if (state.bottom) break;
-  }
-  // In fondo la nota dev'essere ancora disegnata tutta: se CodeMirror avesse
-  // rifatto il viewport, la foto tornerebbe a dipendere da quando.
-  if (state.gaps > 0) throw new Error("in fondo la nota ha di nuovo dei vuoti stimati: è troppo lunga per questa preparazione");
 }
 
 /// Apre un documento di videoscrittura dall'albero e aspetta che la
