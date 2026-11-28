@@ -186,3 +186,13 @@ area, con la prova di ogni gesto nell'app sul banco.
 | 2026-11-21 | `PLAN-ui/editor.html` (`piano/editor-completo`) | formule, lanciatore e menu della pagina | [Formule, lanciatore e menu della pagina](gesti-editor/formule-lanciatore-menu-pagina.md) |
 | 2026-11-21 | `PLAN-ui/editor.html` (`piano/editor-completo`) | scrittura, «/», «@», link e barra di formato | [Scrittura, «/», «@», link e barra di formato](gesti-editor/scrittura.md) |
 | 2026-11-21 | `PLAN-ui/editor.html` (`piano/editor-completo`) | testata, proprietà, commenti, sbirciata e ispettore | [Testata, proprietà, commenti, sbirciata e ispettore](gesti-editor/testata-commenti-ispettore.md) |
+
+## Le animazioni dell'editor
+
+Quali animazioni del prototipo l'app fa uguali, e quali no: un inventario per
+area, letto dal codice dei due lati; il banco lo confermerà.
+
+| Data | Prototipo | Area | Pagina |
+|---|---|---|---|
+| 2026-11-28 | `PLAN-ui/editor.html` (`piano/editor-completo`) | pagina, scrittura e commenti | [Pagina, scrittura e commenti](animazioni-editor/pagina-scrittura-commenti.md) |
+| 2026-11-28 | `PLAN-ui/editor.html` (`piano/editor-completo`) | blocchi | [Blocchi](animazioni-editor/blocchi.md) |
