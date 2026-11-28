@@ -21,7 +21,7 @@ Confronto gesto per gesto del prototipo `PLAN-ui/editor.html` con l'app, per l'a
   - Le 30 righe non provate hanno ora un esito. Il pieno schermo del diagramma (159–163) si apre da «Ingrandisci»; rotella, trascinamento, sfondo e × sono decisi dal codice.
   - Il foglio nella scheda (93–113, 116): 15 uguali e 8 diversi. Il valore scritto in una cella e Invio non restano nel banco (righe 103 e 107): da verificare nell'app vera.
   - Ora uguali: il clic sulla scheda PDF la attiva (117), Esc sceglie il blocco della scheda (125), il taglia, l'ordina e l'allinea del menu della tabella (67, 71, 72), Elimina la riga (75).
-  - Ora diversi: la barra di formato ha il menu «Operazioni sulla tabella» al posto dei pulsanti Riga e Ordina (85, 86); lo Spazio su un blocco scelto ne sostituisce il testo, e il blocco del diagramma non si sceglie da tastiera (164, 165).
+  - Ora diversi: la barra di formato ha il menu «Operazioni sulla tabella» al posto dei pulsanti Riga e Ordina (85, 86); il blocco del diagramma non si sceglie con le frecce né col clic, che mette il cursore nel sorgente, e lo Spazio su un paragrafo scelto ne sostituisce il testo (164, 165). Con il blocco scelto da Esc, Invio e Spazio fanno come il prototipo.
 
 ## Come si è misurato
 
@@ -205,8 +205,8 @@ Confronto gesto per gesto del prototipo `PLAN-ui/editor.html` con l'app, per l'a
 | 161 | Pieno schermo: clic sullo sfondo | `pointerup` → idem | 3875 | un clic sullo sfondo senza trascinare chiude | uguale | [D-28] Dal codice (`ui/lightbox.ts`) |
 | 162 | Pieno schermo: Esc | tasto | 3876 | chiude | uguale | [D-29] |
 | 163 | Pieno schermo: × | `.dg-full-x` → idem | 3877 | chiude | uguale | [D-30] Dal codice (`ui/lightbox.ts`) |
-| 164 | Blocco del diagramma selezionato, Invio | tasto | 4417 | dal paragrafo sotto, Esc e freccia su saltano il diagramma: il suo blocco non si sceglie da tastiera | diverso | [D-31] Il prototipo apre il sorgente |
-| 165 | Blocco del diagramma selezionato, Spazio | tasto | 4417 | come la riga 164; lo Spazio sul blocco scelto (qui «Dopo la tabella.») ne sostituisce il testo con uno spazio | diverso | [D-32] Il prototipo ingrandisce il diagramma e non cancella un blocco di testo scelto. Che Ctrl+Z lo riporti non è provato |
+| 164 | Blocco del diagramma selezionato, Invio | tasto | 4417 | con il blocco scelto (Esc dal sorgente) Invio apre il sorgente; ma il blocco non si sceglie con le frecce, e un clic sul disegno mette il cursore nel sorgente | diverso | [D-31] Dal codice (`diagram-live.ts`, `diagramBlockKeys`) e dalla sonda. Il prototipo sceglie il blocco col clic sul disegno (riga 3908); nell'app, dopo il clic, Invio spezza «flowchart TD» in due righe e il diagramma non si disegna più |
+| 165 | Blocco del diagramma selezionato, Spazio | tasto | 4417 | con il blocco scelto (Esc dal sorgente) lo Spazio ingrandisce; dopo un clic sul disegno lo Spazio scrive nel sorgente; su un paragrafo scelto ne sostituisce il testo | diverso | [D-32] Il prototipo ingrandisce e non cancella un blocco di testo scelto. Sonde: dopo il clic «flowchart TD» diventa «flowchart T D»; con «Dopo la tabella.» scelto resta solo uno spazio. Che Ctrl+Z li riporti non è provato |
 
 ## Riepilogo
 
@@ -226,7 +226,7 @@ Per area, al 28/11 (uguali, diversi, mancanti, non provabili): Base 30 gesti (16
 
 Al ripasso del 2026-11-28:
 
-1. **Spazio su un blocco scelto.** Con un paragrafo scelto come blocco, lo Spazio ne sostituisce tutto il testo con uno spazio. Il prototipo non cancella niente, e sul diagramma lo ingrandisce. In più il blocco del diagramma non si sceglie con le frecce: Esc e freccia su lo saltano (righe 164 e 165).
+1. **Clic sul diagramma, poi un tasto.** Nel prototipo il clic sul disegno sceglie il blocco, e Invio o Spazio aprono il sorgente o ingrandiscono. Nell'app il clic mette il cursore nel sorgente: Invio spezza «flowchart TD» in due righe e il diagramma non si disegna più. Con le frecce il blocco non si sceglie, e lo Spazio su un paragrafo scelto ne sostituisce tutto il testo (righe 164 e 165).
 2. **Scrivere nel foglio della scheda.** La battuta apre la cella e Invio scende, ma tornando sulla cella il valore è quello di prima, senza avviso; lo stesso con Canc (righe 103 e 107). Può essere l'host del banco: se vale anche nell'app vera, il valore si perde in silenzio.
 3. **Base, stato e bacheca.** Lo stato scritto in una riga torna quello di prima, e trascinare una scheda in un'altra corsia non la sposta (righe 23 e 25). Mancano le viste Calendario e Linea del tempo (righe 2 e 3).
 4. **Tabella, riempire.** La maniglia di riempimento sceglie il testo invece di riempire, e il doppio clic non riempie fino in fondo (righe 79 e 80). La barra di formato ha un menu al posto dei pulsanti Riga, Ordina e In foglio (righe 85–87).

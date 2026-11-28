@@ -265,6 +265,10 @@ export const VOCI = [
   { n: "164-blocco", titolo: "Blocco del diagramma scelto (dal paragrafo sotto), Invio", partenza: FUORI, gesto: async (p, h) => { await h.clic("Ultima riga", 3); await h.tasti("Escape", "ArrowUp", "Enter"); }, leggi: ilDiagramma },
   { n: "165-blocco", titolo: "Blocco del diagramma scelto (dal paragrafo sotto), Spazio", partenza: FUORI, gesto: async (p, h) => { await h.clic("Ultima riga", 3); await h.tasti("Escape", "ArrowUp", "Space"); }, leggi: ilDiagramma },
   { n: "138-questo", titolo: "Vale per Questo, poi uno stile", partenza: FUORI, gesto: async (p, h) => { await menuDelDiagramma(p, h); await p.locator(".diagram-menu-segment", { hasText: "Questo" }).first().click(); await p.locator(".diagram-menu-style").nth(2).click(); await h.fotogrammi(); }, leggi: ilDiagramma },
+  // Il blocco del diagramma scelto con un clic sul disegno.
+  { n: "164-clic", titolo: "Clic sul disegno, poi Invio", partenza: FUORI, gesto: async (p, h) => { await h.clicSu(DISEGNO); await h.tasti("Enter"); }, leggi: ilDiagramma },
+  { n: "165-clic", titolo: "Clic sul disegno, poi Spazio", partenza: FUORI, gesto: async (p, h) => { await h.clicSu(DISEGNO); await h.tasti("Space"); }, leggi: ilDiagramma },
+  { n: "165-esc", titolo: "Esc dal sorgente, poi Spazio", partenza: FUORI, gesto: async (p, h) => { await p.locator(DISEGNO).dblclick(); await h.fotogrammi(); await h.tasti("Escape", "Space"); }, leggi: ilDiagramma },
   { n: 164, titolo: "Blocco del diagramma scelto, Invio", partenza: FUORI, gesto: async (p, h) => { await h.clic("Dopo la tabella", 3); await h.tasti("ArrowDown", "Escape", "Enter"); }, leggi: ilDiagramma },
   { n: 165, titolo: "Blocco del diagramma scelto, Spazio", partenza: FUORI, gesto: async (p, h) => { await h.clic("Dopo la tabella", 3); await h.tasti("ArrowDown", "Escape", "Space"); }, leggi: ilDiagramma },
 ];
