@@ -327,6 +327,7 @@ const IT = {
   // La riga dei suggerimenti nella banda (T14): la frase dopo i tasti.
   "live.keys.insert": "inserisce un blocco",
   "live.keys.mention": "persone e date",
+  "live.keys.soft_break": "a capo nel paragrafo",
   "live.keys.launcher": "cerca o esegue",
   "live.keys.select_block": "seleziona il blocco",
   "live.keys.leave_focus": "esce dalla concentrazione",
@@ -1040,6 +1041,7 @@ const EN: Record<keyof typeof IT, string> = {
   "live.hint.quote": "Quote",
   "live.keys.insert": "inserts a block",
   "live.keys.mention": "people and dates",
+  "live.keys.soft_break": "new line in the paragraph",
   "live.keys.launcher": "finds or runs",
   "live.keys.select_block": "selects the block",
   "live.keys.leave_focus": "leaves focus mode",

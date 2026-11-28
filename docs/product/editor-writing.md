@@ -134,6 +134,7 @@ sta facendo. Niente finestre che coprono il lavoro: la riga suggerisce e basta.
 | Dove sta il cursore | Che cosa dice la riga |
 | --- | --- |
 | in una riga qualunque | «/ inserisce un blocco · @ persone e date · Ctrl+O cerca o esegue · Esc seleziona il blocco» |
+| in un paragrafo, coi blocchi accesi | come sopra, e dopo «@» anche «Shift+Enter a capo nel paragrafo»: lì Invio apre un paragrafo nuovo ([i blocchi](editor-blocks.md)) |
 | su un testo scelto | «Ctrl+B grassetto · Ctrl+I corsivo · Ctrl+K collega» |
 | in un compito | «Ctrl+Enter spunta · @ una data diventa la scadenza · Tab rientra» |
 | su un link | «Ctrl sopra il link: l'anteprima · Alt+Enter lo apre» |
